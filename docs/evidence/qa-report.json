@@ -1,0 +1,37 @@
+{
+  "targetUrl": "http://127.0.0.1:5174",
+  "generatedAt": "2026-07-15T15:23:34.399Z",
+  "checks": [
+    "desktop student flow reached RULE_FALLBACK diagnosis",
+    "level 2 progressive hint displayed",
+    "teacher timeline displayed execution event",
+    "teacher timeline displayed diagnosis event",
+    "mobile initial task workspace loaded"
+  ],
+  "desktopMetrics": {
+    "innerWidth": 1440,
+    "innerHeight": 900,
+    "clientWidth": 1440,
+    "clientHeight": 900,
+    "scrollWidth": 1440,
+    "scrollHeight": 7048,
+    "canScrollX": false,
+    "canScrollY": true
+  },
+  "mobileMetrics": {
+    "innerWidth": 390,
+    "innerHeight": 844,
+    "clientWidth": 390,
+    "clientHeight": 844,
+    "scrollWidth": 390,
+    "scrollHeight": 3671,
+    "canScrollX": false,
+    "canScrollY": true
+  },
+  "screenshots": [
+    "docs/evidence/student-workspace-after-diagnosis.png",
+    "docs/evidence/student-workspace-after-level2-hint.png",
+    "docs/evidence/teacher-timeline.png",
+    "docs/evidence/mobile-initial.png"
+  ]
+}
