@@ -1,0 +1,138 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f5f7f4;
+  color: #202323;
+}
+
+.app-shell {
+  min-height: 100vh;
+  background: #f5f7f4;
+}
+
+.topbar {
+  height: auto;
+  min-height: 76px;
+  padding: 16px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: #ffffff;
+  border-bottom: 1px solid #dfe7e0;
+}
+
+.topbar h3 {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.content {
+  padding: 20px 28px 32px;
+}
+
+.workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.task-strip {
+  min-height: 92px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  background: #ffffff;
+  border: 1px solid #dfe7e0;
+  border-radius: 8px;
+}
+
+.task-strip h2 {
+  margin: 4px 0 0;
+  letter-spacing: 0;
+}
+
+.ant-card {
+  border-radius: 8px;
+  border-color: #dfe7e0;
+  box-shadow: none;
+}
+
+.ant-card + .ant-card {
+  margin-top: 16px;
+}
+
+.signature {
+  margin: 14px 0;
+  padding: 10px 12px;
+  border: 1px solid #cbd8d1;
+  border-radius: 6px;
+  background: #f7fbfb;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 13px;
+  overflow-x: auto;
+}
+
+.stderr {
+  max-height: 140px;
+  margin: 0;
+  padding: 10px;
+  overflow: auto;
+  background: #2a2628;
+  color: #ffe8df;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.full {
+  width: 100%;
+}
+
+.section-collapse {
+  margin-top: 12px;
+}
+
+@media (max-width: 720px) {
+  .topbar,
+  .task-strip {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .content {
+    padding: 14px;
+  }
+
+  .ant-card-head-wrapper {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .ant-card-extra {
+    margin-inline-start: 0;
+    width: 100%;
+  }
+
+  .ant-card-extra .ant-space {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .ant-card-extra .ant-btn {
+    min-width: 0;
+  }
+
+  .ant-table {
+    font-size: 12px;
+  }
+
+  .ant-table-cell {
+    word-break: break-word;
+  }
+}

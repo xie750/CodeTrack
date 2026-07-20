@@ -1,0 +1,76 @@
+{
+  "generated_at": "2026-07-15T15:24:08.041381+00:00",
+  "overall_status": "BLOCKED",
+  "checks": [
+    {
+      "id": "screenshot_evidence",
+      "status": "PASS",
+      "details": {
+        "student-workspace-after-diagnosis.png": "117613 bytes",
+        "student-workspace-after-level2-hint.png": "156544 bytes",
+        "teacher-timeline.png": "352213 bytes",
+        "mobile-initial.png": "133341 bytes",
+        "qa-report.json": "1020 bytes",
+        "viewport_fit": {
+          "desktop_can_scroll_x": false,
+          "mobile_can_scroll_x": false
+        },
+        "missing_qa_checks": []
+      }
+    },
+    {
+      "id": "clean_migration_seed",
+      "status": "PASS",
+      "details": {
+        "migration": "INFO  [alembic.runtime.migration] Context impl SQLiteImpl.\nINFO  [alembic.runtime.migration] Will assume non-transactional DDL.\nINFO  [alembic.runtime.migration] Running upgrade  -> 20260715_0001, initial CodeTrack demo schema",
+        "seed": "CodeTrack demo seed data is ready.",
+        "counts": {
+          "tasks": 1,
+          "test_cases": 5,
+          "knowledge_sources": 4
+        }
+      }
+    },
+    {
+      "id": "validation_notes_current",
+      "status": "PASS",
+      "details": {
+        "file": "7512 bytes",
+        "missing_fragments": []
+      }
+    },
+    {
+      "id": "env_example_safe",
+      "status": "PASS",
+      "details": {
+        "file": "347 bytes",
+        "missing_keys": [],
+        "non_empty_secret_placeholders": []
+      }
+    },
+    {
+      "id": "docker_runtime_available",
+      "status": "BLOCKED",
+      "details": "docker command is unavailable in this environment"
+    },
+    {
+      "id": "required_artifacts_present",
+      "status": "PASS",
+      "details": {
+        "backend/app/services/model_gateway.py": "7888 bytes",
+        "backend/app/services/sandbox_client.py": "3562 bytes",
+        "backend/app/services/audit.py": "1377 bytes",
+        "sandbox/docker_runner.py": "3978 bytes",
+        "deploy/docker-compose.yml": "2026 bytes",
+        "deploy/README.md": "1917 bytes",
+        "frontend/scripts/capture-evidence.mjs": "4655 bytes",
+        "tests/test_demo_flow.py": "39664 bytes",
+        "tests/test_sandbox_service.py": "4732 bytes",
+        "tests/test_api_contract_audit.py": "6045 bytes",
+        "Dorc/第一阶段/CodeTrack_dev_docs_v0.1/api/02_demo_v0.1_api.md": "13604 bytes",
+        ".env.example": "347 bytes",
+        "docs/demo_v0.1_validation_notes.md": "7512 bytes"
+      }
+    }
+  ]
+}
