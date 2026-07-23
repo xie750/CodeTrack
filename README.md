@@ -23,18 +23,29 @@ CodeTrack Demo V0.1 实现了第一个文档驱动的垂直切片：
 
 AI/RAG 集成通过模型网关适配器进行。当配置了 `CODETRACK_MODEL_GATEWAY_URL` 时，后端仅将任务上下文、当前版本代码、失败的工具证据和预置知识源发送到该网关。返回的 JSON 在存储前必须通过 schema、引用、置信度和提示泄漏验证。如果网关缺失或无效，失败的链表提交会收到一个明确标记为 `RULE_FALLBACK` 的诊断，其中引用了真实的测试结果 ID 和预置课程源 ID，设置 `needs_teacher_review=true`，并提供受控的渐进式提示。
 
-## 本地后端
+## 启动
+
+**后端**（一个终端）：
 
 ```bash
-python -m pip install -r backend/requirements.txt
+cd backend
+pip install -r requirements.txt
 alembic upgrade head
-python scripts/seed_demo.py
-uvicorn backend.app.main:app --reload
+cd ../scripts && python seed_demo.py && cd ../backend
+uvicorn app.main:app --reload
 ```
 
-本地默认数据库为 SQLite，便于快速开发。`.env.example` 显示了文档化 Demo 环境所需的 PostgreSQL 连接地址。
+**前端**（另一个终端）：
 
-如需干净的本地恢复，将 `CODETRACK_DATABASE_URL` 指向一个空数据库，运行 `alembic upgrade head`，然后运行 `python scripts/seed_demo.py`。
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+后端默认跑在 `http://localhost:8000`，前端默认跑在 `http://localhost:5173`。
+
+如需 PostgreSQL，复制 `.env.example` 为 `.env`，修改 `CODETRACK_DATABASE_URL` 即可。
 
 ## 测试
 
