@@ -2,28 +2,28 @@
 
 将计算机课程实验从传统"做题交作业"升级为"任务闯关 + AI 导师陪练 + 能力画像 + 教师智能编排 + 科研训练衔接"的教学研一体化平台。
 
-## Project Overview
+## 项目概述
 
-CodeTrack Demo V0.1 implements the first document-driven vertical slice:
+CodeTrack Demo V0.1 实现了第一个文档驱动的垂直切片：
 
 ```text
-task detail -> code submission -> immutable version -> sandbox execution
--> structured test results -> version history -> completion summary
--> teacher timeline
+任务详情 -> 代码提交 -> 不可变版本 -> 沙箱执行
+-> 结构化测试结果 -> 版本历史 -> 完成总结
+-> 教师时间线
 ```
 
-The scope follows `Dorc/第一阶段/CodeTrack_dev_docs_v0.1`.
+实现范围遵循 `Dorc/第一阶段/CodeTrack_dev_docs_v0.1`。
 
-## Current Scope
+## 当前范围
 
-- Backend: FastAPI + SQLAlchemy.
-- Sandbox: isolated local execution adapter for the fixed C++ `deleteAt` task.
-- Frontend: React + TypeScript + Vite source scaffold for the student and teacher demo screens.
-- Tests: pytest coverage for the linked-list fixture, idempotent submissions, empty code, and compile errors.
+- 后端：FastAPI + SQLAlchemy。
+- 沙箱：针对固定的 C++ `deleteAt` 任务提供的隔离本地执行适配器。
+- 前端：学生和教师演示界面的 React + TypeScript + Vite 源码脚手架。
+- 测试：针对链表 fixture、幂等提交、空代码和编译错误的 pytest 覆盖率。
 
-AI/RAG integration is kept behind a model gateway adapter. When `CODETRACK_MODEL_GATEWAY_URL` is configured, the backend sends only task context, current version code, failed tool evidence and seeded knowledge sources to that gateway. Returned JSON must pass schema, reference, confidence and hint-leakage validation before it is stored. If the gateway is missing or invalid, failed linked-list submissions receive a clearly marked `RULE_FALLBACK` diagnosis that cites real test-result IDs and seeded course-source IDs, sets `needs_teacher_review=true`, and exposes controlled progressive hints.
+AI/RAG 集成通过模型网关适配器进行。当配置了 `CODETRACK_MODEL_GATEWAY_URL` 时，后端仅将任务上下文、当前版本代码、失败的工具证据和预置知识源发送到该网关。返回的 JSON 在存储前必须通过 schema、引用、置信度和提示泄漏验证。如果网关缺失或无效，失败的链表提交会收到一个明确标记为 `RULE_FALLBACK` 的诊断，其中引用了真实的测试结果 ID 和预置课程源 ID，设置 `needs_teacher_review=true`，并提供受控的渐进式提示。
 
-## Local Backend
+## 本地后端
 
 ```bash
 python -m pip install -r backend/requirements.txt
@@ -32,21 +32,21 @@ python scripts/seed_demo.py
 uvicorn backend.app.main:app --reload
 ```
 
-The local default database is SQLite for quick development. `.env.example` shows the PostgreSQL URL expected for the documented Demo environment.
+本地默认数据库为 SQLite，便于快速开发。`.env.example` 显示了文档化 Demo 环境所需的 PostgreSQL 连接地址。
 
-For a clean local restore, point `CODETRACK_DATABASE_URL` at an empty database, run `alembic upgrade head`, then run `python scripts/seed_demo.py`.
+如需干净的本地恢复，将 `CODETRACK_DATABASE_URL` 指向一个空数据库，运行 `alembic upgrade head`，然后运行 `python scripts/seed_demo.py`。
 
-## Tests
+## 测试
 
 ```bash
 python -m pytest
 ```
 
-The sandbox requires `g++` on `PATH`.
+沙箱需要 `g++` 在 `PATH` 中。
 
-## Demo Accounts
+## 演示账号
 
-- Student: `X-Demo-User-Id: user_student_001`
-- Teacher: `X-Demo-User-Id: user_teacher_001`
+- 学生：`X-Demo-User-Id: user_student_001`
+- 教师：`X-Demo-User-Id: user_teacher_001`
 
-The frontend uses these headers automatically for the Demo screens.
+前端在演示界面中自动使用这些请求头。
