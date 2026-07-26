@@ -33,6 +33,7 @@ function AppContent() {
   const location = useLocation();
   const { taskId } = useParams<{ taskId: string }>();
   const activeKey = selectedKey(location.pathname);
+  const isWorkspace = location.pathname.startsWith("/workspace");
 
   function openWorkspace(id?: string) {
     navigate(`/workspace/${id ?? "task_linked_list_delete_001"}`);
@@ -47,6 +48,14 @@ function AppContent() {
       profile: "/profile"
     };
     navigate(aliases[page] ?? page);
+  }
+
+  if (isWorkspace) {
+    return (
+      <Routes>
+        <Route path="/workspace/:taskId" element={<TaskWorkspaceWrapper onBack={() => navigate("/tasks")} />} />
+      </Routes>
+    );
   }
 
   return (
