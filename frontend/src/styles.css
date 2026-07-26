@@ -5,6 +5,7 @@
 html,
 body,
 #root {
+  height: 100%;
   min-height: 100%;
 }
 
@@ -206,7 +207,9 @@ textarea {
 }
 
 .replica-shell {
+  height: 100dvh;
   min-height: 100vh;
+  overflow: hidden;
   background: #f7f9fc;
 }
 
@@ -297,13 +300,20 @@ textarea {
 .replica-app {
   display: grid;
   grid-template-columns: 194px minmax(0, 1fr);
-  min-height: calc(100vh - 74px);
+  height: calc(100dvh - 74px);
+  min-height: 0;
 }
 
 .replica-sidebar {
+  position: sticky;
+  top: 74px;
+  height: calc(100dvh - 74px);
+  min-height: 0;
   display: flex;
   flex-direction: column;
   padding: 34px 18px 22px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
   border-right: 1px solid #edf1f6;
   background: #ffffff;
 }
@@ -481,6 +491,10 @@ textarea {
 .app-content {
   width: 100%;
   min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
 }
 
 .home-dashboard {
@@ -2196,7 +2210,11 @@ textarea {
 }
 
 .program-shell {
+  --program-topbar-height: 64px;
+  --program-head-height: 102px;
+  height: 100dvh;
   min-height: 100vh;
+  overflow: hidden;
   background: #f7f9fc;
   color: #101b31;
 }
@@ -2214,7 +2232,10 @@ textarea {
 }
 
 .program-topbar {
-  height: 64px;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  height: var(--program-topbar-height);
   padding: 0 18px;
   display: grid;
   grid-template-columns: 170px minmax(0, 1fr) auto;
@@ -2319,17 +2340,25 @@ textarea {
 
 .program-page {
   width: 100%;
-  max-width: 1120px;
+  max-width: none;
+  height: calc(100dvh - var(--program-topbar-height));
   margin: 0 auto;
-  padding: 17px 12px 38px;
+  padding: 0 18px 24px;
+  overflow: auto;
+  scrollbar-gutter: stable;
 }
 
 .program-head {
-  min-height: 86px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  min-height: var(--program-head-height);
+  padding: 14px 0 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 18px;
+  background: #f7f9fc;
 }
 
 .program-back {
@@ -2372,7 +2401,9 @@ textarea {
 
 .program-head-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 14px;
 }
 
@@ -2419,14 +2450,17 @@ textarea {
 
 .program-grid {
   display: grid;
-  grid-template-columns: 290px minmax(0, 1fr) 330px;
+  grid-template-columns: clamp(250px, 22vw, 320px) minmax(520px, 1fr) clamp(280px, 24vw, 360px);
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .program-problem {
-  min-height: 966px;
+  max-height: calc(100dvh - var(--program-topbar-height) - var(--program-head-height) - 34px);
+  min-height: 0;
   padding: 22px 18px;
+  overflow: auto;
+  scrollbar-gutter: stable;
 }
 
 .program-problem h2 {
@@ -2474,13 +2508,17 @@ textarea {
 
 .program-center {
   min-width: 0;
+  max-height: calc(100dvh - var(--program-topbar-height) - var(--program-head-height) - 34px);
   display: flex;
   flex-direction: column;
   gap: 16px;
+  overflow: auto;
+  scrollbar-gutter: stable;
 }
 
 .program-editor {
-  min-height: 512px;
+  flex: 0 0 auto;
+  min-height: 0;
 }
 
 .program-editor header,
@@ -2531,10 +2569,10 @@ textarea {
 }
 
 .program-editor pre {
-  height: 360px;
+  height: clamp(280px, 40dvh, 420px);
   margin: 0;
   padding: 14px 0;
-  overflow: hidden;
+  overflow: auto;
   color: #182944;
   background: #ffffff;
   font-family: "Cascadia Code", Consolas, monospace;
@@ -2576,7 +2614,13 @@ textarea {
 }
 
 .program-result {
-  min-height: 400px;
+  flex: 0 0 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.program-result table {
+  min-width: 680px;
 }
 
 .program-result header nav {
@@ -2674,9 +2718,11 @@ textarea {
 }
 
 .program-ai {
-  min-height: 966px;
+  max-height: calc(100dvh - var(--program-topbar-height) - var(--program-head-height) - 34px);
+  min-height: 0;
   padding: 0 10px 14px;
-  overflow: hidden;
+  overflow: auto;
+  scrollbar-gutter: stable;
 }
 
 .program-ai > header {
@@ -2808,7 +2854,7 @@ textarea {
 .program-bottom-grid {
   margin-top: 20px;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 14px;
 }
 
@@ -3115,9 +3161,37 @@ textarea {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .program-page {
+    padding-inline: 12px;
+  }
+
+  .program-grid {
+    grid-template-columns: minmax(240px, 0.86fr) minmax(520px, 1.34fr) minmax(270px, 0.9fr);
+    min-width: 1060px;
+  }
+
+  .program-topbar {
+    grid-template-columns: 150px minmax(0, 1fr) auto;
+  }
+
+  .program-nav {
+    justify-content: flex-start;
+    gap: 18px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .program-nav::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 @media (max-width: 991px) {
+  .replica-shell {
+    height: 100dvh;
+  }
+
   .replica-topbar {
     height: 66px;
     padding: 0 14px;
@@ -3141,7 +3215,8 @@ textarea {
 
   .replica-app {
     display: block;
-    min-height: calc(100vh - 66px);
+    height: calc(100dvh - 66px);
+    min-height: 0;
   }
 
   .replica-sidebar {
@@ -3208,5 +3283,87 @@ textarea {
   .mobile-nav a.active {
     color: #176cf5;
     font-weight: 800;
+  }
+
+  .program-shell {
+    --program-topbar-height: 58px;
+    --program-head-height: 136px;
+  }
+
+  .program-topbar {
+    height: var(--program-topbar-height);
+    grid-template-columns: minmax(128px, auto) minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 0 12px;
+  }
+
+  .program-brand strong {
+    font-size: 18px;
+  }
+
+  .program-nav {
+    justify-content: flex-start;
+    gap: 14px;
+    overflow-x: auto;
+  }
+
+  .program-nav button {
+    flex: 0 0 auto;
+    font-size: 13px;
+  }
+
+  .program-top-actions strong,
+  .program-top-actions > svg {
+    display: none;
+  }
+
+  .program-page {
+    height: calc(100dvh - var(--program-topbar-height));
+    padding: 0 12px 18px;
+  }
+
+  .program-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .program-title-line {
+    margin-top: 12px;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .program-title-line h1 {
+    font-size: 21px;
+  }
+
+  .program-head-actions {
+    width: 100%;
+    justify-content: flex-start;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .program-head-actions button {
+    flex: 0 0 auto;
+  }
+
+  .program-grid {
+    min-width: 980px;
+    grid-template-columns: 250px 500px 280px;
+    gap: 12px;
+  }
+
+  .program-problem,
+  .program-center,
+  .program-ai {
+    max-height: calc(100dvh - var(--program-topbar-height) - var(--program-head-height) - 28px);
+  }
+
+  .program-bottom-grid {
+    min-width: 980px;
   }
 }
