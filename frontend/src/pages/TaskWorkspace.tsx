@@ -1,417 +1,305 @@
-import { useEffect, useState } from "react";
 import {
-  Alert,
-  Badge,
-  Button,
-  Card,
-  Col,
-  Collapse,
-  Empty,
-  Input,
-  List,
-  Row,
-  Space,
-  Spin,
-  Table,
-  Tag,
-  Typography
-} from "antd";
-import {
+  ArrowLeft,
+  Bell,
   Bot,
-  ClipboardPaste,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Circle,
+  Code2,
+  Eye,
+  GraduationCap,
+  Lightbulb,
+  Maximize2,
+  MoreVertical,
+  NotebookTabs,
   Play,
-  RefreshCw,
-  Search
+  Save,
+  Search,
+  ShieldCheck,
+  Upload,
+  Zap
 } from "lucide-react";
-import Editor from "@monaco-editor/react";
-import { api, Diagnosis, ExecutionStatus, Hint, Summary, TaskDetail, VersionHistoryItem, VersionResult } from "../api";
-import { wrongHeadUpdateCode, terminalStatuses } from "../data/constants";
-
-const { Text, Title, Paragraph } = Typography;
+import avatarImg from "../assets/ui-home/avatar.png";
 
 type PageProps = {
   taskId: string;
   onBack: () => void;
 };
 
+const codeLines = [
+  "class Solution {",
+  "public:",
+  "    vector<int> twoSum(vector<int>& nums, int target) {",
+  "        unordered_map<int, int> mp;",
+  "        for (int i = 0; i < nums.size(); i++) {",
+  "            int complement = target - nums[i];",
+  "            if (mp.count(complement)) {",
+  "                return {mp[complement], i};",
+  "            }",
+  "            mp[nums[i]] = i;",
+  "        }",
+  "        return {};",
+  "    }",
+  "};"
+];
+
+const testRows = [
+  ["测试点 1", "[2,7,11,15], 9", "[0,1]", "[0,1]", "通过", "2 ms"],
+  ["测试点 2", "[3,2,4], 6", "[1,2]", "[1,2]", "通过", "2 ms"],
+  ["测试点 3", "[3,3], 6", "[0,1]", "[0,1]", "通过", "1 ms"],
+  ["测试点 4", "[3,5,7,10], 13", "[1,3]", "[1,3]", "通过", "3 ms"],
+  ["测试点 5", "[0,4,3,0], 0", "[0,3]", "[-1,-1]", "失败", "1 ms"]
+];
+
+const hints = [
+  {
+    title: "第一层提示 · 思考方向",
+    desc: "思考在遍历数组时，如何正确处理相同的元素值？关注“查询补数”和“存入当前元素下标”的时机。",
+    open: false
+  },
+  {
+    title: "第二层提示 · 逻辑分析",
+    desc: "对于每个元素 nums[i]：先在哈希表中查找 target - nums[i] 是否存在；如果存在，直接返回对应下标；如果不存在，再把当前元素及其下标存入哈希表。",
+    open: true
+  },
+  {
+    title: "第三层提示 · 关键步骤 / 伪代码",
+    desc: "创建哈希表 mp，用于存储数值到下标。遍历 nums，计算 complement；若 mp 中存在 complement，返回 {mp[complement], i}；否则写入 nums[i]。",
+    open: true
+  }
+];
+
+const historyRows = [
+  ["通过", "2024-06-01 10:25", "12 ms", "8.6 MB"],
+  ["通过", "2024-06-01 10:20", "11 ms", "8.2 MB"],
+  ["失败", "2024-06-01 10:10", "12 ms", "8.6 MB"],
+  ["通过", "2024-06-01 09:55", "10 ms", "8.0 MB"],
+  ["通过", "2024-05-31 22:45", "13 ms", "8.7 MB"]
+];
+
+const growthItems = [
+  ["哈希表使用", "+15 经验值", "熟练度提升 12%", 62],
+  ["边界处理", "+10 经验值", "熟练度提升 8%", 52],
+  ["复杂度优化", "+8 经验值", "熟练度提升 6%", 44]
+];
+
+const suggestions = [
+  ["复习哈希表相关知识", "建议复习哈希表的基本操作和使用场景。", "done"],
+  ["练习边界条件处理", "多练习包含重复元素、负数等情况的题目。", "warn"],
+  ["尝试同类中等题目", "推荐练习：三数之和、有效的字母异位词。", "todo"]
+];
+
 export default function TaskWorkspace({ taskId, onBack }: PageProps) {
-  const [task, setTask] = useState<TaskDetail | null>(null);
-  const [code, setCode] = useState("");
-  const [execution, setExecution] = useState<ExecutionStatus | null>(null);
-  const [result, setResult] = useState<VersionResult | null>(null);
-  const [versions, setVersions] = useState<VersionHistoryItem[]>([]);
-  const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null);
-  const [hints, setHints] = useState<Hint[]>([]);
-  const [summary, setSummary] = useState<Summary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function loadVersion(versionId: string, submissionId: string | null) {
-    const loaded = await api.getResults(versionId);
-    setResult(loaded);
-    setDiagnosis(null);
-    setHints([]);
-    if (loaded.diagnosis.status === "READY") {
-      const loadedDiagnosis = await api.getDiagnosis(versionId);
-      setDiagnosis(loadedDiagnosis);
-      if (loadedDiagnosis.hint) {
-        setHints([
-          {
-            hint_id: `${loadedDiagnosis.diagnosis_id}_level_${loadedDiagnosis.hint_level ?? 1}`,
-            diagnosis_id: loadedDiagnosis.diagnosis_id,
-            level: loadedDiagnosis.hint_level ?? 1,
-            content: loadedDiagnosis.hint,
-            unlocked: true,
-            unlock_reason: "AUTO_LEVEL_1",
-            generated_at: "",
-            viewed_at: ""
-          }
-        ]);
-      }
-    }
-    if (submissionId) {
-      setVersions(await api.getVersions(submissionId));
-      if (loaded.submission_status === "PASSED") {
-        setSummary(await api.getSummary(submissionId));
-      }
-    }
-  }
-
-  async function loadTask() {
-    setLoading(true);
-    setError(null);
-    setExecution(null);
-    setResult(null);
-    setDiagnosis(null);
-    setHints([]);
-    setVersions([]);
-    setSummary(null);
-    try {
-      const detail = await api.getTask(taskId);
-      setTask(detail);
-      setCode(detail.interface_spec.student_template);
-      if (detail.current_progress.latest_version_id) {
-        await loadVersion(detail.current_progress.latest_version_id, detail.current_progress.submission_id);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "请求失败");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function submit() {
-    if (!task) return;
-    setSubmitting(true);
-    setError(null);
-    setExecution(null);
-    setResult(null);
-    try {
-      const submitted = await api.submitCode(task.task_id, code);
-      let next = await api.getExecution(submitted.execution_id);
-      setExecution(next);
-      for (let i = 0; i < 10 && !terminalStatuses.has(next.status); i++) {
-        await new Promise((resolve) => window.setTimeout(resolve, 1000));
-        next = await api.getExecution(submitted.execution_id);
-        setExecution(next);
-      }
-      await loadVersion(submitted.version_id, submitted.submission_id);
-      const detail = await api.getTask(task.task_id);
-      setTask(detail);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "提交失败");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function requestHint(level: number) {
-    if (!diagnosis) return;
-    setError(null);
-    try {
-      const nextHint = await api.requestHint(diagnosis.diagnosis_id, level);
-      setHints((current) => {
-        const withoutSame = current.filter((item) => item.level !== nextHint.level);
-        return [...withoutSame, nextHint].sort((a, b) => a.level - b.level);
-      });
-      if (result) {
-        setResult({
-          ...result,
-          hint_access: {
-            ...result.hint_access,
-            highest_viewed_level: Math.max(result.hint_access.highest_viewed_level, level),
-            available_levels: level >= 2 ? [1, 2, 3] : result.hint_access.available_levels
-          }
-        });
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "提示申请失败");
-    }
-  }
-
-  useEffect(() => {
-    loadTask();
-  }, [taskId]);
-
-  const passedCount = result?.tests.filter((test) => test.status === "PASSED").length ?? 0;
-  const failedCount = result?.tests.filter((test) => test.status === "FAILED").length ?? 0;
-
-  if (loading) return <Spin />;
-
-  if (!task) {
-    return (
-      <div className="page-grid">
-        {error && <Alert type="error" message={error} showIcon />}
-        <Empty description="任务暂不可用" />
-        <Button onClick={onBack}>返回任务列表</Button>
-      </div>
-    );
-  }
-
   return (
-    <div className="workspace">
-      {error && <Alert type="error" message={error} showIcon />}
-      <section className="page-lead">
-        <div>
-          <Text type="secondary">真实后端链路 · {task.language}</Text>
-          <Title level={2}>{task.title}</Title>
-          <Paragraph>提交后先展示系统验证事实，再展示 AI 诊断、课程来源和渐进提示。</Paragraph>
+    <div className="program-shell" data-task-id={taskId}>
+      <header className="program-topbar">
+        <div className="program-brand">
+          <span><ShieldCheck size={22} /></span>
+          <strong>码学堂</strong>
         </div>
-        <Space wrap>
-          <Button onClick={onBack}>返回任务列表</Button>
-          <Button type="primary" icon={<Play size={16} />} loading={submitting} onClick={submit}>
-            提交并诊断
-          </Button>
-        </Space>
-      </section>
+        <nav className="program-nav" aria-label="课程导航">
+          {["首页", "课程学习", "班级任务", "题库", "竞赛", "学习分析"].map((item) => (
+            <button className={item === "班级任务" ? "active" : ""} type="button" key={item}>{item}</button>
+          ))}
+        </nav>
+        <div className="program-top-actions">
+          <button type="button" aria-label="搜索"><Search size={22} /></button>
+          <button className="program-bell" type="button" aria-label="通知"><Bell size={21} /><span>3</span></button>
+          <img src={avatarImg} alt="张同学头像" />
+          <strong>张同学</strong>
+          <ChevronDown size={16} />
+        </div>
+      </header>
 
-      <Row gutter={[16, 16]} className="workspace-grid">
-        <Col xs={24} xl={7}>
-          <Card title="任务说明">
-            <Paragraph>{task.description}</Paragraph>
-            <div className="signature">{task.interface_spec.function_signature}</div>
-            <List size="small" dataSource={task.interface_spec.rules} renderItem={(item) => <List.Item>{item}</List.Item>} />
-          </Card>
-          <Card title="知识点与公开样例">
-            <Space wrap className="tag-row">
-              {task.learning_objectives.map((item) => (
-                <Tag key={item} color="blue">
-                  {item}
-                </Tag>
+      <main className="program-page">
+        <section className="program-head">
+          <div>
+            <button className="program-back" type="button" onClick={onBack}><ArrowLeft size={16} /> 返回班级任务</button>
+            <div className="program-title-line">
+              <h1>编程任务：两数之和</h1>
+              <span>难度：<b>中等</b></span>
+            </div>
+          </div>
+          <div className="program-head-actions">
+            <button type="button"><Eye size={17} /> 收藏</button>
+            <button type="button"><NotebookTabs size={17} /> 笔记</button>
+            <button className="outline" type="button"><ChevronLeft size={17} /> 上一题</button>
+            <button className="primary" type="button">下一题 <ChevronRight size={17} /></button>
+          </div>
+        </section>
+
+        <section className="program-grid">
+          <article className="program-card program-problem">
+            <h2>题目描述</h2>
+            <p>给定一个整数数组 nums 和一个整数目标值 target，请你在该数组中找出和为目标值 target 的那两个整数，并返回它们的数组下标。</p>
+            <p>你可以假设每个输入只对应一种答案，并且你不可以重复使用数组中的同一个元素。</p>
+
+            <h2>输入输出说明</h2>
+            <ul>
+              <li>输入：整数数组 nums 和整数 target</li>
+              <li>输出：返回这两个整数在数组中的下标，顺序不限。</li>
+            </ul>
+
+            <h2>示例</h2>
+            <p><b>输入：</b> nums = [2,7,11,15], target = 9</p>
+            <p><b>输出：</b> [0,1]</p>
+            <p><b>解释：</b> 因为 nums[0] + nums[1] == 9，所以返回 [0,1]</p>
+
+            <h2>约束条件</h2>
+            <ul>
+              <li>2 &lt;= nums.length &lt;= 10^4</li>
+              <li>-10^9 &lt;= nums[i] &lt;= 10^9</li>
+              <li>-10^9 &lt;= target &lt;= 10^9</li>
+              <li>只会存在一个有效答案</li>
+            </ul>
+
+            <h2>知识点</h2>
+            <div className="program-tags"><span>哈希表</span><span>数组</span><span>两数之和</span><span>时间复杂度</span></div>
+
+            <h2>老师备注</h2>
+            <p>请尽量使用 O(n) 时间复杂度和 O(n) 空间复杂度完成。可使用哈希表存储遍历过程中的数值与下标。</p>
+          </article>
+
+          <div className="program-center">
+            <article className="program-card program-editor">
+              <header>
+                <h2>代码编辑器</h2>
+                <div>
+                  <button type="button">C++ <ChevronDown size={14} /></button>
+                  <button type="button" aria-label="主题"><Lightbulb size={17} /></button>
+                  <button type="button" aria-label="全屏"><Maximize2 size={17} /></button>
+                  <button type="button" aria-label="更多"><MoreVertical size={17} /></button>
+                </div>
+              </header>
+              <pre>{codeLines.map((line, index) => <span key={`${index}-${line}`}><em>{index + 1}</em><code>{line}</code></span>)}</pre>
+              <footer>
+                <button type="button"><Save size={16} /> 保存草稿</button>
+                <button className="primary" type="button"><Play size={16} /> 运行代码</button>
+                <button className="primary" type="button"><Upload size={16} /> 提交代码</button>
+              </footer>
+            </article>
+
+            <article className="program-card program-result">
+              <header>
+                <nav><button className="active" type="button">测试结果</button><button type="button">运行输出</button></nav>
+                <div>执行用时：<b>12 ms</b><span>内存使用：</span><b>8.6 MB</b><CheckCircle2 size={18} /></div>
+              </header>
+              <table>
+                <thead><tr><th>测试点</th><th>输入</th><th>期望输出</th><th>你的输出</th><th>结果</th><th>耗时</th></tr></thead>
+                <tbody>
+                  {testRows.map((row) => (
+                    <tr key={row[0]}>
+                      {row.map((cell, index) => (
+                        <td className={index === 4 ? (cell === "通过" ? "pass" : "fail") : ""} key={`${row[0]}-${cell}-${index}`}>
+                          {index === 4 ? <span>{cell === "通过" ? <Check size={13} /> : <Circle size={12} fill="currentColor" />} {cell}</span> : cell}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="program-pass"><CheckCircle2 size={18} /> 已通过 4/5 个测试点，继续根据提示优化代码。</div>
+            </article>
+          </div>
+
+          <aside className="program-card program-ai">
+            <header>
+              <span><Bot size={22} /></span>
+              <h2>AI学习助手</h2>
+            </header>
+            <section>
+              <h3>AI诊断总结</h3>
+              <p>你的代码整体思路正确，使用哈希表查找补数，时间复杂度为 O(n)。但在处理重复元素或存储顺序上仍存在问题，导致在某些情况下未能找到有效解。</p>
+            </section>
+            <section>
+              <h3>问题分析</h3>
+              <ul>
+                <li><b>失败测试点：</b>测试点 5（[0,4,3,0], target = 0）</li>
+                <li><b>原因：</b>在处理当前元素前，未先查询补数，可能将当前元素的下标提前存入哈希表，导致误用自身元素或错过有效配对。</li>
+              </ul>
+            </section>
+            <section className="program-hints">
+              <h3>分层提示</h3>
+              {hints.map((hint, index) => (
+                <article className={hint.open ? "open" : ""} key={hint.title}>
+                  <button type="button"><Lightbulb size={15} /> {hint.title}<ChevronDown size={15} /></button>
+                  <p>{hint.desc}</p>
+                  {hint.open && index === 2 ? <ol><li>创建哈希表 mp，用于存储数值到下标；</li><li>遍历数组 nums；</li><li>若找到补数，返回对应下标；否则写入当前元素。</li></ol> : null}
+                </article>
               ))}
-            </Space>
-            <List
-              size="small"
-              dataSource={task.public_tests}
-              renderItem={(item) => (
-                <List.Item>
-                  <Space direction="vertical" size={2}>
-                    <Text strong>{item.name}</Text>
-                    <Text type="secondary">
-                      {JSON.stringify(item.input_summary)} -&gt; {item.expected_output_summary}
-                    </Text>
-                  </Space>
-                </List.Item>
-              )}
-            />
-          </Card>
-        </Col>
+            </section>
+            <div className="hint-usage">
+              <p><Eye size={14} /> 第一层提示 <span>已查看（20:45）</span></p>
+              <p><Eye size={14} /> 第二层提示 <span>已查看（20:46）</span></p>
+              <p><Eye size={14} /> 第三层提示 <span>未查看</span></p>
+            </div>
+            <footer>
+              <button type="button"><GraduationCap size={16} /> 查看讲解</button>
+              <button className="primary" type="button"><Lightbulb size={16} /> 获取下一层提示</button>
+            </footer>
+          </aside>
+        </section>
 
-        <Col xs={24} xl={10}>
-          <Card
-            title="代码编辑器"
-            extra={
-              <Space wrap>
-                <Button icon={<ClipboardPaste size={16} />} onClick={() => setCode(wrongHeadUpdateCode)}>
-                  错误示例
-                </Button>
-                <Button icon={<RefreshCw size={16} />} onClick={() => setCode(task.interface_spec.student_template)}>
-                  恢复模板
-                </Button>
-              </Space>
-            }
-          >
-            <Editor
-              height="460px"
-              language="cpp"
-              theme="vs"
-              value={code}
-              options={{ minimap: { enabled: false }, fontSize: 14, scrollBeyondLastLine: false }}
-              onChange={(value) => setCode(value ?? "")}
-            />
-          </Card>
-          <Card title="版本历史">
-            <List
-              dataSource={versions}
-              locale={{ emptyText: "暂无版本" }}
-              renderItem={(item) => (
-                <List.Item>
-                  <Space wrap>
-                    <Text strong>第 {item.version_no} 版</Text>
-                    <Tag color={item.submission_status === "PASSED" ? "success" : item.submission_status === "FAILED" ? "error" : "processing"}>{item.submission_status}</Tag>
-                    <Text>{item.passed_count}/{item.total_required_count}</Text>
-                    {item.is_latest && <Tag>最新</Tag>}
-                  </Space>
-                </List.Item>
-              )}
-            />
-          </Card>
-        </Col>
+        <section className="program-bottom-grid">
+          <article className="program-card program-history">
+            <header><h2>提交记录</h2><a href="#">更多 <ChevronRight size={14} /></a></header>
+            <table>
+              <thead><tr><th>状态</th><th>提交时间</th><th>用时</th><th>内存</th></tr></thead>
+              <tbody>
+                {historyRows.map((row) => (
+                  <tr key={row.join("-")}>
+                    <td className={row[0] === "通过" ? "pass" : "fail"}>{row[0]}</td>
+                    <td>{row[1]}</td>
+                    <td>{row[2]}</td>
+                    <td>{row[3]}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <a className="program-card-link" href="#">查看全部提交 <ChevronRight size={14} /></a>
+          </article>
 
-        <Col xs={24} xl={7}>
-          <Card title="系统验证">
-            {execution || result ? (
-              <Space direction="vertical" className="full">
-                <Space wrap>
-                  <Tag color={(execution?.status ?? result?.execution.status ?? "PENDING") === "SUCCEEDED" ? "success" : (execution?.status ?? result?.execution.status ?? "PENDING") === "FAILED" ? "error" : "processing"}>
-                    {execution?.status ?? result?.execution.status}
-                  </Tag>
-                  <Text>通过 {passedCount} 项</Text>
-                  <Text>失败 {failedCount} 项</Text>
-                </Space>
-                {result?.execution.compiler_stderr && <pre className="stderr">{result.execution.compiler_stderr}</pre>}
-                <Table
-                  size="small"
-                  rowKey="test_case_id"
-                  pagination={false}
-                  dataSource={result?.tests ?? []}
-                  columns={[
-                    { title: "测试", dataIndex: "name" },
-                    { title: "状态", dataIndex: "status", render: (value: string) => <Tag color={value === "PASSED" ? "success" : value === "FAILED" ? "error" : "processing"}>{value}</Tag> },
-                    { title: "实际输出", dataIndex: "actual_output" }
-                  ]}
-                />
-              </Space>
-            ) : (
-              <Empty description="尚未执行" />
-            )}
-          </Card>
+          <article className="program-card program-growth">
+            <h2>能力成长 <span>i</span></h2>
+            {growthItems.map((item, index) => (
+              <div className="growth-row" key={item[0]}>
+                <span className={index === 1 ? "orange" : index === 2 ? "blue" : ""}>{index === 0 ? <NotebookTabs size={17} /> : index === 1 ? <Zap size={17} /> : <Code2 size={17} />}</span>
+                <div><strong>{item[0]}</strong><p>{item[2]}</p><i><b style={{ width: `${item[3]}%` }} /></i></div>
+                <em>{item[1]}</em>
+              </div>
+            ))}
+            <a className="program-card-link" href="#">查看能力详情 <ChevronRight size={14} /></a>
+          </article>
 
-          <Card title="AI 诊断与来源">
-            {diagnosis ? (
-              <Space direction="vertical" className="full">
-                <Alert
-                  type={diagnosis.needs_teacher_review ? "warning" : "info"}
-                  showIcon
-                  message={diagnosis.diagnosis_type}
-                  description={diagnosis.explanation}
-                />
-                <Space wrap>
-                  <Tag color="gold">置信度 {Math.round(diagnosis.confidence * 100)}%</Tag>
-                  <Tag color={diagnosis.model_provider === "RULE_FALLBACK" ? "orange" : "blue"}>{diagnosis.model_provider}</Tag>
-                  <Tag color="purple">AI 生成内容</Tag>
-                  {diagnosis.needs_teacher_review && <Tag color="red">需教师复核</Tag>}
-                </Space>
-              </Space>
-            ) : (
-              <Alert type="info" showIcon message="诊断状态" description={result ? result.diagnosis.status : "提交后展示诊断状态。"} />
-            )}
-            {result && (
-              <Collapse
-                className="section-collapse"
-                items={[
-                  {
-                    key: "facts",
-                    label: "工具事实",
-                    children: <Text>执行状态 {result.execution.status}，提交状态 {result.submission_status}。</Text>
-                  },
-                  {
-                    key: "diagnosis",
-                    label: "AI 分析",
-                    children: diagnosis ? (
-                      <Space direction="vertical">
-                        <Text>{diagnosis.explanation}</Text>
-                        <Text type="secondary">证据：{diagnosis.verified_evidence_ids.join(", ")}</Text>
-                      </Space>
-                    ) : (
-                      <Text>{result.diagnosis.status}</Text>
-                    )
-                  },
-                  {
-                    key: "sources",
-                    label: "课程来源",
-                    children: diagnosis ? (
-                      diagnosis.knowledge_sources.length > 0 ? (
-                        <List
-                          size="small"
-                          dataSource={diagnosis.knowledge_sources}
-                          renderItem={(source) => (
-                            <List.Item>
-                              <Space direction="vertical" size={2}>
-                                <Space wrap>
-                                  <Text strong>{source.title}</Text>
-                                  <Tag>{source.source_id}</Tag>
-                                  <Tag color="blue">{source.version}</Tag>
-                                  <Tag color="green">{source.authority_level}</Tag>
-                                </Space>
-                                <Text type="secondary">{source.summary}</Text>
-                              </Space>
-                            </List.Item>
-                          )}
-                        />
-                      ) : (
-                        <Text type="secondary">暂无可打开的课程来源</Text>
-                      )
-                    ) : (
-                      <Text>暂无来源</Text>
-                    )
-                  },
-                  {
-                    key: "hints",
-                    label: "渐进提示",
-                    children: (
-                      <Space direction="vertical" className="full">
-                        {hints.length === 0 ? (
-                          <Text type="secondary">暂无提示</Text>
-                        ) : (
-                          hints.map((hint) => (
-                            <Alert
-                              key={`${hint.diagnosis_id}_${hint.level}`}
-                              type="success"
-                              showIcon
-                              message={`第 ${hint.level} 级提示`}
-                              description={hint.content}
-                            />
-                          ))
-                        )}
-                        {diagnosis && (
-                          <Space wrap>
-                            <Button disabled={hints.some((hint) => hint.level === 2)} onClick={() => requestHint(2)}>
-                              申请二级提示
-                            </Button>
-                            <Button
-                              disabled={!hints.some((hint) => hint.level === 2) || hints.some((hint) => hint.level === 3)}
-                              onClick={() => requestHint(3)}
-                            >
-                              申请三级提示
-                            </Button>
-                          </Space>
-                        )}
-                      </Space>
-                    )
-                  }
-                ]}
-              />
-            )}
-          </Card>
+          <article className="program-card program-error">
+            <header><h2>错因分析</h2><button type="button">本题表现 <ChevronDown size={14} /></button></header>
+            <div className="error-layout">
+              <div className="error-donut"><strong>5<span>次</span></strong></div>
+              <div className="error-legend">
+                <p><i className="blue" /> 逻辑错误 <b>60% (3次)</b></p>
+                <p><i className="red" /> 边界条件 <b>20% (1次)</b></p>
+                <p><i className="orange" /> 超时问题 <b>20% (1次)</b></p>
+                <p><i /> 其他问题 <b>0% (0次)</b></p>
+              </div>
+            </div>
+            <a className="program-card-link" href="#">查看错题本 <ChevronRight size={14} /></a>
+          </article>
 
-          <Card title="学习总结">
-            {summary ? (
-              <Space direction="vertical" className="full">
-                <Tag color={summary.final_status === "PASSED" ? "success" : summary.final_status === "FAILED" ? "error" : "processing"}>{summary.final_status}</Tag>
-                <Text>提交次数：{summary.version_count}</Text>
-                <Alert type="info" message="下一步建议" description={summary.next_step_suggestion} showIcon />
-                {summary.capability_evidence && (
-                  <Alert type="success" message={summary.capability_evidence.capability_code} description={summary.capability_evidence.explanation} showIcon />
-                )}
-              </Space>
-            ) : (
-              <Empty description="通过后生成，并进入我的资料" />
-            )}
-          </Card>
-        </Col>
-      </Row>
+          <article className="program-card program-advice">
+            <h2>学习建议</h2>
+            {suggestions.map((item) => (
+              <div className={item[2]} key={item[0]}>
+                <span>{item[2] === "done" ? <Check size={15} /> : item[2] === "warn" ? <Circle size={15} /> : <Circle size={15} />}</span>
+                <div><strong>{item[0]}</strong><p>{item[1]}</p></div>
+              </div>
+            ))}
+            <a className="program-card-link" href="#">查看推荐题目 <ChevronRight size={14} /></a>
+          </article>
+        </section>
+      </main>
     </div>
   );
 }
