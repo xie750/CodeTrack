@@ -1,6 +1,6 @@
 import { useEffect, useState, type MouseEvent } from "react";
 import { Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
-import { Bell, BookOpen, ChartNoAxesColumnIncreasing, ChevronsLeft, ClipboardList, House, LogOut, Search, Star } from "lucide-react";
+import { Bell, BookOpen, ChartNoAxesColumnIncreasing, ChevronsLeft, ChevronsRight, ClipboardList, House, LogOut, Search, Star } from "lucide-react";
 import { ConfigProvider } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import LearningHome from "./pages/LearningHome";
@@ -71,6 +71,7 @@ function AppContent({ authUser, onLogout }: { authUser: AuthUser; onLogout: () =
   const activeKey = selectedKey(location.pathname);
   const isWorkspace = location.pathname.startsWith("/workspace") || location.pathname.startsWith("/question-workspace");
   const activeRouteGroup = routeGroup(location.pathname);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   function transitionTo(to: string) {
     if (to === location.pathname) return;
@@ -151,8 +152,8 @@ function AppContent({ authUser, onLogout }: { authUser: AuthUser; onLogout: () =
         </div>
       </header>
 
-      <div className="replica-app">
-        <aside className="replica-sidebar">
+      <div className={`replica-app${sidebarCollapsed ? " collapsed" : ""}`}>
+        <aside className={`replica-sidebar${sidebarCollapsed ? " collapsed" : ""}`}>
           <nav className="replica-side-nav" aria-label="学生端导航">
             {navItems.map((item) => (
               <NavLink
@@ -167,23 +168,50 @@ function AppContent({ authUser, onLogout }: { authUser: AuthUser; onLogout: () =
               </NavLink>
             ))}
           </nav>
-          <button className="collapse-btn" type="button">
-            <ChevronsLeft size={18} />
-            收起侧栏
+          {activeKey === "/profile" ? (
+            <div className="profile-side-widgets" aria-label="学习画像侧栏摘要">
+              <section>
+                <div className="rank-mascot">码</div>
+                <div>
+                  <span>当前段位</span>
+                  <strong>探索者 I</strong>
+                  <div className="side-stars"><Star size={13} fill="currentColor" /><Star size={13} fill="currentColor" /><Star size={13} /><Star size={13} /><Star size={13} /></div>
+                </div>
+                <div className="side-meter"><b style={{ width: "40%" }} /></div>
+                <em>320 / 800</em>
+              </section>
+              <section>
+                <span>连续学习天数</span>
+                <strong className="streak">21 <small>天</small></strong>
+                <em>已连续学习</em>
+                <div className="week-dots">{["一", "二", "三", "四", "五", "六", "日"].map((day, index) => <i className={index < 6 ? "done" : ""} key={day}>{day}</i>)}</div>
+                <a href="#">查看学习日历</a>
+              </section>
+            </div>
+          ) : null}
+          <button className="collapse-btn" type="button" onClick={() => setSidebarCollapsed((prev) => !prev)}>
+            {sidebarCollapsed ? <ChevronsRight size={18} /> : <ChevronsLeft size={18} />}
+            {sidebarCollapsed ? "展开侧栏" : "收起侧栏"}
           </button>
         </aside>
+
+        {sidebarCollapsed && (
+          <button className="sidebar-expand-float" type="button" onClick={() => setSidebarCollapsed(false)} aria-label="展开侧栏">
+            <ChevronsRight size={20} />
+          </button>
+        )}
 
         <main className="app-content" data-route={activeRouteGroup}>
           <div className="route-stage" key={activeRouteGroup}>
             <Routes location={location}>
-            <Route path="/" element={<LearningHome onNavigate={handleNavigate} onOpenWorkspace={openTask} />} />
-            <Route path="/tasks" element={<CourseTasks onOpenWorkspace={openTask} />} />
-            <Route path="/workspace/:taskId" element={<TaskWorkspaceWrapper onBack={() => transitionTo("/tasks")} />} />
-            <Route path="/question-workspace/:assignmentId" element={<QuestionWorkspaceWrapper onBack={() => transitionTo("/tasks")} />} />
-            <Route path="/self-study" element={<SelfStudy />} />
-            <Route path="/ai-tutor" element={<AiTutor />} />
-            <Route path="/library" element={<LearningLibrary />} />
-            <Route path="/profile" element={<LearningProfile />} />
+              <Route path="/" element={<LearningHome onNavigate={handleNavigate} onOpenWorkspace={openTask} />} />
+              <Route path="/tasks" element={<CourseTasks onOpenWorkspace={openTask} />} />
+              <Route path="/workspace/:taskId" element={<TaskWorkspaceWrapper onBack={() => transitionTo("/tasks")} />} />
+              <Route path="/question-workspace/:assignmentId" element={<QuestionWorkspaceWrapper onBack={() => transitionTo("/tasks")} />} />
+              <Route path="/self-study" element={<SelfStudy />} />
+              <Route path="/ai-tutor" element={<AiTutor />} />
+              <Route path="/library" element={<LearningLibrary />} />
+              <Route path="/profile" element={<LearningProfile />} />
             </Routes>
           </div>
         </main>
@@ -207,7 +235,7 @@ function AppContent({ authUser, onLogout }: { authUser: AuthUser; onLogout: () =
           <span>自学</span>
         </NavLink>
       </nav>
-    </div>
+    </div >
   );
 }
 
