@@ -1307,6 +1307,41 @@ html[data-route-motion="deeper"] .workspace-route-stage {
   color: #176cf5;
 }
 
+.replica-app.collapsed {
+  grid-template-columns: 0 minmax(0, 1fr);
+}
+
+.replica-sidebar.collapsed {
+  width: 0;
+  min-width: 0;
+  padding: 34px 0 22px;
+  overflow: hidden;
+  border-right: 0;
+}
+
+.sidebar-expand-float {
+  position: absolute;
+  left: 10px;
+  top: 90px;
+  z-index: 25;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #dce4ee;
+  border-radius: 8px;
+  color: #4e5d74;
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(42, 77, 128, 0.1);
+  cursor: pointer;
+}
+
+.sidebar-expand-float:hover {
+  border-color: #b9cff5;
+  color: #176cf5;
+  box-shadow: 0 6px 16px rgba(42, 77, 128, 0.15);
+}
+
 .app-content {
   width: 100%;
   min-width: 0;

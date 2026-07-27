@@ -1,6 +1,6 @@
 import { useEffect, useState, type MouseEvent } from "react";
 import { Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
-import { Bell, BookOpen, ChartNoAxesColumnIncreasing, ChevronsLeft, ClipboardList, House, LogOut, Search, Star } from "lucide-react";
+import { Bell, BookOpen, ChartNoAxesColumnIncreasing, ChevronsLeft, ChevronsRight, ClipboardList, House, LogOut, Search, Star } from "lucide-react";
 import { ConfigProvider } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import LearningHome from "./pages/LearningHome";
@@ -71,6 +71,7 @@ function AppContent({ authUser, onLogout }: { authUser: AuthUser; onLogout: () =
   const activeKey = selectedKey(location.pathname);
   const isWorkspace = location.pathname.startsWith("/workspace") || location.pathname.startsWith("/question-workspace");
   const activeRouteGroup = routeGroup(location.pathname);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   function transitionTo(to: string) {
     if (to === location.pathname) return;
@@ -151,8 +152,8 @@ function AppContent({ authUser, onLogout }: { authUser: AuthUser; onLogout: () =
         </div>
       </header>
 
-      <div className="replica-app">
-        <aside className="replica-sidebar">
+      <div className={`replica-app${sidebarCollapsed ? " collapsed" : ""}`}>
+        <aside className={`replica-sidebar${sidebarCollapsed ? " collapsed" : ""}`}>
           <nav className="replica-side-nav" aria-label="学生端导航">
             {navItems.map((item) => (
               <NavLink
@@ -167,11 +168,17 @@ function AppContent({ authUser, onLogout }: { authUser: AuthUser; onLogout: () =
               </NavLink>
             ))}
           </nav>
-          <button className="collapse-btn" type="button">
-            <ChevronsLeft size={18} />
-            收起侧栏
+          <button className="collapse-btn" type="button" onClick={() => setSidebarCollapsed((prev) => !prev)}>
+            {sidebarCollapsed ? <ChevronsRight size={18} /> : <ChevronsLeft size={18} />}
+            {sidebarCollapsed ? "展开侧栏" : "收起侧栏"}
           </button>
         </aside>
+
+        {sidebarCollapsed && (
+          <button className="sidebar-expand-float" type="button" onClick={() => setSidebarCollapsed(false)} aria-label="展开侧栏">
+            <ChevronsRight size={20} />
+          </button>
+        )}
 
         <main className="app-content" data-route={activeRouteGroup}>
           <div className="route-stage" key={activeRouteGroup}>

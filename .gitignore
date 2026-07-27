@@ -10,3 +10,4 @@ frontend/tsconfig.tsbuildinfo
 
 .env
 
+/文件解析.md
