@@ -16,6 +16,45 @@ body {
   font-family: Inter, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
 }
 
+:root {
+  --motion-soft: cubic-bezier(0.2, 0.78, 0.22, 1);
+  --motion-snap: cubic-bezier(0.16, 1, 0.3, 1);
+  --route-duration: 180ms;
+}
+
+@keyframes route-enter-forward {
+  from {
+    opacity: 0;
+    transform: translate3d(8px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes route-enter-back {
+  from {
+    opacity: 0;
+    transform: translate3d(-8px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes route-enter-deeper {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
 button,
 input,
 textarea {
@@ -206,6 +245,23 @@ textarea {
   display: none;
 }
 
+.route-stage,
+.workspace-route-stage {
+  min-height: 100%;
+  animation: route-enter-forward var(--route-duration) var(--motion-soft) both;
+  will-change: opacity, transform;
+}
+
+html[data-route-motion="back"] .route-stage,
+html[data-route-motion="back"] .workspace-route-stage {
+  animation-name: route-enter-back;
+}
+
+html[data-route-motion="deeper"] .route-stage,
+html[data-route-motion="deeper"] .workspace-route-stage {
+  animation-name: route-enter-deeper;
+}
+
 .replica-shell {
   height: 100dvh;
   min-height: 100vh;
@@ -257,6 +313,7 @@ textarea {
   background: transparent;
   color: #ffffff;
   cursor: pointer;
+  transition: background 180ms var(--motion-soft), transform 180ms var(--motion-soft);
 }
 
 .top-icon:hover {
@@ -335,6 +392,10 @@ textarea {
   color: #40506a;
   font-size: 16px;
   text-decoration: none;
+  transition:
+    background 220ms var(--motion-soft),
+    border-color 220ms var(--motion-soft),
+    color 220ms var(--motion-soft);
 }
 
 .side-link:hover {
@@ -354,6 +415,7 @@ textarea {
   display: grid;
   place-items: center;
   color: #53647d;
+  transition: color 220ms var(--motion-soft);
 }
 
 .side-link.active .side-icon {
@@ -372,120 +434,12 @@ textarea {
   color: #4e5d74;
   background: #ffffff;
   cursor: pointer;
+  transition: border-color 180ms var(--motion-soft), color 180ms var(--motion-soft), transform 180ms var(--motion-soft);
 }
 
 .collapse-btn:hover {
   border-color: #b9cff5;
   color: #176cf5;
-}
-
-.profile-side-widgets {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  margin-top: auto;
-  margin-bottom: 22px;
-}
-
-.profile-side-widgets section {
-  min-height: 128px;
-  padding: 16px 14px;
-  border-radius: 10px;
-  background: #f7faff;
-  box-shadow: 0 8px 24px rgba(42, 77, 128, 0.04);
-}
-
-.rank-mascot {
-  float: left;
-  width: 44px;
-  height: 44px;
-  margin-right: 10px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  color: #176cf5;
-  background: linear-gradient(145deg, #dceaff, #ffffff);
-  font-weight: 900;
-}
-
-.profile-side-widgets span,
-.profile-side-widgets em {
-  display: block;
-  color: #7a879b;
-  font-size: 11px;
-  font-style: normal;
-}
-
-.profile-side-widgets strong {
-  display: block;
-  margin: 3px 0 8px;
-  color: #20314d;
-  font-size: 13px;
-}
-
-.side-stars {
-  display: flex;
-  gap: 2px;
-  color: #ffb020;
-}
-
-.side-meter {
-  clear: both;
-  height: 6px;
-  margin: 14px 0 8px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #e5eaf2;
-}
-
-.side-meter b {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: #176cf5;
-}
-
-.profile-side-widgets .streak {
-  color: #176cf5;
-  font-size: 29px;
-}
-
-.profile-side-widgets .streak small {
-  color: #1d2a40;
-  font-size: 13px;
-}
-
-.week-dots {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
-  margin: 12px 0 13px;
-}
-
-.week-dots i {
-  width: 16px;
-  height: 16px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  color: #98a4b6;
-  background: #e5eaf2;
-  font-size: 9px;
-  font-style: normal;
-}
-
-.week-dots i.done {
-  color: #ffffff;
-  background: #176cf5;
-}
-
-.profile-side-widgets a {
-  display: block;
-  color: #176cf5;
-  font-size: 12px;
-  font-weight: 800;
-  text-align: center;
-  text-decoration: none;
 }
 
 .app-content {
@@ -624,6 +578,7 @@ textarea {
   box-shadow: 0 8px 18px rgba(25, 103, 239, 0.2);
   font-weight: 800;
   cursor: pointer;
+  transition: transform 180ms var(--motion-soft), box-shadow 180ms var(--motion-soft), background 180ms var(--motion-soft);
 }
 
 .primary-btn span {
@@ -656,6 +611,7 @@ textarea {
   border: 1px solid #e8edf4;
   border-radius: 10px;
   background: #ffffff;
+  transition: border-color 180ms var(--motion-soft), background 180ms var(--motion-soft), transform 180ms var(--motion-soft), box-shadow 180ms var(--motion-soft);
 }
 
 .task-row:hover {
@@ -781,6 +737,7 @@ textarea {
   background: #ffffff;
   font-weight: 800;
   cursor: pointer;
+  transition: border-color 180ms var(--motion-soft), color 180ms var(--motion-soft), background 180ms var(--motion-soft), transform 180ms var(--motion-soft);
 }
 
 .outline-btn:hover {
@@ -802,6 +759,7 @@ textarea {
   border: 1px solid #e6ebf3;
   border-radius: 10px;
   background: #ffffff;
+  transition: border-color 180ms var(--motion-soft), transform 180ms var(--motion-soft), box-shadow 180ms var(--motion-soft);
 }
 
 .recommendation h3 {
@@ -1768,6 +1726,7 @@ textarea {
   background: #ffffff;
   font-weight: 800;
   cursor: pointer;
+  transition: border-color 180ms var(--motion-soft), color 180ms var(--motion-soft), background 180ms var(--motion-soft), transform 180ms var(--motion-soft), box-shadow 180ms var(--motion-soft);
 }
 
 .class-select {
@@ -1788,6 +1747,7 @@ textarea {
 }
 
 .view-switch {
+  position: relative;
   display: flex;
   padding: 2px;
   border: 1px solid #dce5f2;
@@ -1894,6 +1854,11 @@ textarea {
   background: transparent;
   font-weight: 800;
   cursor: pointer;
+  transition: color 180ms var(--motion-soft), background 180ms var(--motion-soft), transform 180ms var(--motion-soft);
+}
+
+.class-tabs button:hover {
+  color: #176cf5;
 }
 
 .class-tabs button.active {
@@ -2283,6 +2248,11 @@ textarea {
   background: transparent;
   font-size: 14px;
   font-weight: 700;
+  transition: color 180ms var(--motion-soft), border-color 180ms var(--motion-soft), transform 180ms var(--motion-soft);
+}
+
+.program-nav button:hover {
+  color: #ffffff;
 }
 
 .program-nav button.active {
@@ -2307,6 +2277,11 @@ textarea {
   border-radius: 8px;
   color: #ffffff;
   background: transparent;
+  transition: background 180ms var(--motion-soft), transform 180ms var(--motion-soft);
+}
+
+.program-top-actions button:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .program-bell span {
@@ -2371,6 +2346,11 @@ textarea {
   color: #3f506d;
   background: transparent;
   font-size: 13px;
+  transition: color 180ms var(--motion-soft), transform 180ms var(--motion-soft);
+}
+
+.program-back:hover {
+  color: #176cf5;
 }
 
 .program-title-line {
@@ -2421,6 +2401,7 @@ textarea {
   color: #45546b;
   background: transparent;
   font-weight: 800;
+  transition: border-color 180ms var(--motion-soft), color 180ms var(--motion-soft), background 180ms var(--motion-soft), box-shadow 180ms var(--motion-soft), transform 180ms var(--motion-soft);
 }
 
 .program-head-actions .outline,
@@ -3101,6 +3082,23 @@ textarea {
   min-height: 36px;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+
+  .route-stage,
+  .workspace-route-stage {
+    animation: none !important;
+    transform: none !important;
+  }
+}
+
 @media (max-width: 991px) {
   .page-lead,
   .task-card,
@@ -3278,6 +3276,11 @@ textarea {
     font-size: 11px;
     letter-spacing: 0;
     text-decoration: none;
+    transition: color 180ms var(--motion-soft);
+  }
+
+  .mobile-nav a:hover {
+    color: #176cf5;
   }
 
   .mobile-nav a.active {

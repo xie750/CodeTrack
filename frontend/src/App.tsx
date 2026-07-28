@@ -1,3 +1,4 @@
+import type { MouseEvent } from "react";
 import { NavLink, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Bell, BookOpen, ChartNoAxesColumnIncreasing, ChevronDown, ChevronsLeft, ClipboardList, House, Search, Star } from "lucide-react";
 import { ConfigProvider } from "antd";
@@ -20,6 +21,8 @@ const navItems = [
   { key: "/profile", label: "学习画像", icon: <ChartNoAxesColumnIncreasing size={22} strokeWidth={2.1} /> }
 ];
 
+const routeOrder = ["/", "/tasks", "/workspace", "/self-study", "/ai-tutor", "/library", "/profile"];
+
 function selectedKey(pathname: string) {
   if (pathname.startsWith("/workspace")) return "/tasks";
   if (pathname.startsWith("/tasks")) return "/tasks";
@@ -28,15 +31,46 @@ function selectedKey(pathname: string) {
   return "/";
 }
 
+function routeGroup(pathname: string) {
+  if (pathname.startsWith("/workspace")) return "/workspace";
+  if (pathname.startsWith("/tasks")) return "/tasks";
+  if (pathname.startsWith("/self-study")) return "/self-study";
+  if (pathname.startsWith("/ai-tutor")) return "/ai-tutor";
+  if (pathname.startsWith("/library")) return "/library";
+  if (pathname.startsWith("/profile")) return "/profile";
+  return "/";
+}
+
+function routeMotion(from: string, to: string) {
+  const fromIndex = routeOrder.indexOf(routeGroup(from));
+  const toIndex = routeOrder.indexOf(routeGroup(to));
+  if (routeGroup(to) === "/workspace") return "deeper";
+  if (routeGroup(from) === "/workspace") return "back";
+  if (fromIndex === toIndex) return "replace";
+  return toIndex > fromIndex ? "forward" : "back";
+}
+
+function shouldUseNativeNavigation(event: MouseEvent<HTMLAnchorElement>) {
+  return event.defaultPrevented || event.button !== 0 || event.metaKey || event.altKey || event.ctrlKey || event.shiftKey;
+}
+
 function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { taskId } = useParams<{ taskId: string }>();
   const activeKey = selectedKey(location.pathname);
   const isWorkspace = location.pathname.startsWith("/workspace");
+  const activeRouteGroup = routeGroup(location.pathname);
+
+  function transitionTo(to: string) {
+    if (to === location.pathname) return;
+
+    const motion = routeMotion(location.pathname, to);
+    document.documentElement.dataset.routeMotion = motion;
+    navigate(to);
+  }
 
   function openWorkspace(id?: string) {
-    navigate(`/workspace/${id ?? "task_linked_list_delete_001"}`);
+    transitionTo(`/workspace/${id ?? "task_linked_list_delete_001"}`);
   }
 
   function handleNavigate(page: string) {
@@ -47,21 +81,29 @@ function AppContent() {
       tasks: "/tasks",
       profile: "/profile"
     };
-    navigate(aliases[page] ?? page);
+    transitionTo(aliases[page] ?? page);
+  }
+
+  function handleNavClick(event: MouseEvent<HTMLAnchorElement>, to: string) {
+    if (shouldUseNativeNavigation(event)) return;
+    event.preventDefault();
+    transitionTo(to);
   }
 
   if (isWorkspace) {
     return (
-      <Routes>
-        <Route path="/workspace/:taskId" element={<TaskWorkspaceWrapper onBack={() => navigate("/tasks")} />} />
-      </Routes>
+      <div className="workspace-route-stage" key={location.pathname}>
+        <Routes location={location}>
+          <Route path="/workspace/:taskId" element={<TaskWorkspaceWrapper onBack={() => transitionTo("/tasks")} />} />
+        </Routes>
+      </div>
     );
   }
 
   return (
     <div className="replica-shell">
       <header className="replica-topbar">
-        <NavLink to="/" className="logo-link" aria-label="返回学习首页">
+        <NavLink to="/" className="logo-link" aria-label="返回学习首页" onClick={(event) => handleNavClick(event, "/")}>
           <img className="logo-img" src={logoImg} alt="CodeTrack" />
         </NavLink>
         <div className="top-actions" aria-label="顶部工具栏">
@@ -84,60 +126,53 @@ function AppContent() {
         <aside className="replica-sidebar">
           <nav className="replica-side-nav" aria-label="学生端导航">
             {navItems.map((item) => (
-              <NavLink key={item.key} to={item.key} end={item.key === "/"} className={activeKey === item.key ? "side-link active" : "side-link"}>
+              <NavLink
+                key={item.key}
+                to={item.key}
+                end={item.key === "/"}
+                className={activeKey === item.key ? "side-link active" : "side-link"}
+                onClick={(event) => handleNavClick(event, item.key)}
+              >
                 <span className="side-icon">{item.icon}</span>
                 <span>{item.label}</span>
               </NavLink>
             ))}
           </nav>
-          {activeKey === "/profile" ? (
-            <div className="profile-side-widgets" aria-label="学习画像侧栏摘要">
-              <section>
-                <div className="rank-mascot">码</div>
-                <div>
-                  <span>当前段位</span>
-                  <strong>探索者 I</strong>
-                  <div className="side-stars"><Star size={13} fill="currentColor" /><Star size={13} fill="currentColor" /><Star size={13} /><Star size={13} /><Star size={13} /></div>
-                </div>
-                <div className="side-meter"><b style={{ width: "40%" }} /></div>
-                <em>320 / 800</em>
-              </section>
-              <section>
-                <span>连续学习天数</span>
-                <strong className="streak">21 <small>天</small></strong>
-                <em>已连续学习</em>
-                <div className="week-dots">{["一", "二", "三", "四", "五", "六", "日"].map((day, index) => <i className={index < 6 ? "done" : ""} key={day}>{day}</i>)}</div>
-                <a href="#">查看学习日历</a>
-              </section>
-            </div>
-          ) : null}
           <button className="collapse-btn" type="button">
             <ChevronsLeft size={18} />
             收起侧栏
           </button>
         </aside>
 
-        <main className="app-content">
-          <Routes>
+        <main className="app-content" data-route={activeRouteGroup}>
+          <div className="route-stage" key={activeRouteGroup}>
+            <Routes location={location}>
             <Route path="/" element={<LearningHome onNavigate={handleNavigate} onOpenWorkspace={openWorkspace} />} />
             <Route path="/tasks" element={<CourseTasks onOpenWorkspace={openWorkspace} />} />
-            <Route path="/workspace/:taskId" element={<TaskWorkspaceWrapper onBack={() => navigate("/tasks")} />} />
+            <Route path="/workspace/:taskId" element={<TaskWorkspaceWrapper onBack={() => transitionTo("/tasks")} />} />
             <Route path="/self-study" element={<SelfStudy />} />
             <Route path="/ai-tutor" element={<AiTutor />} />
             <Route path="/library" element={<LearningLibrary />} />
             <Route path="/profile" element={<LearningProfile />} />
-          </Routes>
+            </Routes>
+          </div>
         </main>
       </div>
 
       <nav className="mobile-nav" aria-label="移动端导航">
         {navItems.map((item) => (
-          <NavLink key={item.key} to={item.key} end={item.key === "/"} className={({ isActive }) => (isActive ? "active" : "")}>
+          <NavLink
+            key={item.key}
+            to={item.key}
+            end={item.key === "/"}
+            className={({ isActive }) => (isActive ? "active" : "")}
+            onClick={(event) => handleNavClick(event, item.key)}
+          >
             {item.icon}
             <span>{item.label}</span>
           </NavLink>
         ))}
-        <NavLink to="/self-study">
+        <NavLink to="/self-study" onClick={(event) => handleNavClick(event, "/self-study")}>
           <BookOpen size={22} />
           <span>自学</span>
         </NavLink>
