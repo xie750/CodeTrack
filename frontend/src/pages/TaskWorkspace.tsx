@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import {
   ArrowLeft,
   Bell,
@@ -32,12 +32,47 @@ type PageProps = {
   onBack: () => void;
 };
 
+type WorkspaceLayout = {
+  problemWidth: number;
+  editorHeight: number | null;
+};
+
+const WORKSPACE_LAYOUT_KEY = "codetrack.taskWorkspace.layout.v1";
+const DEFAULT_PROBLEM_WIDTH = 316;
+const PROBLEM_MIN_WIDTH = 240;
+const CENTER_MIN_WIDTH = 520;
+const EDITOR_MIN_HEIGHT = 300;
+const RESULT_MIN_HEIGHT = 180;
+const SPLITTER_SIZE = 12;
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), Math.max(min, max));
+}
+
+function readWorkspaceLayout(): WorkspaceLayout {
+  if (typeof window === "undefined") {
+    return { problemWidth: DEFAULT_PROBLEM_WIDTH, editorHeight: null };
+  }
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(WORKSPACE_LAYOUT_KEY) ?? "{}") as Partial<WorkspaceLayout>;
+    return {
+      problemWidth: typeof parsed.problemWidth === "number" ? parsed.problemWidth : DEFAULT_PROBLEM_WIDTH,
+      editorHeight: typeof parsed.editorHeight === "number" ? parsed.editorHeight : null
+    };
+  } catch {
+    return { problemWidth: DEFAULT_PROBLEM_WIDTH, editorHeight: null };
+  }
+}
+
 export default function TaskWorkspace({ taskId, onBack }: PageProps) {
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [context, setContext] = useState<LearningContext | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [aiCollapsed, setAiCollapsed] = useState(false);
+  const [layout, setLayout] = useState<WorkspaceLayout>(() => readWorkspaceLayout());
+  const gridRef = useRef<HTMLElement | null>(null);
+  const centerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -66,6 +101,10 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
     };
   }, [taskId]);
 
+  useEffect(() => {
+    window.localStorage.setItem(WORKSPACE_LAYOUT_KEY, JSON.stringify(layout));
+  }, [layout]);
+
   const editorLines = useMemo(() => {
     const template = task?.interface_spec.student_template.trimEnd();
     return template ? template.split("\n") : ["// 正在等待任务模板"];
@@ -84,9 +123,82 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
 
   const knowledgeTags = task?.learning_objectives.length ? task.learning_objectives : ["等待任务知识点"];
   const studentName = context?.student.name ?? "学生";
+  const workspaceStyle = {
+    "--program-problem-width": `${layout.problemWidth}px`,
+    ...(layout.editorHeight ? { "--program-editor-height": `${layout.editorHeight}px` } : {})
+  } as CSSProperties;
+
+  function startProblemResize(event: PointerEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const grid = gridRef.current;
+    if (!grid) return;
+
+    const gridRect = grid.getBoundingClientRect();
+    const aiWidth = grid.querySelector(".program-ai")?.getBoundingClientRect().width ?? 0;
+    const maxProblemWidth = gridRect.width - aiWidth - CENTER_MIN_WIDTH - SPLITTER_SIZE - 32;
+
+    document.documentElement.classList.add("workspace-resizing", "workspace-resizing-x");
+
+    function handleMove(moveEvent: globalThis.PointerEvent) {
+      const nextWidth = clamp(moveEvent.clientX - gridRect.left, PROBLEM_MIN_WIDTH, maxProblemWidth);
+      setLayout((current) => ({ ...current, problemWidth: Math.round(nextWidth) }));
+    }
+
+    function stopResize() {
+      document.documentElement.classList.remove("workspace-resizing", "workspace-resizing-x");
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", stopResize);
+      window.removeEventListener("pointercancel", stopResize);
+    }
+
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", stopResize);
+    window.addEventListener("pointercancel", stopResize);
+  }
+
+  function startEditorResize(event: PointerEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const center = centerRef.current;
+    if (!center) return;
+
+    const centerRect = center.getBoundingClientRect();
+    const maxEditorHeight = centerRect.height - RESULT_MIN_HEIGHT - SPLITTER_SIZE;
+
+    document.documentElement.classList.add("workspace-resizing", "workspace-resizing-y");
+
+    function handleMove(moveEvent: globalThis.PointerEvent) {
+      const nextHeight = clamp(moveEvent.clientY - centerRect.top, EDITOR_MIN_HEIGHT, maxEditorHeight);
+      setLayout((current) => ({ ...current, editorHeight: Math.round(nextHeight) }));
+    }
+
+    function stopResize() {
+      document.documentElement.classList.remove("workspace-resizing", "workspace-resizing-y");
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", stopResize);
+      window.removeEventListener("pointercancel", stopResize);
+    }
+
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", stopResize);
+    window.addEventListener("pointercancel", stopResize);
+  }
+
+  function handleProblemSplitterKey(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const delta = event.key === "ArrowLeft" ? -24 : 24;
+    setLayout((current) => ({ ...current, problemWidth: Math.max(PROBLEM_MIN_WIDTH, current.problemWidth + delta) }));
+  }
+
+  function handleEditorSplitterKey(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    event.preventDefault();
+    const delta = event.key === "ArrowUp" ? -24 : 24;
+    setLayout((current) => ({ ...current, editorHeight: Math.max(EDITOR_MIN_HEIGHT, (current.editorHeight ?? 420) + delta) }));
+  }
 
   return (
-    <div className="program-shell" data-task-id={taskId}>
+    <div className="program-shell" data-task-id={taskId} style={workspaceStyle}>
       <header className="program-topbar">
         <div className="program-brand">
           <span className="program-brand-mark ct-brand-mark" aria-hidden="true" />
@@ -107,8 +219,10 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
             <section className="program-head skeleton-block" />
             <section className="program-grid">
               <article className="program-card program-problem skeleton-block" />
+              <div className="program-splitter vertical skeleton-block" />
               <div className="program-center">
                 <article className="program-card program-editor skeleton-block" />
+                <div className="program-splitter horizontal skeleton-block" />
                 <article className="program-card program-result skeleton-block" />
               </div>
               <aside className="program-card program-ai skeleton-block" />
@@ -138,7 +252,7 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
           </div>
         </section>
 
-        <section className="program-grid" data-ai-collapsed={aiCollapsed ? "true" : "false"}>
+        <section className="program-grid" data-ai-collapsed={aiCollapsed ? "true" : "false"} ref={gridRef}>
           <article className="program-card program-problem">
             <h2>题目描述</h2>
             <p>{task.description}</p>
@@ -169,7 +283,19 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
             <p>请先运行公开样例，再根据系统验证和 AI 诊断逐步修正。新提交不会继承旧诊断。</p>
           </article>
 
-          <div className="program-center">
+          <div
+            className="program-splitter vertical"
+            role="separator"
+            aria-label="调整题目和代码区域宽度"
+            aria-orientation="vertical"
+            tabIndex={0}
+            onPointerDown={startProblemResize}
+            onKeyDown={handleProblemSplitterKey}
+          >
+            <span />
+          </div>
+
+          <div className="program-center" ref={centerRef}>
             <article className="program-card program-editor">
               <header>
                 <h2>代码编辑器</h2>
@@ -187,6 +313,18 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
                 <button className="primary" type="button"><Upload size={16} /> 提交代码</button>
               </footer>
             </article>
+
+            <div
+              className="program-splitter horizontal"
+              role="separator"
+              aria-label="调整代码编辑器和测试结果高度"
+              aria-orientation="horizontal"
+              tabIndex={0}
+              onPointerDown={startEditorResize}
+              onKeyDown={handleEditorSplitterKey}
+            >
+              <span />
+            </div>
 
             <article className="program-card program-result">
               <header>
