@@ -302,8 +302,8 @@ export default function LearningProfile() {
               </g>
               <polyline points="62,130 120,97 178,127 236,145 294,112 352,98 410,126" fill="none" stroke="#176cf5" strokeWidth="4" strokeLinecap="round" />
               <polyline points="62,132 120,146 178,104 236,96 294,86 352,117 410,151" fill="none" stroke="#20bd79" strokeWidth="4" strokeLinecap="round" />
-              {[62,120,178,236,294,352,410].map((x, idx) => <circle key={`b-${x}`} cx={x} cy={[130,97,127,145,112,98,126][idx]} r="4" fill="#176cf5" />)}
-              {[62,120,178,236,294,352,410].map((x, idx) => <circle key={`g-${x}`} cx={x} cy={[132,146,104,96,86,117,151][idx]} r="4" fill="#20bd79" />)}
+              {[62, 120, 178, 236, 294, 352, 410].map((x, idx) => <circle key={`b-${x}`} cx={x} cy={[130, 97, 127, 145, 112, 98, 126][idx]} r="4" fill="#176cf5" />)}
+              {[62, 120, 178, 236, 294, 352, 410].map((x, idx) => <circle key={`g-${x}`} cx={x} cy={[132, 146, 104, 96, 86, 117, 151][idx]} r="4" fill="#20bd79" />)}
             </svg>
             <div className="behavior-stats">
               <span>学习高峰时间<strong>20:00 - 22:00</strong></span>

@@ -307,79 +307,78 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
           </section>
         </div>
 
-        <footer className="home-footer">© 2024 CodeTrack · 时代码点亮未来 <span>帮助中心</span><span>隐私政策</span><span>用户协议</span></footer>
-      </section>
-
-      <aside className="home-aside">
-        <section className="home-card right-card today-goal">
-          <div className="home-card-header">
-            <h2>今日目标</h2>
-            <button className="text-link" type="button">编辑</button>
-          </div>
-          {isLoading ? <div className="side-skeleton skeleton-block" /> : profile ? <>
-          <div className="goal-ring">
-            <div>
-              <strong>{profile.overview.recent_task_completion}%</strong>
-              <span>已完成</span>
+        <section className="home-bottom-panels">
+          <article className="home-card home-panel today-goal">
+            <div className="home-card-header">
+              <h2>今日目标</h2>
+              <button className="text-link" type="button">编辑</button>
             </div>
-          </div>
-          <div className="goal-list">
-            <span className="done"><Check size={14} />完成 1 个课程任务</span>
-            <span className="done"><Check size={14} />复盘 1 个薄弱点</span>
-            <span><i />保存 1 份学习产物</span>
-          </div>
-          </> : <div className="empty-panel">暂无今日目标数据。</div>}
-        </section>
+            {isLoading ? <div className="side-skeleton skeleton-block" /> : profile ? <>
+            <div className="goal-ring">
+              <div>
+                <strong>{profile.overview.recent_task_completion}%</strong>
+                <span>已完成</span>
+              </div>
+            </div>
+            <div className="goal-list">
+              <span className="done"><Check size={14} />完成 1 个课程任务</span>
+              <span className="done"><Check size={14} />复盘 1 个薄弱点</span>
+              <span><i />保存 1 份学习产物</span>
+            </div>
+            </> : <div className="empty-panel">暂无今日目标数据。</div>}
+          </article>
 
-        <section className="home-card right-card">
-          <div className="home-card-header">
-            <h2>近期提醒</h2>
-            <button className="text-link" type="button">查看全部</button>
-          </div>
-          <div className="reminder-list">
-            {isLoading ? (
-              Array.from({ length: 3 }).map((_, index) => <div className="reminder-item skeleton-row" key={index} />)
-            ) : reminders.length ? (
-              reminders.map((item) => (
-              <article className="reminder-item" key={item.desc}>
-                <div className={`reminder-icon ${item.color}`}>{item.icon}</div>
+          <article className="home-card home-panel">
+            <div className="home-card-header">
+              <h2>近期提醒</h2>
+              <button className="text-link" type="button">查看全部</button>
+            </div>
+            <div className="reminder-list">
+              {isLoading ? (
+                Array.from({ length: 3 }).map((_, index) => <div className="reminder-item skeleton-row" key={index} />)
+              ) : reminders.length ? (
+                reminders.map((item) => (
+                <div className="reminder-item" key={item.desc}>
+                  <div className={`reminder-icon ${item.color}`}>{item.icon}</div>
+                  <div>
+                    <strong>{item.title}</strong>
+                    <span>{item.desc}</span>
+                    <em>{item.time}</em>
+                  </div>
+                </div>
+              ))): (
+                <div className="empty-panel compact">暂无近期提醒。</div>
+              )}
+            </div>
+          </article>
+
+          <article className="home-card home-panel ai-panel">
+            <h2>AI 助学</h2>
+            <img src={robotImg} alt="AI 助学机器人" />
+            <strong>AI 助教小码</strong>
+            <p>有问题随时问我，为你提供学习建议。</p>
+            <button className="primary-btn" type="button" onClick={() => onNavigate("/ai-tutor")}>去提问</button>
+          </article>
+
+          <article className="home-card home-panel resource-panel">
+            <div className="home-card-header">
+              <h2>推荐资料</h2>
+              <button className="text-link" type="button" onClick={() => onNavigate("/library")}>查看全部</button>
+            </div>
+            {resources.map((item) => (
+              <div className="resource-item" key={item.title}>
+                <div className={`file-icon ${item.color}`}>{item.label}</div>
                 <div>
                   <strong>{item.title}</strong>
-                  <span>{item.desc}</span>
-                  <em>{item.time}</em>
+                  <span>{item.meta}</span>
                 </div>
-              </article>
-              ))
-            ) : (
-              <div className="empty-panel compact">暂无近期提醒。</div>
-            )}
-          </div>
-        </section>
-
-        <section className="home-card right-card ai-card">
-          <h2>AI 助学</h2>
-          <img src={robotImg} alt="AI 助学机器人" />
-          <strong>AI 助教小码</strong>
-          <p>有问题随时问我，为你提供学习建议。</p>
-          <button className="primary-btn" type="button" onClick={() => onNavigate("/ai-tutor")}>去提问</button>
-        </section>
-
-        <section className="home-card right-card resource-card">
-          <div className="home-card-header">
-            <h2>推荐资料</h2>
-            <button className="text-link" type="button" onClick={() => onNavigate("/library")}>查看全部</button>
-          </div>
-          {resources.map((item) => (
-            <article className="resource-item" key={item.title}>
-              <div className={`file-icon ${item.color}`}>{item.label}</div>
-              <div>
-                <strong>{item.title}</strong>
-                <span>{item.meta}</span>
               </div>
-            </article>
-          ))}
+            ))}
+          </article>
         </section>
-      </aside>
+
+        <footer className="home-footer">© 2024 CodeTrack · 时代码点亮未来 <span>帮助中心</span><span>隐私政策</span><span>用户协议</span></footer>
+      </section>
     </div>
   );
 }
