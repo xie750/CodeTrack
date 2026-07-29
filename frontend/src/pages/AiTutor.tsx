@@ -20,17 +20,33 @@ const { Text, Title, Paragraph } = Typography;
 export default function AiTutor() {
   const [context, setContext] = useState<LearningContext | null>(null);
   const [profile, setProfile] = useState<StudentProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
+    setLoading(true);
+    setError(null);
+    setContext(null);
+    setProfile(null);
     api.getLearningContext().then((data) => {
       if (!alive) return;
       setContext(data);
       const courseId = data.courses[0]?.course_id;
       if (courseId) {
-        api.getStudentProfile(courseId).then((profileData) => alive && setProfile(profileData)).catch(() => undefined);
+        api.getStudentProfile(courseId).then((profileData) => alive && setProfile(profileData)).catch(() => {
+          if (alive) setError("学习画像数据暂时不可用，AI 导师将等待画像后再展示个性化回答。");
+        }).finally(() => {
+          if (alive) setLoading(false);
+        });
+      } else {
+        setLoading(false);
       }
-    }).catch(() => undefined);
+    }).catch(() => {
+      if (!alive) return;
+      setError("AI 导师上下文加载失败，请稍后刷新。");
+      setLoading(false);
+    });
     return () => {
       alive = false;
     };
@@ -40,8 +56,8 @@ export default function AiTutor() {
     return profile?.knowledge_states.find((item) => item.state === "WEAK") ?? profile?.knowledge_states[0];
   }, [profile]);
   const frequentError = profile?.frequent_errors[0];
-  const studentName = context?.student.name ?? "当前学生";
-  const courseName = profile?.course.name ?? context?.courses[0]?.course_name ?? "数据结构与程序设计基础";
+  const studentName = context?.student.name;
+  const courseName = profile?.course.name ?? context?.courses[0]?.course_name;
 
   return (
     <div className="page-grid">
@@ -49,21 +65,29 @@ export default function AiTutor() {
         <div>
           <Text type="secondary">Concept Tutor Agent · Citation Guard Agent</Text>
           <Title level={2}>结合页面上下文、学习画像和课程知识库回答</Title>
-          <Paragraph>这里不是通用聊天框，回答必须显示画像适配、引用来源、置信度和下一步动作。当前已绑定 {studentName} 的学习上下文。</Paragraph>
+          <Paragraph>
+            {loading
+              ? "正在读取当前学生的学习上下文..."
+              : studentName
+                ? `这里不是通用聊天框，回答必须显示画像适配、引用来源、置信度和下一步动作。当前已绑定 ${studentName} 的学习上下文。`
+                : error ?? "暂时没有可用的学习上下文。"}
+          </Paragraph>
         </div>
-        <Button type="primary" icon={<Sparkles size={16} />}>
+        <Button type="primary" icon={<Sparkles size={16} />} disabled={loading || !profile}>
           生成复习笔记
         </Button>
       </section>
 
+      {error ? <Alert type="warning" message={error} showIcon /> : null}
+
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={15}>
           <Card title="对话区">
-            <div className="chat-flow">
+            {loading ? <div className="chat-flow skeleton-block" /> : profile ? <div className="chat-flow">
               <div className="chat-bubble user">
                 <Text strong>学生提问</Text>
                 <Paragraph>
-                  为什么{weakestPoint?.knowledge_point ?? "链表删除头节点"}容易出错？请结合我最近的提交解释。
+                  为什么{weakestPoint?.knowledge_point ?? "当前薄弱知识点"}容易出错？请结合我最近的提交解释。
                 </Paragraph>
               </div>
               <div className="chat-bubble ai">
@@ -82,13 +106,13 @@ export default function AiTutor() {
                   </Paragraph>
                 </Space>
               </div>
-            </div>
-            <Input.TextArea rows={4} placeholder="继续追问，例如：帮我把这段诊断整理成复习笔记" />
+            </div> : <div className="empty-panel">画像数据加载后，这里会展示个性化 AI 导师回答。</div>}
+            <Input.TextArea rows={4} placeholder="继续追问，例如：帮我把这段诊断整理成复习笔记" disabled={loading || !profile} />
             <Space wrap className="action-bar">
-              <Button>继续追问</Button>
-              <Button>生成练习</Button>
-              <Button>生成知识卡片</Button>
-              <Button type="primary">保存到资料</Button>
+              <Button disabled={loading || !profile}>继续追问</Button>
+              <Button disabled={loading || !profile}>生成练习</Button>
+              <Button disabled={loading || !profile}>生成知识卡片</Button>
+              <Button type="primary" disabled={loading || !profile}>保存到资料</Button>
             </Space>
           </Card>
         </Col>
@@ -97,9 +121,9 @@ export default function AiTutor() {
             <List
               size="small"
               dataSource={[
-                `学生：${studentName}`,
+                `学生：${studentName ?? "加载中"}`,
                 `班级：${context?.student.class_name ?? "加载中"}`,
-                `课程：${courseName}`,
+                `课程：${courseName ?? "加载中"}`,
                 `画像：${weakestPoint ? `${weakestPoint.knowledge_point} · ${weakestPoint.mastery_score}%` : "等待画像数据"}`,
                 "风险：不能直接给完整答案"
               ]}
