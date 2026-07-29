@@ -103,8 +103,8 @@ def seed_demo_data(db: Session) -> None:
     users = {
         "user_teacher_001": {"display_name": "王老师", "role": "TEACHER", "status": "ACTIVE"},
         "user_teacher_002": {"display_name": "李老师", "role": "TEACHER", "status": "ACTIVE"},
-        "user_student_001": {"display_name": "学生一", "role": "STUDENT", "status": "ACTIVE"},
-        "user_student_002": {"display_name": "学生二", "role": "STUDENT", "status": "ACTIVE"},
+        "user_student_001": {"display_name": "王同学", "role": "STUDENT", "status": "ACTIVE"},
+        "user_student_002": {"display_name": "刘同学", "role": "STUDENT", "status": "ACTIVE"},
     }
     for user_id, values in users.items():
         upsert(db, User, user_id, values)
@@ -183,12 +183,17 @@ def seed_demo_data(db: Session) -> None:
     for class_id, values in classes.items():
         upsert(db, AdministrativeClass, class_id, values)
 
-    for student_id in ("user_student_001", "user_student_002"):
+    memberships = [
+        ("class_se_001", "user_student_001", "ACTIVE"),
+        ("class_se_001", "user_student_002", "TRANSFERRED"),
+        ("class_cs_001", "user_student_002", "ACTIVE"),
+    ]
+    for class_id, student_id, status in memberships:
         upsert_one(
             db,
             StudentClassMembership,
-            {"class_id": "class_se_001", "student_id": student_id},
-            {"status": "ACTIVE"},
+            {"class_id": class_id, "student_id": student_id},
+            {"status": status},
         )
 
     teaching_assignments = {
@@ -298,6 +303,21 @@ def seed_demo_data(db: Session) -> None:
             "deadline": datetime(2026, 8, 8, 23, 59, tzinfo=timezone.utc),
         },
     )
+    upsert(
+        db,
+        TaskAssignment,
+        "assign_cs1_ds_linked_list_001",
+        {
+            "task_id": "task_linked_list_delete_001",
+            "teaching_assignment_id": "ta_cs1_ds_001",
+            "published_by": "user_teacher_001",
+            "publish_status": "PUBLISHED",
+            "assignment_mode": "PRACTICE",
+            "allow_hint_level_3": True,
+            "published_at": datetime(2026, 7, 21, 8, 0, tzinfo=timezone.utc),
+            "deadline": datetime(2026, 8, 6, 23, 59, tzinfo=timezone.utc),
+        },
+    )
 
     test_cases = [
         (
@@ -391,12 +411,12 @@ def seed_demo_data(db: Session) -> None:
     upsert_one(
         db,
         StudentTaskProgress,
-        {"assignment_id": "assign_se1_ds_linked_list_001", "student_id": "user_student_002"},
+        {"assignment_id": "assign_cs1_ds_linked_list_001", "student_id": "user_student_002"},
         {
-            "status": "NOT_STARTED",
-            "passed_count": 0,
+            "status": "NEEDS_REVISION",
+            "passed_count": 3,
             "total_required_count": 5,
-            "highest_hint_level": 0,
+            "highest_hint_level": 2,
             "score": None,
         },
     )
@@ -464,6 +484,18 @@ def seed_demo_data(db: Session) -> None:
             "recent_task_completion": 0.25,
             "recommendation_text": "建议完成一次 IP 地址与子网划分入门练习。",
         },
+        "profile_user_student_002_ds": {
+            "student_id": "user_student_002",
+            "course_id": "course_ds_001",
+            "class_id": "class_cs_001",
+            "summary_text": "刘同学的链表定位已经基本稳定，当前更需要巩固递归出口和栈匹配中的边界判断。",
+            "overall_progress": 74,
+            "hint_dependency_level": "HIGH",
+            "compile_error_rate": 0.08,
+            "logic_error_rate": 0.31,
+            "recent_task_completion": 0.58,
+            "recommendation_text": "先复盘二叉树递归出口，再完成括号匹配边界练习。",
+        },
     }
     for profile_id, values in profile_snapshots.items():
         upsert(db, LearnerProfileSnapshot, profile_id, values)
@@ -496,6 +528,33 @@ def seed_demo_data(db: Session) -> None:
                 "last_evidence": "自学记录显示仍需练习掩码换算",
             },
         ),
+        (
+            {"student_id": "user_student_002", "course_id": "course_ds_001", "knowledge_point": "链表定位"},
+            {
+                "mastery_score": 82,
+                "state": "STABLE",
+                "evidence_count": 4,
+                "last_evidence": "单链表删除任务中普通位置和尾节点用例通过",
+            },
+        ),
+        (
+            {"student_id": "user_student_002", "course_id": "course_ds_001", "knowledge_point": "二叉树递归出口"},
+            {
+                "mastery_score": 49,
+                "state": "WEAK",
+                "evidence_count": 2,
+                "last_evidence": "前序遍历练习中空节点返回条件遗漏",
+            },
+        ),
+        (
+            {"student_id": "user_student_002", "course_id": "course_ds_001", "knowledge_point": "栈匹配边界"},
+            {
+                "mastery_score": 57,
+                "state": "WEAK",
+                "evidence_count": 2,
+                "last_evidence": "括号匹配中右括号先出现的用例处理不稳定",
+            },
+        ),
     ]
     for filters, values in knowledge_states:
         upsert_one(db, LearnerKnowledgeState, filters, values)
@@ -519,6 +578,24 @@ def seed_demo_data(db: Session) -> None:
                 "related_knowledge_points": json.dumps(["链表边界处理"], ensure_ascii=False),
             },
         ),
+        (
+            {"student_id": "user_student_002", "course_id": "course_ds_001", "error_type": "RECURSION_BASE_CASE_MISSING"},
+            {
+                "label": "递归出口遗漏",
+                "count": 4,
+                "severity": "HIGH",
+                "related_knowledge_points": json.dumps(["二叉树", "递归"], ensure_ascii=False),
+            },
+        ),
+        (
+            {"student_id": "user_student_002", "course_id": "course_ds_001", "error_type": "STACK_EMPTY_GUARD_MISSING"},
+            {
+                "label": "栈空判断不足",
+                "count": 2,
+                "severity": "MEDIUM",
+                "related_knowledge_points": json.dumps(["栈与队列", "括号匹配"], ensure_ascii=False),
+            },
+        ),
     ]
     for filters, values in error_stats:
         upsert_one(db, LearnerErrorStat, filters, values)
@@ -540,6 +617,40 @@ def seed_demo_data(db: Session) -> None:
             "status": "ACTIVE",
         },
     )
+    upsert(
+        db,
+        Recommendation,
+        "rec_user_student_002_ds_tree_recursion",
+        {
+            "student_id": "user_student_002",
+            "course_id": "course_ds_001",
+            "recommendation_type": "SELF_STUDY",
+            "title": "复盘二叉树递归出口",
+            "reason": "最近练习暴露空节点返回条件遗漏，建议先用小树手动画调用栈。",
+            "priority": 10,
+            "related_task_id": "task_linked_list_delete_001",
+            "related_knowledge_points": json.dumps(["二叉树", "递归"], ensure_ascii=False),
+            "suggested_action": "OPEN_SELF_STUDY",
+            "status": "ACTIVE",
+        },
+    )
+    upsert(
+        db,
+        Recommendation,
+        "rec_user_student_002_ds_stack_match",
+        {
+            "student_id": "user_student_002",
+            "course_id": "course_ds_001",
+            "recommendation_type": "REVIEW",
+            "title": "补一组栈匹配边界用例",
+            "reason": "右括号先出现和空栈匹配需要单独验证，避免只通过普通嵌套样例。",
+            "priority": 8,
+            "related_task_id": "task_linked_list_delete_001",
+            "related_knowledge_points": json.dumps(["栈与队列", "边界处理"], ensure_ascii=False),
+            "suggested_action": "GENERATE_EXERCISE",
+            "status": "ACTIVE",
+        },
+    )
 
     upsert(
         db,
@@ -556,6 +667,23 @@ def seed_demo_data(db: Session) -> None:
             "knowledge_points": json.dumps(["链表", "边界处理"], ensure_ascii=False),
             "error_type": "HEAD_NODE_RETURN_MISSING",
             "payload": json.dumps({"hint_level": 1, "source": "seed"}, ensure_ascii=False),
+        },
+    )
+    upsert(
+        db,
+        LearnerEvent,
+        "evt_user_student_002_ds_hint_viewed",
+        {
+            "student_id": "user_student_002",
+            "course_id": "course_ds_001",
+            "class_id": "class_cs_001",
+            "teaching_assignment_id": "ta_cs1_ds_001",
+            "assignment_id": "assign_cs1_ds_linked_list_001",
+            "task_id": "task_linked_list_delete_001",
+            "event_type": "HINT_VIEWED",
+            "knowledge_points": json.dumps(["二叉树", "递归"], ensure_ascii=False),
+            "error_type": "RECURSION_BASE_CASE_MISSING",
+            "payload": json.dumps({"hint_level": 2, "source": "seed"}, ensure_ascii=False),
         },
     )
 

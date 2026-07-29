@@ -13,9 +13,9 @@ import {
   Typography
 } from "antd";
 import { FileText } from "lucide-react";
+import { api, StudentProfile } from "../api";
 import {
   knowledgeSources,
-  profileSummary,
   selfStudyOutputs
 } from "../data/constants";
 
@@ -25,11 +25,27 @@ export default function SelfStudy() {
   const [point, setPoint] = useState("链表");
   const [outputType, setOutputType] = useState("复习笔记");
   const [saved, setSaved] = useState(false);
+  const [profile, setProfile] = useState<StudentProfile | null>(null);
   const content = selfStudyOutputs[point][outputType];
 
   useEffect(() => {
     setSaved(false);
   }, [point, outputType]);
+
+  useEffect(() => {
+    let alive = true;
+    api.getLearningContext().then((context) => {
+      const courseId = context.courses[0]?.course_id;
+      if (courseId) {
+        api.getStudentProfile(courseId).then((data) => alive && setProfile(data)).catch(() => undefined);
+      }
+    }).catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const weakPoint = profile?.knowledge_states.find((item) => item.state === "WEAK") ?? profile?.knowledge_states[0];
 
   return (
     <div className="page-grid">
@@ -58,7 +74,16 @@ export default function SelfStudy() {
             />
           </Card>
           <Card title="画像提醒">
-            <Alert type="warning" message="适配建议" description={`你最近在${profileSummary.weakPoints[0]}上出错较多，建议优先生成复习笔记。`} showIcon />
+            <Alert
+              type="warning"
+              message="适配建议"
+              description={
+                weakPoint
+                  ? `你最近在${weakPoint.knowledge_point}上证据较多，建议优先生成复习笔记。`
+                  : "画像数据加载后，会按当前学生推荐优先复习的知识点。"
+              }
+              showIcon
+            />
           </Card>
         </Col>
         <Col xs={24} lg={11}>

@@ -34,6 +34,34 @@ def loads_list(value: str) -> list:
     return parsed if isinstance(parsed, list) else []
 
 
+def task_knowledge_points(task: Task) -> list[str]:
+    if "子网" in task.title or task.course_id == "course_network_001":
+        return ["计算机网络", "子网划分", "IP 地址"]
+    if "二叉树" in task.title:
+        return ["二叉树", "递归", "遍历"]
+    if "栈" in task.title:
+        return ["栈与队列", "括号匹配", "边界处理"]
+    return ["链表", "边界处理", "指针"]
+
+
+def task_difficulty(task: Task) -> str:
+    if "二叉树" in task.title or "子网" in task.title:
+        return "MEDIUM"
+    return "BASIC"
+
+
+def latest_task_summary(task: Task, progress: StudentTaskProgress | None) -> str:
+    if progress is None or progress.status == "NOT_STARTED":
+        return "尚未提交，建议先运行公开样例。"
+    if progress.status == "COMPLETED":
+        return "已完成，学习总结和画像已同步更新。"
+    if task.course_id == "course_network_001":
+        return "最近练习显示子网掩码换算还需要继续巩固。"
+    if progress.highest_hint_level >= 2:
+        return "最近一次修正已经通过部分用例，建议继续核查边界条件。"
+    return "最近一次提交未通过头节点删除用例。"
+
+
 def require_active_class(db: Session, user: User) -> tuple[AdministrativeClass, StudentClassMembership]:
     membership = db.scalar(
         select(StudentClassMembership).where(
@@ -148,15 +176,13 @@ def list_student_tasks(
                 "title": task.title,
                 "task_type": "CODING",
                 "deadline": iso(assignment.deadline),
-                "difficulty": "BASIC",
-                "knowledge_points": ["链表", "边界处理", "指针"],
+                "difficulty": task_difficulty(task),
+                "knowledge_points": task_knowledge_points(task),
                 "status": progress.status if progress else "NOT_STARTED",
                 "passed_count": progress.passed_count if progress else 0,
                 "total_required_count": progress.total_required_count if progress else len(task.test_cases),
                 "highest_hint_level": progress.highest_hint_level if progress else 0,
-                "latest_summary": "最近一次提交未通过头节点删除用例"
-                if progress and progress.status != "NOT_STARTED"
-                else "尚未提交，建议先运行公开样例。",
+                "latest_summary": latest_task_summary(task, progress),
             }
         )
     return ok(data)

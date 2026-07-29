@@ -135,7 +135,7 @@ export default function CourseTasks({ onOpenWorkspace }: PageProps) {
           <button className="class-select" type="button">
             {context?.student.class_name ?? "软件工程 1 班"} <ChevronDown size={16} />
           </button>
-          <button className="class-ghost" type="button"><Plus size={17} /> 加入班级</button>
+          <button className="class-ghost" type="button"><Plus size={17} /> 模拟登录已绑定</button>
         </div>
         <div className="class-title-row">
           <div className="view-switch">
