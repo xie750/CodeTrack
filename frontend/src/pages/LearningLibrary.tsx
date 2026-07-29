@@ -22,6 +22,9 @@ type FavoriteType = "编程题" | "练习题" | "考核题";
 type FavoriteItem = {
   id: string;
   taskId: string;
+  assignmentId: string;
+  workspaceType: string;
+  taskType: string;
   title: string;
   type: FavoriteType;
   badgeClass: "green" | "purple" | "orange";
@@ -70,6 +73,9 @@ function taskToFavorite(task: StudentTaskCard): FavoriteItem {
   return {
     id: task.assignment_id,
     taskId: task.task_id,
+    assignmentId: task.assignment_id,
+    workspaceType: task.workspace_type,
+    taskType: task.task_type,
     title: task.title,
     ...typeInfo,
     tags: ["教师下发", ...task.knowledge_points].slice(0, 4),
@@ -194,6 +200,10 @@ export default function LearningLibrary() {
   }
 
   function openTask(item: FavoriteItem) {
+    if (item.workspaceType === "QUESTION_SET" || item.taskType === "QUIZ" || item.taskType === "EXAM") {
+      navigate(`/question-workspace/${item.assignmentId}`);
+      return;
+    }
     navigate(`/workspace/${item.taskId}`);
   }
 

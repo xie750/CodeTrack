@@ -15,9 +15,10 @@ import {
   UserRound
 } from "lucide-react";
 import { api, apiCache, LearningContext, StudentTaskCard } from "../api";
+import type { TaskOpenTarget } from "../App";
 
 type PageProps = {
-  onOpenWorkspace: (taskId?: string) => void;
+  onOpenWorkspace: (target?: TaskOpenTarget | string) => void;
 };
 
 type TaskTab = "全部课程" | string;
@@ -123,7 +124,7 @@ export default function CourseTasks({ onOpenWorkspace }: PageProps) {
 
   const courseTabs = useMemo(() => ["全部课程", ...(context?.courses.map((course) => course.course_name) ?? [])], [context]);
   const loading = loadingContext || loadingTasks;
-  const primaryTaskId = tasks.find((task) => task.status !== "COMPLETED")?.task_id ?? tasks[0]?.task_id;
+  const primaryTask = tasks.find((task) => task.status !== "COMPLETED") ?? tasks[0];
   const inProgress = tasks.filter((task) => ["IN_PROGRESS", "SUBMITTED", "NEEDS_REVISION"].includes(task.status)).length;
   const completed = tasks.filter((task) => task.status === "COMPLETED").length;
   const dueSoon = tasks.filter((task) => task.deadline).length;
@@ -152,8 +153,18 @@ export default function CourseTasks({ onOpenWorkspace }: PageProps) {
             <button type="button"><List size={17} /> 列表视图</button>
             <button className="active" type="button"><Grid2X2 size={17} /> 卡片视图</button>
           </div>
-          <button className="class-primary" type="button" disabled={!primaryTaskId || loading} onClick={() => onOpenWorkspace(primaryTaskId)}>
-            <SquareCode size={17} /> 进入编程模式
+          <button
+            className="class-primary"
+            type="button"
+            disabled={!primaryTask || loading}
+            onClick={() => primaryTask && onOpenWorkspace({
+              taskId: primaryTask.task_id,
+              assignmentId: primaryTask.assignment_id,
+              workspaceType: primaryTask.workspace_type,
+              taskType: primaryTask.task_type
+            })}
+          >
+            <SquareCode size={17} /> 进入当前任务
           </button>
         </div>
       </header>
@@ -213,7 +224,18 @@ export default function CourseTasks({ onOpenWorkspace }: PageProps) {
                       </div>
                       <div className="class-progress"><i style={{ width: `${Math.max(6, progress)}%` }} /></div>
                     </div>
-                    <button className={hot ? "primary" : ""} type="button" onClick={() => onOpenWorkspace(task.task_id)}>进入任务</button>
+                    <button
+                      className={hot ? "primary" : ""}
+                      type="button"
+                      onClick={() => onOpenWorkspace({
+                        taskId: task.task_id,
+                        assignmentId: task.assignment_id,
+                        workspaceType: task.workspace_type,
+                        taskType: task.task_type
+                      })}
+                    >
+                      {task.workspace_type === "QUESTION_SET" ? "开始做题" : "进入编程"}
+                    </button>
                   </div>
                 </article>
               );

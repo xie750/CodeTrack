@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, CalendarClock, Check, ClipboardList, Code2, MonitorPlay } from "lucide-react";
 import { api, apiCache, LearningContext, StudentProfile, StudentTaskCard } from "../api";
+import type { TaskOpenTarget } from "../App";
 import heroArt from "../assets/ui-home/hero-art.png";
 import robotImg from "../assets/ui-home/robot-img.png";
 
 type PageProps = {
   onNavigate: (page: string) => void;
-  onOpenWorkspace: (taskId?: string) => void;
+  onOpenWorkspace: (target?: TaskOpenTarget | string) => void;
 };
 
 const resources = [
@@ -101,7 +102,10 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
       progress: taskProgress(task),
       color: index === 0 ? "blue" : index === 1 ? "green" : "purple",
       icon: task.task_type === "CODING" ? <Code2 size={22} /> : <ClipboardList size={22} />,
-      taskId: task.task_id
+      taskId: task.task_id,
+      assignmentId: task.assignment_id,
+      workspaceType: task.workspace_type,
+      taskType: task.task_type
     }));
   }, [tasks]);
 
@@ -135,7 +139,7 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
         { name: "知识掌握", value: profile.knowledge_states[0]?.mastery_score ?? 0 }
       ]
     : [];
-  const primaryTaskId = tasks.find((task) => task.status !== "COMPLETED")?.task_id ?? tasks[0]?.task_id;
+  const primaryTask = tasks.find((task) => task.status !== "COMPLETED") ?? tasks[0];
   const courseName = context?.courses[0]?.course_name;
   const studentName = context?.student.name;
   const isLoading = pageStatus === "loading";
@@ -157,9 +161,14 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
               className="primary-btn"
               type="button"
               disabled={isLoading}
-              onClick={() => (primaryTaskId ? onOpenWorkspace(primaryTaskId) : onNavigate("/tasks"))}
+              onClick={() => (primaryTask ? onOpenWorkspace({
+                taskId: primaryTask.task_id,
+                assignmentId: primaryTask.assignment_id,
+                workspaceType: primaryTask.workspace_type,
+                taskType: primaryTask.task_type
+              }) : onNavigate("/tasks"))}
             >
-              {primaryTaskId ? "继续学习" : "查看任务"}
+              {primaryTask ? "继续学习" : "查看任务"}
               <span>
                 <ArrowRight size={17} />
               </span>
@@ -198,7 +207,16 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
                     <i className={task.color} style={{ width: `${task.progress}%` }} />
                   </div>
                 </div>
-                <button className="outline-btn" type="button" onClick={() => onOpenWorkspace(task.taskId ?? primaryTaskId)}>
+                <button
+                  className="outline-btn"
+                  type="button"
+                  onClick={() => onOpenWorkspace({
+                    taskId: task.taskId,
+                    assignmentId: task.assignmentId,
+                    workspaceType: task.workspaceType,
+                    taskType: task.taskType
+                  })}
+                >
                   继续学习
                 </button>
               </article>
@@ -222,7 +240,12 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
                 <span className={`recommend-tag ${item.color}`}>{item.label}</span>
                 <h3>{item.title}</h3>
                 <p>{item.desc}</p>
-                <button className="outline-btn" type="button" onClick={() => (item.color === "blue" ? onOpenWorkspace(primaryTaskId) : onNavigate("/self-study"))}>
+                <button className="outline-btn" type="button" onClick={() => (item.color === "blue" && primaryTask ? onOpenWorkspace({
+                  taskId: primaryTask.task_id,
+                  assignmentId: primaryTask.assignment_id,
+                  workspaceType: primaryTask.workspace_type,
+                  taskType: primaryTask.task_type
+                }) : onNavigate("/self-study"))}>
                   {item.action}
                 </button>
               </article>

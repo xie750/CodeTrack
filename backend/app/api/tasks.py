@@ -107,6 +107,8 @@ def get_task(
     task = db.get(Task, task_id)
     if task is None:
         raise ApiError(404, "TASK_NOT_FOUND", "任务不存在")
+    if task.workspace_type != "CODING":
+        raise ApiError(400, "NOT_CODING_TASK", "当前任务不是编程任务，请使用题目作答工作台")
     ensure_course_member(db, task.course_id, user.id)
     public_tests = (
         db.query(TestCase)
@@ -160,6 +162,8 @@ def submit_code(
     task = db.get(Task, task_id)
     if task is None:
         raise ApiError(404, "TASK_NOT_FOUND", "任务不存在")
+    if task.workspace_type != "CODING":
+        raise ApiError(400, "NOT_CODING_TASK", "当前任务不是编程任务，不能提交代码")
     ensure_course_member(db, task.course_id, user.id, role="STUDENT")
     submission, version, execution, created = create_submission_version(
         db=db,
