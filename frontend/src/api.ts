@@ -47,6 +47,7 @@ export type StudentTaskCard = {
   teacher_name: string;
   title: string;
   task_type: string;
+  workspace_type: string;
   assignment_mode: string;
   description: string;
   published_at: string | null;
@@ -297,6 +298,81 @@ type CachedGetEntry<T> = {
   promise?: Promise<T>;
 };
 
+export type QuestionWorkspace = {
+  assignment: {
+    assignment_id: string;
+    assignment_mode: string;
+    allow_hint_level_3: boolean;
+    published_at: string | null;
+    deadline: string | null;
+  };
+  task: {
+    task_id: string;
+    course_id: string;
+    course_name: string;
+    teacher_name: string;
+    title: string;
+    description: string;
+    workspace_type: string;
+    learning_objectives: string[];
+  };
+  progress: {
+    status: string;
+    score: number | null;
+    passed_count: number;
+    total_required_count: number;
+  };
+  attempt: {
+    attempt_id: string | null;
+    status: string;
+    score: number | null;
+    max_score: number;
+    correct_count: number;
+    total_count: number;
+    submitted_at: string | null;
+  };
+  questions: QuestionItem[];
+};
+
+export type QuestionItem = {
+  question_id: string;
+  question_type: "SINGLE_CHOICE" | "MULTIPLE_CHOICE" | "TRUE_FALSE" | string;
+  stem: string;
+  analysis: string;
+  knowledge_points: string[];
+  difficulty: string;
+  score: number;
+  selected_option_ids: string[];
+  is_correct: boolean | null;
+  earned_score: number | null;
+  correct_option_ids?: string[];
+  options: Array<{
+    option_id: string;
+    label: string;
+    content: string;
+    is_correct?: boolean;
+  }>;
+};
+
+export type SubmitQuestionResult = {
+  attempt_id: string;
+  status: string;
+  score: number;
+  max_score: number;
+  score_percent: number;
+  correct_count: number;
+  total_count: number;
+  submitted_at: string | null;
+  questions: QuestionItem[];
+  profile_signal: {
+    overall_progress: number;
+    logic_error_rate: number;
+    recent_task_completion: number;
+    summary: string;
+    recommendation: string;
+  };
+};
+
 const getCache = new Map<string, CachedGetEntry<unknown>>();
 
 function studentTasksUrl(courseId?: string) {
@@ -391,6 +467,8 @@ export const api = {
   logout: () => request<{ logged_out: boolean }>("/api/v1/auth/logout", { method: "POST" }),
   listTasks: () => request<TaskListItem[]>("/api/v1/tasks"),
   getTask: (taskId: string) => request<TaskDetail>(`/api/v1/tasks/${taskId}`),
+  getQuestionWorkspace: (assignmentId: string) =>
+    request<QuestionWorkspace>(`/api/v1/student/assignments/${assignmentId}/workspace`),
   getLearningContext: () => cachedGet<LearningContext>("/api/v1/student/learning-context"),
   listStudentTasks: (courseId?: string) =>
     cachedGet<StudentTaskCard[]>(studentTasksUrl(courseId)),
@@ -406,6 +484,25 @@ export const api = {
       body: JSON.stringify({ language: "CPP", source_code: sourceCode })
     });
     clearApiCache((url) => url.startsWith("/api/v1/student/") || url === "/api/v1/tasks");
+    return result;
+  },
+  saveQuestionAnswers: async (assignmentId: string, answers: Array<{ question_id: string; selected_option_ids: string[] }>) => {
+    const result = await request<{ attempt_id: string; status: string; saved_at: string }>(
+      `/api/v1/student/assignments/${assignmentId}/answers`,
+      {
+        method: "POST",
+        body: JSON.stringify({ answers })
+      }
+    );
+    clearApiCache((url) => url.startsWith("/api/v1/student/"));
+    return result;
+  },
+  submitQuestionAnswers: async (assignmentId: string, answers: Array<{ question_id: string; selected_option_ids: string[] }>) => {
+    const result = await request<SubmitQuestionResult>(`/api/v1/student/assignments/${assignmentId}/submit-answers`, {
+      method: "POST",
+      body: JSON.stringify({ answers })
+    });
+    clearApiCache((url) => url.startsWith("/api/v1/student/"));
     return result;
   },
   getExecution: (executionId: string) =>

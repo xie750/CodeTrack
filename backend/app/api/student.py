@@ -1,6 +1,7 @@
 import json
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -22,8 +23,22 @@ from backend.app.models import (
     User,
 )
 from backend.app.services.submissions import iso
+from backend.app.services.question_workflow import (
+    question_workspace_payload,
+    save_question_draft,
+    submit_question_answers,
+)
 
 router = APIRouter(prefix="/api/v1/student", tags=["student"])
+
+
+class QuestionAnswerPayload(BaseModel):
+    question_id: str
+    selected_option_ids: list[str]
+
+
+class SaveQuestionAnswersRequest(BaseModel):
+    answers: list[QuestionAnswerPayload]
 
 
 def loads_list(value: str) -> list:
@@ -53,6 +68,8 @@ def task_difficulty(task: Task) -> str:
 
 
 def task_type_from_assignment(assignment: TaskAssignment) -> str:
+    if assignment.task and assignment.task.workspace_type == "QUESTION_SET":
+        return assignment.assignment_mode if assignment.assignment_mode in {"QUIZ", "EXAM"} else "QUIZ"
     mode_map = {
         "PRACTICE": "CODING",
         "QUIZ": "QUIZ",
@@ -188,6 +205,7 @@ def list_student_tasks(
                 "teacher_name": teacher.display_name,
                 "title": task.title,
                 "task_type": task_type_from_assignment(assignment),
+                "workspace_type": task.workspace_type,
                 "assignment_mode": assignment.assignment_mode,
                 "description": task.description,
                 "published_at": iso(assignment.published_at),
@@ -202,6 +220,43 @@ def list_student_tasks(
             }
         )
     return ok(data)
+
+
+@router.get("/assignments/{assignment_id}/workspace")
+def get_assignment_workspace(
+    assignment_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    administrative_class, _ = require_active_class(db, user)
+    return ok(question_workspace_payload(db, assignment_id, administrative_class.id, user))
+
+
+@router.post("/assignments/{assignment_id}/answers")
+def save_assignment_answers(
+    assignment_id: str,
+    payload: SaveQuestionAnswersRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    administrative_class, _ = require_active_class(db, user)
+    answers = [answer.model_dump() for answer in payload.answers]
+    return ok(save_question_draft(db, assignment_id, administrative_class.id, user, answers))
+
+
+@router.post("/assignments/{assignment_id}/submit-answers", status_code=status.HTTP_201_CREATED)
+def submit_assignment_answers(
+    assignment_id: str,
+    payload: SaveQuestionAnswersRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    administrative_class, _ = require_active_class(db, user)
+    answers = [answer.model_dump() for answer in payload.answers]
+    return ok(submit_question_answers(db, assignment_id, administrative_class.id, user, answers))
 
 
 @router.get("/profile")

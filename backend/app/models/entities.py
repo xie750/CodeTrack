@@ -89,6 +89,7 @@ class Task(Base):
     course_id: Mapped[str] = mapped_column(ForeignKey("courses.id"), nullable=False)
     title: Mapped[str] = mapped_column(String(160), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
+    workspace_type: Mapped[str] = mapped_column(String(30), nullable=False, default="CODING")
     language: Mapped[str] = mapped_column(String(20), nullable=False)
     interface_spec: Mapped[str] = mapped_column(Text, nullable=False)
     learning_objectives: Mapped[str] = mapped_column(Text, nullable=False)
@@ -97,6 +98,7 @@ class Task(Base):
 
     course: Mapped[Course] = relationship()
     test_cases: Mapped[list["TestCase"]] = relationship(order_by="TestCase.sort_order")
+    questions: Mapped[list["Question"]] = relationship(order_by="Question.sort_order")
 
 
 class TeachingAssignment(Base):
@@ -160,6 +162,66 @@ class TestCase(Base):
     capability_id: Mapped[str] = mapped_column(ForeignKey("capabilities.id"), nullable=False)
     required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class Question(Base):
+    __tablename__ = "questions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id"), nullable=False)
+    question_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    stem: Mapped[str] = mapped_column(Text, nullable=False)
+    analysis: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    knowledge_points: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    difficulty: Mapped[str] = mapped_column(String(20), nullable=False, default="BASIC")
+    score: Mapped[float] = mapped_column(Float, nullable=False, default=10)
+    error_type: Mapped[str | None] = mapped_column(String(80))
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    task: Mapped[Task] = relationship(back_populates="questions")
+    options: Mapped[list["QuestionOption"]] = relationship(order_by="QuestionOption.sort_order")
+
+
+class QuestionOption(Base):
+    __tablename__ = "question_options"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    question_id: Mapped[str] = mapped_column(ForeignKey("questions.id"), nullable=False)
+    label: Mapped[str] = mapped_column(String(8), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    is_correct: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class QuestionAttempt(Base):
+    __tablename__ = "question_attempts"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    assignment_id: Mapped[str] = mapped_column(ForeignKey("task_assignments.id"), nullable=False)
+    task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id"), nullable=False)
+    student_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="DRAFT")
+    answers_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    score: Mapped[float | None] = mapped_column(Float)
+    max_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    correct_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    result_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class QuestionAnswer(Base):
+    __tablename__ = "question_answers"
+    __table_args__ = (UniqueConstraint("attempt_id", "question_id", name="uq_question_answer_attempt_question"),)
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    attempt_id: Mapped[str] = mapped_column(ForeignKey("question_attempts.id"), nullable=False)
+    question_id: Mapped[str] = mapped_column(ForeignKey("questions.id"), nullable=False)
+    selected_option_ids: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    is_correct: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    answered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
 class KnowledgeSource(Base):

@@ -15,6 +15,8 @@ from backend.app.models import (
     LearnerEvent,
     LearnerKnowledgeState,
     LearnerProfileSnapshot,
+    Question,
+    QuestionOption,
     Recommendation,
     StudentClassMembership,
     StudentTaskProgress,
@@ -112,8 +114,16 @@ def ensure_auth_columns(db: Session) -> None:
     db.commit()
 
 
+def ensure_task_workspace_columns(db: Session) -> None:
+    columns = {column["name"] for column in inspect(db.bind).get_columns("tasks")}
+    if "workspace_type" not in columns:
+        db.execute(text("ALTER TABLE tasks ADD COLUMN workspace_type VARCHAR(30) NOT NULL DEFAULT 'CODING'"))
+    db.commit()
+
+
 def seed_demo_data(db: Session) -> None:
     ensure_auth_columns(db)
+    ensure_task_workspace_columns(db)
     users = {
         "user_teacher_001": {
             "username": "teacher_wang",
@@ -285,6 +295,7 @@ def seed_demo_data(db: Session) -> None:
             "course_id": "course_ds_001",
             "title": "单链表指定位置节点删除",
             "description": "实现删除单链表指定位置节点的函数。",
+            "workspace_type": "CODING",
             "language": "CPP",
             "interface_spec": "ListNode* deleteAt(ListNode* head, int position);",
             "learning_objectives": json.dumps(learning_objectives, ensure_ascii=False),
@@ -300,6 +311,7 @@ def seed_demo_data(db: Session) -> None:
             "course_id": "course_network_001",
             "title": "IP 地址与子网划分练习",
             "description": "根据给定 IP 和掩码完成子网划分与可用主机数计算。",
+            "workspace_type": "CODING",
             "language": "CPP",
             "interface_spec": "int analyzeSubnet(string ip, string mask);",
             "learning_objectives": json.dumps(
@@ -323,6 +335,7 @@ def seed_demo_data(db: Session) -> None:
             "course_id": "course_ds_001",
             "title": "链表边界处理巩固练习",
             "description": "围绕单链表删除任务补充一组边界场景练习，重点检查头节点返回值和越界位置保护。",
+            "workspace_type": "CODING",
             "language": "CPP",
             "interface_spec": "ListNode* deleteAt(ListNode* head, int position);",
             "learning_objectives": json.dumps(linked_list_review_objectives, ensure_ascii=False),
@@ -338,6 +351,7 @@ def seed_demo_data(db: Session) -> None:
             "course_id": "course_ds_001",
             "title": "链表删除阶段测验",
             "description": "教师用于检查链表节点删除理解程度的小测，覆盖普通位置、头节点和空链表三类判断。",
+            "workspace_type": "QUESTION_SET",
             "language": "CPP",
             "interface_spec": "ListNode* deleteAt(ListNode* head, int position);",
             "learning_objectives": json.dumps(["解释链表删除过程", "判断边界用例", "定位指针更新错误"], ensure_ascii=False),
@@ -353,6 +367,7 @@ def seed_demo_data(db: Session) -> None:
             "course_id": "course_ds_001",
             "title": "栈与队列预习任务",
             "description": "在进入栈与队列章节前，先用结构化题目梳理先进后出、先进先出和边界判空的差异。",
+            "workspace_type": "QUESTION_SET",
             "language": "CPP",
             "interface_spec": "ListNode* deleteAt(ListNode* head, int position);",
             "learning_objectives": json.dumps(["区分栈与队列", "理解判空边界", "迁移链表指针经验"], ensure_ascii=False),
@@ -552,6 +567,136 @@ def seed_demo_data(db: Session) -> None:
                     "sort_order": order,
                 },
             )
+
+    question_sets = {
+        "task_linked_list_stage_quiz_001": [
+            {
+                "id": "q_linked_quiz_001",
+                "question_type": "SINGLE_CHOICE",
+                "stem": "在单链表删除第 0 个节点时，最需要优先更新的是哪一项？",
+                "analysis": "删除头节点没有前驱节点，函数需要把新的头节点作为链表起点返回。",
+                "knowledge_points": ["链表边界处理", "头节点删除"],
+                "difficulty": "BASIC",
+                "score": 10,
+                "error_type": "HEAD_NODE_RETURN_MISSING",
+                "options": [
+                    ("A", "原头节点的 next 指针", True),
+                    ("B", "尾节点的 next 指针", False),
+                    ("C", "链表中所有节点的值", False),
+                    ("D", "测试用例的输入顺序", False),
+                ],
+            },
+            {
+                "id": "q_linked_quiz_002",
+                "question_type": "MULTIPLE_CHOICE",
+                "stem": "为了验证单链表删除函数的边界处理，下面哪些场景应该纳入测试？",
+                "analysis": "边界测试至少覆盖空链表、头节点、尾节点和非法位置，才能暴露常见指针更新问题。",
+                "knowledge_points": ["链表边界处理", "边界测试"],
+                "difficulty": "MEDIUM",
+                "score": 15,
+                "error_type": "BOUNDARY_CASE_MISSING",
+                "options": [
+                    ("A", "空链表删除", True),
+                    ("B", "删除头节点", True),
+                    ("C", "删除尾节点", True),
+                    ("D", "只测试中间节点即可", False),
+                ],
+            },
+            {
+                "id": "q_linked_quiz_003",
+                "question_type": "TRUE_FALSE",
+                "stem": "如果 position 超过链表长度，合理处理方式通常是保持原链表不变。",
+                "analysis": "非法位置不应改变链表结构，也不应触发空指针访问。",
+                "knowledge_points": ["非法位置保护", "链表边界处理"],
+                "difficulty": "BASIC",
+                "score": 10,
+                "error_type": "INVALID_POSITION_GUARD_MISSING",
+                "options": [
+                    ("A", "正确", True),
+                    ("B", "错误", False),
+                ],
+            },
+        ],
+        "task_stack_queue_preview_001": [
+            {
+                "id": "q_stack_preview_001",
+                "question_type": "SINGLE_CHOICE",
+                "stem": "栈结构最典型的访问规则是什么？",
+                "analysis": "栈是后进先出结构，最近压入的元素会最先被弹出。",
+                "knowledge_points": ["栈与队列", "LIFO"],
+                "difficulty": "BASIC",
+                "score": 10,
+                "error_type": "STACK_QUEUE_RULE_CONFUSION",
+                "options": [
+                    ("A", "先进先出", False),
+                    ("B", "后进先出", True),
+                    ("C", "按值从小到大访问", False),
+                    ("D", "随机访问任意位置", False),
+                ],
+            },
+            {
+                "id": "q_stack_preview_002",
+                "question_type": "MULTIPLE_CHOICE",
+                "stem": "下面哪些操作前通常需要先判断结构是否为空？",
+                "analysis": "出栈、出队和读取队首都依赖已有元素，空结构下直接访问会导致错误。",
+                "knowledge_points": ["栈与队列", "判空边界"],
+                "difficulty": "MEDIUM",
+                "score": 15,
+                "error_type": "EMPTY_GUARD_MISSING",
+                "options": [
+                    ("A", "pop 出栈", True),
+                    ("B", "dequeue 出队", True),
+                    ("C", "front 读取队首", True),
+                    ("D", "push 入栈", False),
+                ],
+            },
+            {
+                "id": "q_stack_preview_003",
+                "question_type": "TRUE_FALSE",
+                "stem": "队列的典型访问顺序是先进先出。",
+                "analysis": "队列模拟排队场景，先进入队列的元素通常先被处理。",
+                "knowledge_points": ["栈与队列", "FIFO"],
+                "difficulty": "BASIC",
+                "score": 10,
+                "error_type": "STACK_QUEUE_RULE_CONFUSION",
+                "options": [
+                    ("A", "正确", True),
+                    ("B", "错误", False),
+                ],
+            },
+        ],
+    }
+    for task_id, questions in question_sets.items():
+        for index, question in enumerate(questions, start=1):
+            upsert(
+                db,
+                Question,
+                question["id"],
+                {
+                    "task_id": task_id,
+                    "question_type": question["question_type"],
+                    "stem": question["stem"],
+                    "analysis": question["analysis"],
+                    "knowledge_points": json.dumps(question["knowledge_points"], ensure_ascii=False),
+                    "difficulty": question["difficulty"],
+                    "score": question["score"],
+                    "error_type": question["error_type"],
+                    "sort_order": index,
+                },
+            )
+            for option_index, (label, content, is_correct) in enumerate(question["options"], start=1):
+                upsert(
+                    db,
+                    QuestionOption,
+                    f"{question['id']}_{label.lower()}",
+                    {
+                        "question_id": question["id"],
+                        "label": label,
+                        "content": content,
+                        "is_correct": is_correct,
+                        "sort_order": option_index,
+                    },
+                )
 
     upsert_one(
         db,

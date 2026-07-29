@@ -6,6 +6,7 @@ import zhCN from "antd/locale/zh_CN";
 import LearningHome from "./pages/LearningHome";
 import CourseTasks from "./pages/CourseTasks";
 import TaskWorkspace from "./pages/TaskWorkspace";
+import QuestionWorkspace from "./pages/QuestionWorkspace";
 import SelfStudy from "./pages/SelfStudy";
 import AiTutor from "./pages/AiTutor";
 import LearningLibrary from "./pages/LearningLibrary";
@@ -22,10 +23,18 @@ const navItems = [
   { key: "/profile", label: "学习画像", icon: <ChartNoAxesColumnIncreasing size={22} strokeWidth={2.1} /> }
 ];
 
-const routeOrder = ["/", "/tasks", "/workspace", "/self-study", "/ai-tutor", "/library", "/profile"];
+export type TaskOpenTarget = {
+  taskId?: string;
+  assignmentId?: string;
+  workspaceType?: string;
+  taskType?: string;
+};
+
+const routeOrder = ["/", "/tasks", "/workspace", "/question-workspace", "/self-study", "/ai-tutor", "/library", "/profile"];
 
 function selectedKey(pathname: string) {
   if (pathname.startsWith("/workspace")) return "/tasks";
+  if (pathname.startsWith("/question-workspace")) return "/tasks";
   if (pathname.startsWith("/tasks")) return "/tasks";
   if (pathname.startsWith("/library")) return "/library";
   if (pathname.startsWith("/profile")) return "/profile";
@@ -34,6 +43,7 @@ function selectedKey(pathname: string) {
 
 function routeGroup(pathname: string) {
   if (pathname.startsWith("/workspace")) return "/workspace";
+  if (pathname.startsWith("/question-workspace")) return "/question-workspace";
   if (pathname.startsWith("/tasks")) return "/tasks";
   if (pathname.startsWith("/self-study")) return "/self-study";
   if (pathname.startsWith("/ai-tutor")) return "/ai-tutor";
@@ -45,8 +55,8 @@ function routeGroup(pathname: string) {
 function routeMotion(from: string, to: string) {
   const fromIndex = routeOrder.indexOf(routeGroup(from));
   const toIndex = routeOrder.indexOf(routeGroup(to));
-  if (routeGroup(to) === "/workspace") return "deeper";
-  if (routeGroup(from) === "/workspace") return "back";
+  if (routeGroup(to) === "/workspace" || routeGroup(to) === "/question-workspace") return "deeper";
+  if (routeGroup(from) === "/workspace" || routeGroup(from) === "/question-workspace") return "back";
   if (fromIndex === toIndex) return "replace";
   return toIndex > fromIndex ? "forward" : "back";
 }
@@ -59,7 +69,7 @@ function AppContent({ authUser, onLogout }: { authUser: AuthUser; onLogout: () =
   const navigate = useNavigate();
   const location = useLocation();
   const activeKey = selectedKey(location.pathname);
-  const isWorkspace = location.pathname.startsWith("/workspace");
+  const isWorkspace = location.pathname.startsWith("/workspace") || location.pathname.startsWith("/question-workspace");
   const activeRouteGroup = routeGroup(location.pathname);
 
   function transitionTo(to: string) {
@@ -70,8 +80,16 @@ function AppContent({ authUser, onLogout }: { authUser: AuthUser; onLogout: () =
     navigate(to);
   }
 
-  function openWorkspace(id?: string) {
-    transitionTo(`/workspace/${id ?? "task_linked_list_delete_001"}`);
+  function openTask(target: TaskOpenTarget | string | undefined) {
+    if (typeof target === "string" || !target) {
+      transitionTo(`/workspace/${target ?? "task_linked_list_delete_001"}`);
+      return;
+    }
+    if (target.workspaceType === "QUESTION_SET" || target.taskType === "QUIZ" || target.taskType === "EXAM") {
+      transitionTo(`/question-workspace/${target.assignmentId}`);
+      return;
+    }
+    transitionTo(`/workspace/${target.taskId ?? "task_linked_list_delete_001"}`);
   }
 
   function handleNavigate(page: string) {
@@ -96,6 +114,7 @@ function AppContent({ authUser, onLogout }: { authUser: AuthUser; onLogout: () =
       <div className="workspace-route-stage" key={location.pathname}>
         <Routes location={location}>
           <Route path="/workspace/:taskId" element={<TaskWorkspaceWrapper onBack={() => transitionTo("/tasks")} />} />
+          <Route path="/question-workspace/:assignmentId" element={<QuestionWorkspaceWrapper onBack={() => transitionTo("/tasks")} />} />
         </Routes>
       </div>
     );
@@ -157,9 +176,10 @@ function AppContent({ authUser, onLogout }: { authUser: AuthUser; onLogout: () =
         <main className="app-content" data-route={activeRouteGroup}>
           <div className="route-stage" key={activeRouteGroup}>
             <Routes location={location}>
-            <Route path="/" element={<LearningHome onNavigate={handleNavigate} onOpenWorkspace={openWorkspace} />} />
-            <Route path="/tasks" element={<CourseTasks onOpenWorkspace={openWorkspace} />} />
+            <Route path="/" element={<LearningHome onNavigate={handleNavigate} onOpenWorkspace={openTask} />} />
+            <Route path="/tasks" element={<CourseTasks onOpenWorkspace={openTask} />} />
             <Route path="/workspace/:taskId" element={<TaskWorkspaceWrapper onBack={() => transitionTo("/tasks")} />} />
+            <Route path="/question-workspace/:assignmentId" element={<QuestionWorkspaceWrapper onBack={() => transitionTo("/tasks")} />} />
             <Route path="/self-study" element={<SelfStudy />} />
             <Route path="/ai-tutor" element={<AiTutor />} />
             <Route path="/library" element={<LearningLibrary />} />
@@ -201,6 +221,14 @@ function TaskWorkspaceWrapper({ onBack }: { onBack: () => void }) {
     );
   }
   return <TaskWorkspace taskId={taskId} onBack={onBack} />;
+}
+
+function QuestionWorkspaceWrapper({ onBack }: { onBack: () => void }) {
+  const { assignmentId } = useParams();
+  if (!assignmentId) {
+    return <Navigate to="/tasks" replace />;
+  }
+  return <QuestionWorkspace assignmentId={assignmentId} onBack={onBack} />;
 }
 
 export default function App() {
