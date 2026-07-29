@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.api_response import ApiError, ok, request_id
 from backend.app.core.database import get_db
-from backend.app.core.security import current_user, ensure_course_member
+from backend.app.core.security import current_user, ensure_course_member, require_role
 from backend.app.models import Capability, CapabilityEvidence, Diagnosis, ExecutionRun, Submission, SubmissionVersion, User
 from backend.app.services.audit import record_audit
 from backend.app.services.diagnosis import create_or_get_hint, serialize_diagnosis, serialize_hint
@@ -98,9 +98,21 @@ def authorized_version(db: Session, version_id: str, user: User) -> tuple[Submis
     submission = db.get(Submission, version.submission_id)
     if submission is None:
         raise ApiError(404, "SUBMISSION_NOT_FOUND", "提交不存在")
-    ensure_course_member(db, submission.task.course_id, user.id)
+    ensure_submission_access(db, submission, user)
     execution = db.scalar(select(ExecutionRun).where(ExecutionRun.submission_version_id == version.id))
     return version, submission, execution
+
+
+def ensure_submission_access(db: Session, submission: Submission, user: User) -> None:
+    if user.role == "STUDENT":
+        if submission.student_id != user.id:
+            raise ApiError(403, "AUTH_FORBIDDEN", "无权访问其他学生的提交")
+        ensure_course_member(db, submission.task.course_id, user.id, role="STUDENT")
+        return
+    if user.role == "TEACHER":
+        ensure_course_member(db, submission.task.course_id, user.id, role="TEACHER")
+        return
+    raise ApiError(403, "AUTH_FORBIDDEN", "当前角色无权访问该资源")
 
 
 @router.get("/submission-versions/{version_id}/results")
@@ -189,6 +201,9 @@ def request_hint(
         raise ApiError(404, "DIAGNOSIS_NOT_FOUND", "诊断不存在")
     version = diagnosis.version
     submission = version.submission
+    require_role(user, "STUDENT")
+    if submission.student_id != user.id:
+        raise ApiError(403, "AUTH_FORBIDDEN", "无权访问其他学生的诊断提示")
     ensure_course_member(db, submission.task.course_id, user.id, role="STUDENT")
     hint = create_or_get_hint(
         db,
@@ -222,7 +237,7 @@ def get_versions(
     submission = db.get(Submission, submission_id)
     if submission is None:
         raise ApiError(404, "SUBMISSION_NOT_FOUND", "提交不存在")
-    ensure_course_member(db, submission.task.course_id, user.id)
+    ensure_submission_access(db, submission, user)
     latest_no = submission.latest_version_no
     data = []
     for version in submission.versions:
@@ -258,7 +273,7 @@ def get_summary(
     submission = db.get(Submission, submission_id)
     if submission is None:
         raise ApiError(404, "SUBMISSION_NOT_FOUND", "提交不存在")
-    ensure_course_member(db, submission.task.course_id, user.id)
+    ensure_submission_access(db, submission, user)
     if not submission.versions:
         raise ApiError(404, "SUBMISSION_VERSION_NOT_FOUND", "提交版本不存在")
     first = submission.versions[0]

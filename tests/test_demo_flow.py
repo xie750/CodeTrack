@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 
 from backend.app.core.database import SessionLocal
-from backend.app.models import CapabilityEvidence, CapabilityState, Course, Enrollment, KnowledgeSource, Task, User
+from backend.app.models import CapabilityEvidence, CapabilityState, Course, Enrollment, KnowledgeSource, Submission, SubmissionVersion, Task, User
 from backend.app.main import app
 from backend.app.services.seed import STANDARD_CORRECT_CODE, STANDARD_WRONG_CODE
 from backend.app.services.sandbox_client import SandboxClientResult
@@ -13,7 +13,9 @@ import backend.app.services.model_gateway as model_gateway
 import backend.app.services.submissions as submissions_service
 
 def client() -> TestClient:
-    return TestClient(app)
+    test_client = TestClient(app)
+    test_client.headers.update({"X-Demo-User-Id": "user_student_001"})
+    return test_client
 
 
 def ensure_student_enrolled(user_id: str, display_name: str) -> None:
@@ -35,8 +37,15 @@ def ensure_student_enrolled(user_id: str, display_name: str) -> None:
 def wait_for_results(c: TestClient, version_id: str, timeout_seconds: int = 45):
     deadline = time.time() + timeout_seconds
     last = None
+    db = SessionLocal()
+    try:
+        version = db.get(SubmissionVersion, version_id)
+        submission = db.get(Submission, version.submission_id) if version else None
+        headers = {"X-Demo-User-Id": submission.student_id} if submission else None
+    finally:
+        db.close()
     while time.time() < deadline:
-        last = c.get(f"/api/v1/submission-versions/{version_id}/results")
+        last = c.get(f"/api/v1/submission-versions/{version_id}/results", headers=headers)
         assert last.status_code == 200
         data = last.json()["data"]
         if data["execution"]["status"] in {
@@ -743,6 +752,35 @@ def test_authentication_and_role_checks_are_enforced():
             json={"language": "CPP", "source_code": STANDARD_CORRECT_CODE},
         )
         assert teacher_submit.status_code == 403
+
+
+def test_login_returns_jwt_and_student_context_uses_token_identity():
+    with client() as c:
+        login = c.post("/api/v1/auth/login", json={"username": "liu", "password": "codetrack123"})
+        assert login.status_code == 200
+        login_data = login.json()["data"]
+        assert login_data["token_type"] == "bearer"
+        assert login_data["user"]["id"] == "user_student_002"
+        headers = {"Authorization": f"Bearer {login_data['access_token']}"}
+
+        me = c.get("/api/v1/auth/me", headers=headers)
+        assert me.status_code == 200
+        assert me.json()["data"]["display_name"] == "刘同学"
+
+        context = c.get("/api/v1/student/learning-context", headers=headers)
+        assert context.status_code == 200
+        assert context.json()["data"]["student"]["class_name"] == "计科 1 班"
+
+
+def test_student_token_cannot_access_teacher_api():
+    with client() as c:
+        login = c.post("/api/v1/auth/login", json={"username": "wang", "password": "codetrack123"})
+        token = login.json()["data"]["access_token"]
+        response = c.get(
+            "/api/v1/teacher/courses/course_ds_001/submissions",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 403
 
 
 def test_student_without_course_membership_is_forbidden():

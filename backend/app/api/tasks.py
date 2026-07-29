@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from backend.app.core.api_response import ApiError, ok, request_id
 from backend.app.core.config import get_settings
 from backend.app.core.database import SessionLocal, get_db
-from backend.app.core.security import current_user, ensure_course_member
+from backend.app.core.security import current_user, ensure_course_member, require_role
 from backend.app.models import Course, Enrollment, Submission, Task, TestCase, User
 from backend.app.services.seed import STUDENT_TEMPLATE
 from backend.app.services.audit import record_audit
@@ -67,6 +67,7 @@ def list_tasks(
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ):
+    require_role(user, "STUDENT")
     tasks = db.scalars(
         select(Task)
         .join(Enrollment, Enrollment.course_id == Task.course_id)
@@ -102,6 +103,7 @@ def get_task(
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ):
+    require_role(user, "STUDENT")
     task = db.get(Task, task_id)
     if task is None:
         raise ApiError(404, "TASK_NOT_FOUND", "任务不存在")
@@ -153,6 +155,7 @@ def submit_code(
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ):
+    require_role(user, "STUDENT")
     rid = request_id()
     task = db.get(Task, task_id)
     if task is None:

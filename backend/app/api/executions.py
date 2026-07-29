@@ -23,7 +23,14 @@ def get_execution(
     submission = db.get(Submission, version.submission_id) if version else None
     if submission is None:
         raise ApiError(404, "SUBMISSION_NOT_FOUND", "提交不存在")
-    ensure_course_member(db, submission.task.course_id, user.id)
+    if user.role == "STUDENT" and submission.student_id != user.id:
+        raise ApiError(403, "AUTH_FORBIDDEN", "无权访问其他学生的执行结果")
+    ensure_course_member(
+        db,
+        submission.task.course_id,
+        user.id,
+        role="TEACHER" if user.role == "TEACHER" else "STUDENT",
+    )
 
     total = len(execution.test_results)
     passed = len([result for result in execution.test_results if result.status == "PASSED"])

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.api_response import ApiError, ok
 from backend.app.core.database import get_db
-from backend.app.core.security import current_user
+from backend.app.core.security import current_user, require_role
 from backend.app.models import (
     AdministrativeClass,
     Course,
@@ -79,6 +79,7 @@ def require_active_class(db: Session, user: User) -> tuple[AdministrativeClass, 
 
 @router.get("/learning-context")
 def learning_context(db: Session = Depends(get_db), user: User = Depends(current_user)):
+    require_role(user, "STUDENT")
     administrative_class, _ = require_active_class(db, user)
     assignments = db.scalars(
         select(TeachingAssignment)
@@ -139,6 +140,7 @@ def list_student_tasks(
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ):
+    require_role(user, "STUDENT")
     administrative_class, _ = require_active_class(db, user)
     query = (
         select(TaskAssignment, Task, TeachingAssignment, Course, User, StudentTaskProgress)
@@ -194,6 +196,7 @@ def learner_profile(
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ):
+    require_role(user, "STUDENT")
     administrative_class, _ = require_active_class(db, user)
     profile_query = select(LearnerProfileSnapshot).where(
         LearnerProfileSnapshot.student_id == user.id,
