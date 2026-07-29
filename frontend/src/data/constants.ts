@@ -251,7 +251,5 @@ export function mapApiTask(task: import("../api").TaskListItem): DemoTask {
 }
 
 export function buildTaskCards(apiTasks: import("../api").TaskListItem[]) {
-  const mapped = apiTasks.map(mapApiTask);
-  const ids = new Set(mapped.map((item) => item.task_id));
-  return [...mapped, ...demoTasks.filter((item) => !ids.has(item.task_id))];
+  return apiTasks.map(mapApiTask);
 }

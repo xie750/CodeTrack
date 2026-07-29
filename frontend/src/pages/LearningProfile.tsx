@@ -2,10 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   BookOpenCheck,
   CalendarDays,
-  Check,
-  Circle,
   ClipboardCheck,
-  FileCheck2,
   FunctionSquare,
   Goal,
   GraduationCap,
@@ -19,13 +16,6 @@ import {
 } from "lucide-react";
 import { api, LearningContext, StudentProfile } from "../api";
 import heroArt from "../assets/ui-home/hero-art.png";
-
-const defaultRecords = [
-  { icon: <Check size={16} />, title: "完成练习　循环结构综合练习", meta: "正确率 82%", time: "05-17 09:45", done: true },
-  { icon: <ClipboardCheck size={16} />, title: "完成测验　函数与参数配置测验", meta: "得分 86/100", time: "05-16 21:10" },
-  { icon: <Circle size={16} />, title: "观看课程　Python 函数进阶（第 3 课）", meta: "观看时长 42 分钟", time: "05-16 19:30" },
-  { icon: <FileCheck2 size={16} />, title: "完成任务　阶段任务：流程控制实战", meta: "进度 100%", time: "05-15 16:20" }
-];
 
 const knowledgeIcons = [<Medal size={19} />, <FunctionSquare size={19} />, <Triangle size={19} />, <RefreshCw size={19} />, <NotebookTabs size={19} />, <Sparkles size={19} />];
 const knowledgeColors = ["blue", "green", "blue", "purple", "green", "orange"];
@@ -57,14 +47,26 @@ export default function LearningProfile() {
   const [context, setContext] = useState<LearningContext | null>(null);
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
   const [profile, setProfile] = useState<StudentProfile | null>(null);
+  const [contextLoading, setContextLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
+    setContextLoading(true);
+    setError(null);
+    setContext(null);
+    setProfile(null);
     api.getLearningContext().then((data) => {
       if (!alive) return;
       setContext(data);
       setSelectedCourseId(data.courses[0]?.course_id ?? "");
-    }).catch(() => undefined);
+    }).catch(() => {
+      if (!alive) return;
+      setError("学习画像上下文加载失败，请稍后刷新。");
+    }).finally(() => {
+      if (alive) setContextLoading(false);
+    });
     return () => {
       alive = false;
     };
@@ -73,10 +75,17 @@ export default function LearningProfile() {
   useEffect(() => {
     if (!selectedCourseId) return;
     let alive = true;
+    setProfileLoading(true);
+    setError(null);
+    setProfile(null);
     api.getStudentProfile(selectedCourseId).then((data) => {
       if (alive) setProfile(data);
     }).catch(() => {
-      if (alive) setProfile(null);
+      if (!alive) return;
+      setProfile(null);
+      setError("当前课程画像数据加载失败，请稍后刷新。");
+    }).finally(() => {
+      if (alive) setProfileLoading(false);
     });
     return () => {
       alive = false;
@@ -88,8 +97,40 @@ export default function LearningProfile() {
     [context, selectedCourseId]
   );
 
-  const overview = profile?.overview;
-  const knowledgeCards = (profile?.knowledge_states ?? []).map((item, index) => ({
+  const isLoading = contextLoading || profileLoading;
+
+  if (isLoading) {
+    return (
+      <div className="profile-page">
+        <section className="profile-hero profile-loading-hero">
+          <div>
+            <h1>正在读取学习画像...</h1>
+            <p>页面会在当前课程画像数据返回后一次性回显。</p>
+          </div>
+          <img src={heroArt} alt="学生使用电脑学习" />
+        </section>
+        <section className="profile-top-grid">
+          <article className="profile-card profile-pad skeleton-block" />
+          <article className="profile-card profile-pad skeleton-block" />
+        </section>
+        <section className="profile-card profile-pad skeleton-block profile-page-skeleton" />
+      </div>
+    );
+  }
+
+  if (error || !context || !profile) {
+    return (
+      <div className="profile-page">
+        <section className="profile-card profile-pad">
+          <h2>学习画像暂不可用</h2>
+          <p className="profile-empty-copy">{error ?? "当前账号还没有可展示的课程画像数据。"}</p>
+        </section>
+      </div>
+    );
+  }
+
+  const overview = profile.overview;
+  const knowledgeCards = profile.knowledge_states.map((item, index) => ({
     icon: knowledgeIcons[index % knowledgeIcons.length],
     title: item.knowledge_point,
     score: item.mastery_score,
@@ -98,40 +139,37 @@ export default function LearningProfile() {
     warn: item.state === "WEAK",
     evidence: item.last_evidence
   }));
-  const weakItems = (profile?.knowledge_states ?? [])
+  const weakItems = profile.knowledge_states
     .filter((item) => item.state === "WEAK" || item.mastery_score < 70)
     .map((item) => ({
       title: item.knowledge_point,
       rate: `掌握度 ${item.mastery_score}%`,
       desc: item.last_evidence || `证据 ${item.evidence_count} 条，建议结合最近任务复盘。`
     }));
-  const adviceItems = (profile?.recommendations ?? []).map((item, index) => ({
+  const adviceItems = profile.recommendations.map((item, index) => ({
     icon: index === 0 ? <CalendarDays size={21} /> : index === 1 ? <Goal size={21} /> : <BookOpenCheck size={21} />,
     title: item.title,
     desc: item.reason,
     action: item.suggested_action || "去完成",
     color: index === 0 ? "blue" : index === 1 ? "green" : "orange"
   }));
-  const records = [
-    ...(profile?.frequent_errors ?? []).slice(0, 2).map((item) => ({
+  const records = profile.frequent_errors.slice(0, 4).map((item) => ({
       icon: <ClipboardCheck size={16} />,
       title: `高频错因　${item.label}`,
       meta: `${item.count} 次 · ${item.related_knowledge_points.join(" / ")}`,
-      time: formatTime(overview?.updated_at)
-    })),
-    ...defaultRecords
-  ].slice(0, 4);
-  const progress = overview?.overall_progress ?? 68;
-  const compileRate = overview?.compile_error_rate ?? 18;
-  const logicRate = overview?.logic_error_rate ?? 42;
-  const completion = overview?.recent_task_completion ?? 76;
+      time: formatTime(overview.updated_at)
+    }));
+  const progress = overview.overall_progress;
+  const compileRate = overview.compile_error_rate;
+  const logicRate = overview.logic_error_rate;
+  const completion = overview.recent_task_completion;
 
   return (
     <div className="profile-page">
       <section className="profile-hero">
         <div>
-          <h1>早上好，{context?.student.name ?? "小码同学"}！</h1>
-          <p>{overview?.summary ?? "这是你的学习画像与成长分析，继续朝目标前进吧。"}</p>
+          <h1>早上好，{context.student.name}！</h1>
+          <p>{overview.summary}</p>
         </div>
         <img src={heroArt} alt="学生使用电脑学习" />
       </section>
@@ -140,19 +178,19 @@ export default function LearningProfile() {
         <article className="profile-card profile-pad">
           <h2>当前学习目标与进度</h2>
           <div className="goal-table">
-            <span>当前班级</span><strong>{context?.student.class_name ?? "软件工程 1 班"}</strong>
-            <span>当前课程</span><strong>{currentCourse?.course_name ?? profile?.course.name ?? "数据结构与程序设计基础"}</strong>
-            <span>任课教师</span><strong>{currentCourse?.teacher_name ?? profile?.course.teacher_name ?? "王老师"}</strong>
+            <span>当前班级</span><strong>{context.student.class_name}</strong>
+            <span>当前课程</span><strong>{currentCourse?.course_name ?? profile.course.name}</strong>
+            <span>任课教师</span><strong>{currentCourse?.teacher_name ?? profile.course.teacher_name}</strong>
             <span>总体进度</span>
             <div className="profile-progress-line">
               <div className="profile-track"><i style={{ width: `${progress}%` }} /></div>
               <b>{progress}%</b>
             </div>
-            <span>当前阶段</span><strong>{overview?.hint_dependency_level ? `提示依赖：${overview.hint_dependency_level}` : "课程任务进行中"}</strong>
-            <span>下一步计划</span><strong>{overview?.recommendation ?? "完成当前课程任务并复盘薄弱知识点"}</strong>
+            <span>当前阶段</span><strong>提示依赖：{overview.hint_dependency_level}</strong>
+            <span>下一步计划</span><strong>{overview.recommendation}</strong>
           </div>
           <div className="profile-action">
-            {(context?.courses ?? []).map((course) => (
+            {context.courses.map((course) => (
               <button
                 key={course.course_id}
                 type="button"
@@ -193,9 +231,9 @@ export default function LearningProfile() {
               <text x="158" y="228" textAnchor="middle">逻辑稳定</text>
               <text x="158" y="244" textAnchor="middle">{100 - logicRate}</text>
               <text x="37" y="178">知识掌握</text>
-              <text x="57" y="195">{knowledgeCards[0]?.score ?? 76}</text>
+              <text x="57" y="195">{knowledgeCards[0]?.score ?? 0}</text>
               <text x="27" y="86">提示控制</text>
-              <text x="57" y="103">{overview?.hint_dependency_level === "HIGH" ? 55 : 75}</text>
+              <text x="57" y="103">{overview.hint_dependency_level === "HIGH" ? 55 : 75}</text>
             </svg>
             <div className="profile-legend">
               <span><i className="green" />80分及以上　优秀</span>
@@ -210,18 +248,13 @@ export default function LearningProfile() {
       <section className="profile-card profile-pad knowledge-section">
         <div className="profile-section-head"><h2>知识掌握画像</h2><a href="#">查看详情 ›</a></div>
         <div className="knowledge-grid">
-          {(knowledgeCards.length ? knowledgeCards : [
-            { icon: <Medal size={19} />, title: "基础语法", score: 85, state: "良好", color: "blue", warn: false },
-            { icon: <FunctionSquare size={19} />, title: "函数与表达式", score: 78, state: "良好", color: "green", warn: false },
-            { icon: <Triangle size={19} />, title: "条件判断", score: 72, state: "良好", color: "blue", warn: false },
-            { icon: <RefreshCw size={19} />, title: "循环结构", score: 68, state: "待提升", color: "purple", warn: true }
-          ]).map((item) => (
+          {knowledgeCards.length ? knowledgeCards.map((item) => (
             <article className="knowledge-card" key={item.title}>
               <div className="knowledge-top"><span className={item.color}>{item.icon}</span>{item.title}</div>
               <strong>{item.score}% <em className={item.warn ? "warn" : ""}>{item.state}</em></strong>
               <div className="profile-track"><i className={item.warn ? "orange" : ""} style={{ width: `${item.score}%` }} /></div>
             </article>
-          ))}
+          )) : <div className="empty-panel wide">当前课程暂无知识点画像数据。</div>}
         </div>
       </section>
 
@@ -229,14 +262,14 @@ export default function LearningProfile() {
         <article className="profile-card profile-pad">
           <div className="profile-section-head"><h2>薄弱项诊断</h2></div>
           <div className="weak-list">
-            {(weakItems.length ? weakItems : [{ title: "暂无明显薄弱项", rate: "持续观察", desc: "当前课程画像数据较稳定，继续完成任务后会更新诊断。" }]).map((item, index) => (
+            {weakItems.length ? weakItems.map((item, index) => (
               <div className="weak-row" key={item.title}>
                 <span className="rank">{index + 1}</span>
                 <div className="weak-name"><strong>{item.title}</strong><span>{item.rate}</span></div>
                 <p>{item.desc}</p>
                 <button type="button">去练习</button>
               </div>
-            ))}
+            )) : <div className="empty-panel">暂无明显薄弱项，继续完成任务后画像会更新。</div>}
           </div>
           <a className="profile-more" href="#">查看全部薄弱项 ›</a>
         </article>
@@ -244,13 +277,13 @@ export default function LearningProfile() {
         <article className="profile-card profile-pad">
           <div className="profile-section-head"><h2>个性化学习建议</h2></div>
           <div className="advice-list">
-            {(adviceItems.length ? adviceItems : [{ icon: <CalendarDays size={21} />, title: "今日建议", desc: "建议先完成当前课程任务，再查看画像变化。", action: "去完成", color: "blue" }]).map((item) => (
+            {adviceItems.length ? adviceItems.map((item) => (
               <div className="advice-row" key={item.title}>
                 <span className={item.color}>{item.icon}</span>
                 <div><strong>{item.title}</strong><p>{item.desc}</p></div>
                 <button type="button">{item.action}</button>
               </div>
-            ))}
+            )) : <div className="empty-panel">暂无个性化建议。</div>}
           </div>
         </article>
       </section>
@@ -285,14 +318,14 @@ export default function LearningProfile() {
         <article className="profile-card chart-card">
           <h2>近期学习记录</h2>
           <div className="profile-timeline">
-            {records.map((item) => (
+            {records.length ? records.map((item) => (
               <div className="record-row" key={item.title}>
-                <span className={"done" in item && item.done ? "done" : ""}>{item.icon}</span>
+                <span>{item.icon}</span>
                 <strong>{item.title}</strong>
                 <em>{item.meta}</em>
                 <time>{item.time}</time>
               </div>
-            ))}
+            )) : <div className="empty-panel">暂无近期学习记录。</div>}
           </div>
           <a className="profile-more" href="#">查看全部记录 ›</a>
         </article>
@@ -301,15 +334,15 @@ export default function LearningProfile() {
       <section className="profile-summary-grid">
         <article className="profile-card summary-card">
           <div className="summary-icon"><Star size={27} fill="currentColor" /></div>
-          <div><h3>系统分析</h3><strong>{progress}<span> 分</span></strong><p>{overview?.summary ?? "综合表现良好，继续保持！"}<br />更新于：{formatTime(overview?.updated_at)}</p></div>
+          <div><h3>系统分析</h3><strong>{progress}<span> 分</span></strong><p>{overview.summary}<br />更新于：{formatTime(overview.updated_at)}</p></div>
         </article>
         <article className="profile-card summary-card">
           <div className="summary-icon purple"><GraduationCap size={28} /></div>
-          <div><h3>教师评价</h3><strong className="purple">{currentCourse?.teacher_name ?? "任课教师"} <span>课程视角</span></strong><p>画像按课程独立计算，便于老师查看本课程情况。<br />来自：{profile?.course.name ?? currentCourse?.course_name ?? "当前课程"}</p><a href="#">查看评语 ›</a></div>
+          <div><h3>教师评价</h3><strong className="purple">{currentCourse?.teacher_name ?? profile.course.teacher_name} <span>课程视角</span></strong><p>画像按课程独立计算，便于老师查看本课程情况。<br />来自：{profile.course.name}</p><a href="#">查看评语 ›</a></div>
         </article>
         <article className="profile-card summary-card">
           <div className="summary-icon green"><UserRound size={28} /></div>
-          <div><h3>自我评价</h3><strong className="green">{completion}<span> 分</span></strong><p>我会继续努力，突破薄弱点！<br />班级：{context?.student.class_name ?? "软件工程 1 班"}</p><a href="#">去更新 ›</a></div>
+          <div><h3>自我评价</h3><strong className="green">{completion}<span> 分</span></strong><p>我会继续努力，突破薄弱点！<br />班级：{context.student.class_name}</p><a href="#">去更新 ›</a></div>
         </article>
       </section>
     </div>

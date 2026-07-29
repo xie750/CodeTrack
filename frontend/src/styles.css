@@ -55,10 +55,81 @@ body {
   }
 }
 
+@keyframes surface-skeleton {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+
 button,
 input,
 textarea {
   font: inherit;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.skeleton-block,
+.skeleton-row {
+  position: relative;
+  overflow: hidden;
+  border-color: #e6edf6 !important;
+  color: transparent !important;
+  background:
+    linear-gradient(100deg, #eef3f9 0%, #f8fbff 42%, #eef3f9 84%) !important;
+  background-size: 220% 100% !important;
+  animation: surface-skeleton 1.25s ease-in-out infinite;
+}
+
+.skeleton-row > *,
+.skeleton-block > * {
+  visibility: hidden;
+}
+
+.empty-panel {
+  min-height: 92px;
+  padding: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed #d8e2ef;
+  border-radius: 8px;
+  color: #657187;
+  background: #f8fbff;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.65;
+  text-align: center;
+}
+
+.empty-panel.wide {
+  grid-column: 1 / -1;
+}
+
+.empty-panel.compact {
+  min-height: 72px;
+  padding: 14px;
+}
+
+.side-skeleton {
+  min-height: 220px;
+  border-radius: 8px;
+}
+
+.profile-page-skeleton {
+  min-height: 260px;
+}
+
+.profile-empty-copy {
+  margin: 12px 0 0;
+  color: #657187;
+  line-height: 1.7;
 }
 
 .page-lead h2,

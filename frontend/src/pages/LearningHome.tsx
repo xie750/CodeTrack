@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, BookOpenCheck, CalendarClock, Camera, Check, ClipboardList, Code2, FileText, MonitorPlay, NotebookTabs } from "lucide-react";
+import { ArrowRight, CalendarClock, Check, ClipboardList, Code2, MonitorPlay } from "lucide-react";
 import { api, LearningContext, StudentProfile, StudentTaskCard } from "../api";
 import heroArt from "../assets/ui-home/hero-art.png";
 import robotImg from "../assets/ui-home/robot-img.png";
@@ -8,18 +8,6 @@ type PageProps = {
   onNavigate: (page: string) => void;
   onOpenWorkspace: (taskId?: string) => void;
 };
-
-const fallbackTasks = [
-  { title: "数组与循环综合应用", type: "编程任务", deadline: "今天 23:59", progress: 60, color: "blue", icon: <Code2 size={22} />, taskId: undefined },
-  { title: "函数基础练习题", type: "练习题", deadline: "明天 23:59", progress: 80, color: "green", icon: <ClipboardList size={22} />, taskId: undefined },
-  { title: "指针与数组应用复习", type: "知识点复习", deadline: "5-31 23:59", progress: 30, color: "purple", icon: <BookOpenCheck size={22} />, taskId: undefined }
-];
-
-const fallbackRecommendations = [
-  { label: "编程任务", title: "两数之和", desc: "给定一个整数数组 nums 和一个目标值 target...", action: "开始练习", color: "blue" },
-  { label: "练习题", title: "链表操作综合题", desc: "基于链表的插入、删除与反转练习。", action: "去练习", color: "green" },
-  { label: "知识点复习", title: "数据结构复习", desc: "回顾栈、队列、哈希表的核心概念。", action: "开始复习", color: "purple" }
-];
 
 const resources = [
   { title: "Python 数据结构速查手册", meta: "PDF · 1.2MB", color: "red", label: "pdf" },
@@ -48,24 +36,55 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
   const [context, setContext] = useState<LearningContext | null>(null);
   const [tasks, setTasks] = useState<StudentTaskCard[]>([]);
   const [profile, setProfile] = useState<StudentProfile | null>(null);
+  const [pageStatus, setPageStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [loadMessage, setLoadMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
-    api.getLearningContext().then((data) => {
-      if (!alive) return;
-      setContext(data);
-      api.listStudentTasks().then((taskData) => alive && setTasks(taskData)).catch(() => alive && setTasks([]));
-      if (data.courses[0]?.course_id) {
-        api.getStudentProfile(data.courses[0].course_id).then((profileData) => alive && setProfile(profileData)).catch(() => undefined);
+    async function loadHomeData() {
+      setPageStatus("loading");
+      setLoadMessage(null);
+      setContext(null);
+      setTasks([]);
+      setProfile(null);
+
+      try {
+        const data = await api.getLearningContext();
+        if (!alive) return;
+        setContext(data);
+
+        const courseId = data.courses[0]?.course_id;
+        const [taskResult, profileResult] = await Promise.allSettled([
+          api.listStudentTasks(),
+          courseId ? api.getStudentProfile(courseId) : Promise.resolve(null)
+        ]);
+        if (!alive) return;
+
+        setTasks(taskResult.status === "fulfilled" ? taskResult.value : []);
+        setProfile(profileResult.status === "fulfilled" ? profileResult.value : null);
+        setLoadMessage(
+          taskResult.status === "rejected" || profileResult.status === "rejected"
+            ? "部分学习数据暂时没有读取成功，页面已按当前接口结果显示。"
+            : null
+        );
+        setPageStatus("ready");
+      } catch {
+        if (!alive) return;
+        setContext(null);
+        setTasks([]);
+        setProfile(null);
+        setLoadMessage("学习首页数据加载失败，请稍后刷新。");
+        setPageStatus("error");
       }
-    }).catch(() => undefined);
+    }
+
+    loadHomeData();
     return () => {
       alive = false;
     };
   }, []);
 
   const todayTasks = useMemo(() => {
-    if (!tasks.length) return fallbackTasks;
     return tasks.slice(0, 3).map((task, index) => ({
       title: task.title,
       type: task.task_type === "CODING" ? "编程任务" : "课程任务",
@@ -79,7 +98,6 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
 
   const recommendations = useMemo(() => {
     const items = profile?.recommendations ?? [];
-    if (!items.length) return fallbackRecommendations;
     return items.slice(0, 3).map((item, index) => ({
       label: index === 0 ? "画像建议" : "知识点复习",
       title: item.title,
@@ -90,13 +108,6 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
   }, [profile]);
 
   const reminders = useMemo(() => {
-    if (!tasks.length) {
-      return [
-        { icon: <ClipboardList size={20} />, title: "班级任务 截止", desc: "函数基础练习题", time: "截止时间：明天 23:59", color: "orange" },
-        { icon: <Camera size={20} />, title: "直播课开始", desc: "数据结构与算法精讲", time: "今天 19:30", color: "blue" },
-        { icon: <NotebookTabs size={20} />, title: "作业截止", desc: "两数之和 编程任务", time: "5-31 23:59", color: "purple" }
-      ];
-    }
     return tasks.slice(0, 3).map((task, index) => ({
       icon: index === 0 ? <ClipboardList size={20} /> : index === 1 ? <CalendarClock size={20} /> : <MonitorPlay size={20} />,
       title: "班级任务 截止",
@@ -106,26 +117,40 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
     }));
   }, [tasks]);
 
-  const skills = [
-    { name: "总体进度", value: profile?.overview.overall_progress ?? 72 },
-    { name: "任务完成", value: profile?.overview.recent_task_completion ?? 78 },
-    { name: "调试能力", value: 100 - (profile?.overview.compile_error_rate ?? 28) },
-    { name: "逻辑稳定", value: 100 - (profile?.overview.logic_error_rate ?? 20) },
-    { name: "知识掌握", value: profile?.knowledge_states[0]?.mastery_score ?? 90 }
-  ];
-  const primaryTaskId = todayTasks[0]?.taskId;
-  const courseName = context?.courses[0]?.course_name ?? "数据结构与程序设计基础";
-  const studentName = context?.student.name ?? "张同学";
+  const skills = profile
+    ? [
+        { name: "总体进度", value: profile.overview.overall_progress },
+        { name: "任务完成", value: profile.overview.recent_task_completion },
+        { name: "调试能力", value: 100 - profile.overview.compile_error_rate },
+        { name: "逻辑稳定", value: 100 - profile.overview.logic_error_rate },
+        { name: "知识掌握", value: profile.knowledge_states[0]?.mastery_score ?? 0 }
+      ]
+    : [];
+  const primaryTaskId = tasks.find((task) => task.status !== "COMPLETED")?.task_id ?? tasks[0]?.task_id;
+  const courseName = context?.courses[0]?.course_name;
+  const studentName = context?.student.name;
+  const isLoading = pageStatus === "loading";
 
   return (
     <div className="home-dashboard">
       <section className="home-main">
         <section className="home-card home-hero">
           <div className="hero-copy">
-            <h1>早上好，{studentName}！</h1>
-            <p>{context ? `${context.student.class_name} · ${courseName} 的任务和画像数据已接入。` : "坚持学习的每一天，都是更好的自己迈进一步。"}</p>
-            <button className="primary-btn" type="button" onClick={() => onOpenWorkspace(primaryTaskId)}>
-              继续学习
+            <h1>早上好，{studentName ?? "同学"}！</h1>
+            <p>
+              {isLoading
+                ? "正在读取你的课程任务和学习画像..."
+                : context && courseName
+                  ? `${context.student.class_name} · ${courseName} 的任务和画像数据已接入。`
+                  : loadMessage ?? "暂时没有读取到学习首页数据。"}
+            </p>
+            <button
+              className="primary-btn"
+              type="button"
+              disabled={isLoading}
+              onClick={() => (primaryTaskId ? onOpenWorkspace(primaryTaskId) : onNavigate("/tasks"))}
+            >
+              {primaryTaskId ? "继续学习" : "查看任务"}
               <span>
                 <ArrowRight size={17} />
               </span>
@@ -143,7 +168,10 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
             </button>
           </div>
           <div className="task-list">
-            {todayTasks.map((task, index) => (
+            {isLoading ? (
+              Array.from({ length: 3 }).map((_, index) => <div className="task-row skeleton-row" key={index} />)
+            ) : todayTasks.length ? (
+              todayTasks.map((task, index) => (
               <article className="task-row" key={task.title}>
                 <div className={`task-icon ${task.color}`}>{task.icon}</div>
                 <div className="task-info">
@@ -165,7 +193,10 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
                   继续学习
                 </button>
               </article>
-            ))}
+              ))
+            ) : (
+              <div className="empty-panel">当前没有从接口读取到今日任务。切换到课程任务页后会按班级任务数据展示。</div>
+            )}
           </div>
         </section>
 
@@ -174,7 +205,10 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
             <h2>推荐学习</h2>
           </div>
           <div className="recommendations">
-            {recommendations.map((item) => (
+            {isLoading ? (
+              Array.from({ length: 3 }).map((_, index) => <div className="recommendation skeleton-block" key={index} />)
+            ) : recommendations.length ? (
+              recommendations.map((item) => (
               <article className="recommendation" key={item.title}>
                 <span className={`recommend-tag ${item.color}`}>{item.label}</span>
                 <h3>{item.title}</h3>
@@ -183,31 +217,34 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
                   {item.action}
                 </button>
               </article>
-            ))}
+              ))
+            ) : (
+              <div className="empty-panel wide">暂无个性化推荐。完成任务或保存资料后，系统会基于画像生成下一步建议。</div>
+            )}
           </div>
         </section>
 
         <div className="analytics-grid">
           <section className="home-card analytics-card">
             <h2>学习进度</h2>
-            <div className="progress-layout">
+            {isLoading ? <div className="progress-layout skeleton-block" /> : profile ? <div className="progress-layout">
               <div className="donut">
                 <div className="donut-center">
-                  <strong>{profile?.overview.overall_progress ?? 72}%</strong>
+                  <strong>{profile.overview.overall_progress}%</strong>
                   <span>总体进度</span>
                 </div>
               </div>
               <div className="legend-list">
-                <span><i className="dot blue" />已完成&nbsp; {profile?.overview.recent_task_completion ?? 72}%</span>
+                <span><i className="dot blue" />已完成&nbsp; {profile.overview.recent_task_completion}%</span>
                 <span><i className="dot green" />进行中&nbsp; {tasks.filter((task) => task.status !== "COMPLETED").length} 个</span>
-                <span><i className="dot gray" />薄弱点&nbsp; {profile?.knowledge_states.filter((item) => item.state === "WEAK").length ?? 0} 个</span>
+                <span><i className="dot gray" />薄弱点&nbsp; {profile.knowledge_states.filter((item) => item.state === "WEAK").length} 个</span>
               </div>
-            </div>
+            </div> : <div className="empty-panel">暂无学习画像数据。</div>}
           </section>
 
           <section className="home-card analytics-card radar-card">
             <h2>能力雷达</h2>
-            <div className="radar-layout">
+            {isLoading ? <div className="radar-layout skeleton-block" /> : profile ? <div className="radar-layout">
               <svg viewBox="0 0 180 170" aria-label="能力雷达图">
                 <polygon points="90,14 158,58 132,138 48,138 22,58" fill="#eef4ff" stroke="#cddcff" />
                 <polygon points="90,42 130,68 116,120 62,120 48,68" fill="#d7e5ff" stroke="#adc6ff" />
@@ -234,7 +271,7 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
                 ))}
                 <p className="growth">画像来自 <b>{courseName}</b></p>
               </div>
-            </div>
+            </div> : <div className="empty-panel">暂无能力维度数据。</div>}
           </section>
         </div>
 
@@ -247,9 +284,10 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
             <h2>今日目标</h2>
             <button className="text-link" type="button">编辑</button>
           </div>
+          {isLoading ? <div className="side-skeleton skeleton-block" /> : profile ? <>
           <div className="goal-ring">
             <div>
-              <strong>{profile?.overview.recent_task_completion ?? 70}%</strong>
+              <strong>{profile.overview.recent_task_completion}%</strong>
               <span>已完成</span>
             </div>
           </div>
@@ -258,6 +296,7 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
             <span className="done"><Check size={14} />复盘 1 个薄弱点</span>
             <span><i />保存 1 份学习产物</span>
           </div>
+          </> : <div className="empty-panel">暂无今日目标数据。</div>}
         </section>
 
         <section className="home-card right-card">
@@ -266,7 +305,10 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
             <button className="text-link" type="button">查看全部</button>
           </div>
           <div className="reminder-list">
-            {reminders.map((item) => (
+            {isLoading ? (
+              Array.from({ length: 3 }).map((_, index) => <div className="reminder-item skeleton-row" key={index} />)
+            ) : reminders.length ? (
+              reminders.map((item) => (
               <article className="reminder-item" key={item.desc}>
                 <div className={`reminder-icon ${item.color}`}>{item.icon}</div>
                 <div>
@@ -275,7 +317,10 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
                   <em>{item.time}</em>
                 </div>
               </article>
-            ))}
+              ))
+            ) : (
+              <div className="empty-panel compact">暂无近期提醒。</div>
+            )}
           </div>
         </section>
 

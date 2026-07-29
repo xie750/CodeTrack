@@ -65,12 +65,15 @@ export default function CourseTasks({ onOpenWorkspace }: PageProps) {
   const [context, setContext] = useState<LearningContext | null>(null);
   const [selectedTab, setSelectedTab] = useState<TaskTab>("全部课程");
   const [tasks, setTasks] = useState<StudentTaskCard[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingContext, setLoadingContext] = useState(true);
+  const [loadingTasks, setLoadingTasks] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
-    setLoading(true);
+    setLoadingContext(true);
+    setContext(null);
+    setSelectedTab("全部课程");
     api
       .getLearningContext()
       .then((data) => {
@@ -82,7 +85,7 @@ export default function CourseTasks({ onOpenWorkspace }: PageProps) {
         setError("班级课程数据加载失败，当前显示为空状态。");
       })
       .finally(() => {
-        if (alive) setLoading(false);
+        if (alive) setLoadingContext(false);
       });
     return () => {
       alive = false;
@@ -92,8 +95,9 @@ export default function CourseTasks({ onOpenWorkspace }: PageProps) {
   useEffect(() => {
     let alive = true;
     const courseId = context?.courses.find((course) => course.course_name === selectedTab)?.course_id;
-    setLoading(true);
+    setLoadingTasks(true);
     setError(null);
+    setTasks([]);
     api
       .listStudentTasks(courseId)
       .then((data) => {
@@ -105,7 +109,7 @@ export default function CourseTasks({ onOpenWorkspace }: PageProps) {
         setError("任务数据加载失败，请稍后刷新。");
       })
       .finally(() => {
-        if (alive) setLoading(false);
+        if (alive) setLoadingTasks(false);
       });
     return () => {
       alive = false;
@@ -113,6 +117,7 @@ export default function CourseTasks({ onOpenWorkspace }: PageProps) {
   }, [context, selectedTab]);
 
   const courseTabs = useMemo(() => ["全部课程", ...(context?.courses.map((course) => course.course_name) ?? [])], [context]);
+  const loading = loadingContext || loadingTasks;
   const primaryTaskId = tasks.find((task) => task.status !== "COMPLETED")?.task_id ?? tasks[0]?.task_id;
   const inProgress = tasks.filter((task) => ["IN_PROGRESS", "SUBMITTED", "NEEDS_REVISION"].includes(task.status)).length;
   const completed = tasks.filter((task) => task.status === "COMPLETED").length;
@@ -122,7 +127,7 @@ export default function CourseTasks({ onOpenWorkspace }: PageProps) {
 
   const stats = [
     { title: "班级任务总数", value: String(tasks.length), sub: currentCourse?.course_name ?? "全部课程汇总", icon: <FileText size={28} />, color: "blue" },
-    { title: "进行中任务", value: String(inProgress), sub: loading ? "正在刷新" : "按课程实时更新", icon: <BellRing size={28} />, color: "orange" },
+    { title: "进行中任务", value: loading ? "..." : String(inProgress), sub: loading ? "正在读取当前课程" : "按课程实时更新", icon: <BellRing size={28} />, color: "orange" },
     { title: "已完成任务", value: String(completed), sub: "完成后同步画像", icon: <CheckCircle2 size={28} />, color: "green" },
     { title: "本周截止任务", value: String(dueSoon), sub: "来自教师下发", icon: <CalendarDays size={28} />, color: "indigo" }
   ];
@@ -133,7 +138,7 @@ export default function CourseTasks({ onOpenWorkspace }: PageProps) {
         <div className="class-title-row">
           <h1>班级任务</h1>
           <button className="class-select" type="button">
-            {context?.student.class_name ?? "软件工程 1 班"} <ChevronDown size={16} />
+            {loadingContext ? "正在加载班级" : context?.student.class_name ?? "暂无班级"} <ChevronDown size={16} />
           </button>
           <button className="class-ghost" type="button"><Plus size={17} /> 模拟登录已绑定</button>
         </div>
@@ -142,7 +147,7 @@ export default function CourseTasks({ onOpenWorkspace }: PageProps) {
             <button type="button"><List size={17} /> 列表视图</button>
             <button className="active" type="button"><Grid2X2 size={17} /> 卡片视图</button>
           </div>
-          <button className="class-primary" type="button" onClick={() => onOpenWorkspace(primaryTaskId)}>
+          <button className="class-primary" type="button" disabled={!primaryTaskId || loading} onClick={() => onOpenWorkspace(primaryTaskId)}>
             <SquareCode size={17} /> 进入编程模式
           </button>
         </div>
@@ -178,7 +183,9 @@ export default function CourseTasks({ onOpenWorkspace }: PageProps) {
           </div>
 
           <section className="class-task-grid">
-            {tasks.map((task) => {
+            {loading ? (
+              Array.from({ length: 6 }).map((_, index) => <article className="class-card class-task-card skeleton-block" key={index} />)
+            ) : tasks.map((task) => {
               const progress = Math.round((task.passed_count / Math.max(task.total_required_count, 1)) * 100);
               const hot = task.status === "IN_PROGRESS" || task.status === "NEEDS_REVISION";
               return (
@@ -235,14 +242,16 @@ export default function CourseTasks({ onOpenWorkspace }: PageProps) {
           <section className="class-card sidecard">
             <h2>任务提醒</h2>
             <div className="remind-list">
-              {tasks.slice(0, 3).map((task, index) => (
+              {loading ? (
+                Array.from({ length: 3 }).map((_, index) => <p className="skeleton-row" key={index} />)
+              ) : tasks.slice(0, 3).map((task, index) => (
                 <p key={task.assignment_id}>
                   <span className={index === 0 ? "red" : index === 1 ? "orange" : "blue"} />
                   <strong>{task.title}</strong>
                   <em>{formatDeadline(task.deadline)} 截止</em>
                 </p>
               ))}
-              {tasks.length === 0 ? <p><span className="blue" /><strong>暂无提醒</strong><em>等待教师下发任务</em></p> : null}
+              {!loading && tasks.length === 0 ? <p><span className="blue" /><strong>暂无提醒</strong><em>等待教师下发任务</em></p> : null}
             </div>
             <a href="#">查看全部提醒</a>
           </section>
