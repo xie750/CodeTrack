@@ -1,4 +1,4 @@
-import type { MouseEvent } from "react";
+import { useState, type MouseEvent } from "react";
 import { NavLink, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Bell, BookOpen, ChartNoAxesColumnIncreasing, ChevronDown, ChevronsLeft, ClipboardList, House, Search, Star } from "lucide-react";
 import { ConfigProvider } from "antd";
@@ -11,7 +11,7 @@ import AiTutor from "./pages/AiTutor";
 import LearningLibrary from "./pages/LearningLibrary";
 import LearningProfile from "./pages/LearningProfile";
 import avatarImg from "./assets/ui-home/avatar.png";
-import { profileSummary } from "./data/constants";
+import { DEMO_USERS, getCurrentDemoUserId, getDemoUser, setCurrentDemoUserId } from "./demoUsers";
 
 const navItems = [
   { key: "/", label: "学习首页", icon: <House size={22} strokeWidth={2.4} /> },
@@ -56,9 +56,11 @@ function shouldUseNativeNavigation(event: MouseEvent<HTMLAnchorElement>) {
 function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [currentUserId, setCurrentUserId] = useState(getCurrentDemoUserId);
   const activeKey = selectedKey(location.pathname);
   const isWorkspace = location.pathname.startsWith("/workspace");
   const activeRouteGroup = routeGroup(location.pathname);
+  const currentDemoUser = getDemoUser(currentUserId);
 
   function transitionTo(to: string) {
     if (to === location.pathname) return;
@@ -89,9 +91,14 @@ function AppContent() {
     transitionTo(to);
   }
 
+  function handleUserChange(userId: string) {
+    setCurrentDemoUserId(userId);
+    setCurrentUserId(userId);
+  }
+
   if (isWorkspace) {
     return (
-      <div className="workspace-route-stage" key={location.pathname}>
+      <div className="workspace-route-stage" key={`${location.pathname}-${currentUserId}`}>
         <Routes location={location}>
           <Route path="/workspace/:taskId" element={<TaskWorkspaceWrapper onBack={() => transitionTo("/tasks")} />} />
         </Routes>
@@ -116,11 +123,25 @@ function AppContent() {
             <Bell size={25} strokeWidth={2.1} />
             <span className="notification-badge">3</span>
           </button>
-          <div className="top-user">
-            <img className="avatar" src={avatarImg} alt={profileSummary.studentName} />
-            <strong>{profileSummary.studentName}</strong>
-            <ChevronDown size={18} />
-          </div>
+          <label className="top-user user-switcher">
+            <img className="avatar" src={avatarImg} alt={currentDemoUser.name} />
+            <span className="user-switcher-copy">
+              <strong>{currentDemoUser.name}</strong>
+              <small>{currentDemoUser.className}</small>
+            </span>
+            <select
+              value={currentUserId}
+              onChange={(event) => handleUserChange(event.target.value)}
+              aria-label="切换模拟登录用户"
+            >
+              {DEMO_USERS.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.name} · {user.className}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={18} aria-hidden="true" />
+          </label>
         </div>
       </header>
 
@@ -147,7 +168,7 @@ function AppContent() {
         </aside>
 
         <main className="app-content" data-route={activeRouteGroup}>
-          <div className="route-stage" key={activeRouteGroup}>
+          <div className="route-stage" key={`${activeRouteGroup}-${currentUserId}`}>
             <Routes location={location}>
             <Route path="/" element={<LearningHome onNavigate={handleNavigate} onOpenWorkspace={openWorkspace} />} />
             <Route path="/tasks" element={<CourseTasks onOpenWorkspace={openWorkspace} />} />

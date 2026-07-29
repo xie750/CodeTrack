@@ -1,3 +1,5 @@
+import { getCurrentDemoUserId } from "./demoUsers";
+
 export type ApiMeta = { request_id: string; [key: string]: unknown };
 export type ApiResponse<T> = { data: T; meta: ApiMeta };
 export type ApiErrorBody = { error: { code: string; message: string; details: Record<string, unknown> }; meta: ApiMeta };
@@ -284,7 +286,10 @@ export type TeacherTimeline = {
   }>;
 };
 
-const studentHeaders = { "X-Demo-User-Id": "user_student_001" };
+function studentHeaders() {
+  return { "X-Demo-User-Id": getCurrentDemoUserId() };
+}
+
 const teacherHeaders = { "X-Demo-User-Id": "user_teacher_001" };
 
 async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
@@ -298,48 +303,48 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  listTasks: () => request<TaskListItem[]>("/api/v1/tasks", { headers: studentHeaders }),
-  getTask: (taskId: string) => request<TaskDetail>(`/api/v1/tasks/${taskId}`, { headers: studentHeaders }),
-  getLearningContext: () => request<LearningContext>("/api/v1/student/learning-context", { headers: studentHeaders }),
+  listTasks: () => request<TaskListItem[]>("/api/v1/tasks", { headers: studentHeaders() }),
+  getTask: (taskId: string) => request<TaskDetail>(`/api/v1/tasks/${taskId}`, { headers: studentHeaders() }),
+  getLearningContext: () => request<LearningContext>("/api/v1/student/learning-context", { headers: studentHeaders() }),
   listStudentTasks: (courseId?: string) =>
     request<StudentTaskCard[]>(
       `/api/v1/student/tasks${courseId ? `?course_id=${encodeURIComponent(courseId)}` : ""}`,
-      { headers: studentHeaders }
+      { headers: studentHeaders() }
     ),
   getStudentProfile: (courseId?: string) =>
     request<StudentProfile>(
       `/api/v1/student/profile${courseId ? `?course_id=${encodeURIComponent(courseId)}` : ""}`,
-      { headers: studentHeaders }
+      { headers: studentHeaders() }
     ),
   submitCode: (taskId: string, sourceCode: string) =>
     request<SubmitResponse>(`/api/v1/tasks/${taskId}/submissions`, {
       method: "POST",
       headers: {
-        ...studentHeaders,
+        ...studentHeaders(),
         "Content-Type": "application/json",
         "Idempotency-Key": crypto.randomUUID()
       },
       body: JSON.stringify({ language: "CPP", source_code: sourceCode })
     }),
   getExecution: (executionId: string) =>
-    request<ExecutionStatus>(`/api/v1/executions/${executionId}`, { headers: studentHeaders }),
+    request<ExecutionStatus>(`/api/v1/executions/${executionId}`, { headers: studentHeaders() }),
   getResults: (versionId: string) =>
-    request<VersionResult>(`/api/v1/submission-versions/${versionId}/results`, { headers: studentHeaders }),
+    request<VersionResult>(`/api/v1/submission-versions/${versionId}/results`, { headers: studentHeaders() }),
   getDiagnosis: (versionId: string) =>
-    request<Diagnosis>(`/api/v1/submission-versions/${versionId}/diagnosis`, { headers: studentHeaders }),
+    request<Diagnosis>(`/api/v1/submission-versions/${versionId}/diagnosis`, { headers: studentHeaders() }),
   requestHint: (diagnosisId: string, requestedLevel: number) =>
     request<Hint>(`/api/v1/diagnoses/${diagnosisId}/hints`, {
       method: "POST",
       headers: {
-        ...studentHeaders,
+        ...studentHeaders(),
         "Content-Type": "application/json"
       },
       body: JSON.stringify({ requested_level: requestedLevel })
     }),
   getVersions: (submissionId: string) =>
-    request<VersionHistoryItem[]>(`/api/v1/submissions/${submissionId}/versions`, { headers: studentHeaders }),
+    request<VersionHistoryItem[]>(`/api/v1/submissions/${submissionId}/versions`, { headers: studentHeaders() }),
   getSummary: (submissionId: string) =>
-    request<Summary>(`/api/v1/submissions/${submissionId}/summary`, { headers: studentHeaders }),
+    request<Summary>(`/api/v1/submissions/${submissionId}/summary`, { headers: studentHeaders() }),
   listTeacherSubmissions: () =>
     request<TeacherSubmission[]>("/api/v1/teacher/courses/course_ds_001/submissions", { headers: teacherHeaders }),
   getTeacherTimeline: (submissionId: string) =>

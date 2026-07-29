@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Button,
@@ -11,21 +12,44 @@ import {
   Typography
 } from "antd";
 import { Sparkles } from "lucide-react";
-import {
-  knowledgeSources,
-  profileSummary
-} from "../data/constants";
+import { api, LearningContext, StudentProfile } from "../api";
+import { knowledgeSources } from "../data/constants";
 
 const { Text, Title, Paragraph } = Typography;
 
 export default function AiTutor() {
+  const [context, setContext] = useState<LearningContext | null>(null);
+  const [profile, setProfile] = useState<StudentProfile | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api.getLearningContext().then((data) => {
+      if (!alive) return;
+      setContext(data);
+      const courseId = data.courses[0]?.course_id;
+      if (courseId) {
+        api.getStudentProfile(courseId).then((profileData) => alive && setProfile(profileData)).catch(() => undefined);
+      }
+    }).catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const weakestPoint = useMemo(() => {
+    return profile?.knowledge_states.find((item) => item.state === "WEAK") ?? profile?.knowledge_states[0];
+  }, [profile]);
+  const frequentError = profile?.frequent_errors[0];
+  const studentName = context?.student.name ?? "当前学生";
+  const courseName = profile?.course.name ?? context?.courses[0]?.course_name ?? "数据结构与程序设计基础";
+
   return (
     <div className="page-grid">
       <section className="page-lead">
         <div>
           <Text type="secondary">Concept Tutor Agent · Citation Guard Agent</Text>
           <Title level={2}>结合页面上下文、学习画像和课程知识库回答</Title>
-          <Paragraph>这里不是通用聊天框，回答必须显示画像适配、引用来源、置信度和下一步动作。</Paragraph>
+          <Paragraph>这里不是通用聊天框，回答必须显示画像适配、引用来源、置信度和下一步动作。当前已绑定 {studentName} 的学习上下文。</Paragraph>
         </div>
         <Button type="primary" icon={<Sparkles size={16} />}>
           生成复习笔记
@@ -38,7 +62,9 @@ export default function AiTutor() {
             <div className="chat-flow">
               <div className="chat-bubble user">
                 <Text strong>学生提问</Text>
-                <Paragraph>为什么链表删除头节点容易出错？请结合我最近的提交解释。</Paragraph>
+                <Paragraph>
+                  为什么{weakestPoint?.knowledge_point ?? "链表删除头节点"}容易出错？请结合我最近的提交解释。
+                </Paragraph>
               </div>
               <div className="chat-bubble ai">
                 <Space direction="vertical" className="full">
@@ -48,11 +74,11 @@ export default function AiTutor() {
                     <Tag color="blue">已结合画像</Tag>
                   </Space>
                   <Paragraph>
-                    头节点删除容易出错，是因为普通节点可以通过前驱节点改 `prev-&gt;next`，但头节点没有前驱节点。你最近的提交已经能删除中间节点，
-                    但在 `position == 0` 时仍返回旧 head，所以公开样例中的头节点删除会失败。
+                    {weakestPoint?.knowledge_point ?? "头节点删除"}是当前画像里需要重点复盘的内容。系统结合 {courseName} 的任务进度、
+                    高频错因{frequentError ? `“${frequentError.label}”` : "和最近提交"}后，建议先定位最小失败场景，再补充对应边界用例。
                   </Paragraph>
                   <Paragraph>
-                    下一步建议：先单独写出 `position == 0` 分支，返回 `head-&gt;next`；再用空链表、头节点、尾节点和越界位置四组样例验证。
+                    下一步建议：先按课程知识源复述规则，再写 2 组最小样例验证；如果这是考核任务，只请求一级或二级提示，不直接索要完整答案。
                   </Paragraph>
                 </Space>
               </div>
@@ -70,7 +96,13 @@ export default function AiTutor() {
           <Card title="当前上下文">
             <List
               size="small"
-              dataSource={["页面：任务工作台", "任务：单链表指定位置节点删除", "画像：链表边界处理薄弱", "风险：不能直接给完整答案"]}
+              dataSource={[
+                `学生：${studentName}`,
+                `班级：${context?.student.class_name ?? "加载中"}`,
+                `课程：${courseName}`,
+                `画像：${weakestPoint ? `${weakestPoint.knowledge_point} · ${weakestPoint.mastery_score}%` : "等待画像数据"}`,
+                "风险：不能直接给完整答案"
+              ]}
               renderItem={(item) => <List.Item>{item}</List.Item>}
             />
           </Card>

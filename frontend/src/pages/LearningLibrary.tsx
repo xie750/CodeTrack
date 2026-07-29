@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   BarChart3,
   Bookmark,
@@ -14,6 +14,7 @@ import {
   Search,
   Target
 } from "lucide-react";
+import { api, LearningContext, StudentProfile } from "../api";
 
 type FavoriteType = "编程题" | "练习题" | "考核题";
 
@@ -118,6 +119,23 @@ export default function LearningLibrary() {
   const [activeTab, setActiveTab] = useState("全部收藏");
   const [query, setQuery] = useState("");
   const [removed, setRemoved] = useState<Set<string>>(new Set());
+  const [context, setContext] = useState<LearningContext | null>(null);
+  const [profile, setProfile] = useState<StudentProfile | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api.getLearningContext().then((data) => {
+      if (!alive) return;
+      setContext(data);
+      const courseId = data.courses[0]?.course_id;
+      if (courseId) {
+        api.getStudentProfile(courseId).then((profileData) => alive && setProfile(profileData)).catch(() => undefined);
+      }
+    }).catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const filtered = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -132,6 +150,10 @@ export default function LearningLibrary() {
     });
   }, [activeTab, query]);
 
+  const courseName = context?.courses[0]?.course_name ?? "数据结构";
+  const className = context?.student.class_name ?? "软件工程 2 班";
+  const weakPoint = profile?.knowledge_states.find((item) => item.state === "WEAK")?.knowledge_point ?? "薄弱知识点";
+
   function removeFavorite(title: string) {
     setRemoved((current) => new Set(current).add(title));
   }
@@ -143,11 +165,11 @@ export default function LearningLibrary() {
           <div className="library-head-left">
             <h1>收藏夹</h1>
             <button type="button" className="library-select">
-              软件工程 2 班
+              {className}
               <ChevronDown size={17} />
             </button>
             <button type="button" className="library-select library-select-sm">
-              数据结构
+              {courseName}
               <ChevronDown size={17} />
             </button>
           </div>
@@ -200,7 +222,7 @@ export default function LearningLibrary() {
               </div>
               <p>{item.description}</p>
               <div className="favorite-meta">
-                {item.course} · {item.className}
+                {courseName} · {className}
                 <br />
                 收藏时间：{item.collectedAt}
               </div>
@@ -295,7 +317,7 @@ export default function LearningLibrary() {
             <h2>学习建议</h2>
           </header>
           <AdviceItem tone="blue" icon={<BarChart3 size={22} />} title="坚持每日练习" text="本周已收藏 6 道题，继续保持！" />
-          <AdviceItem tone="green" icon={<Target size={22} />} title="强化薄弱知识点" text="条件判断得分较低，建议重点练习" />
+          <AdviceItem tone="green" icon={<Target size={22} />} title="强化薄弱知识点" text={`${weakPoint}需要结合资料复盘`} />
           <AdviceItem tone="orange" icon={<Clock3 size={22} />} title="定期回顾收藏" text="回顾收藏可提升 20% 掌握率" />
           <button type="button" className="plan-button">
             生成个性化学习计划
