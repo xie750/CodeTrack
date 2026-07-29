@@ -10,7 +10,6 @@ import SelfStudy from "./pages/SelfStudy";
 import AiTutor from "./pages/AiTutor";
 import LearningLibrary from "./pages/LearningLibrary";
 import LearningProfile from "./pages/LearningProfile";
-import logoImg from "./assets/ui-home/logo-img.png";
 import avatarImg from "./assets/ui-home/avatar.png";
 import { profileSummary } from "./data/constants";
 
@@ -104,7 +103,10 @@ function AppContent() {
     <div className="replica-shell">
       <header className="replica-topbar">
         <NavLink to="/" className="logo-link" aria-label="返回学习首页" onClick={(event) => handleNavClick(event, "/")}>
-          <img className="logo-img" src={logoImg} alt="CodeTrack" />
+          <span className="ct-brand-mark" aria-hidden="true" />
+          <span className="ct-brand-word">
+            Code<span>Track</span>
+          </span>
         </NavLink>
         <div className="top-actions" aria-label="顶部工具栏">
           <button className="top-icon" type="button" aria-label="搜索">
