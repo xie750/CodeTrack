@@ -14,7 +14,7 @@ import {
   SquareCode,
   UserRound
 } from "lucide-react";
-import { api, LearningContext, StudentTaskCard } from "../api";
+import { api, apiCache, LearningContext, StudentTaskCard } from "../api";
 
 type PageProps = {
   onOpenWorkspace: (taskId?: string) => void;
@@ -62,18 +62,22 @@ function taskTypeText(type: string) {
 }
 
 export default function CourseTasks({ onOpenWorkspace }: PageProps) {
-  const [context, setContext] = useState<LearningContext | null>(null);
+  const cachedContext = apiCache.peekLearningContext();
+  const cachedTasks = apiCache.peekStudentTasks();
+  const [context, setContext] = useState<LearningContext | null>(cachedContext);
   const [selectedTab, setSelectedTab] = useState<TaskTab>("全部课程");
-  const [tasks, setTasks] = useState<StudentTaskCard[]>([]);
-  const [loadingContext, setLoadingContext] = useState(true);
-  const [loadingTasks, setLoadingTasks] = useState(true);
+  const [tasks, setTasks] = useState<StudentTaskCard[]>(cachedTasks ?? []);
+  const [loadingContext, setLoadingContext] = useState(!cachedContext);
+  const [loadingTasks, setLoadingTasks] = useState(!cachedTasks);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
-    setLoadingContext(true);
-    setContext(null);
-    setSelectedTab("全部课程");
+    if (!context) {
+      setLoadingContext(true);
+      setContext(null);
+      setSelectedTab("全部课程");
+    }
     api
       .getLearningContext()
       .then((data) => {
@@ -95,9 +99,10 @@ export default function CourseTasks({ onOpenWorkspace }: PageProps) {
   useEffect(() => {
     let alive = true;
     const courseId = context?.courses.find((course) => course.course_name === selectedTab)?.course_id;
-    setLoadingTasks(true);
+    const cachedTaskData = apiCache.peekStudentTasks(courseId);
+    setLoadingTasks(!cachedTaskData);
     setError(null);
-    setTasks([]);
+    setTasks(cachedTaskData ?? []);
     api
       .listStudentTasks(courseId)
       .then((data) => {

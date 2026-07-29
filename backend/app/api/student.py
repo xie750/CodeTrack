@@ -47,7 +47,18 @@ def task_knowledge_points(task: Task) -> list[str]:
 def task_difficulty(task: Task) -> str:
     if "二叉树" in task.title or "子网" in task.title:
         return "MEDIUM"
+    if "阶段测验" in task.title or "综合" in task.title:
+        return "MEDIUM"
     return "BASIC"
+
+
+def task_type_from_assignment(assignment: TaskAssignment) -> str:
+    mode_map = {
+        "PRACTICE": "CODING",
+        "QUIZ": "QUIZ",
+        "EXAM": "EXAM",
+    }
+    return mode_map.get(assignment.assignment_mode, "CODING")
 
 
 def latest_task_summary(task: Task, progress: StudentTaskProgress | None) -> str:
@@ -176,7 +187,10 @@ def list_student_tasks(
                 "teacher_id": teacher.id,
                 "teacher_name": teacher.display_name,
                 "title": task.title,
-                "task_type": "CODING",
+                "task_type": task_type_from_assignment(assignment),
+                "assignment_mode": assignment.assignment_mode,
+                "description": task.description,
+                "published_at": iso(assignment.published_at),
                 "deadline": iso(assignment.deadline),
                 "difficulty": task_difficulty(task),
                 "knowledge_points": task_knowledge_points(task),

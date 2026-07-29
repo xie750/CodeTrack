@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Alert, Button, Input } from "antd";
 import { LockKeyhole, LogIn, UserRound } from "lucide-react";
-import { api } from "../api";
+import { api, apiCache } from "../api";
 import { setAccessToken, type AuthUser } from "../authSession";
 
 type LoginPageProps = {
@@ -20,6 +20,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     setError(null);
     try {
       const result = await api.login(username, password);
+      apiCache.clear();
       setAccessToken(result.access_token);
       onLogin(result.user);
     } catch (err) {

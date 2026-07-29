@@ -310,6 +310,56 @@ def seed_demo_data(db: Session) -> None:
             "status": "OPEN",
         },
     )
+    linked_list_review_objectives = [
+        "复盘链表删除中的边界场景",
+        "识别头节点、尾节点和非法位置的处理差异",
+        "用公开样例先完成一次自检",
+    ]
+    upsert(
+        db,
+        Task,
+        "task_linked_list_boundary_review_001",
+        {
+            "course_id": "course_ds_001",
+            "title": "链表边界处理巩固练习",
+            "description": "围绕单链表删除任务补充一组边界场景练习，重点检查头节点返回值和越界位置保护。",
+            "language": "CPP",
+            "interface_spec": "ListNode* deleteAt(ListNode* head, int position);",
+            "learning_objectives": json.dumps(linked_list_review_objectives, ensure_ascii=False),
+            "capability_ids": json.dumps(["cap_linked_list_boundary"], ensure_ascii=False),
+            "status": "OPEN",
+        },
+    )
+    upsert(
+        db,
+        Task,
+        "task_linked_list_stage_quiz_001",
+        {
+            "course_id": "course_ds_001",
+            "title": "链表删除阶段测验",
+            "description": "教师用于检查链表节点删除理解程度的小测，覆盖普通位置、头节点和空链表三类判断。",
+            "language": "CPP",
+            "interface_spec": "ListNode* deleteAt(ListNode* head, int position);",
+            "learning_objectives": json.dumps(["解释链表删除过程", "判断边界用例", "定位指针更新错误"], ensure_ascii=False),
+            "capability_ids": json.dumps(["cap_linked_list_boundary"], ensure_ascii=False),
+            "status": "OPEN",
+        },
+    )
+    upsert(
+        db,
+        Task,
+        "task_stack_queue_preview_001",
+        {
+            "course_id": "course_ds_001",
+            "title": "栈与队列预习任务",
+            "description": "在进入栈与队列章节前，先用结构化题目梳理先进后出、先进先出和边界判空的差异。",
+            "language": "CPP",
+            "interface_spec": "ListNode* deleteAt(ListNode* head, int position);",
+            "learning_objectives": json.dumps(["区分栈与队列", "理解判空边界", "迁移链表指针经验"], ensure_ascii=False),
+            "capability_ids": json.dumps(["cap_linked_list_boundary"], ensure_ascii=False),
+            "status": "OPEN",
+        },
+    )
     upsert(
         db,
         TaskAssignment,
@@ -323,6 +373,51 @@ def seed_demo_data(db: Session) -> None:
             "allow_hint_level_3": True,
             "published_at": datetime(2026, 7, 20, 8, 0, tzinfo=timezone.utc),
             "deadline": datetime(2026, 8, 5, 23, 59, tzinfo=timezone.utc),
+        },
+    )
+    upsert(
+        db,
+        TaskAssignment,
+        "assign_se1_ds_boundary_review_001",
+        {
+            "task_id": "task_linked_list_boundary_review_001",
+            "teaching_assignment_id": "ta_se1_ds_001",
+            "published_by": "user_teacher_001",
+            "publish_status": "PUBLISHED",
+            "assignment_mode": "PRACTICE",
+            "allow_hint_level_3": True,
+            "published_at": datetime(2026, 7, 24, 8, 0, tzinfo=timezone.utc),
+            "deadline": datetime(2026, 8, 7, 23, 59, tzinfo=timezone.utc),
+        },
+    )
+    upsert(
+        db,
+        TaskAssignment,
+        "assign_se1_ds_stage_quiz_001",
+        {
+            "task_id": "task_linked_list_stage_quiz_001",
+            "teaching_assignment_id": "ta_se1_ds_001",
+            "published_by": "user_teacher_001",
+            "publish_status": "PUBLISHED",
+            "assignment_mode": "QUIZ",
+            "allow_hint_level_3": False,
+            "published_at": datetime(2026, 7, 25, 8, 0, tzinfo=timezone.utc),
+            "deadline": datetime(2026, 8, 10, 23, 59, tzinfo=timezone.utc),
+        },
+    )
+    upsert(
+        db,
+        TaskAssignment,
+        "assign_se1_ds_stack_queue_preview_001",
+        {
+            "task_id": "task_stack_queue_preview_001",
+            "teaching_assignment_id": "ta_se1_ds_001",
+            "published_by": "user_teacher_001",
+            "publish_status": "PUBLISHED",
+            "assignment_mode": "EXAM",
+            "allow_hint_level_3": False,
+            "published_at": datetime(2026, 7, 27, 8, 0, tzinfo=timezone.utc),
+            "deadline": datetime(2026, 8, 12, 23, 59, tzinfo=timezone.utc),
         },
     )
     upsert(
@@ -432,6 +527,31 @@ def seed_demo_data(db: Session) -> None:
                 "sort_order": order,
             },
         )
+    extra_task_cases = {
+        "task_linked_list_boundary_review_001": "boundary_review",
+        "task_linked_list_stage_quiz_001": "stage_quiz",
+        "task_stack_queue_preview_001": "stack_preview",
+    }
+    for task_id, prefix in extra_task_cases.items():
+        for case_id, name, visibility, input_data, expected, summary, hidden_summary, tag, order in test_cases[:3]:
+            upsert(
+                db,
+                TestCase,
+                f"tc_{prefix}_{case_id.removeprefix('tc_')}",
+                {
+                    "task_id": task_id,
+                    "name": name,
+                    "visibility": visibility,
+                    "input_data": json.dumps(input_data, ensure_ascii=False),
+                    "expected_output": json.dumps(expected, ensure_ascii=False),
+                    "expected_output_summary": summary,
+                    "hidden_failure_summary": hidden_summary,
+                    "error_tag": tag,
+                    "capability_id": "cap_linked_list_boundary",
+                    "required": True,
+                    "sort_order": order,
+                },
+            )
 
     upsert_one(
         db,
@@ -442,6 +562,42 @@ def seed_demo_data(db: Session) -> None:
             "passed_count": 2,
             "total_required_count": 5,
             "highest_hint_level": 1,
+            "score": None,
+        },
+    )
+    upsert_one(
+        db,
+        StudentTaskProgress,
+        {"assignment_id": "assign_se1_ds_boundary_review_001", "student_id": "user_student_001"},
+        {
+            "status": "NOT_STARTED",
+            "passed_count": 0,
+            "total_required_count": 3,
+            "highest_hint_level": 0,
+            "score": None,
+        },
+    )
+    upsert_one(
+        db,
+        StudentTaskProgress,
+        {"assignment_id": "assign_se1_ds_stage_quiz_001", "student_id": "user_student_001"},
+        {
+            "status": "SUBMITTED",
+            "passed_count": 2,
+            "total_required_count": 3,
+            "highest_hint_level": 0,
+            "score": 76,
+        },
+    )
+    upsert_one(
+        db,
+        StudentTaskProgress,
+        {"assignment_id": "assign_se1_ds_stack_queue_preview_001", "student_id": "user_student_001"},
+        {
+            "status": "NOT_STARTED",
+            "passed_count": 0,
+            "total_required_count": 3,
+            "highest_hint_level": 0,
             "score": None,
         },
     )

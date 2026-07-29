@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   BarChart3,
   Bookmark,
@@ -14,11 +15,13 @@ import {
   Search,
   Target
 } from "lucide-react";
-import { api, LearningContext, StudentProfile } from "../api";
+import { api, LearningContext, StudentProfile, StudentTaskCard } from "../api";
 
 type FavoriteType = "编程题" | "练习题" | "考核题";
 
 type FavoriteItem = {
+  id: string;
+  taskId: string;
   title: string;
   type: FavoriteType;
   badgeClass: "green" | "purple" | "orange";
@@ -26,136 +29,172 @@ type FavoriteItem = {
   description: string;
   course: string;
   className: string;
-  collectedAt: string;
+  teacherName: string;
+  publishedAt: string;
   difficulty: string;
   progress: number;
   count: string;
 };
 
-const favoriteItems: FavoriteItem[] = [
-  {
-    title: "两数之和",
-    type: "编程题",
-    badgeClass: "green",
-    tags: ["C++", "算法", "数组"],
-    description: "给定一个整数数组 nums 和一个目标值 target，找出和为目标值的两个数下标。",
-    course: "数据结构",
-    className: "软件工程 2 班",
-    collectedAt: "2024-05-26 23:59",
-    difficulty: "中等",
-    progress: 20,
-    count: "2/10"
-  },
-  {
-    title: "链表基础练习",
-    type: "练习题",
-    badgeClass: "purple",
-    tags: ["C++", "数据结构", "链表"],
-    description: "练习链表的基本操作与概念理解，巩固链表的插入、删除与反转等操作。",
-    course: "数据结构",
-    className: "软件工程 2 班",
-    collectedAt: "2024-05-25 21:10",
-    difficulty: "简单",
-    progress: 60,
-    count: "6/10"
-  },
-  {
-    title: "数据库基础测验",
-    type: "考核题",
-    badgeClass: "orange",
-    tags: ["单选", "填空", "SQL"],
-    description: "考查数据库基础知识点，包含 SQL 语句与概念理解题。",
-    course: "数据库原理",
-    className: "软件工程 2 班",
-    collectedAt: "2024-05-26 23:59",
-    difficulty: "中等",
-    progress: 35,
-    count: "7/20"
-  },
-  {
-    title: "条件判断综合题",
-    type: "练习题",
-    badgeClass: "purple",
-    tags: ["单选", "判断题", "C++"],
-    description: "基于条件判断语句的综合应用练习，巩固 if-else 与 switch-case 的使用。",
-    course: "程序设计基础",
-    className: "软件工程 2 班",
-    collectedAt: "2024-05-23 19:30",
-    difficulty: "简单",
-    progress: 80,
-    count: "8/10"
-  },
-  {
-    title: "Python 函数练习",
-    type: "编程题",
-    badgeClass: "green",
-    tags: ["Python", "函数", "基础"],
-    description: "通过多个小题练习函数定义、调用与参数传递等基础知识。",
-    course: "Python 基础",
-    className: "软件工程 2 班",
-    collectedAt: "2024-05-22 18:45",
-    difficulty: "简单",
-    progress: 50,
-    count: "5/10"
-  },
-  {
-    title: "栈与队列复习",
-    type: "练习题",
-    badgeClass: "purple",
-    tags: ["数据结构", "栈", "队列"],
-    description: "复习栈与队列的基本概念与实现，包含多种题型巩固理解。",
-    course: "数据结构",
-    className: "软件工程 2 班",
-    collectedAt: "2024-05-21 21:05",
-    difficulty: "中等",
-    progress: 30,
-    count: "3/10"
-  }
-];
-
 const tabs = ["全部收藏", "编程题", "练习题", "考核题", "最近收藏"];
 
+function formatDateTime(value: string | null) {
+  if (!value) return "未设置";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).format(date);
+}
+
+function difficultyText(value: string) {
+  if (value === "MEDIUM") return "中等";
+  if (value === "HARD") return "较难";
+  return "基础";
+}
+
+function favoriteType(taskType: string): Pick<FavoriteItem, "type" | "badgeClass"> {
+  if (taskType === "QUIZ") return { type: "练习题", badgeClass: "purple" };
+  if (taskType === "EXAM") return { type: "考核题", badgeClass: "orange" };
+  return { type: "编程题", badgeClass: "green" };
+}
+
+function taskToFavorite(task: StudentTaskCard): FavoriteItem {
+  const typeInfo = favoriteType(task.task_type);
+  const total = Math.max(task.total_required_count, 1);
+  const progress = Math.round((task.passed_count / total) * 100);
+  return {
+    id: task.assignment_id,
+    taskId: task.task_id,
+    title: task.title,
+    ...typeInfo,
+    tags: ["教师下发", ...task.knowledge_points].slice(0, 4),
+    description: task.description || task.latest_summary,
+    course: task.course_name,
+    className: task.class_name,
+    teacherName: task.teacher_name,
+    publishedAt: formatDateTime(task.published_at),
+    difficulty: difficultyText(task.difficulty),
+    progress,
+    count: `${task.passed_count}/${task.total_required_count}`
+  };
+}
+
+function initialFavoriteIds(tasks: StudentTaskCard[]) {
+  const coding = tasks.find((task) => task.task_type === "CODING")?.assignment_id;
+  const quiz = tasks.find((task) => task.task_type === "QUIZ")?.assignment_id;
+  const fallback = tasks.slice(0, 2).map((task) => task.assignment_id);
+  return new Set([coding, quiz, ...fallback].filter(Boolean).slice(0, 2) as string[]);
+}
+
 export default function LearningLibrary() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("全部收藏");
   const [query, setQuery] = useState("");
-  const [removed, setRemoved] = useState<Set<string>>(new Set());
   const [context, setContext] = useState<LearningContext | null>(null);
   const [profile, setProfile] = useState<StudentProfile | null>(null);
+  const [tasks, setTasks] = useState<StudentTaskCard[]>([]);
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+  const [recentlyChangedIds, setRecentlyChangedIds] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
-    api.getLearningContext().then((data) => {
-      if (!alive) return;
-      setContext(data);
-      const courseId = data.courses[0]?.course_id;
-      if (courseId) {
-        api.getStudentProfile(courseId).then((profileData) => alive && setProfile(profileData)).catch(() => undefined);
+
+    async function loadLibraryData() {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await api.getLearningContext();
+        if (!alive) return;
+        setContext(data);
+
+        const courseId = data.courses[0]?.course_id;
+        const [taskResult, profileResult] = await Promise.allSettled([
+          api.listStudentTasks(courseId),
+          courseId ? api.getStudentProfile(courseId) : Promise.resolve(null)
+        ]);
+        if (!alive) return;
+
+        const loadedTasks = taskResult.status === "fulfilled" ? taskResult.value : [];
+        setTasks(loadedTasks);
+        setFavoriteIds(initialFavoriteIds(loadedTasks));
+        setRecentlyChangedIds(new Set());
+        setProfile(profileResult.status === "fulfilled" ? profileResult.value : null);
+        if (taskResult.status === "rejected") {
+          setError("收藏页暂时没有读到教师下发任务，当前显示为空状态。");
+        }
+      } catch {
+        if (!alive) return;
+        setContext(null);
+        setTasks([]);
+        setFavoriteIds(new Set());
+        setProfile(null);
+        setError("收藏页数据加载失败，请稍后刷新。");
+      } finally {
+        if (alive) setLoading(false);
       }
-    }).catch(() => undefined);
+    }
+
+    loadLibraryData();
     return () => {
       alive = false;
     };
   }, []);
 
-  const filtered = useMemo(() => {
+  const allItems = useMemo(() => tasks.map(taskToFavorite), [tasks]);
+  const visibleItems = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
+    return allItems.filter((item) => {
+      const isFavorite = favoriteIds.has(item.id);
+      const wasRecentlyChanged = recentlyChangedIds.has(item.id);
+      if (!isFavorite && !wasRecentlyChanged) return false;
 
-    return favoriteItems.filter((item) => {
       const typeMatch = activeTab === "全部收藏" || activeTab === "最近收藏" || item.type === activeTab;
       const queryMatch =
         !normalizedQuery ||
         item.title.toLowerCase().includes(normalizedQuery) ||
+        item.course.toLowerCase().includes(normalizedQuery) ||
         item.tags.some((tag) => tag.toLowerCase().includes(normalizedQuery));
       return typeMatch && queryMatch;
     });
-  }, [activeTab, query]);
+  }, [activeTab, allItems, favoriteIds, query, recentlyChangedIds]);
 
-  const courseName = context?.courses[0]?.course_name ?? "数据结构";
-  const className = context?.student.class_name ?? "软件工程 2 班";
-  const weakPoint = profile?.knowledge_states.find((item) => item.state === "WEAK")?.knowledge_point ?? "薄弱知识点";
+  const favoriteItems = useMemo(() => allItems.filter((item) => favoriteIds.has(item.id)), [allItems, favoriteIds]);
+  const typeCounts = useMemo(() => {
+    return favoriteItems.reduce(
+      (counts, item) => {
+        counts[item.type] += 1;
+        return counts;
+      },
+      { 编程题: 0, 练习题: 0, 考核题: 0 } as Record<FavoriteType, number>
+    );
+  }, [favoriteItems]);
 
-  function removeFavorite(title: string) {
-    setRemoved((current) => new Set(current).add(title));
+  const courseName = context?.courses[0]?.course_name ?? "数据结构与程序设计基础";
+  const className = context?.student.class_name ?? "当前班级";
+  const weakPoint = profile?.knowledge_states.find((item) => item.state === "WEAK")?.knowledge_point ?? "链表边界处理";
+
+  function toggleFavorite(item: FavoriteItem) {
+    setFavoriteIds((current) => {
+      const next = new Set(current);
+      if (next.has(item.id)) {
+        next.delete(item.id);
+      } else {
+        next.add(item.id);
+      }
+      return next;
+    });
+    setRecentlyChangedIds((current) => new Set(current).add(item.id));
+  }
+
+  function openTask(item: FavoriteItem) {
+    navigate(`/workspace/${item.taskId}`);
   }
 
   return (
@@ -174,16 +213,16 @@ export default function LearningLibrary() {
             </button>
           </div>
           <label className="library-search">
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索收藏的题目" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索已收藏任务" />
             <Search size={18} />
           </label>
         </header>
 
         <section className="library-stats" aria-label="收藏统计">
-          <StatCard title="收藏题目总数" value="48" unit="道" detail="较上周" growth="+6" tone="blue" icon={<Bookmark size={24} fill="currentColor" />} />
-          <StatCard title="本周新增" value="6" unit="道" detail="较上周" growth="+3" tone="orange" icon={<PlusCircle size={25} fill="currentColor" />} />
-          <StatCard title="编程题" value="24" unit="道" detail="占比 50%" tone="green" icon={<Code2 size={25} />} />
-          <StatCard title="练习题" value="16" unit="道" detail="占比 33%" tone="purple" icon={<Pencil size={25} fill="currentColor" />} />
+          <StatCard title="收藏题目总数" value={String(favoriteItems.length)} unit="道" detail="来自教师下发任务" tone="blue" icon={<Bookmark size={24} fill="currentColor" />} />
+          <StatCard title="本次可演示" value={String(recentlyChangedIds.size)} unit="次" detail="收藏状态响应" tone="orange" icon={<PlusCircle size={25} fill="currentColor" />} />
+          <StatCard title="编程题" value={String(typeCounts.编程题)} unit="道" detail="关联沙箱任务" tone="green" icon={<Code2 size={25} />} />
+          <StatCard title="练习题" value={String(typeCounts.练习题)} unit="道" detail="关联阶段练习" tone="purple" icon={<Pencil size={25} fill="currentColor" />} />
         </section>
 
         <section className="library-filterbar">
@@ -196,7 +235,7 @@ export default function LearningLibrary() {
           </div>
           <div className="library-tools">
             <button type="button" className="library-select library-sort">
-              最新收藏
+              最近下发
               <ChevronDown size={17} />
             </button>
             <button type="button" className="library-filter">
@@ -207,56 +246,72 @@ export default function LearningLibrary() {
           </div>
         </section>
 
-        <section className="favorite-grid" aria-label="收藏题目列表">
-          {filtered.map((item) => (
-            <article key={item.title} className={removed.has(item.title) ? "favorite-card faded" : "favorite-card"}>
-              <button type="button" className="favorite-heart" aria-label={`取消收藏 ${item.title}`} onClick={() => removeFavorite(item.title)}>
-                <Heart size={23} fill="currentColor" />
-              </button>
-              <span className={`favorite-badge ${item.badgeClass}`}>{item.type}</span>
-              <h2>{item.title}</h2>
-              <div className="favorite-tags">
-                {item.tags.map((tag) => (
-                  <span key={tag}>{tag}</span>
-                ))}
-              </div>
-              <p>{item.description}</p>
-              <div className="favorite-meta">
-                {courseName} · {className}
-                <br />
-                收藏时间：{item.collectedAt}
-              </div>
-              <div className="favorite-progress-row">
-                <span>
-                  难度：<b className={item.difficulty === "中等" ? "warn" : ""}>{item.difficulty}</b>
-                </span>
-                <div>
-                  <div className="favorite-progress-label">
-                    <span>进度：</span>
-                    <b>
-                      {item.progress}% ({item.count})
-                    </b>
+        {error ? <p className="library-data-message">{error}</p> : null}
+
+        <section id="favorite-list" className="favorite-grid" aria-label="收藏题目列表">
+          {loading ? (
+            Array.from({ length: 3 }).map((_, index) => <article className="favorite-card skeleton-block" key={index} />)
+          ) : visibleItems.length ? (
+            visibleItems.map((item) => {
+              const isFavorite = favoriteIds.has(item.id);
+              return (
+                <article key={item.id} className={isFavorite ? "favorite-card" : "favorite-card faded"}>
+                  <button type="button" className="favorite-heart" aria-label={`${isFavorite ? "取消收藏" : "重新收藏"} ${item.title}`} onClick={() => toggleFavorite(item)}>
+                    <Heart size={23} fill={isFavorite ? "currentColor" : "none"} />
+                  </button>
+                  <span className={`favorite-badge ${item.badgeClass}`}>{isFavorite ? item.type : "已取消"}</span>
+                  <h2>{item.title}</h2>
+                  <div className="favorite-tags">
+                    {item.tags.map((tag) => (
+                      <span key={tag}>{tag}</span>
+                    ))}
                   </div>
-                  <i className="favorite-track">
-                    <b style={{ width: `${item.progress}%` }} />
-                  </i>
-                </div>
-              </div>
-              <div className="favorite-actions">
-                <button type="button" className="solid">查看题目</button>
-                <button type="button">继续练习</button>
-                <button type="button" className="ghost" onClick={() => removeFavorite(item.title)}>
-                  取消收藏
-                </button>
-              </div>
+                  <p>{item.description}</p>
+                  <div className="favorite-meta">
+                    {item.course} · {item.className}
+                    <br />
+                    发布老师：{item.teacherName} · 下发时间：{item.publishedAt}
+                  </div>
+                  <div className="favorite-progress-row">
+                    <span>
+                      难度：<b className={item.difficulty === "中等" ? "warn" : ""}>{item.difficulty}</b>
+                    </span>
+                    <div>
+                      <div className="favorite-progress-label">
+                        <span>进度：</span>
+                        <b>
+                          {item.progress}% ({item.count})
+                        </b>
+                      </div>
+                      <i className="favorite-track">
+                        <b style={{ width: `${Math.max(6, item.progress)}%` }} />
+                      </i>
+                    </div>
+                  </div>
+                  <div className="favorite-actions">
+                    <button type="button" className="solid" onClick={() => openTask(item)}>查看题目</button>
+                    <button type="button" onClick={() => openTask(item)}>继续练习</button>
+                    <button type="button" className="ghost" onClick={() => toggleFavorite(item)}>
+                      {isFavorite ? "取消收藏" : "重新收藏"}
+                    </button>
+                  </div>
+                </article>
+              );
+            })
+          ) : (
+            <article className="favorite-empty">
+              <Bookmark size={28} />
+              <h2>当前没有收藏题目</h2>
+              <p>收藏页只展示已经存在于教师下发任务里的题目。你可以在演示中点击“重新收藏”恢复刚取消的题目，或回到班级任务查看全部下发内容。</p>
+              <button type="button" onClick={() => navigate("/tasks")}>查看班级任务</button>
             </article>
-          ))}
+          )}
         </section>
 
         <footer className="library-footer">
-          <span>© 2024 CodeTrack</span>
+          <span>© 2026 CodeTrack</span>
           <span>·</span>
-          <span>时代码点亮未来</span>
+          <span>收藏数据关联教师下发任务</span>
           <span>帮助中心</span>
           <span>|</span>
           <span>隐私政策</span>
@@ -269,33 +324,33 @@ export default function LearningLibrary() {
         <section className="library-side-card overview">
           <header>
             <h2>收藏概览</h2>
-            <a href="#">
+            <a href="#favorite-list">
               查看详情 <ChevronRight size={14} />
             </a>
           </header>
           <div className="library-overview-body">
             <div className="library-donut">
               <div>
-                <strong>48</strong>
+                <strong>{favoriteItems.length}</strong>
                 <span>总收藏</span>
               </div>
             </div>
             <div className="library-legend">
               <span>
-                <i className="green" /> 编程题&nbsp;&nbsp;24 (50%)
+                <i className="green" /> 编程题&nbsp;&nbsp;{typeCounts.编程题} 道
               </span>
               <span>
-                <i className="purple" /> 练习题&nbsp;&nbsp;16 (33%)
+                <i className="purple" /> 练习题&nbsp;&nbsp;{typeCounts.练习题} 道
               </span>
               <span>
-                <i className="orange" /> 考核题&nbsp;&nbsp;8 (17%)
+                <i className="orange" /> 考核题&nbsp;&nbsp;{typeCounts.考核题} 道
               </span>
             </div>
           </div>
           <div className="library-side-summary">
-            <span>本周新增：6 道</span>
+            <span>来源：教师下发</span>
             <span>
-              较上周：<b>▲ 3 道</b>
+              已取消：<b>{allItems.filter((item) => recentlyChangedIds.has(item.id) && !favoriteIds.has(item.id)).length} 道</b>
             </span>
           </div>
         </section>
@@ -303,22 +358,30 @@ export default function LearningLibrary() {
         <section className="library-side-card recent">
           <header>
             <h2>最近收藏</h2>
-            <a href="#">
+            <a href="#favorite-list">
               查看全部 <ChevronRight size={14} />
             </a>
           </header>
-          <RecentItem tone="green" icon={<Code2 size={17} />} title="两数之和" meta="编程题 · 数据结构" time="刚刚" />
-          <RecentItem tone="purple" icon={<FileText size={16} />} title="链表基础练习" meta="练习题 · 数据结构" time="1 小时前" />
-          <RecentItem tone="orange" icon={<FileText size={16} />} title="数据库基础测验" meta="考核题 · 数据库原理" time="昨天 23:59" />
+          {favoriteItems.slice(0, 3).map((item) => (
+            <RecentItem
+              key={item.id}
+              tone={item.badgeClass}
+              icon={item.type === "编程题" ? <Code2 size={17} /> : <FileText size={16} />}
+              title={item.title}
+              meta={`${item.type} · ${item.course}`}
+              time={item.publishedAt}
+            />
+          ))}
+          {!favoriteItems.length ? <p className="library-data-message">暂无收藏记录。</p> : null}
         </section>
 
         <section className="library-side-card advice">
           <header>
             <h2>学习建议</h2>
           </header>
-          <AdviceItem tone="blue" icon={<BarChart3 size={22} />} title="坚持每日练习" text="本周已收藏 6 道题，继续保持！" />
-          <AdviceItem tone="green" icon={<Target size={22} />} title="强化薄弱知识点" text={`${weakPoint}需要结合资料复盘`} />
-          <AdviceItem tone="orange" icon={<Clock3 size={22} />} title="定期回顾收藏" text="回顾收藏可提升 20% 掌握率" />
+          <AdviceItem tone="blue" icon={<BarChart3 size={22} />} title="先复盘收藏任务" text="收藏夹里的题目都来自当前班级任务，可以直接回到任务工作区继续练习。" />
+          <AdviceItem tone="green" icon={<Target size={22} />} title="强化薄弱知识点" text={`${weakPoint} 需要结合任务诊断和收藏题目复盘。`} />
+          <AdviceItem tone="orange" icon={<Clock3 size={22} />} title="定期清理收藏" text="取消收藏会即时更新统计，便于演示收藏状态联动。" />
           <button type="button" className="plan-button">
             生成个性化学习计划
           </button>

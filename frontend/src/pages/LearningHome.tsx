@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, CalendarClock, Check, ClipboardList, Code2, MonitorPlay } from "lucide-react";
-import { api, LearningContext, StudentProfile, StudentTaskCard } from "../api";
+import { api, apiCache, LearningContext, StudentProfile, StudentTaskCard } from "../api";
 import heroArt from "../assets/ui-home/hero-art.png";
 import robotImg from "../assets/ui-home/robot-img.png";
 
@@ -33,20 +33,27 @@ function taskProgress(task: StudentTaskCard) {
 }
 
 export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps) {
-  const [context, setContext] = useState<LearningContext | null>(null);
-  const [tasks, setTasks] = useState<StudentTaskCard[]>([]);
-  const [profile, setProfile] = useState<StudentProfile | null>(null);
-  const [pageStatus, setPageStatus] = useState<"loading" | "ready" | "error">("loading");
+  const cachedContext = apiCache.peekLearningContext();
+  const cachedCourseId = cachedContext?.courses[0]?.course_id;
+  const cachedTasks = apiCache.peekStudentTasks();
+  const cachedProfile = cachedCourseId ? apiCache.peekStudentProfile(cachedCourseId) : null;
+  const [context, setContext] = useState<LearningContext | null>(cachedContext);
+  const [tasks, setTasks] = useState<StudentTaskCard[]>(cachedTasks ?? []);
+  const [profile, setProfile] = useState<StudentProfile | null>(cachedProfile);
+  const [pageStatus, setPageStatus] = useState<"loading" | "ready" | "error">(cachedContext ? "ready" : "loading");
   const [loadMessage, setLoadMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     async function loadHomeData() {
-      setPageStatus("loading");
+      const hasVisibleData = Boolean(context || tasks.length || profile);
+      if (!hasVisibleData) {
+        setPageStatus("loading");
+        setContext(null);
+        setTasks([]);
+        setProfile(null);
+      }
       setLoadMessage(null);
-      setContext(null);
-      setTasks([]);
-      setProfile(null);
 
       try {
         const data = await api.getLearningContext();
@@ -70,11 +77,13 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
         setPageStatus("ready");
       } catch {
         if (!alive) return;
-        setContext(null);
-        setTasks([]);
-        setProfile(null);
+        if (!hasVisibleData) {
+          setContext(null);
+          setTasks([]);
+          setProfile(null);
+        }
         setLoadMessage("学习首页数据加载失败，请稍后刷新。");
-        setPageStatus("error");
+        setPageStatus(hasVisibleData ? "ready" : "error");
       }
     }
 
