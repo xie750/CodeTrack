@@ -1,8 +1,27 @@
 import json
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from backend.app.models import Capability, Course, Enrollment, KnowledgeSource, Task, TestCase, User
+from backend.app.models import (
+    AdministrativeClass,
+    Capability,
+    Course,
+    Enrollment,
+    KnowledgeSource,
+    LearnerErrorStat,
+    LearnerEvent,
+    LearnerKnowledgeState,
+    LearnerProfileSnapshot,
+    Recommendation,
+    StudentClassMembership,
+    StudentTaskProgress,
+    Task,
+    TaskAssignment,
+    TeachingAssignment,
+    TestCase,
+    User,
+)
 
 
 STUDENT_TEMPLATE = """ListNode* deleteAt(ListNode* head, int position) {
@@ -71,9 +90,19 @@ def upsert(db: Session, model, key: str, values: dict) -> None:
         setattr(existing, field, value)
 
 
+def upsert_one(db: Session, model, filters: dict, values: dict) -> None:
+    existing = db.query(model).filter_by(**filters).one_or_none()
+    if existing is None:
+        db.add(model(**filters, **values))
+        return
+    for field, value in values.items():
+        setattr(existing, field, value)
+
+
 def seed_demo_data(db: Session) -> None:
     users = {
         "user_teacher_001": {"display_name": "王老师", "role": "TEACHER", "status": "ACTIVE"},
+        "user_teacher_002": {"display_name": "李老师", "role": "TEACHER", "status": "ACTIVE"},
         "user_student_001": {"display_name": "学生一", "role": "STUDENT", "status": "ACTIVE"},
         "user_student_002": {"display_name": "学生二", "role": "STUDENT", "status": "ACTIVE"},
     }
@@ -85,8 +114,32 @@ def seed_demo_data(db: Session) -> None:
         Course,
         "course_ds_001",
         {
-            "name": "数据结构",
-            "description": "面向链表、树和排序等基础数据结构的实验课程",
+            "name": "数据结构与程序设计基础",
+            "description": "面向链表、栈队列、树和程序设计基础的助学课程",
+            "term": "2026-demo",
+            "status": "ACTIVE",
+            "owner_teacher_id": "user_teacher_001",
+        },
+    )
+    upsert(
+        db,
+        Course,
+        "course_network_001",
+        {
+            "name": "计算机网络",
+            "description": "面向网络分层、IP 地址与子网划分的基础课程",
+            "term": "2026-demo",
+            "status": "ACTIVE",
+            "owner_teacher_id": "user_teacher_002",
+        },
+    )
+    upsert(
+        db,
+        Course,
+        "course_arch_001",
+        {
+            "name": "计算机组成原理",
+            "description": "面向计算机系统结构和组成原理的基础课程",
             "term": "2026-demo",
             "status": "ACTIVE",
             "owner_teacher_id": "user_teacher_001",
@@ -97,6 +150,10 @@ def seed_demo_data(db: Session) -> None:
         ("course_ds_001", "user_teacher_001", "TEACHER"),
         ("course_ds_001", "user_student_001", "STUDENT"),
         ("course_ds_001", "user_student_002", "STUDENT"),
+        ("course_network_001", "user_teacher_002", "TEACHER"),
+        ("course_network_001", "user_student_001", "STUDENT"),
+        ("course_arch_001", "user_teacher_001", "TEACHER"),
+        ("course_arch_001", "user_student_001", "STUDENT"),
     ]
     for course_id, user_id, role in enrollments:
         existing = (
@@ -108,6 +165,57 @@ def seed_demo_data(db: Session) -> None:
             db.add(Enrollment(course_id=course_id, user_id=user_id, role=role))
         else:
             existing.role = role
+
+    classes = {
+        "class_se_001": {
+            "name": "软件工程 1 班",
+            "grade": "2026",
+            "major_name": "软件工程",
+            "status": "ACTIVE",
+        },
+        "class_cs_001": {
+            "name": "计科 1 班",
+            "grade": "2026",
+            "major_name": "计算机科学与技术",
+            "status": "ACTIVE",
+        },
+    }
+    for class_id, values in classes.items():
+        upsert(db, AdministrativeClass, class_id, values)
+
+    for student_id in ("user_student_001", "user_student_002"):
+        upsert_one(
+            db,
+            StudentClassMembership,
+            {"class_id": "class_se_001", "student_id": student_id},
+            {"status": "ACTIVE"},
+        )
+
+    teaching_assignments = {
+        "ta_se1_ds_001": {
+            "class_id": "class_se_001",
+            "course_id": "course_ds_001",
+            "teacher_id": "user_teacher_001",
+            "term": "2026-demo",
+            "status": "ACTIVE",
+        },
+        "ta_se1_network_001": {
+            "class_id": "class_se_001",
+            "course_id": "course_network_001",
+            "teacher_id": "user_teacher_002",
+            "term": "2026-demo",
+            "status": "ACTIVE",
+        },
+        "ta_cs1_ds_001": {
+            "class_id": "class_cs_001",
+            "course_id": "course_ds_001",
+            "teacher_id": "user_teacher_001",
+            "term": "2026-demo",
+            "status": "ACTIVE",
+        },
+    }
+    for assignment_id, values in teaching_assignments.items():
+        upsert(db, TeachingAssignment, assignment_id, values)
 
     upsert(
         db,
@@ -140,6 +248,54 @@ def seed_demo_data(db: Session) -> None:
             "learning_objectives": json.dumps(learning_objectives, ensure_ascii=False),
             "capability_ids": json.dumps(["cap_linked_list_boundary"], ensure_ascii=False),
             "status": "OPEN",
+        },
+    )
+    upsert(
+        db,
+        Task,
+        "task_subnet_mask_001",
+        {
+            "course_id": "course_network_001",
+            "title": "IP 地址与子网划分练习",
+            "description": "根据给定 IP 和掩码完成子网划分与可用主机数计算。",
+            "language": "CPP",
+            "interface_spec": "int analyzeSubnet(string ip, string mask);",
+            "learning_objectives": json.dumps(
+                ["理解 IP 地址结构", "掌握子网掩码计算", "识别网络号与主机号"],
+                ensure_ascii=False,
+            ),
+            "capability_ids": json.dumps([], ensure_ascii=False),
+            "status": "OPEN",
+        },
+    )
+    upsert(
+        db,
+        TaskAssignment,
+        "assign_se1_ds_linked_list_001",
+        {
+            "task_id": "task_linked_list_delete_001",
+            "teaching_assignment_id": "ta_se1_ds_001",
+            "published_by": "user_teacher_001",
+            "publish_status": "PUBLISHED",
+            "assignment_mode": "PRACTICE",
+            "allow_hint_level_3": True,
+            "published_at": datetime(2026, 7, 20, 8, 0, tzinfo=timezone.utc),
+            "deadline": datetime(2026, 8, 5, 23, 59, tzinfo=timezone.utc),
+        },
+    )
+    upsert(
+        db,
+        TaskAssignment,
+        "assign_se1_network_subnet_001",
+        {
+            "task_id": "task_subnet_mask_001",
+            "teaching_assignment_id": "ta_se1_network_001",
+            "published_by": "user_teacher_002",
+            "publish_status": "PUBLISHED",
+            "assignment_mode": "PRACTICE",
+            "allow_hint_level_3": True,
+            "published_at": datetime(2026, 7, 22, 8, 0, tzinfo=timezone.utc),
+            "deadline": datetime(2026, 8, 8, 23, 59, tzinfo=timezone.utc),
         },
     )
 
@@ -220,6 +376,31 @@ def seed_demo_data(db: Session) -> None:
             },
         )
 
+    upsert_one(
+        db,
+        StudentTaskProgress,
+        {"assignment_id": "assign_se1_ds_linked_list_001", "student_id": "user_student_001"},
+        {
+            "status": "IN_PROGRESS",
+            "passed_count": 2,
+            "total_required_count": 5,
+            "highest_hint_level": 1,
+            "score": None,
+        },
+    )
+    upsert_one(
+        db,
+        StudentTaskProgress,
+        {"assignment_id": "assign_se1_ds_linked_list_001", "student_id": "user_student_002"},
+        {
+            "status": "NOT_STARTED",
+            "passed_count": 0,
+            "total_required_count": 5,
+            "highest_hint_level": 0,
+            "score": None,
+        },
+    )
+
     sources = {
         "kb_linked_list_delete_basic": (
             "单链表删除基本规则",
@@ -257,6 +438,126 @@ def seed_demo_data(db: Session) -> None:
                 "student_visible": True,
             },
         )
+
+    profile_snapshots = {
+        "profile_user_student_001_ds": {
+            "student_id": "user_student_001",
+            "course_id": "course_ds_001",
+            "class_id": "class_se_001",
+            "summary_text": "链表边界处理是当前主要薄弱点，建议先复盘删除头节点和非法位置两个场景。",
+            "overall_progress": 62,
+            "hint_dependency_level": "MEDIUM",
+            "compile_error_rate": 0.18,
+            "logic_error_rate": 0.42,
+            "recent_task_completion": 0.67,
+            "recommendation_text": "先完成链表边界专项复盘，再进入栈与队列练习。",
+        },
+        "profile_user_student_001_network": {
+            "student_id": "user_student_001",
+            "course_id": "course_network_001",
+            "class_id": "class_se_001",
+            "summary_text": "计算机网络数据较少，子网划分需要通过后续练习继续确认。",
+            "overall_progress": 34,
+            "hint_dependency_level": "LOW",
+            "compile_error_rate": 0,
+            "logic_error_rate": 0.15,
+            "recent_task_completion": 0.25,
+            "recommendation_text": "建议完成一次 IP 地址与子网划分入门练习。",
+        },
+    }
+    for profile_id, values in profile_snapshots.items():
+        upsert(db, LearnerProfileSnapshot, profile_id, values)
+
+    knowledge_states = [
+        (
+            {"student_id": "user_student_001", "course_id": "course_ds_001", "knowledge_point": "链表边界处理"},
+            {
+                "mastery_score": 52,
+                "state": "WEAK",
+                "evidence_count": 3,
+                "last_evidence": "单链表删除任务中头节点用例失败",
+            },
+        ),
+        (
+            {"student_id": "user_student_001", "course_id": "course_ds_001", "knowledge_point": "指针遍历"},
+            {
+                "mastery_score": 78,
+                "state": "STABLE",
+                "evidence_count": 2,
+                "last_evidence": "中间节点删除公开用例通过",
+            },
+        ),
+        (
+            {"student_id": "user_student_001", "course_id": "course_network_001", "knowledge_point": "子网划分"},
+            {
+                "mastery_score": 46,
+                "state": "WEAK",
+                "evidence_count": 1,
+                "last_evidence": "自学记录显示仍需练习掩码换算",
+            },
+        ),
+    ]
+    for filters, values in knowledge_states:
+        upsert_one(db, LearnerKnowledgeState, filters, values)
+
+    error_stats = [
+        (
+            {"student_id": "user_student_001", "course_id": "course_ds_001", "error_type": "HEAD_NODE_RETURN_MISSING"},
+            {
+                "label": "头节点返回值遗漏",
+                "count": 3,
+                "severity": "HIGH",
+                "related_knowledge_points": json.dumps(["链表", "边界处理"], ensure_ascii=False),
+            },
+        ),
+        (
+            {"student_id": "user_student_001", "course_id": "course_ds_001", "error_type": "BOUNDARY_CASE_MISSING"},
+            {
+                "label": "边界用例覆盖不足",
+                "count": 2,
+                "severity": "MEDIUM",
+                "related_knowledge_points": json.dumps(["链表边界处理"], ensure_ascii=False),
+            },
+        ),
+    ]
+    for filters, values in error_stats:
+        upsert_one(db, LearnerErrorStat, filters, values)
+
+    upsert(
+        db,
+        Recommendation,
+        "rec_user_student_001_ds_boundary",
+        {
+            "student_id": "user_student_001",
+            "course_id": "course_ds_001",
+            "recommendation_type": "REVIEW",
+            "title": "完成链表边界专项复盘",
+            "reason": "最近提交暴露删除头节点时链表起点未更新的问题。",
+            "priority": 10,
+            "related_task_id": "task_linked_list_delete_001",
+            "related_knowledge_points": json.dumps(["链表", "边界处理"], ensure_ascii=False),
+            "suggested_action": "OPEN_SELF_STUDY",
+            "status": "ACTIVE",
+        },
+    )
+
+    upsert(
+        db,
+        LearnerEvent,
+        "evt_user_student_001_ds_hint_viewed",
+        {
+            "student_id": "user_student_001",
+            "course_id": "course_ds_001",
+            "class_id": "class_se_001",
+            "teaching_assignment_id": "ta_se1_ds_001",
+            "assignment_id": "assign_se1_ds_linked_list_001",
+            "task_id": "task_linked_list_delete_001",
+            "event_type": "HINT_VIEWED",
+            "knowledge_points": json.dumps(["链表", "边界处理"], ensure_ascii=False),
+            "error_type": "HEAD_NODE_RETURN_MISSING",
+            "payload": json.dumps({"hint_level": 1, "source": "seed"}, ensure_ascii=False),
+        },
+    )
 
     db.commit()
 

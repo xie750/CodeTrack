@@ -28,6 +28,7 @@
 | `06_iteration_backlog.md` | 后续迭代池和暂缓功能 |
 | `07_agent_harness_design.md` | 助学智能体角色、边界和协作方式 |
 | `08_harness_research_notes.md` | 主流 harness 工程思路调研和本项目落地方式 |
+| `09_student_data_design.md` | 行政班、课程任务、学习画像和教师聚合的数据设计 |
 | `../../AGENTS.md` | 项目级 agent harness 入口 |
 
 ## 4. 当前优先级

@@ -16,6 +16,92 @@ export type TaskListItem = {
   passed_at: string | null;
 };
 
+export type LearningContext = {
+  student: {
+    id: string;
+    name: string;
+    class_id: string;
+    class_name: string;
+  };
+  courses: Array<{
+    course_id: string;
+    course_name: string;
+    teacher_id: string;
+    teacher_name: string;
+    teaching_assignment_id: string;
+    task_count: number;
+    unfinished_count: number;
+  }>;
+};
+
+export type StudentTaskCard = {
+  assignment_id: string;
+  task_id: string;
+  course_id: string;
+  course_name: string;
+  class_id: string;
+  class_name: string;
+  teacher_id: string;
+  teacher_name: string;
+  title: string;
+  task_type: string;
+  deadline: string | null;
+  difficulty: string;
+  knowledge_points: string[];
+  status: string;
+  passed_count: number;
+  total_required_count: number;
+  highest_hint_level: number;
+  latest_summary: string;
+};
+
+export type StudentProfile = {
+  student: {
+    id: string;
+    name: string;
+    class_id: string;
+    class_name: string;
+  };
+  course: {
+    id: string;
+    name: string;
+    teacher_name: string;
+  };
+  overview: {
+    overall_progress: number;
+    hint_dependency_level: string;
+    compile_error_rate: number;
+    logic_error_rate: number;
+    recent_task_completion: number;
+    summary: string;
+    recommendation: string;
+    updated_at: string;
+  };
+  knowledge_states: Array<{
+    knowledge_point: string;
+    mastery_score: number;
+    state: string;
+    evidence_count: number;
+    last_evidence: string;
+  }>;
+  frequent_errors: Array<{
+    error_type: string;
+    label: string;
+    count: number;
+    severity: string;
+    related_knowledge_points: string[];
+  }>;
+  recommendations: Array<{
+    id: string;
+    title: string;
+    reason: string;
+    priority: number;
+    related_task_id: string | null;
+    related_knowledge_points: string[];
+    suggested_action: string;
+  }>;
+};
+
 export type TaskDetail = {
   task_id: string;
   course_id: string;
@@ -214,6 +300,17 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
 export const api = {
   listTasks: () => request<TaskListItem[]>("/api/v1/tasks", { headers: studentHeaders }),
   getTask: (taskId: string) => request<TaskDetail>(`/api/v1/tasks/${taskId}`, { headers: studentHeaders }),
+  getLearningContext: () => request<LearningContext>("/api/v1/student/learning-context", { headers: studentHeaders }),
+  listStudentTasks: (courseId?: string) =>
+    request<StudentTaskCard[]>(
+      `/api/v1/student/tasks${courseId ? `?course_id=${encodeURIComponent(courseId)}` : ""}`,
+      { headers: studentHeaders }
+    ),
+  getStudentProfile: (courseId?: string) =>
+    request<StudentProfile>(
+      `/api/v1/student/profile${courseId ? `?course_id=${encodeURIComponent(courseId)}` : ""}`,
+      { headers: studentHeaders }
+    ),
   submitCode: (taskId: string, sourceCode: string) =>
     request<SubmitResponse>(`/api/v1/tasks/${taskId}/submissions`, {
       method: "POST",
