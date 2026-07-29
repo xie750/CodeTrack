@@ -3521,14 +3521,13 @@ html[data-route-motion="deeper"] .workspace-route-stage {
 
 .program-grid {
   display: grid;
-  grid-template-columns: clamp(250px, 22vw, 320px) minmax(520px, 1fr) clamp(280px, 24vw, 360px);
-  gap: 16px;
+  grid-template-columns: var(--program-problem-width, 316px) 12px minmax(520px, 1fr) clamp(280px, 24vw, 360px);
+  column-gap: 8px;
   align-items: stretch;
-  transition: grid-template-columns 220ms var(--motion-soft);
 }
 
 .program-grid[data-ai-collapsed="true"] {
-  grid-template-columns: clamp(250px, 22vw, 320px) minmax(620px, 1fr) 56px;
+  grid-template-columns: var(--program-problem-width, 316px) 12px minmax(620px, 1fr) 56px;
 }
 
 .program-problem {
@@ -3587,18 +3586,16 @@ html[data-route-motion="deeper"] .workspace-route-stage {
   min-width: 0;
   height: calc(100dvh - var(--program-topbar-height) - var(--program-head-height) - 34px);
   max-height: calc(100dvh - var(--program-topbar-height) - var(--program-head-height) - 34px);
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  overflow: auto;
-  scrollbar-gutter: stable;
+  display: grid;
+  grid-template-rows: minmax(300px, var(--program-editor-height, 1.45fr)) 12px minmax(180px, 1fr);
+  overflow: hidden;
 }
 
 .program-editor {
-  flex: 1 1 auto;
-  min-height: 320px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .program-editor header,
@@ -3696,13 +3693,88 @@ html[data-route-motion="deeper"] .workspace-route-stage {
 }
 
 .program-result {
-  flex: 0 0 auto;
   min-height: 0;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .program-result table {
   min-width: 680px;
+}
+
+.program-splitter {
+  position: relative;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  touch-action: none;
+  user-select: none;
+  z-index: 2;
+}
+
+.program-splitter span {
+  display: block;
+  border-radius: 999px;
+  background: #cbd7e7;
+  opacity: 0.68;
+  transition: background 160ms var(--motion-soft), opacity 160ms var(--motion-soft), transform 160ms var(--motion-soft);
+}
+
+.program-splitter.vertical {
+  width: 12px;
+  cursor: col-resize;
+}
+
+.program-splitter.vertical span {
+  width: 3px;
+  height: 58px;
+}
+
+.program-splitter.horizontal {
+  height: 12px;
+  cursor: row-resize;
+}
+
+.program-splitter.horizontal span {
+  width: 58px;
+  height: 3px;
+}
+
+.program-splitter:hover span,
+.program-splitter:focus-visible span {
+  background: #176cf5;
+  opacity: 1;
+}
+
+.program-splitter.vertical:hover span,
+.program-splitter.vertical:focus-visible span {
+  transform: scaleY(1.16);
+}
+
+.program-splitter.horizontal:hover span,
+.program-splitter.horizontal:focus-visible span {
+  transform: scaleX(1.16);
+}
+
+.program-splitter:focus-visible {
+  outline: 2px solid rgba(23, 108, 245, 0.35);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+html.workspace-resizing,
+html.workspace-resizing * {
+  user-select: none !important;
+}
+
+html.workspace-resizing-x,
+html.workspace-resizing-x * {
+  cursor: col-resize !important;
+}
+
+html.workspace-resizing-y,
+html.workspace-resizing-y * {
+  cursor: row-resize !important;
 }
 
 .program-result header nav {
@@ -4315,12 +4387,12 @@ html[data-route-motion="deeper"] .workspace-route-stage {
   }
 
   .program-grid {
-    grid-template-columns: minmax(240px, 0.86fr) minmax(520px, 1.34fr) minmax(270px, 0.9fr);
-    min-width: 1060px;
+    grid-template-columns: var(--program-problem-width, 300px) 12px minmax(520px, 1fr) minmax(270px, 0.9fr);
+    min-width: 1120px;
   }
 
   .program-grid[data-ai-collapsed="true"] {
-    grid-template-columns: minmax(240px, 0.86fr) minmax(690px, 1.34fr) 56px;
+    grid-template-columns: var(--program-problem-width, 300px) 12px minmax(690px, 1fr) 56px;
     min-width: 1010px;
   }
 
@@ -4629,14 +4701,14 @@ html[data-route-motion="deeper"] .workspace-route-stage {
   }
 
   .program-grid {
-    min-width: 980px;
-    grid-template-columns: 250px 500px 280px;
+    min-width: calc(var(--program-problem-width, 250px) + 824px);
+    grid-template-columns: var(--program-problem-width, 250px) 12px 500px 280px;
     gap: 12px;
   }
 
   .program-grid[data-ai-collapsed="true"] {
-    min-width: 862px;
-    grid-template-columns: 250px 544px 56px;
+    min-width: calc(var(--program-problem-width, 250px) + 624px);
+    grid-template-columns: var(--program-problem-width, 250px) 12px 544px 56px;
   }
 
   .program-problem,
