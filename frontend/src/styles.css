@@ -3513,6 +3513,7 @@ html[data-route-motion="deeper"] .workspace-route-stage {
 }
 
 .program-card {
+  min-width: 0;
   border: 1px solid #dfe7f3;
   border-radius: 8px;
   background: #ffffff;
@@ -3712,11 +3713,20 @@ html[data-route-motion="deeper"] .workspace-route-stage {
   z-index: 2;
 }
 
+.program-splitter::before {
+  content: "";
+  position: absolute;
+  border-radius: 8px;
+  background: transparent;
+  transition: background 160ms var(--motion-soft);
+}
+
 .program-splitter span {
+  position: relative;
   display: block;
   border-radius: 999px;
-  background: #cbd7e7;
-  opacity: 0.68;
+  background: #d4deeb;
+  opacity: 0.52;
   transition: background 160ms var(--motion-soft), opacity 160ms var(--motion-soft), transform 160ms var(--motion-soft);
 }
 
@@ -3725,8 +3735,13 @@ html[data-route-motion="deeper"] .workspace-route-stage {
   cursor: col-resize;
 }
 
+.program-splitter.vertical::before {
+  width: 10px;
+  height: 100%;
+}
+
 .program-splitter.vertical span {
-  width: 3px;
+  width: 2px;
   height: 58px;
 }
 
@@ -3735,13 +3750,34 @@ html[data-route-motion="deeper"] .workspace-route-stage {
   cursor: row-resize;
 }
 
+.program-splitter.horizontal::before {
+  width: 100%;
+  height: 10px;
+}
+
 .program-splitter.horizontal span {
   width: 58px;
-  height: 3px;
+  height: 2px;
+}
+
+.program-splitter:hover::before,
+.program-splitter:focus-visible::before {
+  background: #edf3fb;
 }
 
 .program-splitter:hover span,
 .program-splitter:focus-visible span {
+  background: #176cf5;
+  opacity: 1;
+}
+
+html.workspace-resizing-x .program-splitter.vertical::before,
+html.workspace-resizing-y .program-splitter.horizontal::before {
+  background: #edf3fb;
+}
+
+html.workspace-resizing-x .program-splitter.vertical span,
+html.workspace-resizing-y .program-splitter.horizontal span {
   background: #176cf5;
   opacity: 1;
 }
@@ -4637,6 +4673,8 @@ html.workspace-resizing-y * {
   .program-shell {
     --program-topbar-height: 58px;
     --program-head-height: 136px;
+    width: 100%;
+    overflow: hidden;
   }
 
   .program-topbar {
@@ -4669,6 +4707,7 @@ html.workspace-resizing-y * {
   .program-page {
     height: calc(100dvh - var(--program-topbar-height));
     padding: 0 12px 18px;
+    overflow-x: hidden;
   }
 
   .program-head {
@@ -4701,24 +4740,91 @@ html.workspace-resizing-y * {
   }
 
   .program-grid {
-    min-width: calc(var(--program-problem-width, 250px) + 824px);
-    grid-template-columns: var(--program-problem-width, 250px) 12px 500px 280px;
-    gap: 12px;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 12px;
+    column-gap: 0;
   }
 
   .program-grid[data-ai-collapsed="true"] {
-    min-width: calc(var(--program-problem-width, 250px) + 624px);
-    grid-template-columns: var(--program-problem-width, 250px) 12px 544px 56px;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .program-problem,
   .program-center,
   .program-ai {
-    height: calc(100dvh - var(--program-topbar-height) - var(--program-head-height) - 28px);
-    max-height: calc(100dvh - var(--program-topbar-height) - var(--program-head-height) - 28px);
+    width: 100%;
+    height: auto;
+    max-height: none;
+  }
+
+  .program-problem {
+    max-height: 380px;
+  }
+
+  .program-center {
+    grid-template-rows: minmax(360px, auto) minmax(220px, auto);
+    gap: 12px;
+    overflow: visible;
+  }
+
+  .program-splitter {
+    display: none;
+  }
+
+  .program-editor {
+    min-height: 420px;
+  }
+
+  .program-editor pre {
+    min-height: 240px;
+  }
+
+  .program-editor footer {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .program-result {
+    max-width: 100%;
+  }
+
+  .program-result header {
+    height: auto;
+    min-height: 56px;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 14px;
+  }
+
+  .program-result table {
+    min-width: 640px;
+  }
+
+  .program-ai.collapsed {
+    height: 56px;
+  }
+
+  .program-ai.collapsed > header {
+    height: 56px;
+    padding: 0 14px;
+    flex-direction: row;
+  }
+
+  .program-ai.collapsed h2 {
+    writing-mode: horizontal-tb;
+    font-size: 15px;
+  }
+
+  .program-ai.collapsed .program-ai-toggle {
+    margin: 0 0 0 auto;
   }
 
   .program-bottom-grid {
-    min-width: 980px;
+    min-width: 0;
+    grid-template-columns: 1fr;
   }
 }

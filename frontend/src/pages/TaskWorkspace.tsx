@@ -33,17 +33,27 @@ type PageProps = {
 };
 
 type WorkspaceLayout = {
-  problemWidth: number;
-  editorHeight: number | null;
+  problemRatio: number;
+  editorRatio: number;
+};
+
+type WorkspaceMetrics = {
+  gridWidth: number;
+  centerHeight: number;
+  aiWidth: number;
 };
 
 const WORKSPACE_LAYOUT_KEY = "codetrack.taskWorkspace.layout.v1";
 const DEFAULT_PROBLEM_WIDTH = 316;
-const PROBLEM_MIN_WIDTH = 240;
-const CENTER_MIN_WIDTH = 520;
-const EDITOR_MIN_HEIGHT = 300;
-const RESULT_MIN_HEIGHT = 180;
+const DEFAULT_EDITOR_HEIGHT = 407;
+const DEFAULT_PROBLEM_RATIO = 0.31;
+const DEFAULT_EDITOR_RATIO = 0.59;
+const PROBLEM_MIN_WIDTH = 260;
+const CENTER_MIN_WIDTH = 560;
+const EDITOR_MIN_HEIGHT = 320;
+const RESULT_MIN_HEIGHT = 220;
 const SPLITTER_SIZE = 12;
+const GRID_COLUMN_GAPS = 24;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), Math.max(min, max));
@@ -51,17 +61,44 @@ function clamp(value: number, min: number, max: number) {
 
 function readWorkspaceLayout(): WorkspaceLayout {
   if (typeof window === "undefined") {
-    return { problemWidth: DEFAULT_PROBLEM_WIDTH, editorHeight: null };
+    return { problemRatio: DEFAULT_PROBLEM_RATIO, editorRatio: DEFAULT_EDITOR_RATIO };
   }
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(WORKSPACE_LAYOUT_KEY) ?? "{}") as Partial<WorkspaceLayout>;
+    const parsed = JSON.parse(window.localStorage.getItem(WORKSPACE_LAYOUT_KEY) ?? "{}") as Partial<WorkspaceLayout> & {
+      problemWidth?: number;
+      editorHeight?: number | null;
+    };
     return {
-      problemWidth: typeof parsed.problemWidth === "number" ? parsed.problemWidth : DEFAULT_PROBLEM_WIDTH,
-      editorHeight: typeof parsed.editorHeight === "number" ? parsed.editorHeight : null
+      problemRatio:
+        typeof parsed.problemRatio === "number"
+          ? clamp(parsed.problemRatio, 0.18, 0.58)
+          : typeof parsed.problemWidth === "number"
+            ? clamp(parsed.problemWidth / 1000, 0.18, 0.58)
+            : DEFAULT_PROBLEM_RATIO,
+      editorRatio:
+        typeof parsed.editorRatio === "number"
+          ? clamp(parsed.editorRatio, 0.34, 0.76)
+          : typeof parsed.editorHeight === "number"
+            ? clamp(parsed.editorHeight / 688, 0.34, 0.76)
+            : DEFAULT_EDITOR_RATIO
     };
   } catch {
-    return { problemWidth: DEFAULT_PROBLEM_WIDTH, editorHeight: null };
+    return { problemRatio: DEFAULT_PROBLEM_RATIO, editorRatio: DEFAULT_EDITOR_RATIO };
   }
+}
+
+function resolveProblemWidth(metrics: WorkspaceMetrics | null, problemRatio: number) {
+  if (!metrics) return DEFAULT_PROBLEM_WIDTH;
+  const availableWidth = metrics.gridWidth - metrics.aiWidth - SPLITTER_SIZE - GRID_COLUMN_GAPS;
+  const maxProblemWidth = Math.max(PROBLEM_MIN_WIDTH, availableWidth - CENTER_MIN_WIDTH);
+  return Math.round(clamp(availableWidth * problemRatio, PROBLEM_MIN_WIDTH, maxProblemWidth));
+}
+
+function resolveEditorHeight(metrics: WorkspaceMetrics | null, editorRatio: number) {
+  if (!metrics) return DEFAULT_EDITOR_HEIGHT;
+  const availableHeight = metrics.centerHeight - SPLITTER_SIZE;
+  const maxEditorHeight = Math.max(EDITOR_MIN_HEIGHT, availableHeight - RESULT_MIN_HEIGHT);
+  return Math.round(clamp(availableHeight * editorRatio, EDITOR_MIN_HEIGHT, maxEditorHeight));
 }
 
 export default function TaskWorkspace({ taskId, onBack }: PageProps) {
@@ -71,6 +108,7 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
   const [error, setError] = useState<string | null>(null);
   const [aiCollapsed, setAiCollapsed] = useState(false);
   const [layout, setLayout] = useState<WorkspaceLayout>(() => readWorkspaceLayout());
+  const [metrics, setMetrics] = useState<WorkspaceMetrics | null>(null);
   const gridRef = useRef<HTMLElement | null>(null);
   const centerRef = useRef<HTMLDivElement | null>(null);
 
@@ -105,6 +143,54 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
     window.localStorage.setItem(WORKSPACE_LAYOUT_KEY, JSON.stringify(layout));
   }, [layout]);
 
+  useEffect(() => {
+    const grid = gridRef.current;
+    const center = centerRef.current;
+    if (!grid || !center) return undefined;
+    const activeGrid = grid;
+    const activeCenter = center;
+
+    let frame = 0;
+    function measure() {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const gridRect = activeGrid.getBoundingClientRect();
+        const centerRect = activeCenter.getBoundingClientRect();
+        const aiWidth = activeGrid.querySelector(".program-ai")?.getBoundingClientRect().width ?? 0;
+        setMetrics((current) => {
+          const next = {
+            gridWidth: Math.round(gridRect.width),
+            centerHeight: Math.round(centerRect.height),
+            aiWidth: Math.round(aiWidth)
+          };
+          if (
+            current &&
+            current.gridWidth === next.gridWidth &&
+            current.centerHeight === next.centerHeight &&
+            current.aiWidth === next.aiWidth
+          ) {
+            return current;
+          }
+          return next;
+        });
+      });
+    }
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(activeGrid);
+    observer.observe(activeCenter);
+    const aiPanel = activeGrid.querySelector(".program-ai");
+    if (aiPanel) observer.observe(aiPanel);
+    window.addEventListener("resize", measure);
+    measure();
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [aiCollapsed, loading, task, error]);
+
   const editorLines = useMemo(() => {
     const template = task?.interface_spec.student_template.trimEnd();
     return template ? template.split("\n") : ["// 正在等待任务模板"];
@@ -123,9 +209,11 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
 
   const knowledgeTags = task?.learning_objectives.length ? task.learning_objectives : ["等待任务知识点"];
   const studentName = context?.student.name ?? "学生";
+  const problemWidth = resolveProblemWidth(metrics, layout.problemRatio);
+  const editorHeight = resolveEditorHeight(metrics, layout.editorRatio);
   const workspaceStyle = {
-    "--program-problem-width": `${layout.problemWidth}px`,
-    ...(layout.editorHeight ? { "--program-editor-height": `${layout.editorHeight}px` } : {})
+    "--program-problem-width": `${problemWidth}px`,
+    "--program-editor-height": `${editorHeight}px`
   } as CSSProperties;
 
   function startProblemResize(event: PointerEvent<HTMLDivElement>) {
@@ -135,16 +223,22 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
 
     const gridRect = grid.getBoundingClientRect();
     const aiWidth = grid.querySelector(".program-ai")?.getBoundingClientRect().width ?? 0;
-    const maxProblemWidth = gridRect.width - aiWidth - CENTER_MIN_WIDTH - SPLITTER_SIZE - 32;
+    const availableWidth = gridRect.width - aiWidth - SPLITTER_SIZE - GRID_COLUMN_GAPS;
+    const maxProblemWidth = Math.max(PROBLEM_MIN_WIDTH, availableWidth - CENTER_MIN_WIDTH);
+    let frame = 0;
 
     document.documentElement.classList.add("workspace-resizing", "workspace-resizing-x");
 
     function handleMove(moveEvent: globalThis.PointerEvent) {
       const nextWidth = clamp(moveEvent.clientX - gridRect.left, PROBLEM_MIN_WIDTH, maxProblemWidth);
-      setLayout((current) => ({ ...current, problemWidth: Math.round(nextWidth) }));
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        setLayout((current) => ({ ...current, problemRatio: clamp(nextWidth / availableWidth, 0.18, 0.58) }));
+      });
     }
 
     function stopResize() {
+      window.cancelAnimationFrame(frame);
       document.documentElement.classList.remove("workspace-resizing", "workspace-resizing-x");
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", stopResize);
@@ -162,16 +256,22 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
     if (!center) return;
 
     const centerRect = center.getBoundingClientRect();
-    const maxEditorHeight = centerRect.height - RESULT_MIN_HEIGHT - SPLITTER_SIZE;
+    const availableHeight = centerRect.height - SPLITTER_SIZE;
+    const maxEditorHeight = Math.max(EDITOR_MIN_HEIGHT, availableHeight - RESULT_MIN_HEIGHT);
+    let frame = 0;
 
     document.documentElement.classList.add("workspace-resizing", "workspace-resizing-y");
 
     function handleMove(moveEvent: globalThis.PointerEvent) {
       const nextHeight = clamp(moveEvent.clientY - centerRect.top, EDITOR_MIN_HEIGHT, maxEditorHeight);
-      setLayout((current) => ({ ...current, editorHeight: Math.round(nextHeight) }));
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        setLayout((current) => ({ ...current, editorRatio: clamp(nextHeight / availableHeight, 0.34, 0.76) }));
+      });
     }
 
     function stopResize() {
+      window.cancelAnimationFrame(frame);
       document.documentElement.classList.remove("workspace-resizing", "workspace-resizing-y");
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", stopResize);
@@ -187,14 +287,38 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     event.preventDefault();
     const delta = event.key === "ArrowLeft" ? -24 : 24;
-    setLayout((current) => ({ ...current, problemWidth: Math.max(PROBLEM_MIN_WIDTH, current.problemWidth + delta) }));
+    setLayout((current) => {
+      const grid = gridRef.current;
+      if (!grid) return current;
+      const gridRect = grid.getBoundingClientRect();
+      const aiWidth = grid.querySelector(".program-ai")?.getBoundingClientRect().width ?? 0;
+      const availableWidth = gridRect.width - aiWidth - SPLITTER_SIZE - GRID_COLUMN_GAPS;
+      const maxProblemWidth = Math.max(PROBLEM_MIN_WIDTH, availableWidth - CENTER_MIN_WIDTH);
+      const nextWidth = clamp(problemWidth + delta, PROBLEM_MIN_WIDTH, maxProblemWidth);
+      return { ...current, problemRatio: clamp(nextWidth / availableWidth, 0.18, 0.58) };
+    });
   }
 
   function handleEditorSplitterKey(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
     event.preventDefault();
     const delta = event.key === "ArrowUp" ? -24 : 24;
-    setLayout((current) => ({ ...current, editorHeight: Math.max(EDITOR_MIN_HEIGHT, (current.editorHeight ?? 420) + delta) }));
+    setLayout((current) => {
+      const center = centerRef.current;
+      if (!center) return current;
+      const availableHeight = center.getBoundingClientRect().height - SPLITTER_SIZE;
+      const maxEditorHeight = Math.max(EDITOR_MIN_HEIGHT, availableHeight - RESULT_MIN_HEIGHT);
+      const nextHeight = clamp(editorHeight + delta, EDITOR_MIN_HEIGHT, maxEditorHeight);
+      return { ...current, editorRatio: clamp(nextHeight / availableHeight, 0.34, 0.76) };
+    });
+  }
+
+  function resetProblemSplitter() {
+    setLayout((current) => ({ ...current, problemRatio: DEFAULT_PROBLEM_RATIO }));
+  }
+
+  function resetEditorSplitter() {
+    setLayout((current) => ({ ...current, editorRatio: DEFAULT_EDITOR_RATIO }));
   }
 
   return (
@@ -291,6 +415,7 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
             tabIndex={0}
             onPointerDown={startProblemResize}
             onKeyDown={handleProblemSplitterKey}
+            onDoubleClick={resetProblemSplitter}
           >
             <span />
           </div>
@@ -322,6 +447,7 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
               tabIndex={0}
               onPointerDown={startEditorResize}
               onKeyDown={handleEditorSplitterKey}
+              onDoubleClick={resetEditorSplitter}
             >
               <span />
             </div>
