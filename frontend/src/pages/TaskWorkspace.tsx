@@ -16,10 +16,11 @@ import {
   Maximize2,
   MoreVertical,
   NotebookTabs,
+  PanelRightClose,
+  PanelRightOpen,
   Play,
   Save,
   Search,
-  ShieldCheck,
   Upload,
   Zap
 } from "lucide-react";
@@ -36,6 +37,7 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
   const [context, setContext] = useState<LearningContext | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [aiCollapsed, setAiCollapsed] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -87,14 +89,9 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
     <div className="program-shell" data-task-id={taskId}>
       <header className="program-topbar">
         <div className="program-brand">
-          <span><ShieldCheck size={22} /></span>
-          <strong>码学堂</strong>
+          <span className="program-brand-mark ct-brand-mark" aria-hidden="true" />
+          <strong>Code<span>Track</span></strong>
         </div>
-        <nav className="program-nav" aria-label="课程导航">
-          {["首页", "课程学习", "班级任务", "题库", "竞赛", "学习分析"].map((item) => (
-            <button className={item === "班级任务" ? "active" : ""} type="button" key={item}>{item}</button>
-          ))}
-        </nav>
         <div className="program-top-actions">
           <button type="button" aria-label="搜索"><Search size={22} /></button>
           <button className="program-bell" type="button" aria-label="通知"><Bell size={21} /><span>3</span></button>
@@ -141,7 +138,7 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
           </div>
         </section>
 
-        <section className="program-grid">
+        <section className="program-grid" data-ai-collapsed={aiCollapsed ? "true" : "false"}>
           <article className="program-card program-problem">
             <h2>题目描述</h2>
             <p>{task.description}</p>
@@ -214,40 +211,53 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
             </article>
           </div>
 
-          <aside className="program-card program-ai">
+          <aside className={`program-card program-ai${aiCollapsed ? " collapsed" : ""}`} aria-label="AI学习助手" aria-expanded={!aiCollapsed}>
             <header>
               <span><Bot size={22} /></span>
               <h2>AI学习助手</h2>
+              <button
+                className="program-ai-toggle"
+                type="button"
+                aria-label={aiCollapsed ? "展开AI学习助手" : "收起AI学习助手"}
+                onClick={() => setAiCollapsed((value) => !value)}
+              >
+                {aiCollapsed ? <PanelRightOpen size={17} /> : <PanelRightClose size={17} />}
+                <span className="sr-only">{aiCollapsed ? "展开AI学习助手" : "收起AI学习助手"}</span>
+              </button>
             </header>
-            <section>
-              <h3>AI诊断总结</h3>
-              <p>提交代码并完成系统验证后，AI 诊断会基于当前任务、执行结果、测试证据和课程知识源生成。</p>
-            </section>
-            <section>
-              <h3>问题分析</h3>
-              <ul>
-                <li><b>系统验证：</b>等待首次提交。</li>
-                <li><b>分析范围：</b>{task.title} 的公开样例、隐藏测试摘要、代码版本和学习画像。</li>
-              </ul>
-            </section>
-            <section className="program-hints">
-              <h3>分层提示</h3>
-              {knowledgeTags.slice(0, 3).map((tag, index) => (
-                <article key={tag}>
-                  <button type="button"><Lightbulb size={15} /> 第{index + 1}层提示 · {tag}<ChevronDown size={15} /></button>
-                  <p>提交后可按层级解锁。首层只给方向，后续层级会结合当前失败证据逐步展开。</p>
-                </article>
-              ))}
-            </section>
-            <div className="hint-usage">
-              <p><Eye size={14} /> 第一层提示 <span>待提交后解锁</span></p>
-              <p><Eye size={14} /> 第二层提示 <span>待诊断后解锁</span></p>
-              <p><Eye size={14} /> 第三层提示 <span>按任务规则控制</span></p>
-            </div>
-            <footer>
-              <button type="button"><GraduationCap size={16} /> 查看讲解</button>
-              <button className="primary" type="button"><Lightbulb size={16} /> 获取下一层提示</button>
-            </footer>
+            {!aiCollapsed && (
+              <>
+                <section>
+                  <h3>AI诊断总结</h3>
+                  <p>提交代码并完成系统验证后，AI 诊断会基于当前任务、执行结果、测试证据和课程知识源生成。</p>
+                </section>
+                <section>
+                  <h3>问题分析</h3>
+                  <ul>
+                    <li><b>系统验证：</b>等待首次提交。</li>
+                    <li><b>分析范围：</b>{task.title} 的公开样例、隐藏测试摘要、代码版本和学习画像。</li>
+                  </ul>
+                </section>
+                <section className="program-hints">
+                  <h3>分层提示</h3>
+                  {knowledgeTags.slice(0, 3).map((tag, index) => (
+                    <article key={tag}>
+                      <button type="button"><Lightbulb size={15} /> 第{index + 1}层提示 · {tag}<ChevronDown size={15} /></button>
+                      <p>提交后可按层级解锁。首层只给方向，后续层级会结合当前失败证据逐步展开。</p>
+                    </article>
+                  ))}
+                </section>
+                <div className="hint-usage">
+                  <p><Eye size={14} /> 第一层提示 <span>待提交后解锁</span></p>
+                  <p><Eye size={14} /> 第二层提示 <span>待诊断后解锁</span></p>
+                  <p><Eye size={14} /> 第三层提示 <span>按任务规则控制</span></p>
+                </div>
+                <footer>
+                  <button type="button"><GraduationCap size={16} /> 查看讲解</button>
+                  <button className="primary" type="button"><Lightbulb size={16} /> 获取下一层提示</button>
+                </footer>
+              </>
+            )}
           </aside>
         </section>
 
