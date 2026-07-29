@@ -16,9 +16,12 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    username: Mapped[str | None] = mapped_column(String(80), unique=True)
     display_name: Mapped[str] = mapped_column(String(100), nullable=False)
     role: Mapped[str] = mapped_column(String(20), nullable=False)
+    password_hash: Mapped[str | None] = mapped_column(String(220))
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="ACTIVE")
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 

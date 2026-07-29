@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.api_response import ApiError, ok
 from backend.app.core.database import get_db
-from backend.app.core.security import current_user, ensure_course_member
+from backend.app.core.security import current_user, ensure_course_member, require_role
 from backend.app.models import CapabilityEvidence, Course, Submission, User
 from backend.app.services.submissions import iso
 
@@ -17,6 +17,7 @@ def teacher_submissions(
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ):
+    require_role(user, "TEACHER")
     course = db.get(Course, course_id)
     if course is None:
         raise ApiError(404, "COURSE_NOT_FOUND", "课程不存在")
@@ -64,6 +65,7 @@ def teacher_timeline(
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ):
+    require_role(user, "TEACHER")
     submission = db.get(Submission, submission_id)
     if submission is None:
         raise ApiError(404, "SUBMISSION_NOT_FOUND", "提交不存在")

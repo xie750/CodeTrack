@@ -1,4 +1,4 @@
-import { getCurrentDemoUserId } from "./demoUsers";
+import { authHeaders, type AuthUser } from "./authSession";
 
 export type ApiMeta = { request_id: string; [key: string]: unknown };
 export type ApiResponse<T> = { data: T; meta: ApiMeta };
@@ -286,14 +286,13 @@ export type TeacherTimeline = {
   }>;
 };
 
-function studentHeaders() {
-  return { "X-Demo-User-Id": getCurrentDemoUserId() };
-}
-
-const teacherHeaders = { "X-Demo-User-Id": "user_teacher_001" };
-
 async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(url, options);
+  const headers = new Headers(authHeaders());
+  new Headers(options.headers).forEach((value, key) => headers.set(key, value));
+  const response = await fetch(url, {
+    ...options,
+    headers
+  });
   const body = (await response.json()) as ApiResponse<T> | ApiErrorBody;
   if (!response.ok || "error" in body) {
     const message = "error" in body ? `${body.error.code}: ${body.error.message}` : response.statusText;
@@ -303,50 +302,59 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  listTasks: () => request<TaskListItem[]>("/api/v1/tasks", { headers: studentHeaders() }),
-  getTask: (taskId: string) => request<TaskDetail>(`/api/v1/tasks/${taskId}`, { headers: studentHeaders() }),
-  getLearningContext: () => request<LearningContext>("/api/v1/student/learning-context", { headers: studentHeaders() }),
+  login: (username: string, password: string) =>
+    request<{
+      access_token: string;
+      token_type: string;
+      expires_in: number;
+      user: AuthUser;
+    }>("/api/v1/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password })
+    }),
+  me: () => request<AuthUser>("/api/v1/auth/me"),
+  logout: () => request<{ logged_out: boolean }>("/api/v1/auth/logout", { method: "POST" }),
+  listTasks: () => request<TaskListItem[]>("/api/v1/tasks"),
+  getTask: (taskId: string) => request<TaskDetail>(`/api/v1/tasks/${taskId}`),
+  getLearningContext: () => request<LearningContext>("/api/v1/student/learning-context"),
   listStudentTasks: (courseId?: string) =>
     request<StudentTaskCard[]>(
-      `/api/v1/student/tasks${courseId ? `?course_id=${encodeURIComponent(courseId)}` : ""}`,
-      { headers: studentHeaders() }
+      `/api/v1/student/tasks${courseId ? `?course_id=${encodeURIComponent(courseId)}` : ""}`
     ),
   getStudentProfile: (courseId?: string) =>
     request<StudentProfile>(
-      `/api/v1/student/profile${courseId ? `?course_id=${encodeURIComponent(courseId)}` : ""}`,
-      { headers: studentHeaders() }
+      `/api/v1/student/profile${courseId ? `?course_id=${encodeURIComponent(courseId)}` : ""}`
     ),
   submitCode: (taskId: string, sourceCode: string) =>
     request<SubmitResponse>(`/api/v1/tasks/${taskId}/submissions`, {
       method: "POST",
       headers: {
-        ...studentHeaders(),
         "Content-Type": "application/json",
         "Idempotency-Key": crypto.randomUUID()
       },
       body: JSON.stringify({ language: "CPP", source_code: sourceCode })
     }),
   getExecution: (executionId: string) =>
-    request<ExecutionStatus>(`/api/v1/executions/${executionId}`, { headers: studentHeaders() }),
+    request<ExecutionStatus>(`/api/v1/executions/${executionId}`),
   getResults: (versionId: string) =>
-    request<VersionResult>(`/api/v1/submission-versions/${versionId}/results`, { headers: studentHeaders() }),
+    request<VersionResult>(`/api/v1/submission-versions/${versionId}/results`),
   getDiagnosis: (versionId: string) =>
-    request<Diagnosis>(`/api/v1/submission-versions/${versionId}/diagnosis`, { headers: studentHeaders() }),
+    request<Diagnosis>(`/api/v1/submission-versions/${versionId}/diagnosis`),
   requestHint: (diagnosisId: string, requestedLevel: number) =>
     request<Hint>(`/api/v1/diagnoses/${diagnosisId}/hints`, {
       method: "POST",
       headers: {
-        ...studentHeaders(),
         "Content-Type": "application/json"
       },
       body: JSON.stringify({ requested_level: requestedLevel })
     }),
   getVersions: (submissionId: string) =>
-    request<VersionHistoryItem[]>(`/api/v1/submissions/${submissionId}/versions`, { headers: studentHeaders() }),
+    request<VersionHistoryItem[]>(`/api/v1/submissions/${submissionId}/versions`),
   getSummary: (submissionId: string) =>
-    request<Summary>(`/api/v1/submissions/${submissionId}/summary`, { headers: studentHeaders() }),
+    request<Summary>(`/api/v1/submissions/${submissionId}/summary`),
   listTeacherSubmissions: () =>
-    request<TeacherSubmission[]>("/api/v1/teacher/courses/course_ds_001/submissions", { headers: teacherHeaders }),
+    request<TeacherSubmission[]>("/api/v1/teacher/courses/course_ds_001/submissions"),
   getTeacherTimeline: (submissionId: string) =>
-    request<TeacherTimeline>(`/api/v1/teacher/submissions/${submissionId}/timeline`, { headers: teacherHeaders })
+    request<TeacherTimeline>(`/api/v1/teacher/submissions/${submissionId}/timeline`)
 };

@@ -5,18 +5,27 @@ from fastapi.testclient import TestClient
 
 from backend.app.core.database import SessionLocal
 from backend.app.main import app
-from backend.app.models import AuditLog
+from backend.app.models import AuditLog, Submission, SubmissionVersion
 from backend.app.services.seed import STANDARD_WRONG_CODE
 
 
 def client() -> TestClient:
-    return TestClient(app)
+    test_client = TestClient(app)
+    test_client.headers.update({"X-Demo-User-Id": "user_student_001"})
+    return test_client
 
 
 def wait_for_results(c: TestClient, version_id: str, timeout_seconds: int = 45):
     deadline = time.time() + timeout_seconds
+    db = SessionLocal()
+    try:
+        version = db.get(SubmissionVersion, version_id)
+        submission = db.get(Submission, version.submission_id) if version else None
+        headers = {"X-Demo-User-Id": submission.student_id} if submission else None
+    finally:
+        db.close()
     while time.time() < deadline:
-        response = c.get(f"/api/v1/submission-versions/{version_id}/results")
+        response = c.get(f"/api/v1/submission-versions/{version_id}/results", headers=headers)
         assert response.status_code == 200
         data = response.json()["data"]
         if data["execution"]["status"] in {

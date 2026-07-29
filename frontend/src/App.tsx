@@ -1,6 +1,6 @@
-import { useState, type MouseEvent } from "react";
-import { NavLink, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
-import { Bell, BookOpen, ChartNoAxesColumnIncreasing, ChevronDown, ChevronsLeft, ClipboardList, House, Search, Star } from "lucide-react";
+import { useEffect, useState, type MouseEvent } from "react";
+import { Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Bell, BookOpen, ChartNoAxesColumnIncreasing, ChevronsLeft, ClipboardList, House, LogOut, Search, Star } from "lucide-react";
 import { ConfigProvider } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import LearningHome from "./pages/LearningHome";
@@ -10,8 +10,10 @@ import SelfStudy from "./pages/SelfStudy";
 import AiTutor from "./pages/AiTutor";
 import LearningLibrary from "./pages/LearningLibrary";
 import LearningProfile from "./pages/LearningProfile";
+import LoginPage from "./pages/LoginPage";
 import avatarImg from "./assets/ui-home/avatar.png";
-import { DEMO_USERS, getCurrentDemoUserId, getDemoUser, setCurrentDemoUserId } from "./demoUsers";
+import { api } from "./api";
+import { clearAccessToken, getAccessToken, type AuthUser } from "./authSession";
 
 const navItems = [
   { key: "/", label: "学习首页", icon: <House size={22} strokeWidth={2.4} /> },
@@ -53,14 +55,12 @@ function shouldUseNativeNavigation(event: MouseEvent<HTMLAnchorElement>) {
   return event.defaultPrevented || event.button !== 0 || event.metaKey || event.altKey || event.ctrlKey || event.shiftKey;
 }
 
-function AppContent() {
+function AppContent({ authUser, onLogout }: { authUser: AuthUser; onLogout: () => void }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const [currentUserId, setCurrentUserId] = useState(getCurrentDemoUserId);
   const activeKey = selectedKey(location.pathname);
   const isWorkspace = location.pathname.startsWith("/workspace");
   const activeRouteGroup = routeGroup(location.pathname);
-  const currentDemoUser = getDemoUser(currentUserId);
 
   function transitionTo(to: string) {
     if (to === location.pathname) return;
@@ -91,14 +91,9 @@ function AppContent() {
     transitionTo(to);
   }
 
-  function handleUserChange(userId: string) {
-    setCurrentDemoUserId(userId);
-    setCurrentUserId(userId);
-  }
-
   if (isWorkspace) {
     return (
-      <div className="workspace-route-stage" key={`${location.pathname}-${currentUserId}`}>
+      <div className="workspace-route-stage" key={location.pathname}>
         <Routes location={location}>
           <Route path="/workspace/:taskId" element={<TaskWorkspaceWrapper onBack={() => transitionTo("/tasks")} />} />
         </Routes>
@@ -123,25 +118,17 @@ function AppContent() {
             <Bell size={25} strokeWidth={2.1} />
             <span className="notification-badge">3</span>
           </button>
-          <label className="top-user user-switcher">
-            <img className="avatar" src={avatarImg} alt={currentDemoUser.name} />
-            <span className="user-switcher-copy">
-              <strong>{currentDemoUser.name}</strong>
-              <small>{currentDemoUser.className}</small>
+          <div className="top-user authed-user">
+            <img className="avatar" src={avatarImg} alt={authUser.display_name} />
+            <span className="authed-user-copy">
+              <strong>{authUser.display_name}</strong>
+              <small>{authUser.role === "STUDENT" ? "学生账号" : "教师账号"}</small>
             </span>
-            <select
-              value={currentUserId}
-              onChange={(event) => handleUserChange(event.target.value)}
-              aria-label="切换模拟登录用户"
-            >
-              {DEMO_USERS.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.name} · {user.className}
-                </option>
-              ))}
-            </select>
-            <ChevronDown size={18} aria-hidden="true" />
-          </label>
+            <button type="button" className="logout-btn" onClick={onLogout} aria-label="退出登录">
+              <LogOut size={17} />
+              退出
+            </button>
+          </div>
         </div>
       </header>
 
@@ -168,7 +155,7 @@ function AppContent() {
         </aside>
 
         <main className="app-content" data-route={activeRouteGroup}>
-          <div className="route-stage" key={`${activeRouteGroup}-${currentUserId}`}>
+          <div className="route-stage" key={activeRouteGroup}>
             <Routes location={location}>
             <Route path="/" element={<LearningHome onNavigate={handleNavigate} onOpenWorkspace={openWorkspace} />} />
             <Route path="/tasks" element={<CourseTasks onOpenWorkspace={openWorkspace} />} />
@@ -217,6 +204,38 @@ function TaskWorkspaceWrapper({ onBack }: { onBack: () => void }) {
 }
 
 export default function App() {
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    const token = getAccessToken();
+    if (!token) {
+      setCheckingAuth(false);
+      return;
+    }
+    api.me()
+      .then((user) => {
+        if (alive) setAuthUser(user);
+      })
+      .catch(() => {
+        clearAccessToken();
+        if (alive) setAuthUser(null);
+      })
+      .finally(() => {
+        if (alive) setCheckingAuth(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  function handleLogout() {
+    api.logout().catch(() => undefined);
+    clearAccessToken();
+    setAuthUser(null);
+  }
+
   return (
     <ConfigProvider
       locale={zhCN}
@@ -228,7 +247,20 @@ export default function App() {
         }
       }}
     >
-      <AppContent />
+      {checkingAuth ? (
+        <div className="auth-loading">正在恢复登录状态...</div>
+      ) : (
+        <Routes>
+          <Route
+            path="/login"
+            element={authUser ? <Navigate to="/" replace /> : <LoginPage onLogin={(user) => setAuthUser(user)} />}
+          />
+          <Route
+            path="/*"
+            element={authUser ? <AppContent authUser={authUser} onLogout={handleLogout} /> : <Navigate to="/login" replace />}
+          />
+        </Routes>
+      )}
     </ConfigProvider>
   );
 }

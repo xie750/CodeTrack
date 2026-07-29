@@ -1,8 +1,10 @@
 import json
 from datetime import datetime, timezone
 
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
+from backend.app.core.security import hash_password, verify_password
 from backend.app.models import (
     AdministrativeClass,
     Capability,
@@ -99,15 +101,50 @@ def upsert_one(db: Session, model, filters: dict, values: dict) -> None:
         setattr(existing, field, value)
 
 
+def ensure_auth_columns(db: Session) -> None:
+    columns = {column["name"] for column in inspect(db.bind).get_columns("users")}
+    if "username" not in columns:
+        db.execute(text("ALTER TABLE users ADD COLUMN username VARCHAR(80)"))
+    if "password_hash" not in columns:
+        db.execute(text("ALTER TABLE users ADD COLUMN password_hash VARCHAR(220)"))
+    if "last_login_at" not in columns:
+        db.execute(text("ALTER TABLE users ADD COLUMN last_login_at DATETIME"))
+    db.commit()
+
+
 def seed_demo_data(db: Session) -> None:
+    ensure_auth_columns(db)
     users = {
-        "user_teacher_001": {"display_name": "王老师", "role": "TEACHER", "status": "ACTIVE"},
-        "user_teacher_002": {"display_name": "李老师", "role": "TEACHER", "status": "ACTIVE"},
-        "user_student_001": {"display_name": "王同学", "role": "STUDENT", "status": "ACTIVE"},
-        "user_student_002": {"display_name": "刘同学", "role": "STUDENT", "status": "ACTIVE"},
+        "user_teacher_001": {
+            "username": "teacher_wang",
+            "display_name": "王老师",
+            "role": "TEACHER",
+            "status": "ACTIVE",
+        },
+        "user_teacher_002": {
+            "username": "teacher_li",
+            "display_name": "李老师",
+            "role": "TEACHER",
+            "status": "ACTIVE",
+        },
+        "user_student_001": {
+            "username": "wang",
+            "display_name": "王同学",
+            "role": "STUDENT",
+            "status": "ACTIVE",
+        },
+        "user_student_002": {
+            "username": "liu",
+            "display_name": "刘同学",
+            "role": "STUDENT",
+            "status": "ACTIVE",
+        },
     }
     for user_id, values in users.items():
         upsert(db, User, user_id, values)
+        user = db.get(User, user_id)
+        if user and not verify_password("codetrack123", user.password_hash):
+            user.password_hash = hash_password("codetrack123")
 
     upsert(
         db,

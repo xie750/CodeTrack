@@ -390,6 +390,48 @@ html[data-route-motion="deeper"] .workspace-route-stage {
   font-size: 15px;
 }
 
+.authed-user {
+  min-height: 48px;
+  padding: 4px 6px 4px 4px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.authed-user-copy {
+  min-width: 92px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.authed-user-copy small {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 11px;
+}
+
+.logout-btn {
+  min-width: 70px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 8px;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 180ms var(--motion-soft), border-color 180ms var(--motion-soft);
+}
+
+.logout-btn:hover {
+  border-color: rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.14);
+}
+
 .user-switcher {
   position: relative;
   min-width: 248px;
@@ -428,6 +470,130 @@ html[data-route-motion="deeper"] .workspace-route-stage {
   height: 100%;
   opacity: 0;
   cursor: pointer;
+}
+
+.auth-loading,
+.login-page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(23, 108, 245, 0.12), transparent 28%),
+    linear-gradient(135deg, #f7f9fc 0%, #edf4ff 100%);
+}
+
+.auth-loading {
+  color: #40506a;
+  font-weight: 800;
+}
+
+.login-panel {
+  width: min(100%, 440px);
+  padding: 30px;
+  border: 1px solid #dfe7f3;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 46px rgba(42, 77, 128, 0.12);
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #15223a;
+}
+
+.login-brand strong {
+  font-size: 25px;
+  font-weight: 900;
+}
+
+.login-brand strong span {
+  color: #176cf5;
+}
+
+.login-mark::before {
+  border-color: #15223a;
+}
+
+.login-copy {
+  margin-top: 26px;
+}
+
+.login-copy h1 {
+  margin: 0;
+  color: #111a30;
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.login-copy p {
+  margin: 10px 0 0;
+  color: #66748a;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.login-form {
+  margin-top: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.login-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #24324b;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.login-form .ant-input-affix-wrapper-lg,
+.login-form .ant-btn-lg {
+  min-height: 46px;
+  border-radius: 8px;
+}
+
+.login-form .ant-btn-lg {
+  font-weight: 900;
+}
+
+.login-demo-accounts {
+  margin-top: 20px;
+  padding-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-top: 1px solid #edf1f6;
+}
+
+.login-demo-accounts span {
+  width: 100%;
+  color: #6a778c;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.login-demo-accounts button {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid #dbe5f2;
+  border-radius: 8px;
+  color: #30415b;
+  background: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.login-demo-accounts button:hover {
+  border-color: #176cf5;
+  color: #176cf5;
+  background: #f5f8ff;
 }
 
 .avatar {
@@ -3993,6 +4159,25 @@ html[data-route-motion="deeper"] .workspace-route-stage {
   .top-user strong,
   .top-user svg {
     display: none;
+  }
+
+  .authed-user {
+    min-width: 98px;
+    padding-right: 4px;
+  }
+
+  .authed-user-copy {
+    display: none;
+  }
+
+  .logout-btn {
+    min-width: 42px;
+    padding: 0 8px;
+    font-size: 0;
+  }
+
+  .logout-btn svg {
+    display: block;
   }
 
   .user-switcher {
