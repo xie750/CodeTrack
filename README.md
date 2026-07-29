@@ -33,6 +33,9 @@ pip install -r requirements.txt
 alembic upgrade head
 cd ../scripts && python seed_demo.py && cd ../backend
 uvicorn app.main:app --reload
+
+总结：python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
+
 ```
 
 **前端**（另一个终端）：

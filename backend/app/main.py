@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from backend.app.api import executions, health, tasks, teacher, versions
+from backend.app.api import executions, health, student, tasks, teacher, versions
 from backend.app.core.api_response import ApiError, api_error_handler
 from backend.app.core.database import SessionLocal, engine
 from backend.app.models import Base
@@ -25,6 +25,7 @@ def create_app() -> FastAPI:
     app.add_exception_handler(ApiError, api_error_handler)
     app.include_router(health.router)
     app.include_router(tasks.router)
+    app.include_router(student.router)
     app.include_router(executions.router)
     app.include_router(versions.router)
     app.include_router(teacher.router)

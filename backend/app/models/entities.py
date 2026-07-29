@@ -43,6 +43,33 @@ class Enrollment(Base):
     role: Mapped[str] = mapped_column(String(20), nullable=False)
 
 
+class AdministrativeClass(Base):
+    __tablename__ = "classes"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    grade: Mapped[str] = mapped_column(String(20), nullable=False)
+    major_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="ACTIVE")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class StudentClassMembership(Base):
+    __tablename__ = "student_class_memberships"
+    __table_args__ = (
+        UniqueConstraint("class_id", "student_id", name="uq_student_class_membership"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    class_id: Mapped[str] = mapped_column(ForeignKey("classes.id"), nullable=False)
+    student_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="ACTIVE")
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    administrative_class: Mapped[AdministrativeClass] = relationship()
+    student: Mapped[User] = relationship()
+
+
 class Capability(Base):
     __tablename__ = "capabilities"
 
@@ -67,6 +94,52 @@ class Task(Base):
 
     course: Mapped[Course] = relationship()
     test_cases: Mapped[list["TestCase"]] = relationship(order_by="TestCase.sort_order")
+
+
+class TeachingAssignment(Base):
+    __tablename__ = "teaching_assignments"
+    __table_args__ = (
+        UniqueConstraint(
+            "class_id",
+            "course_id",
+            "teacher_id",
+            "term",
+            name="uq_teaching_assignment_class_course_teacher_term",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    class_id: Mapped[str] = mapped_column(ForeignKey("classes.id"), nullable=False)
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id"), nullable=False)
+    teacher_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    term: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="ACTIVE")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    administrative_class: Mapped[AdministrativeClass] = relationship()
+    course: Mapped[Course] = relationship()
+    teacher: Mapped[User] = relationship()
+
+
+class TaskAssignment(Base):
+    __tablename__ = "task_assignments"
+    __table_args__ = (
+        UniqueConstraint("task_id", "teaching_assignment_id", name="uq_task_assignment_task_teaching"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id"), nullable=False)
+    teaching_assignment_id: Mapped[str] = mapped_column(ForeignKey("teaching_assignments.id"), nullable=False)
+    published_by: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    publish_status: Mapped[str] = mapped_column(String(20), nullable=False, default="PUBLISHED")
+    assignment_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="PRACTICE")
+    allow_hint_level_3: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    task: Mapped[Task] = relationship()
+    teaching_assignment: Mapped[TeachingAssignment] = relationship()
+    publisher: Mapped[User] = relationship()
 
 
 class TestCase(Base):
@@ -115,6 +188,31 @@ class Submission(Base):
     student: Mapped[User] = relationship()
     task: Mapped[Task] = relationship()
     versions: Mapped[list["SubmissionVersion"]] = relationship(order_by="SubmissionVersion.version_no")
+
+
+class StudentTaskProgress(Base):
+    __tablename__ = "student_task_progress"
+    __table_args__ = (
+        UniqueConstraint("assignment_id", "student_id", name="uq_student_task_progress_assignment_student"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    assignment_id: Mapped[str] = mapped_column(ForeignKey("task_assignments.id"), nullable=False)
+    student_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="NOT_STARTED")
+    latest_submission_id: Mapped[str | None] = mapped_column(ForeignKey("submissions.id"))
+    latest_version_id: Mapped[str | None] = mapped_column(ForeignKey("submission_versions.id"))
+    passed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_required_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    highest_hint_level: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    score: Mapped[float | None] = mapped_column(Float)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    assignment: Mapped[TaskAssignment] = relationship()
+    student: Mapped[User] = relationship()
 
 
 class SubmissionVersion(Base):
@@ -236,6 +334,99 @@ class CapabilityState(Base):
     state: Mapped[str] = mapped_column(String(30), nullable=False)
     reason_summary: Mapped[str] = mapped_column(Text, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class LearnerEvent(Base):
+    __tablename__ = "learner_events"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    student_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id"), nullable=False)
+    class_id: Mapped[str] = mapped_column(ForeignKey("classes.id"), nullable=False)
+    teaching_assignment_id: Mapped[str | None] = mapped_column(ForeignKey("teaching_assignments.id"))
+    assignment_id: Mapped[str | None] = mapped_column(ForeignKey("task_assignments.id"))
+    task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id"))
+    event_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    knowledge_points: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    error_type: Mapped[str | None] = mapped_column(String(80))
+    payload: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class LearnerProfileSnapshot(Base):
+    __tablename__ = "learner_profile_snapshots"
+    __table_args__ = (
+        UniqueConstraint("student_id", "course_id", name="uq_learner_profile_student_course"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    student_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id"), nullable=False)
+    class_id: Mapped[str] = mapped_column(ForeignKey("classes.id"), nullable=False)
+    summary_text: Mapped[str] = mapped_column(Text, nullable=False)
+    overall_progress: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    hint_dependency_level: Mapped[str] = mapped_column(String(20), nullable=False, default="LOW")
+    compile_error_rate: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    logic_error_rate: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    recent_task_completion: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    recommendation_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class LearnerKnowledgeState(Base):
+    __tablename__ = "learner_knowledge_states"
+    __table_args__ = (
+        UniqueConstraint(
+            "student_id",
+            "course_id",
+            "knowledge_point",
+            name="uq_learner_knowledge_student_course_point",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    student_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id"), nullable=False)
+    knowledge_point: Mapped[str] = mapped_column(String(100), nullable=False)
+    mastery_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    state: Mapped[str] = mapped_column(String(20), nullable=False, default="STABLE")
+    evidence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_evidence: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class LearnerErrorStat(Base):
+    __tablename__ = "learner_error_stats"
+    __table_args__ = (
+        UniqueConstraint("student_id", "course_id", "error_type", name="uq_learner_error_student_course_type"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    student_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id"), nullable=False)
+    error_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    label: Mapped[str] = mapped_column(String(100), nullable=False)
+    count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    severity: Mapped[str] = mapped_column(String(20), nullable=False, default="LOW")
+    related_knowledge_points: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class Recommendation(Base):
+    __tablename__ = "recommendations"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    student_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id"), nullable=False)
+    recommendation_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    related_task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id"))
+    related_knowledge_points: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    suggested_action: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="ACTIVE")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
 class AuditLog(Base):

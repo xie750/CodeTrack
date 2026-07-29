@@ -1,7 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, BookOpenCheck, CalendarClock, Camera, Check, ClipboardList, Code2, FileText, MonitorPlay, NotebookTabs } from "lucide-react";
-import { api, TaskListItem } from "../api";
-import { buildTaskCards } from "../data/constants";
+import { api, LearningContext, StudentProfile, StudentTaskCard } from "../api";
 import heroArt from "../assets/ui-home/hero-art.png";
 import robotImg from "../assets/ui-home/robot-img.png";
 
@@ -10,22 +9,16 @@ type PageProps = {
   onOpenWorkspace: (taskId?: string) => void;
 };
 
-const todayTasks = [
-  { title: "数组与循环综合应用", type: "编程任务", deadline: "今天 23:59", progress: 60, color: "blue", icon: <Code2 size={22} /> },
-  { title: "函数基础练习题", type: "练习题", deadline: "明天 23:59", progress: 80, color: "green", icon: <ClipboardList size={22} /> },
-  { title: "指针与数组应用复习", type: "知识点复习", deadline: "5-31 23:59", progress: 30, color: "purple", icon: <BookOpenCheck size={22} /> }
+const fallbackTasks = [
+  { title: "数组与循环综合应用", type: "编程任务", deadline: "今天 23:59", progress: 60, color: "blue", icon: <Code2 size={22} />, taskId: undefined },
+  { title: "函数基础练习题", type: "练习题", deadline: "明天 23:59", progress: 80, color: "green", icon: <ClipboardList size={22} />, taskId: undefined },
+  { title: "指针与数组应用复习", type: "知识点复习", deadline: "5-31 23:59", progress: 30, color: "purple", icon: <BookOpenCheck size={22} />, taskId: undefined }
 ];
 
-const recommendations = [
+const fallbackRecommendations = [
   { label: "编程任务", title: "两数之和", desc: "给定一个整数数组 nums 和一个目标值 target...", action: "开始练习", color: "blue" },
   { label: "练习题", title: "链表操作综合题", desc: "基于链表的插入、删除与反转练习。", action: "去练习", color: "green" },
   { label: "知识点复习", title: "数据结构复习", desc: "回顾栈、队列、哈希表的核心概念。", action: "开始复习", color: "purple" }
-];
-
-const reminders = [
-  { icon: <ClipboardList size={20} />, title: "班级任务 截止", desc: "函数基础练习题", time: "截止时间：明天 23:59", color: "orange" },
-  { icon: <Camera size={20} />, title: "直播课开始", desc: "数据结构与算法精讲", time: "今天 19:30", color: "blue" },
-  { icon: <NotebookTabs size={20} />, title: "作业截止", desc: "两数之和 编程任务", time: "5-31 23:59", color: "purple" }
 ];
 
 const resources = [
@@ -34,31 +27,103 @@ const resources = [
   { title: "LeetCode 热题精选 100 题", meta: "PDF · 2.8MB", color: "black", label: "C" }
 ];
 
-const skills = [
-  { name: "逻辑思维", value: 85 },
-  { name: "代码能力", value: 78 },
-  { name: "算法能力", value: 72 },
-  { name: "问题解决", value: 80 },
-  { name: "学习效率", value: 90 }
-];
+function deadlineLabel(value: string | null) {
+  if (!value) return "未设置";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).format(date);
+}
+
+function taskProgress(task: StudentTaskCard) {
+  return Math.round((task.passed_count / Math.max(task.total_required_count, 1)) * 100);
+}
 
 export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps) {
-  const [tasks, setTasks] = useState<TaskListItem[]>([]);
+  const [context, setContext] = useState<LearningContext | null>(null);
+  const [tasks, setTasks] = useState<StudentTaskCard[]>([]);
+  const [profile, setProfile] = useState<StudentProfile | null>(null);
 
   useEffect(() => {
-    api.listTasks().then(setTasks).catch(() => setTasks([]));
+    let alive = true;
+    api.getLearningContext().then((data) => {
+      if (!alive) return;
+      setContext(data);
+      api.listStudentTasks().then((taskData) => alive && setTasks(taskData)).catch(() => alive && setTasks([]));
+      if (data.courses[0]?.course_id) {
+        api.getStudentProfile(data.courses[0].course_id).then((profileData) => alive && setProfile(profileData)).catch(() => undefined);
+      }
+    }).catch(() => undefined);
+    return () => {
+      alive = false;
+    };
   }, []);
 
-  const cards = buildTaskCards(tasks);
-  const primaryTaskId = cards[0]?.task_id;
+  const todayTasks = useMemo(() => {
+    if (!tasks.length) return fallbackTasks;
+    return tasks.slice(0, 3).map((task, index) => ({
+      title: task.title,
+      type: task.task_type === "CODING" ? "编程任务" : "课程任务",
+      deadline: deadlineLabel(task.deadline),
+      progress: taskProgress(task),
+      color: index === 0 ? "blue" : index === 1 ? "green" : "purple",
+      icon: task.task_type === "CODING" ? <Code2 size={22} /> : <ClipboardList size={22} />,
+      taskId: task.task_id
+    }));
+  }, [tasks]);
+
+  const recommendations = useMemo(() => {
+    const items = profile?.recommendations ?? [];
+    if (!items.length) return fallbackRecommendations;
+    return items.slice(0, 3).map((item, index) => ({
+      label: index === 0 ? "画像建议" : "知识点复习",
+      title: item.title,
+      desc: item.reason,
+      action: item.suggested_action || "去完成",
+      color: index === 0 ? "blue" : index === 1 ? "green" : "purple"
+    }));
+  }, [profile]);
+
+  const reminders = useMemo(() => {
+    if (!tasks.length) {
+      return [
+        { icon: <ClipboardList size={20} />, title: "班级任务 截止", desc: "函数基础练习题", time: "截止时间：明天 23:59", color: "orange" },
+        { icon: <Camera size={20} />, title: "直播课开始", desc: "数据结构与算法精讲", time: "今天 19:30", color: "blue" },
+        { icon: <NotebookTabs size={20} />, title: "作业截止", desc: "两数之和 编程任务", time: "5-31 23:59", color: "purple" }
+      ];
+    }
+    return tasks.slice(0, 3).map((task, index) => ({
+      icon: index === 0 ? <ClipboardList size={20} /> : index === 1 ? <CalendarClock size={20} /> : <MonitorPlay size={20} />,
+      title: "班级任务 截止",
+      desc: task.title,
+      time: `截止时间：${deadlineLabel(task.deadline)}`,
+      color: index === 0 ? "orange" : index === 1 ? "blue" : "purple"
+    }));
+  }, [tasks]);
+
+  const skills = [
+    { name: "总体进度", value: profile?.overview.overall_progress ?? 72 },
+    { name: "任务完成", value: profile?.overview.recent_task_completion ?? 78 },
+    { name: "调试能力", value: 100 - (profile?.overview.compile_error_rate ?? 28) },
+    { name: "逻辑稳定", value: 100 - (profile?.overview.logic_error_rate ?? 20) },
+    { name: "知识掌握", value: profile?.knowledge_states[0]?.mastery_score ?? 90 }
+  ];
+  const primaryTaskId = todayTasks[0]?.taskId;
+  const courseName = context?.courses[0]?.course_name ?? "数据结构与程序设计基础";
+  const studentName = context?.student.name ?? "张同学";
 
   return (
     <div className="home-dashboard">
       <section className="home-main">
         <section className="home-card home-hero">
           <div className="hero-copy">
-            <h1>早上好，张同学！</h1>
-            <p>坚持学习的每一天，都是更好的自己迈进一步。</p>
+            <h1>早上好，{studentName}！</h1>
+            <p>{context ? `${context.student.class_name} · ${courseName} 的任务和画像数据已接入。` : "坚持学习的每一天，都是更好的自己迈进一步。"}</p>
             <button className="primary-btn" type="button" onClick={() => onOpenWorkspace(primaryTaskId)}>
               继续学习
               <span>
@@ -96,7 +161,7 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
                     <i className={task.color} style={{ width: `${task.progress}%` }} />
                   </div>
                 </div>
-                <button className="outline-btn" type="button" onClick={() => onOpenWorkspace(primaryTaskId)}>
+                <button className="outline-btn" type="button" onClick={() => onOpenWorkspace(task.taskId ?? primaryTaskId)}>
                   继续学习
                 </button>
               </article>
@@ -128,14 +193,14 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
             <div className="progress-layout">
               <div className="donut">
                 <div className="donut-center">
-                  <strong>72%</strong>
+                  <strong>{profile?.overview.overall_progress ?? 72}%</strong>
                   <span>总体进度</span>
                 </div>
               </div>
               <div className="legend-list">
-                <span><i className="dot blue" />已完成&nbsp; 72%</span>
-                <span><i className="dot green" />进行中&nbsp; 20%</span>
-                <span><i className="dot gray" />未开始&nbsp; 8%</span>
+                <span><i className="dot blue" />已完成&nbsp; {profile?.overview.recent_task_completion ?? 72}%</span>
+                <span><i className="dot green" />进行中&nbsp; {tasks.filter((task) => task.status !== "COMPLETED").length} 个</span>
+                <span><i className="dot gray" />薄弱点&nbsp; {profile?.knowledge_states.filter((item) => item.state === "WEAK").length ?? 0} 个</span>
               </div>
             </div>
           </section>
@@ -153,11 +218,11 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
                 <circle cx="118" cy="124" r="4" fill="#176cf5" />
                 <circle cx="62" cy="124" r="4" fill="#176cf5" />
                 <circle cx="43" cy="65" r="4" fill="#176cf5" />
-                <text x="90" y="11" textAnchor="middle">逻辑思维</text>
-                <text x="164" y="63">逻辑思维</text>
-                <text x="123" y="151">算法能力</text>
-                <text x="18" y="151">问题解决</text>
-                <text x="0" y="66">学习效率</text>
+                <text x="90" y="11" textAnchor="middle">总体进度</text>
+                <text x="164" y="63">任务完成</text>
+                <text x="123" y="151">调试能力</text>
+                <text x="18" y="151">逻辑稳定</text>
+                <text x="0" y="66">知识掌握</text>
               </svg>
               <div className="skill-list">
                 {skills.map((skill) => (
@@ -167,7 +232,7 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
                     <b>{skill.value}</b>
                   </div>
                 ))}
-                <p className="growth">较上月总体提升 <b>6% ↑</b></p>
+                <p className="growth">画像来自 <b>{courseName}</b></p>
               </div>
             </div>
           </section>
@@ -184,14 +249,14 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
           </div>
           <div className="goal-ring">
             <div>
-              <strong>70%</strong>
+              <strong>{profile?.overview.recent_task_completion ?? 70}%</strong>
               <span>已完成</span>
             </div>
           </div>
           <div className="goal-list">
-            <span className="done"><Check size={14} />学习时长 ≥ 60 分钟</span>
-            <span className="done"><Check size={14} />完成 1 个编程任务</span>
-            <span><i />完成 15 道练习题</span>
+            <span className="done"><Check size={14} />完成 1 个课程任务</span>
+            <span className="done"><Check size={14} />复盘 1 个薄弱点</span>
+            <span><i />保存 1 份学习产物</span>
           </div>
         </section>
 
@@ -202,7 +267,7 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
           </div>
           <div className="reminder-list">
             {reminders.map((item) => (
-              <article className="reminder-item" key={item.title}>
+              <article className="reminder-item" key={item.desc}>
                 <div className={`reminder-icon ${item.color}`}>{item.icon}</div>
                 <div>
                   <strong>{item.title}</strong>
