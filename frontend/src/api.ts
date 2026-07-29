@@ -1,4 +1,4 @@
-import { authHeaders, type AuthUser } from "./authSession";
+import { authHeaders, getAccessToken, type AuthUser } from "./authSession";
 
 export type ApiMeta = { request_id: string; [key: string]: unknown };
 export type ApiResponse<T> = { data: T; meta: ApiMeta };
@@ -47,6 +47,9 @@ export type StudentTaskCard = {
   teacher_name: string;
   title: string;
   task_type: string;
+  assignment_mode: string;
+  description: string;
+  published_at: string | null;
   deadline: string | null;
   difficulty: string;
   knowledge_points: string[];
@@ -286,6 +289,50 @@ export type TeacherTimeline = {
   }>;
 };
 
+const GET_CACHE_TTL_MS = 2 * 60 * 1000;
+
+type CachedGetEntry<T> = {
+  data?: T;
+  fetchedAt: number;
+  promise?: Promise<T>;
+};
+
+const getCache = new Map<string, CachedGetEntry<unknown>>();
+
+function studentTasksUrl(courseId?: string) {
+  return `/api/v1/student/tasks${courseId ? `?course_id=${encodeURIComponent(courseId)}` : ""}`;
+}
+
+function studentProfileUrl(courseId?: string) {
+  return `/api/v1/student/profile${courseId ? `?course_id=${encodeURIComponent(courseId)}` : ""}`;
+}
+
+function getCacheKey(url: string) {
+  return `${getAccessToken() ?? "anonymous"}:${url}`;
+}
+
+function isFresh(entry: CachedGetEntry<unknown> | undefined, maxAgeMs = GET_CACHE_TTL_MS) {
+  return Boolean(entry?.data) && Date.now() - (entry?.fetchedAt ?? 0) < maxAgeMs;
+}
+
+function peekCachedGet<T>(url: string, maxAgeMs = GET_CACHE_TTL_MS): T | null {
+  const entry = getCache.get(getCacheKey(url));
+  return isFresh(entry, maxAgeMs) ? (entry?.data as T) : null;
+}
+
+function clearApiCache(predicate?: (url: string) => boolean) {
+  if (!predicate) {
+    getCache.clear();
+    return;
+  }
+  for (const key of getCache.keys()) {
+    const url = key.slice(key.indexOf(":") + 1);
+    if (predicate(url)) {
+      getCache.delete(key);
+    }
+  }
+}
+
 async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(authHeaders());
   new Headers(options.headers).forEach((value, key) => headers.set(key, value));
@@ -299,6 +346,33 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
     throw new Error(message);
   }
   return body.data;
+}
+
+async function cachedGet<T>(url: string, maxAgeMs = GET_CACHE_TTL_MS): Promise<T> {
+  const key = getCacheKey(url);
+  const existing = getCache.get(key) as CachedGetEntry<T> | undefined;
+  if (isFresh(existing, maxAgeMs)) {
+    return existing?.data as T;
+  }
+  if (existing?.promise) {
+    return existing.promise;
+  }
+
+  const promise = request<T>(url)
+    .then((data) => {
+      getCache.set(key, { data, fetchedAt: Date.now() });
+      return data;
+    })
+    .catch((error) => {
+      const current = getCache.get(key);
+      if (current && "promise" in current) {
+        getCache.delete(key);
+      }
+      throw error;
+    });
+
+  getCache.set(key, { data: existing?.data, fetchedAt: existing?.fetchedAt ?? 0, promise });
+  return promise;
 }
 
 export const api = {
@@ -317,24 +391,23 @@ export const api = {
   logout: () => request<{ logged_out: boolean }>("/api/v1/auth/logout", { method: "POST" }),
   listTasks: () => request<TaskListItem[]>("/api/v1/tasks"),
   getTask: (taskId: string) => request<TaskDetail>(`/api/v1/tasks/${taskId}`),
-  getLearningContext: () => request<LearningContext>("/api/v1/student/learning-context"),
+  getLearningContext: () => cachedGet<LearningContext>("/api/v1/student/learning-context"),
   listStudentTasks: (courseId?: string) =>
-    request<StudentTaskCard[]>(
-      `/api/v1/student/tasks${courseId ? `?course_id=${encodeURIComponent(courseId)}` : ""}`
-    ),
+    cachedGet<StudentTaskCard[]>(studentTasksUrl(courseId)),
   getStudentProfile: (courseId?: string) =>
-    request<StudentProfile>(
-      `/api/v1/student/profile${courseId ? `?course_id=${encodeURIComponent(courseId)}` : ""}`
-    ),
-  submitCode: (taskId: string, sourceCode: string) =>
-    request<SubmitResponse>(`/api/v1/tasks/${taskId}/submissions`, {
+    cachedGet<StudentProfile>(studentProfileUrl(courseId)),
+  submitCode: async (taskId: string, sourceCode: string) => {
+    const result = await request<SubmitResponse>(`/api/v1/tasks/${taskId}/submissions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Idempotency-Key": crypto.randomUUID()
       },
       body: JSON.stringify({ language: "CPP", source_code: sourceCode })
-    }),
+    });
+    clearApiCache((url) => url.startsWith("/api/v1/student/") || url === "/api/v1/tasks");
+    return result;
+  },
   getExecution: (executionId: string) =>
     request<ExecutionStatus>(`/api/v1/executions/${executionId}`),
   getResults: (versionId: string) =>
@@ -357,4 +430,11 @@ export const api = {
     request<TeacherSubmission[]>("/api/v1/teacher/courses/course_ds_001/submissions"),
   getTeacherTimeline: (submissionId: string) =>
     request<TeacherTimeline>(`/api/v1/teacher/submissions/${submissionId}/timeline`)
+};
+
+export const apiCache = {
+  clear: clearApiCache,
+  peekLearningContext: () => peekCachedGet<LearningContext>("/api/v1/student/learning-context"),
+  peekStudentTasks: (courseId?: string) => peekCachedGet<StudentTaskCard[]>(studentTasksUrl(courseId)),
+  peekStudentProfile: (courseId?: string) => peekCachedGet<StudentProfile>(studentProfileUrl(courseId))
 };

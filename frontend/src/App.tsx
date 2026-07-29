@@ -12,7 +12,7 @@ import LearningLibrary from "./pages/LearningLibrary";
 import LearningProfile from "./pages/LearningProfile";
 import LoginPage from "./pages/LoginPage";
 import avatarImg from "./assets/ui-home/avatar.png";
-import { api } from "./api";
+import { api, apiCache } from "./api";
 import { clearAccessToken, getAccessToken, type AuthUser } from "./authSession";
 
 const navItems = [
@@ -219,6 +219,7 @@ export default function App() {
         if (alive) setAuthUser(user);
       })
       .catch(() => {
+        apiCache.clear();
         clearAccessToken();
         if (alive) setAuthUser(null);
       })
@@ -232,6 +233,7 @@ export default function App() {
 
   function handleLogout() {
     api.logout().catch(() => undefined);
+    apiCache.clear();
     clearAccessToken();
     setAuthUser(null);
   }
