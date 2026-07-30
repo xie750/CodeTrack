@@ -8,12 +8,16 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronsDown,
+  ChevronsLeft,
+  ChevronsRight,
+  ChevronsUp,
   Circle,
-  Code2,
   Eye,
   GraduationCap,
   Lightbulb,
   Maximize2,
+  Minimize2,
   MoreVertical,
   NotebookTabs,
   PanelRightClose,
@@ -21,8 +25,7 @@ import {
   Play,
   Save,
   Search,
-  Upload,
-  Zap
+  Upload
 } from "lucide-react";
 import { api, LearningContext, TaskDetail } from "../api";
 import avatarImg from "../assets/ui-home/avatar.png";
@@ -111,6 +114,14 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
   const [metrics, setMetrics] = useState<WorkspaceMetrics | null>(null);
   const gridRef = useRef<HTMLElement | null>(null);
   const centerRef = useRef<HTMLDivElement | null>(null);
+
+  const [leftTab, setLeftTab] = useState<"description" | "submissions">("description");
+  const [rightTab, setRightTab] = useState<"testcase" | "result">("testcase");
+  const [resultExpanded, setResultExpanded] = useState(false);
+  const [resultCollapsed, setResultCollapsed] = useState(false);
+  const [problemCollapsed, setProblemCollapsed] = useState(false);
+  const [activeCaseIndex, setActiveCaseIndex] = useState(0);
+  const [customCaseValues, setCustomCaseValues] = useState<Record<string, string>[]>([]);
 
   useEffect(() => {
     let alive = true;
@@ -207,6 +218,56 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
     ]);
   }, [task]);
 
+  const testCases = useMemo(() => {
+    return (task?.public_tests ?? []).map((test, index) => ({
+      name: test.name || `Case ${index + 1}`,
+      inputs: Object.entries(test.input_summary as Record<string, unknown>).map(([key, value]) => ({
+        key,
+        value: String(value)
+      }))
+    }));
+  }, [task]);
+
+  useEffect(() => {
+    if (testCases.length > 0 && customCaseValues.length === 0) {
+      setCustomCaseValues(testCases.map((tc) => Object.fromEntries(tc.inputs.map((i) => [i.key, i.value]))));
+    }
+  }, [testCases, customCaseValues.length]);
+
+  const activeCaseInputs = useMemo(() => {
+    const merged = testCases[activeCaseIndex];
+    if (!merged) return [];
+    const overrides = customCaseValues[activeCaseIndex] ?? {};
+    return merged.inputs.map((input) => ({
+      key: input.key,
+      value: overrides[input.key] ?? input.value
+    }));
+  }, [testCases, activeCaseIndex, customCaseValues]);
+
+  // 用例操作辅助函数
+  const handleCaseChange = (index: number) => {
+    setActiveCaseIndex(index);
+  };
+  const handleCaseInputChange = (key: string, value: string) => {
+    setCustomCaseValues((prev) => {
+      const updated = [...prev];
+      if (updated[activeCaseIndex]) {
+        updated[activeCaseIndex] = { ...updated[activeCaseIndex], [key]: value };
+      } else {
+        updated[activeCaseIndex] = { [key]: value };
+      }
+      return updated;
+    });
+  };
+  const resetCurrentCase = () => {
+    setCustomCaseValues((prev) => {
+      const updated = [...prev];
+      if (testCases[activeCaseIndex]) {
+        updated[activeCaseIndex] = Object.fromEntries(testCases[activeCaseIndex].inputs.map(i => [i.key, i.value]));
+      }
+      return updated;
+    });
+  };
   const knowledgeTags = task?.learning_objectives.length ? task.learning_objectives : ["等待任务知识点"];
   const studentName = context?.student.name ?? "学生";
   const problemWidth = resolveProblemWidth(metrics, layout.problemRatio);
@@ -360,222 +421,261 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
           </section>
         ) : (
           <>
-        <section className="program-head">
-          <div>
-            <button className="program-back" type="button" onClick={onBack}><ArrowLeft size={16} /> 返回班级任务</button>
-            <div className="program-title-line">
-              <h1>编程任务：{task.title}</h1>
-              <span>状态：<b>{task.current_progress.status}</b></span>
-            </div>
-          </div>
-          <div className="program-head-actions">
-            <button type="button"><Eye size={17} /> 收藏</button>
-            <button type="button"><NotebookTabs size={17} /> 笔记</button>
-            <button className="outline" type="button"><ChevronLeft size={17} /> 上一题</button>
-            <button className="primary" type="button">下一题 <ChevronRight size={17} /></button>
-          </div>
-        </section>
-
-        <section className="program-grid" data-ai-collapsed={aiCollapsed ? "true" : "false"} ref={gridRef}>
-          <article className="program-card program-problem">
-            <h2>题目描述</h2>
-            <p>{task.description}</p>
-
-            <h2>输入输出说明</h2>
-            <ul>
-              <li>函数签名：{task.interface_spec.function_signature}</li>
-              <li>可编辑区域：{task.interface_spec.editable_region}</li>
-            </ul>
-
-            <h2>示例</h2>
-            {task.public_tests.length ? task.public_tests.map((test) => (
-              <div className="program-example" key={test.test_case_id}>
-                <p><b>{test.name}：</b>{JSON.stringify(test.input_summary)}</p>
-                <p><b>期望输出：</b>{test.expected_output_summary}</p>
-              </div>
-            )) : <p>暂无公开样例。</p>}
-
-            <h2>约束条件</h2>
-            <ul>
-              {task.interface_spec.rules.map((rule) => <li key={rule}>{rule}</li>)}
-            </ul>
-
-            <h2>知识点</h2>
-            <div className="program-tags">{knowledgeTags.map((tag) => <span key={tag}>{tag}</span>)}</div>
-
-            <h2>老师备注</h2>
-            <p>请先运行公开样例，再根据系统验证和 AI 诊断逐步修正。新提交不会继承旧诊断。</p>
-          </article>
-
-          <div
-            className="program-splitter vertical"
-            role="separator"
-            aria-label="调整题目和代码区域宽度"
-            aria-orientation="vertical"
-            tabIndex={0}
-            onPointerDown={startProblemResize}
-            onKeyDown={handleProblemSplitterKey}
-            onDoubleClick={resetProblemSplitter}
-          >
-            <span />
-          </div>
-
-          <div className="program-center" ref={centerRef}>
-            <article className="program-card program-editor">
-              <header>
-                <h2>代码编辑器</h2>
-                <div>
-                  <button type="button">C++ <ChevronDown size={14} /></button>
-                  <button type="button" aria-label="主题"><Lightbulb size={17} /></button>
-                  <button type="button" aria-label="全屏"><Maximize2 size={17} /></button>
-                  <button type="button" aria-label="更多"><MoreVertical size={17} /></button>
+            <section className="program-head">
+              <div>
+                <button className="program-back" type="button" onClick={onBack}><ArrowLeft size={16} /> 返回班级任务</button>
+                <div className="program-title-line">
+                  <h1>编程任务：{task.title}</h1>
+                  <span>状态：<b>{task.current_progress.status}</b></span>
                 </div>
-              </header>
-              <pre>{editorLines.map((line, index) => <span key={`${index}-${line}`}><em>{index + 1}</em><code>{line}</code></span>)}</pre>
-              <footer>
-                <button type="button"><Save size={16} /> 保存草稿</button>
-                <button className="primary" type="button"><Play size={16} /> 运行代码</button>
-                <button className="primary" type="button"><Upload size={16} /> 提交代码</button>
-              </footer>
-            </article>
+              </div>
+              <div className="program-head-actions">
+                <button type="button"><Eye size={17} /> 收藏</button>
+                <button type="button"><NotebookTabs size={17} /> 笔记</button>
+                <button className="outline" type="button"><ChevronLeft size={17} /> 上一题</button>
+                <button className="primary" type="button">下一题 <ChevronRight size={17} /></button>
+              </div>
+            </section>
 
-            <div
-              className="program-splitter horizontal"
-              role="separator"
-              aria-label="调整代码编辑器和测试结果高度"
-              aria-orientation="horizontal"
-              tabIndex={0}
-              onPointerDown={startEditorResize}
-              onKeyDown={handleEditorSplitterKey}
-              onDoubleClick={resetEditorSplitter}
-            >
-              <span />
-            </div>
+            <section className="program-grid" data-ai-collapsed={aiCollapsed ? "true" : "false"} data-problem-collapsed={problemCollapsed ? "true" : "false"} ref={gridRef}>
+              <article className={`program-card program-problem${problemCollapsed ? " collapsed" : ""}`}>
+                <nav className={`program-problem-tabs${problemCollapsed ? " vertical" : ""}`}>
+                  {problemCollapsed ? (
+                    <>
+                      <button type="button" className={leftTab === "description" ? "active" : ""} onClick={() => { setLeftTab("description"); setProblemCollapsed(false); }}>题</button>
+                      <button type="button" className={leftTab === "submissions" ? "active" : ""} onClick={() => { setLeftTab("submissions"); setProblemCollapsed(false); }}>录</button>
+                      <button type="button" className="problem-collapse-btn" title="展开题目面板" onClick={() => setProblemCollapsed(false)}>
+                        <ChevronsRight size={16} />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button type="button" className={leftTab === "description" ? "active" : ""} onClick={() => setLeftTab("description")}>题目描述</button>
+                      <button type="button" className={leftTab === "submissions" ? "active" : ""} onClick={() => setLeftTab("submissions")}>提交记录</button>
+                      <button type="button" className="problem-collapse-btn" title="折叠题目面板" onClick={() => setProblemCollapsed(true)}>
+                        <ChevronsLeft size={16} />
+                      </button>
+                    </>
+                  )}
+                </nav>
 
-            <article className="program-card program-result">
-              <header>
-                <nav><button className="active" type="button">测试结果</button><button type="button">运行输出</button></nav>
-                <div>提交后显示执行用时、内存和诊断状态</div>
-              </header>
-              <table>
-                <thead><tr><th>测试点</th><th>输入</th><th>期望输出</th><th>你的输出</th><th>结果</th><th>耗时</th></tr></thead>
-                <tbody>
-                  {publicTestRows.map((row) => (
-                    <tr key={row[0]}>
-                      {row.map((cell, index) => (
-                        <td className={index === 4 ? (cell === "通过" ? "pass" : cell === "失败" ? "fail" : "") : ""} key={`${row[0]}-${cell}-${index}`}>
-                          {index === 4 ? <span>{cell === "通过" ? <Check size={13} /> : <Circle size={12} fill="currentColor" />} {cell}</span> : cell}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="program-pass"><CheckCircle2 size={18} /> 当前任务已加载。提交代码后，这里会展示真实执行结果。</div>
-            </article>
-          </div>
+                {!problemCollapsed && (
+                  leftTab === "description" ? (
+                    <>
+                      <p>{task.description}</p>
 
-          <aside className={`program-card program-ai${aiCollapsed ? " collapsed" : ""}`} aria-label="AI学习助手" aria-expanded={!aiCollapsed}>
-            <header>
-              <span><Bot size={22} /></span>
-              <h2>AI学习助手</h2>
-              <button
-                className="program-ai-toggle"
-                type="button"
-                aria-label={aiCollapsed ? "展开AI学习助手" : "收起AI学习助手"}
-                onClick={() => setAiCollapsed((value) => !value)}
+                      <h2>输入输出说明</h2>
+                      <ul>
+                        <li>函数签名：{task.interface_spec.function_signature}</li>
+                        <li>可编辑区域：{task.interface_spec.editable_region}</li>
+                      </ul>
+
+                      <h2>示例</h2>
+                      {task.public_tests.length ? task.public_tests.map((test) => (
+                        <div className="program-example" key={test.test_case_id}>
+                          <p><b>{test.name}：</b>{JSON.stringify(test.input_summary)}</p>
+                          <p><b>期望输出：</b>{test.expected_output_summary}</p>
+                        </div>
+                      )) : <p>暂无公开样例。</p>}
+
+                      <h2>约束条件</h2>
+                      <ul>
+                        {task.interface_spec.rules.map((rule) => <li key={rule}>{rule}</li>)}
+                      </ul>
+
+                      <h2>知识点</h2>
+                      <div className="program-tags">{knowledgeTags.map((tag) => <span key={tag}>{tag}</span>)}</div>
+
+                      <h2>老师备注</h2>
+                      <p>请先运行公开样例，再根据系统验证和 AI 诊断逐步修正。新提交不会继承旧诊断。</p>
+                    </>
+                  ) : (
+                    <div className="program-submissions">
+                      <table>
+                        <thead><tr><th>状态</th><th>提交时间</th><th>用时</th><th>内存</th></tr></thead>
+                        <tbody>
+                          <tr>
+                            <td colSpan={4} className="empty-cell">暂无提交记录。提交代码后会显示真实版本历史。</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                      <p className="program-card-link-text">提交代码后，可在此查看每次提交的详细测试结果和 AI 诊断。</p>
+                    </div>
+                  )
+                )}
+              </article>
+
+              <div
+                className="program-splitter vertical"
+                role="separator"
+                aria-label="调整题目和代码区域宽度"
+                aria-orientation="vertical"
+                tabIndex={0}
+                onPointerDown={startProblemResize}
+                onKeyDown={handleProblemSplitterKey}
+                onDoubleClick={resetProblemSplitter}
               >
-                {aiCollapsed ? <PanelRightOpen size={17} /> : <PanelRightClose size={17} />}
-                <span className="sr-only">{aiCollapsed ? "展开AI学习助手" : "收起AI学习助手"}</span>
-              </button>
-            </header>
-            {!aiCollapsed && (
-              <>
-                <section>
-                  <h3>AI诊断总结</h3>
-                  <p>提交代码并完成系统验证后，AI 诊断会基于当前任务、执行结果、测试证据和课程知识源生成。</p>
-                </section>
-                <section>
-                  <h3>问题分析</h3>
-                  <ul>
-                    <li><b>系统验证：</b>等待首次提交。</li>
-                    <li><b>分析范围：</b>{task.title} 的公开样例、隐藏测试摘要、代码版本和学习画像。</li>
-                  </ul>
-                </section>
-                <section className="program-hints">
-                  <h3>分层提示</h3>
-                  {knowledgeTags.slice(0, 3).map((tag, index) => (
-                    <article key={tag}>
-                      <button type="button"><Lightbulb size={15} /> 第{index + 1}层提示 · {tag}<ChevronDown size={15} /></button>
-                      <p>提交后可按层级解锁。首层只给方向，后续层级会结合当前失败证据逐步展开。</p>
-                    </article>
-                  ))}
-                </section>
-                <div className="hint-usage">
-                  <p><Eye size={14} /> 第一层提示 <span>待提交后解锁</span></p>
-                  <p><Eye size={14} /> 第二层提示 <span>待诊断后解锁</span></p>
-                  <p><Eye size={14} /> 第三层提示 <span>按任务规则控制</span></p>
+                <span />
+              </div>
+
+              <div className={`program-center${resultCollapsed ? " result-collapsed" : ""}`} ref={centerRef}>
+                <article className="program-card program-editor">
+                  <header>
+                    <h2>代码编辑器</h2>
+                    <div>
+                      <button type="button">C++ <ChevronDown size={14} /></button>
+                      <button type="button" aria-label="主题"><Lightbulb size={17} /></button>
+                      <button type="button" aria-label="全屏"><Maximize2 size={17} /></button>
+                      <button type="button" aria-label="更多"><MoreVertical size={17} /></button>
+                    </div>
+                  </header>
+                  <pre>{editorLines.map((line, index) => <span key={`${index}-${line}`}><em>{index + 1}</em><code>{line}</code></span>)}</pre>
+                  <footer>
+                    <button type="button"><Save size={16} /> 保存草稿</button>
+                    <button className="primary" type="button"><Play size={16} /> 运行代码</button>
+                    <button className="primary" type="button"><Upload size={16} /> 提交代码</button>
+                  </footer>
+                </article>
+
+                <div
+                  className="program-splitter horizontal"
+                  role="separator"
+                  aria-label="调整代码编辑器和测试结果高度"
+                  aria-orientation="horizontal"
+                  tabIndex={0}
+                  onPointerDown={startEditorResize}
+                  onKeyDown={handleEditorSplitterKey}
+                  onDoubleClick={resetEditorSplitter}
+                >
+                  <span />
                 </div>
-                <footer>
-                  <button type="button"><GraduationCap size={16} /> 查看讲解</button>
-                  <button className="primary" type="button"><Lightbulb size={16} /> 获取下一层提示</button>
-                </footer>
-              </>
-            )}
-          </aside>
-        </section>
 
-        <section className="program-bottom-grid">
-          <article className="program-card program-history">
-            <header><h2>提交记录</h2><a href="#">更多 <ChevronRight size={14} /></a></header>
-            <table>
-              <thead><tr><th>状态</th><th>提交时间</th><th>用时</th><th>内存</th></tr></thead>
-              <tbody>
-                <tr>
-                  <td colSpan={4}>暂无提交记录。提交代码后会显示真实版本历史。</td>
-                </tr>
-              </tbody>
-            </table>
-            <a className="program-card-link" href="#">查看全部提交 <ChevronRight size={14} /></a>
-          </article>
+                <article className={`program-card program-result${resultExpanded ? " expanded" : ""}${resultCollapsed ? " collapsed" : ""}`}>
+                  <header>
+                    <nav className="program-result-tabs">
+                      <button type="button" className={rightTab === "testcase" ? "active" : ""} onClick={() => { setRightTab("testcase"); setResultCollapsed(false); }}>测试用例</button>
+                      <button type="button" className={rightTab === "result" ? "active" : ""} onClick={() => { setRightTab("result"); setResultCollapsed(false); }}>测试结果</button>
+                    </nav>
+                    <div className="program-result-actions">
+                      <button type="button" title={resultExpanded ? "还原" : "放大"} onClick={() => { setResultExpanded((v) => !v); setResultCollapsed(false); }}>
+                        {resultExpanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+                      </button>
+                      <button type="button" title={resultCollapsed ? "展开面板" : "折叠面板"} onClick={() => { setResultCollapsed((v) => !v); setResultExpanded(false); }}>
+                        {resultCollapsed ? <ChevronsUp size={15} /> : <ChevronsDown size={15} />}
+                      </button>
+                    </div>
+                  </header>
 
-          <article className="program-card program-growth">
-            <h2>能力成长 <span>i</span></h2>
-            {knowledgeTags.slice(0, 3).map((item, index) => (
-              <div className="growth-row" key={item}>
-                <span className={index === 1 ? "orange" : index === 2 ? "blue" : ""}>{index === 0 ? <NotebookTabs size={17} /> : index === 1 ? <Zap size={17} /> : <Code2 size={17} />}</span>
-                <div><strong>{item}</strong><p>等待提交和诊断证据更新画像</p><i><b style={{ width: "0%" }} /></i></div>
-                <em>待更新</em>
+                  {!resultCollapsed && (
+                    rightTab === "testcase" ? (
+                      <div className="program-testcase">
+                        <div className="testcase-tabs">
+                          {testCases.map((tc, index) => (
+                            <button
+                              key={tc.name}
+                              type="button"
+                              className={`testcase-tag${activeCaseIndex === index ? " active" : ""}`}
+                              onClick={() => handleCaseChange(index)}
+                            >
+                              {tc.name}
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="testcase-inputs">
+                          {activeCaseInputs.map((input) => (
+                            <div className="testcase-input-row" key={input.key}>
+                              <label>{input.key}</label>
+                              <input
+                                type="text"
+                                value={input.value}
+                                onChange={(e) => handleCaseInputChange(input.key, e.target.value)}
+                              />
+                            </div>
+                          ))}
+                        </div>
+
+                        <footer className="testcase-footer">
+                          <button type="button" className="outline" onClick={resetCurrentCase}>
+                            重置
+                          </button>
+                          <button className="primary" type="button" onClick={() => { setRightTab("result"); }}>
+                            <Play size={14} /> 执行代码
+                          </button>
+                        </footer>
+                      </div>
+                    ) : (
+                      <>
+                        <table>
+                          <thead><tr><th>测试点</th><th>输入</th><th>期望输出</th><th>你的输出</th><th>结果</th><th>耗时</th></tr></thead>
+                          <tbody>
+                            {publicTestRows.map((row) => (
+                              <tr key={row[0]}>
+                                {row.map((cell, index) => (
+                                  <td className={index === 4 ? (cell === "通过" ? "pass" : cell === "失败" ? "fail" : "") : ""} key={`${row[0]}-${cell}-${index}`}>
+                                    {index === 4 ? <span>{cell === "通过" ? <Check size={13} /> : <Circle size={12} fill="currentColor" />} {cell}</span> : cell}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        <div className="program-pass"><CheckCircle2 size={18} /> 当前任务已加载。提交代码后，这里会展示真实执行结果。</div>
+                      </>
+                    )
+                  )}
+                </article>
               </div>
-            ))}
-            <a className="program-card-link" href="#">查看能力详情 <ChevronRight size={14} /></a>
-          </article>
 
-          <article className="program-card program-error">
-            <header><h2>错因分析</h2><button type="button">本题表现 <ChevronDown size={14} /></button></header>
-            <div className="error-layout">
-              <div className="error-donut"><strong>0<span>次</span></strong></div>
-              <div className="error-legend">
-                <p><i className="blue" /> 逻辑错误 <b>待提交</b></p>
-                <p><i className="red" /> 边界条件 <b>待提交</b></p>
-                <p><i className="orange" /> 超时问题 <b>待提交</b></p>
-                <p><i /> 其他问题 <b>0% (0次)</b></p>
-              </div>
-            </div>
-            <a className="program-card-link" href="#">查看错题本 <ChevronRight size={14} /></a>
-          </article>
-
-          <article className="program-card program-advice">
-            <h2>学习建议</h2>
-            {knowledgeTags.slice(0, 3).map((item, index) => (
-              <div className={index === 0 ? "done" : index === 1 ? "warn" : "todo"} key={item}>
-                <span>{index === 0 ? <Check size={15} /> : <Circle size={15} />}</span>
-                <div><strong>复习{item}</strong><p>提交前先对照任务说明和公开样例完成一次自检。</p></div>
-              </div>
-            ))}
-            <a className="program-card-link" href="#">查看推荐题目 <ChevronRight size={14} /></a>
-          </article>
-        </section>
+              <aside className={`program-card program-ai${aiCollapsed ? " collapsed" : ""}`} aria-label="AI学习助手" aria-expanded={!aiCollapsed}>
+                <header>
+                  <span><Bot size={22} /></span>
+                  <h2>AI学习助手</h2>
+                  <button
+                    className="program-ai-toggle"
+                    type="button"
+                    aria-label={aiCollapsed ? "展开AI学习助手" : "收起AI学习助手"}
+                    onClick={() => setAiCollapsed((value) => !value)}
+                  >
+                    {aiCollapsed ? <PanelRightOpen size={17} /> : <PanelRightClose size={17} />}
+                    <span className="sr-only">{aiCollapsed ? "展开AI学习助手" : "收起AI学习助手"}</span>
+                  </button>
+                </header>
+                {!aiCollapsed && (
+                  <>
+                    <section>
+                      <h3>AI诊断总结</h3>
+                      <p>提交代码并完成系统验证后，AI 诊断会基于当前任务、执行结果、测试证据和课程知识源生成。</p>
+                    </section>
+                    <section>
+                      <h3>问题分析</h3>
+                      <ul>
+                        <li><b>系统验证：</b>等待首次提交。</li>
+                        <li><b>分析范围：</b>{task.title} 的公开样例、隐藏测试摘要、代码版本和学习画像。</li>
+                      </ul>
+                    </section>
+                    <section className="program-hints">
+                      <h3>分层提示</h3>
+                      {knowledgeTags.slice(0, 3).map((tag, index) => (
+                        <article key={tag}>
+                          <button type="button"><Lightbulb size={15} /> 第{index + 1}层提示 · {tag}<ChevronDown size={15} /></button>
+                          <p>提交后可按层级解锁。首层只给方向，后续层级会结合当前失败证据逐步展开。</p>
+                        </article>
+                      ))}
+                    </section>
+                    <div className="hint-usage">
+                      <p><Eye size={14} /> 第一层提示 <span>待提交后解锁</span></p>
+                      <p><Eye size={14} /> 第二层提示 <span>待诊断后解锁</span></p>
+                      <p><Eye size={14} /> 第三层提示 <span>按任务规则控制</span></p>
+                    </div>
+                    <footer>
+                      <button type="button"><GraduationCap size={16} /> 查看讲解</button>
+                      <button className="primary" type="button"><Lightbulb size={16} /> 获取下一层提示</button>
+                    </footer>
+                  </>
+                )}
+              </aside>
+            </section>
           </>
         )}
       </main>
