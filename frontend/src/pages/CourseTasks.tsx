@@ -377,7 +377,7 @@ function TaskRow({ item, onOpen }: TaskItemProps) {
       <span className={`class-badge ${item.badge}`}>{item.status}</span>
       <div className="class-row-main">
         <h2>
-          {task.title}
+          <span className="class-row-title">{task.title}</span>
           {item.hot ? <Flame className="class-row-flame" size={15} fill="currentColor" /> : null}
         </h2>
         <div className="class-tag-row">
