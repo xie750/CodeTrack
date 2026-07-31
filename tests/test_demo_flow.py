@@ -9,6 +9,7 @@ from backend.app.models import CapabilityEvidence, CapabilityState, Course, Enro
 from backend.app.main import app
 from backend.app.services.seed import STANDARD_CORRECT_CODE, STANDARD_WRONG_CODE
 from backend.app.services.sandbox_client import SandboxClientResult
+import backend.app.ai.llm_client as llm_client
 import backend.app.services.model_gateway as model_gateway
 import backend.app.services.submissions as submissions_service
 
@@ -124,42 +125,38 @@ def test_wrong_head_update_fails_head_case_and_keeps_hidden_details_masked():
 
 
 def test_configured_model_gateway_result_is_used_when_schema_is_valid(monkeypatch):
-    class FakeResponse:
-        def __init__(self, payload):
-            self.payload = payload
-
-        def raise_for_status(self):
-            return None
-
-        def json(self):
-            evidence_id = self.payload["tool_evidence"][0]["test_result_id"]
-            return {
-                "data": {
-                    "diagnosis_type": "LINKED_LIST_HEAD_UPDATE_ERROR",
-                    "confidence": 0.91,
-                    "explanation": "模型网关根据头节点失败测试和课程资料判断链表起点没有正确变化。",
-                    "verified_evidence_ids": [evidence_id],
-                    "knowledge_source_ids": ["kb_head_node_delete"],
-                    "hint": "请从删除第一个节点后的链表起点是否变化这个方向排查。",
-                    "needs_teacher_review": False,
-                    "model_provider": "TEST_GATEWAY",
-                    "model_name": "test-model",
-                }
+    def gateway_body(payload):
+        evidence_id = payload["tool_evidence"][0]["test_result_id"]
+        return {
+            "data": {
+                "diagnosis_type": "LINKED_LIST_HEAD_UPDATE_ERROR",
+                "confidence": 0.91,
+                "explanation": "模型网关根据头节点失败测试和课程资料判断链表起点没有正确变化。",
+                "verified_evidence_ids": [evidence_id],
+                "knowledge_source_ids": ["kb_head_node_delete"],
+                "hint": "请从删除第一个节点后的链表起点是否变化这个方向排查。",
+                "needs_teacher_review": False,
+                "model_provider": "TEST_GATEWAY",
+                "model_name": "test-model",
             }
+        }
 
-    def fake_post(url, json, timeout, trust_env):
+    # 传输层已搬到 ai/llm_client，patch 那里的 _post_json seam。
+    # 继续 patch model_gateway.httpx.post 会打不中，异常被降级成 RULE_FALLBACK，
+    # 报错表现为「model_provider 不对」，指不到真因。
+    # trust_env=False 现在由 _post_json 内部保证，不再是调用方的断言点。
+    async def fake_post(url, *, json, headers=None, timeout=None):
         assert url == "http://model.test/diagnose"
-        assert trust_env is False
         assert json["tool_evidence"]
         assert json["knowledge_sources"]
-        return FakeResponse(json)
+        return gateway_body(json)
 
     monkeypatch.setattr(
         model_gateway,
         "get_settings",
         lambda: SimpleNamespace(model_gateway_url="http://model.test/diagnose", model_name="test-model"),
     )
-    monkeypatch.setattr(model_gateway.httpx, "post", fake_post)
+    monkeypatch.setattr(llm_client, "_post_json", fake_post)
 
     with client() as c:
         ensure_student_enrolled("user_student_model_gateway", "模型网关学生")
@@ -185,38 +182,31 @@ def test_configured_model_gateway_result_is_used_when_schema_is_valid(monkeypatc
 
 
 def test_low_confidence_model_gateway_requires_review_without_hint(monkeypatch):
-    class FakeResponse:
-        def __init__(self, payload):
-            self.payload = payload
-
-        def raise_for_status(self):
-            return None
-
-        def json(self):
-            evidence_id = self.payload["tool_evidence"][0]["test_result_id"]
-            return {
-                "data": {
-                    "diagnosis_type": "UNKNOWN_OR_LOW_CONFIDENCE",
-                    "confidence": 0.42,
-                    "explanation": "模型只能给出低置信度方向，需要教师复核。",
-                    "verified_evidence_ids": [evidence_id],
-                    "knowledge_source_ids": ["kb_boundary_test_reasoning"],
-                    "hint": "请先根据失败测试复核边界分支，再决定修改方向。",
-                    "model_provider": "TEST_GATEWAY",
-                    "model_name": "test-model",
-                }
+    def gateway_body(payload):
+        evidence_id = payload["tool_evidence"][0]["test_result_id"]
+        return {
+            "data": {
+                "diagnosis_type": "UNKNOWN_OR_LOW_CONFIDENCE",
+                "confidence": 0.42,
+                "explanation": "模型只能给出低置信度方向，需要教师复核。",
+                "verified_evidence_ids": [evidence_id],
+                "knowledge_source_ids": ["kb_boundary_test_reasoning"],
+                "hint": "请先根据失败测试复核边界分支，再决定修改方向。",
+                "model_provider": "TEST_GATEWAY",
+                "model_name": "test-model",
             }
+        }
 
-    def fake_post(url, json, timeout, trust_env):
+    async def fake_post(url, *, json, headers=None, timeout=None):
         assert json["tool_evidence"]
-        return FakeResponse(json)
+        return gateway_body(json)
 
     monkeypatch.setattr(
         model_gateway,
         "get_settings",
         lambda: SimpleNamespace(model_gateway_url="http://model.test/diagnose", model_name="test-model"),
     )
-    monkeypatch.setattr(model_gateway.httpx, "post", fake_post)
+    monkeypatch.setattr(llm_client, "_post_json", fake_post)
 
     with client() as c:
         ensure_student_enrolled("user_student_model_low_confidence", "低置信模型学生")

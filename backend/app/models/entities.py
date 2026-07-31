@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -93,6 +93,7 @@ class Task(Base):
     language: Mapped[str] = mapped_column(String(20), nullable=False)
     interface_spec: Mapped[str] = mapped_column(Text, nullable=False)
     learning_objectives: Mapped[str] = mapped_column(Text, nullable=False)
+    hint_forbidden_fragments: Mapped[str | None] = mapped_column(Text)
     capability_ids: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
 
@@ -337,6 +338,13 @@ class TestResult(Base):
 
 class Diagnosis(Base):
     __tablename__ = "diagnoses"
+    # 一个版本最多一份诊断 —— create_diagnosis_for_version 和上面
+    # SubmissionVersion.diagnosis 这个标量 relationship 都早就假设了一对一，
+    # 但数据库层一直没有约束。用唯一索引而非 UniqueConstraint：SQLite 加约束
+    # 要 batch 模式重建表，加索引原生支持。
+    __table_args__ = (
+        Index("uq_diagnoses_submission_version_id", "submission_version_id", unique=True),
+    )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     submission_version_id: Mapped[str] = mapped_column(ForeignKey("submission_versions.id"), nullable=False)
@@ -509,6 +517,59 @@ class AuditLog(Base):
     duration_ms: Mapped[int | None] = mapped_column(Integer)
     details: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class AgentRun(Base):
+    """一次 AI 工作流运行。字段以内置版 §14.1 为基准。
+
+    §14.1 之外补了四个：`error_code`（`error_message` 是自由文本、不可聚合，
+    要对上 `ai/errors.py` 的分类才能统计失败率）、`attempts`、
+    `token_prompt` / `token_completion`（调 prompt 和算成本的必需项）。
+    """
+
+    __tablename__ = "agent_runs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    student_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+    course_id: Mapped[str | None] = mapped_column(ForeignKey("courses.id"))
+    workflow_type: Mapped[str] = mapped_column(String(60), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="RUNNING")
+    input_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    output_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    model_provider: Mapped[str | None] = mapped_column(String(60))
+    model_name: Mapped[str | None] = mapped_column(String(100))
+    prompt_version: Mapped[str | None] = mapped_column(String(40))
+    error_code: Mapped[str | None] = mapped_column(String(60))
+    error_message: Mapped[str | None] = mapped_column(Text)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    token_prompt: Mapped[int | None] = mapped_column(Integer)
+    token_completion: Mapped[int | None] = mapped_column(Integer)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    steps: Mapped[list["AgentStep"]] = relationship(order_by="AgentStep.step_order")
+
+
+class AgentStep(Base):
+    """运行内的单个步骤。字段直接采用内置版 §14.1。
+
+    用 `*_summary` 而非全量 payload 是文档的选择，和 §5.3
+    「不直接把所有历史代码全部塞入 Prompt」一致。
+    """
+
+    __tablename__ = "agent_steps"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    run_id: Mapped[str] = mapped_column(ForeignKey("agent_runs.id"), nullable=False)
+    step_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    step_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="SUCCEEDED")
+    input_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    output_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    run: Mapped[AgentRun] = relationship(back_populates="steps")
 
 
 class IdempotencyRecord(Base):

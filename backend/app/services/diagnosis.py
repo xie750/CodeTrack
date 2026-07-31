@@ -4,6 +4,7 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session, object_session
 
+from backend.app.ai import guardrails
 from backend.app.core.api_response import ApiError
 from backend.app.models import Diagnosis, HintRecord, KnowledgeSource, Submission, SubmissionVersion, TestResult
 from backend.app.models.entities import utc_now
@@ -38,24 +39,17 @@ def _loads(value: str):
     return json.loads(value)
 
 
-def leakage_check(content: str, level: int) -> dict:
-    forbidden_fragments = [
-        "ListNode* deleteAt",
-        "return head->next",
-        "head = head->next",
-        "prev->next = prev->next->next",
-    ]
-    hits = [fragment for fragment in forbidden_fragments if fragment in content]
-    return {
-        "passed": not hits and len(content) <= 300,
-        "matched_fragments": hits,
-        "level": level,
-        "rule_version": "hint_leakage_v0.1",
-    }
+def leakage_check(content: str, level: int, forbidden_fragments: list[str] | None = None) -> dict:
+    """答案泄露 + 内容长度检查。实现在 `ai/guardrails.py`（第 5、6 道护栏）。
+
+    改造前这里和 `model_gateway.hint_leakage_errors` 各写了一份禁词列表，
+    现在只有一个出口，且禁词可按题目配置。
+    """
+    return guardrails.hint_safety_check(content, level, forbidden_fragments=forbidden_fragments)
 
 
-def ensure_hint_safe(content: str, level: int) -> dict:
-    result = leakage_check(content, level)
+def ensure_hint_safe(content: str, level: int, forbidden_fragments: list[str] | None = None) -> dict:
+    result = leakage_check(content, level, forbidden_fragments)
     if not result["passed"]:
         raise ApiError(422, "HINT_GENERATION_FAILED", "提示未通过答案泄露检查", result)
     return result
@@ -111,7 +105,7 @@ def create_diagnosis_for_version(db: Session, version: SubmissionVersion) -> Dia
 
     evidence_ids = [result.id for result in failed_results]
     knowledge_sources = [source for source_id in source_ids if (source := db.get(KnowledgeSource, source_id))]
-    gateway_result = request_gateway_diagnosis(version, failed_results, knowledge_sources)
+    gateway_result = request_gateway_diagnosis(db, version, failed_results, knowledge_sources)
     if gateway_result is not None:
         diagnosis = create_gateway_diagnosis(db, version, gateway_result)
         if diagnosis.status == "READY":
@@ -234,8 +228,17 @@ def create_or_get_hint(
     ):
         raise ApiError(409, "HINT_LEVEL_NOT_AVAILABLE", "需要先查看二级提示")
 
+    # 第 1 道护栏（教师是否允许该等级提示）。**当前实现为 pass**：
+    # `allow_hint_level_3` 依然没有被强制执行，原因见 guardrails 里的 TODO。
+    permission = guardrails.check_hint_level_permission(db, diagnosis, level)
+    if not permission["passed"]:
+        raise ApiError(403, "HINT_LEVEL_NOT_ALLOWED", "该任务未开放此等级提示", permission)
+
+    version = diagnosis.version
+    task = version.submission.task if version is not None else None
+    forbidden_fragments = guardrails.resolve_forbidden_fragments(task)
     content = content_override or level_content(diagnosis.diagnosis_type, level)
-    check = ensure_hint_safe(content, level)
+    check = ensure_hint_safe(content, level, forbidden_fragments)
     hint = HintRecord(
         id=prefixed_id("hint"),
         diagnosis_id=diagnosis.id,
@@ -250,7 +253,6 @@ def create_or_get_hint(
     db.add(hint)
     db.flush()
 
-    version = diagnosis.version
     if version.highest_hint_level < level:
         version.highest_hint_level = level
     return hint

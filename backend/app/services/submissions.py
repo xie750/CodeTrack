@@ -177,7 +177,15 @@ def run_execution(db: Session, execution_id: str, timeout_seconds: int, audit_re
         timeout_seconds=timeout_seconds,
     )
 
-    execution.status = sandbox_result.status
+    required_total = len([case for case in test_cases if case.required])
+    passed_required = sum(1 for result in sandbox_result.tests if result["status"] == "PASSED")
+    # 只有「跑成功但没全过」才需要接着调模型诊断（内含最长 30s HTTP）。
+    needs_analysis = sandbox_result.status == "SUCCEEDED" and passed_required != required_total
+
+    # execution.status 保持非终态直到诊断完成。
+    # test_demo_flow 的 wait_for_results() 轮询到终态后立刻断言诊断已就绪，
+    # 「终态 ⟺ 诊断已完成」这个隐含契约不能破，否则那批测试会变 flaky。
+    execution.status = "ANALYZING" if needs_analysis else sandbox_result.status
     execution.compile_exit_code = sandbox_result.compile_exit_code
     execution.compiler_stdout = sandbox_result.compiler_stdout
     execution.compiler_stderr = sandbox_result.compiler_stderr
@@ -200,13 +208,13 @@ def run_execution(db: Session, execution_id: str, timeout_seconds: int, audit_re
                 sort_order=result["sort_order"],
             )
         )
-    db.flush()
+    # 先提交测试结果并释放写锁。SQLite 是单写者，改造前这里只 flush，
+    # 写锁一直被占到诊断（含 30s HTTP）跑完才 commit。
+    db.commit()
     db.expire(execution, ["test_results"])
 
     if sandbox_result.status == "SUCCEEDED":
-        required_total = len([case for case in test_cases if case.required])
-        passed_required = sum(1 for result in sandbox_result.tests if result["status"] == "PASSED")
-        if passed_required == required_total:
+        if not needs_analysis:
             submission.status = "PASSED"
             submission.passed_at = execution.finished_at
             create_capability_evidence(db, submission, version)
@@ -218,6 +226,9 @@ def run_execution(db: Session, execution_id: str, timeout_seconds: int, audit_re
         submission.status = "REVIEW_REQUIRED"
     else:
         submission.status = "FAILED"
+
+    # 诊断做完了，现在才能把 execution 置成终态。
+    execution.status = sandbox_result.status
 
     passed_count = sum(1 for result in sandbox_result.tests if result["status"] == "PASSED")
     failed_count = sum(1 for result in sandbox_result.tests if result["status"] == "FAILED")
