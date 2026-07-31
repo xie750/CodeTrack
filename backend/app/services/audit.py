@@ -19,6 +19,11 @@ SAFE_DETAIL_KEYS = {
     "hint_level",
     "resource_profile",
     "failure_reason",
+    # AI 运行可观测性。注意这是允许列表，不加进来的 key 会被静默丢弃 ——
+    # 写了等于没写。
+    "llm_error_code",
+    "attempts",
+    "agent_run_id",
 }
 
 

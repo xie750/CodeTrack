@@ -1,6 +1,8 @@
 from backend.app.models.entities import (
     Base,
     AdministrativeClass,
+    AgentRun,
+    AgentStep,
     AuditLog,
     Capability,
     CapabilityEvidence,
@@ -36,6 +38,8 @@ from backend.app.models.entities import (
 __all__ = [
     "Base",
     "AdministrativeClass",
+    "AgentRun",
+    "AgentStep",
     "AuditLog",
     "Capability",
     "CapabilityEvidence",
