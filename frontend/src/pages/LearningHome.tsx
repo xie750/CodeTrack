@@ -10,12 +10,6 @@ type PageProps = {
   onOpenWorkspace: (target?: TaskOpenTarget | string) => void;
 };
 
-const resources = [
-  { title: "Python 数据结构速查手册", meta: "PDF · 1.2MB", color: "red", label: "pdf" },
-  { title: "常见算法图解（含代码）", meta: "PDF · 3.5MB", color: "blue", label: "pdf" },
-  { title: "LeetCode 热题精选 100 题", meta: "PDF · 2.8MB", color: "black", label: "C" }
-];
-
 function deadlineLabel(value: string | null) {
   if (!value) return "未设置";
   const date = new Date(value);
@@ -130,15 +124,6 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
     }));
   }, [tasks]);
 
-  const skills = profile
-    ? [
-        { name: "总体进度", value: profile.overview.overall_progress },
-        { name: "任务完成", value: profile.overview.recent_task_completion },
-        { name: "调试能力", value: 100 - profile.overview.compile_error_rate },
-        { name: "逻辑稳定", value: 100 - profile.overview.logic_error_rate },
-        { name: "知识掌握", value: profile.knowledge_states[0]?.mastery_score ?? 0 }
-      ]
-    : [];
   const primaryTask = tasks.find((task) => task.status !== "COMPLETED") ?? tasks[0];
   const courseName = context?.courses[0]?.course_name;
   const studentName = context?.student.name;
@@ -255,59 +240,6 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
             )}
           </div>
         </section>
-
-        <div className="analytics-grid">
-          <section className="home-card analytics-card">
-            <h2>学习进度</h2>
-            {isLoading ? <div className="progress-layout skeleton-block" /> : profile ? <div className="progress-layout">
-              <div className="donut">
-                <div className="donut-center">
-                  <strong>{profile.overview.overall_progress}%</strong>
-                  <span>总体进度</span>
-                </div>
-              </div>
-              <div className="legend-list">
-                <span><i className="dot blue" />已完成&nbsp; {profile.overview.recent_task_completion}%</span>
-                <span><i className="dot green" />进行中&nbsp; {tasks.filter((task) => task.status !== "COMPLETED").length} 个</span>
-                <span><i className="dot gray" />薄弱点&nbsp; {profile.knowledge_states.filter((item) => item.state === "WEAK").length} 个</span>
-              </div>
-            </div> : <div className="empty-panel">暂无学习画像数据。</div>}
-          </section>
-
-          <section className="home-card analytics-card radar-card">
-            <h2>能力雷达</h2>
-            {isLoading ? <div className="radar-layout skeleton-block" /> : profile ? <div className="radar-layout">
-              <svg viewBox="0 0 180 170" aria-label="能力雷达图">
-                <polygon points="90,14 158,58 132,138 48,138 22,58" fill="#eef4ff" stroke="#cddcff" />
-                <polygon points="90,42 130,68 116,120 62,120 48,68" fill="#d7e5ff" stroke="#adc6ff" />
-                <polygon points="90,70 104,80 100,102 80,102 76,80" fill="#f8fbff" stroke="#d9e5ff" />
-                <polygon points="90,27 135,63 118,124 62,124 43,65" fill="rgba(32, 111, 246, .2)" stroke="#176cf5" strokeWidth="3" />
-                <circle cx="90" cy="27" r="4" fill="#176cf5" />
-                <circle cx="135" cy="63" r="4" fill="#176cf5" />
-                <circle cx="118" cy="124" r="4" fill="#176cf5" />
-                <circle cx="62" cy="124" r="4" fill="#176cf5" />
-                <circle cx="43" cy="65" r="4" fill="#176cf5" />
-                <text x="90" y="11" textAnchor="middle">总体进度</text>
-                <text x="164" y="63">任务完成</text>
-                <text x="123" y="151">调试能力</text>
-                <text x="18" y="151">逻辑稳定</text>
-                <text x="0" y="66">知识掌握</text>
-              </svg>
-              <div className="skill-list">
-                {skills.map((skill) => (
-                  <div className="skill-row" key={skill.name}>
-                    <span>{skill.name}</span>
-                    <div className="skill-bar"><i style={{ width: `${skill.value}%` }} /></div>
-                    <b>{skill.value}</b>
-                  </div>
-                ))}
-                <p className="growth">画像来自 <b>{courseName}</b></p>
-              </div>
-            </div> : <div className="empty-panel">暂无能力维度数据。</div>}
-          </section>
-        </div>
-
-        <footer className="home-footer">© 2024 CodeTrack · 时代码点亮未来 <span>帮助中心</span><span>隐私政策</span><span>用户协议</span></footer>
       </section>
 
       <aside className="home-aside">
@@ -362,22 +294,6 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
           <strong>AI 助教小码</strong>
           <p>有问题随时问我，为你提供学习建议。</p>
           <button className="primary-btn" type="button" onClick={() => onNavigate("/ai-tutor")}>去提问</button>
-        </section>
-
-        <section className="home-card right-card resource-card">
-          <div className="home-card-header">
-            <h2>推荐资料</h2>
-            <button className="text-link" type="button" onClick={() => onNavigate("/library")}>查看全部</button>
-          </div>
-          {resources.map((item) => (
-            <article className="resource-item" key={item.title}>
-              <div className={`file-icon ${item.color}`}>{item.label}</div>
-              <div>
-                <strong>{item.title}</strong>
-                <span>{item.meta}</span>
-              </div>
-            </article>
-          ))}
         </section>
       </aside>
     </div>
