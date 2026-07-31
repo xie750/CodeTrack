@@ -317,17 +317,6 @@ export default function LearningLibrary() {
             </article>
           )}
         </section>
-
-        <footer className="library-footer">
-          <span>© 2026 CodeTrack</span>
-          <span>·</span>
-          <span>收藏数据关联教师下发任务</span>
-          <span>帮助中心</span>
-          <span>|</span>
-          <span>隐私政策</span>
-          <span>|</span>
-          <span>用户协议</span>
-        </footer>
       </section>
 
       <aside className="library-aside" aria-label="收藏侧栏">

@@ -1988,14 +1988,6 @@ html[data-route-motion="deeper"] .workspace-route-stage {
   margin-top: 4px;
 }
 
-.home-footer {
-  display: flex;
-  justify-content: center;
-  gap: 22px;
-  color: #8a96aa;
-  font-size: 12px;
-}
-
 .library-page {
   width: 100%;
   max-width: 1234px;
@@ -2473,16 +2465,6 @@ html[data-route-motion="deeper"] .workspace-route-stage {
   padding: 12px 14px;
   font-size: 13px;
   line-height: 1.6;
-}
-
-.library-footer {
-  height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 24px;
-  color: #7b879c;
-  font-size: 12px;
 }
 
 .library-aside {
@@ -5196,13 +5178,6 @@ html.workspace-resizing-y * {
 
   .library-overview-body {
     grid-template-columns: 112px minmax(0, 1fr);
-  }
-
-  .library-footer {
-    flex-wrap: wrap;
-    height: auto;
-    padding: 18px 0 0;
-    gap: 8px 16px;
   }
 
   .radar-layout {
