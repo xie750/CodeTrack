@@ -3632,10 +3632,15 @@ html[data-route-motion="deeper"] .workspace-route-stage {
   display: flex;
   align-items: center;
   gap: 7px;
-  overflow: hidden;
   color: #101a31;
   font-size: 15px;
   font-weight: 800;
+}
+
+/* 标题单独包一层：ellipsis 对 flex 容器自身的文本不生效，必须落在子项上 */
+.class-row-title {
+  min-width: 0;
+  overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
