@@ -60,7 +60,12 @@ def test_openapi_contains_demo_contract_paths():
             "/api/v1/diagnoses/{diagnosis_id}/hints",
             "/api/v1/submissions/{submission_id}/versions",
             "/api/v1/submissions/{submission_id}/summary",
+            "/api/v1/teacher/courses",
+            "/api/v1/teacher/courses/{course_id}",
             "/api/v1/teacher/courses/{course_id}/submissions",
+            "/api/v1/teacher/teaching-assignments",
+            "/api/v1/teacher/tasks/{task_id}/monitor",
+            "/api/v1/teacher/dashboard",
             "/api/v1/teacher/submissions/{submission_id}/timeline",
         }
         assert required_paths.issubset(set(paths))

@@ -5393,3 +5393,38 @@ html.workspace-resizing-y * {
     grid-template-columns: 1fr;
   }
 }
+
+/* 教师端模块内二级导航（TeacherSubNav） */
+.teacher-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.teacher-subnav a {
+  padding: 7px 15px;
+  border: 1px solid #e3e9f2;
+  border-radius: 8px;
+  color: #40506a;
+  font-size: 14px;
+  text-decoration: none;
+  background: #ffffff;
+  transition:
+    background 180ms var(--motion-soft),
+    border-color 180ms var(--motion-soft),
+    color 180ms var(--motion-soft);
+}
+
+.teacher-subnav a:hover {
+  border-color: #c9dcff;
+  color: #176cf5;
+  background: #f5f8ff;
+}
+
+.teacher-subnav a.active {
+  border-color: #c9dcff;
+  color: #176cf5;
+  background: #edf4ff;
+  font-weight: 700;
+}

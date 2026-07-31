@@ -97,5 +97,6 @@ def run_sandbox_execution(
         source_code,
         [case_from_record(case) for case in test_cases],
         timeout_seconds=timeout_seconds,
+        compiler=settings.cxx,
     )
     return _from_runner_result(result, {"profile": "local_dev_fallback"})

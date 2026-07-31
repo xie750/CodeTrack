@@ -409,7 +409,7 @@ function clearApiCache(predicate?: (url: string) => boolean) {
   }
 }
 
-async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
+export async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(authHeaders());
   new Headers(options.headers).forEach((value, key) => headers.set(key, value));
   const response = await fetch(url, {

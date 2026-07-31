@@ -40,8 +40,8 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           </strong>
         </div>
         <div className="login-copy">
-          <h1>登录学生助学系统</h1>
-          <p>使用 SQLite seed 账号进入，系统会按登录身份加载班级、课程任务和学习画像。</p>
+          <h1>登录 CodeTrack 教学与助学平台</h1>
+          <p>系统将根据账号角色自动进入学生端或教师端。</p>
         </div>
 
         <form className="login-form" onSubmit={handleSubmit}>
@@ -77,6 +77,8 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           <span>演示账号</span>
           <button type="button" onClick={() => setUsername("wang")}>王同学 / wang</button>
           <button type="button" onClick={() => setUsername("liu")}>刘同学 / liu</button>
+          <button type="button" onClick={() => setUsername("teacher_wang")}>王老师 / teacher_wang</button>
+          <button type="button" onClick={() => setUsername("teacher_li")}>李老师 / teacher_li</button>
         </div>
       </section>
     </main>
