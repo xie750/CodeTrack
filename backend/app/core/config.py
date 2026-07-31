@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     demo_user_id: str = Field(default="user_student_001")
     sandbox_timeout_seconds: int = Field(default=3)
     sandbox_service_url: str | None = Field(default=None)
+    # 本机 g++ 的绝对路径，留空则用 PATH 上的 g++。见 .env 里的说明。
+    cxx: str | None = Field(default=None)
     model_gateway_url: str | None = Field(default=None)
     model_api_key: str | None = Field(default=None)
     model_api_base_url: str = Field(default="https://api.openai.com/v1")

@@ -160,6 +160,38 @@ def security_rejected(reason: str) -> SandboxResult:
     )
 
 
+def infrastructure_error(reason: str, detail: str) -> SandboxResult:
+    return SandboxResult(
+        status="INFRASTRUCTURE_ERROR",
+        compile_exit_code=None,
+        compiler_stdout="",
+        compiler_stderr=detail,
+        tests=[],
+        failure_reason=reason,
+    )
+
+
+def compiler_command(override: str | None = None) -> str:
+    # 独立部署时走环境变量（跟 CODETRACK_SANDBOX_EXECUTION_MODE 一致）；
+    # 后端进程内直连时由调用方把 settings.cxx 传进来。空串一律当没配。
+    return override or os.getenv("CODETRACK_CXX") or "g++"
+
+
+def compiler_env(cxx: str) -> dict[str, str] | None:
+    # 给 CODETRACK_CXX 填绝对路径时，把编译器所在目录插到子进程 PATH 最前面。
+    # 光有绝对路径不够：g++ 会去启动 cc1plus.exe，而 cc1plus 仍然按 PATH 找自己
+    # 的运行时 DLL。Windows 上 Git Bash 把 Git 自带的 mingw64 运行时
+    # （libgcc_s_seh-1 / libwinpthread-1 / libgmp-10 …）排在 MSYS2 UCRT64 之前，
+    # UCRT64 的 cc1plus 加载到不兼容的同名 DLL 会静默退出 127，最终表现成一个
+    # stderr 全空的 COMPILE_ERROR。只改子进程的 PATH，不影响后端自身。
+    directory = os.path.dirname(cxx)
+    if not directory:
+        return None
+    env = dict(os.environ)
+    env["PATH"] = directory + os.pathsep + env.get("PATH", "")
+    return env
+
+
 def parse_test_stdout(stdout: str, tests: list[SandboxTestCase]) -> list[dict[str, Any]]:
     output_by_id: dict[str, tuple[str, int]] = {}
     for line in stdout.splitlines():
@@ -197,6 +229,7 @@ def run_linked_list_tests(
     source_code: str,
     tests: list[SandboxTestCase],
     timeout_seconds: int = 3,
+    compiler: str | None = None,
 ) -> SandboxResult:
     rejection_reason = validate_source(source_code)
     if rejection_reason:
@@ -209,7 +242,9 @@ def run_linked_list_tests(
         main_cpp.write_text(build_driver_source(source_code, tests), encoding="utf-8")
 
         compile_start = perf_counter()
-        compile_cmd = ["g++", "-std=c++17", "-O2", "-pipe", str(main_cpp), "-o", str(exe)]
+        cxx = compiler_command(compiler)
+        env = compiler_env(cxx)
+        compile_cmd = [cxx, "-std=c++17", "-O2", "-pipe", str(main_cpp), "-o", str(exe)]
         compile_timeout = max(15, timeout_seconds * 5)
         try:
             compiled = subprocess.run(
@@ -218,6 +253,12 @@ def run_linked_list_tests(
                 capture_output=True,
                 text=True,
                 timeout=compile_timeout,
+                env=env,
+            )
+        except FileNotFoundError:
+            return infrastructure_error(
+                "COMPILER_NOT_FOUND",
+                f"找不到 C++ 编译器 {cxx!r}。装一个 g++，或用 CODETRACK_CXX 指定绝对路径。",
             )
         except subprocess.TimeoutExpired as exc:
             return SandboxResult(
@@ -230,6 +271,17 @@ def run_linked_list_tests(
             )
 
         if compiled.returncode != 0:
+            # 编译失败但一条诊断都没输出 —— 学生代码再怎么错也会有 error:，
+            # 所以这是编译器自身起不来（多半是运行时 DLL 被同名文件顶掉），
+            # 不能报给学生说他代码有问题。
+            if not compiled.stdout.strip() and not compiled.stderr.strip():
+                return infrastructure_error(
+                    "COMPILER_NO_DIAGNOSTICS",
+                    f"{cxx} 以退出码 {compiled.returncode} 失败且没有任何输出，"
+                    "说明编译器本身无法运行，通常是 PATH 上混入了同名但不兼容的"
+                    "运行时 DLL。把 CODETRACK_CXX 设成编译器的绝对路径即可"
+                    "（会自动把它所在目录提到子进程 PATH 最前面）。",
+                )
             return SandboxResult(
                 status="COMPILE_ERROR",
                 compile_exit_code=compiled.returncode,
@@ -246,6 +298,13 @@ def run_linked_list_tests(
                 capture_output=True,
                 text=True,
                 timeout=remaining,
+                env=env,
+            )
+        except FileNotFoundError:
+            # 编译报了 0 却没落地可执行文件，同样是环境问题而非代码问题。
+            return infrastructure_error(
+                "EXECUTABLE_MISSING",
+                f"{cxx} 返回 0 但没有生成 {exe.name}。",
             )
         except subprocess.TimeoutExpired as exc:
             return SandboxResult(
