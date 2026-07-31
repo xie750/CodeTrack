@@ -1505,7 +1505,7 @@ html[data-route-motion="deeper"] .workspace-route-stage {
   min-height: 85px;
   padding: 14px 16px;
   display: grid;
-  grid-template-columns: 40px minmax(210px, 1fr) 130px 96px;
+  grid-template-columns: 40px minmax(210px, 1fr) 130px 104px;
   align-items: center;
   gap: 16px;
   border: 1px solid #e8edf4;
@@ -1629,19 +1629,34 @@ html[data-route-motion="deeper"] .workspace-route-stage {
 }
 
 .outline-btn {
-  height: 39px;
+  height: 38px;
   padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   border: 1px solid #2674ef;
   border-radius: 8px;
   color: #1767e6;
   background: #ffffff;
-  font-weight: 800;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
   cursor: pointer;
-  transition: border-color 180ms var(--motion-soft), color 180ms var(--motion-soft), background 180ms var(--motion-soft), transform 180ms var(--motion-soft);
+  transition: border-color 180ms var(--motion-soft), color 180ms var(--motion-soft), background 180ms var(--motion-soft), transform 180ms var(--motion-soft), box-shadow 180ms var(--motion-soft);
 }
 
 .outline-btn:hover {
+  border-color: #1a63e0;
   background: #f1f6ff;
+  box-shadow: 0 2px 8px rgba(23, 108, 245, 0.14);
+}
+
+.outline-btn:active {
+  transform: translateY(1px);
+  box-shadow: none;
 }
 
 .recommendations {
@@ -1677,6 +1692,8 @@ html[data-route-motion="deeper"] .workspace-route-stage {
 .recommendation .outline-btn {
   width: 100%;
   margin-top: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .analytics-grid {
@@ -2060,7 +2077,31 @@ html[data-route-motion="deeper"] .workspace-route-stage {
   color: #176cf5;
 }
 
-.library-select-sm,
+.library-course-select {
+  position: relative;
+  cursor: pointer;
+}
+
+.library-course-select select {
+  flex: 0 0 auto;
+  max-width: 260px;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.library-course-select svg {
+  pointer-events: none;
+}
+
 .library-sort {
   min-width: 107px;
 }
@@ -3513,10 +3554,122 @@ html[data-route-motion="deeper"] .workspace-route-stage {
   height: 312px;
   padding: 22px 20px 80px;
   overflow: hidden;
+  transition: border-color 180ms var(--motion-soft), transform 180ms var(--motion-soft), box-shadow 180ms var(--motion-soft);
 }
 
+.class-task-card:hover {
+  border-color: #cfe0ff;
+  transform: translateY(-1px);
+  box-shadow: 0 12px 30px rgba(31, 59, 105, 0.09);
+}
+
+/* 「进行中」只做轻量标识：淡蓝描边 + 渐层底色，不再用 2px 蓝框（那看着像被选中） */
 .class-task-card.highlight {
-  border: 2px solid #176cf5;
+  border-color: #cddfff;
+  background: linear-gradient(180deg, #f7fbff, #ffffff 58%);
+}
+
+.class-task-card.highlight:hover {
+  border-color: #a9c9ff;
+}
+
+.class-task-card:focus-within {
+  border-color: #9dc2ff;
+  box-shadow: 0 0 0 3px rgba(23, 108, 245, 0.14);
+}
+
+/* 列表视图：同样的信息量，换成一屏能看更多条的密排行 */
+.class-task-list {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.class-task-row {
+  min-height: 72px;
+  padding: 13px 18px;
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr) 148px 156px 92px;
+  align-items: center;
+  gap: 18px;
+  transition: border-color 180ms var(--motion-soft), transform 180ms var(--motion-soft), box-shadow 180ms var(--motion-soft);
+}
+
+.class-task-row:hover {
+  border-color: #cfe0ff;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(31, 59, 105, 0.08);
+}
+
+.class-task-row.highlight {
+  border-color: #cddfff;
+  background: linear-gradient(90deg, #f7fbff, #ffffff 42%);
+}
+
+.class-task-row.highlight:hover {
+  border-color: #a9c9ff;
+}
+
+.class-task-row:focus-within {
+  border-color: #9dc2ff;
+  box-shadow: 0 0 0 3px rgba(23, 108, 245, 0.14);
+}
+
+.class-task-row .class-badge {
+  justify-content: center;
+  width: 100%;
+  min-height: 26px;
+  padding: 0 6px;
+  font-size: 12px;
+}
+
+.class-row-main {
+  min-width: 0;
+}
+
+.class-row-main h2 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+  color: #101a31;
+  font-size: 15px;
+  font-weight: 800;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.class-row-flame {
+  flex: 0 0 auto;
+  color: #ff4d4f;
+}
+
+.class-task-row .class-tag-row {
+  margin-top: 6px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.class-task-row .class-tag-row span {
+  flex: 0 0 auto;
+  min-height: 21px;
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
+.class-row-meta {
+  max-height: none;
+  margin-top: 0;
+  gap: 6px;
+}
+
+.class-row-progress {
+  min-width: 0;
+}
+
+.class-row-progress .class-progress {
+  margin-top: 6px;
 }
 
 .hot-icon {
@@ -3645,21 +3798,72 @@ html[data-route-motion="deeper"] .workspace-route-stage {
   background: linear-gradient(90deg, #176cf5, #2f8cff);
 }
 
-.class-task-bottom button {
+.class-task-bottom button,
+.class-task-row > button {
   height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid #84adff;
   border-radius: 7px;
   color: #176cf5;
   background: #ffffff;
   font-size: 13px;
-  font-weight: 900;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
+  transition: border-color 180ms var(--motion-soft), color 180ms var(--motion-soft), background 180ms var(--motion-soft), transform 180ms var(--motion-soft), box-shadow 180ms var(--motion-soft);
 }
 
-.class-task-bottom button.primary {
+.class-task-bottom button:hover,
+.class-task-row > button:hover {
+  border-color: #2c78ff;
+  background: #f1f6ff;
+  box-shadow: 0 2px 8px rgba(23, 108, 245, 0.14);
+}
+
+.class-task-bottom button.primary,
+.class-task-row > button.primary {
   border-color: #176cf5;
   color: #ffffff;
   background: linear-gradient(180deg, #2c83ff, #1165ed);
+  box-shadow: 0 4px 10px rgba(20, 103, 248, 0.18);
+}
+
+.class-task-bottom button.primary:hover,
+.class-task-row > button.primary:hover {
+  background: linear-gradient(180deg, #1f79ff, #0b5cdf);
+  box-shadow: 0 6px 14px rgba(20, 103, 248, 0.26);
+}
+
+.class-task-bottom button:active,
+.class-task-row > button:active {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+
+.class-empty {
+  margin-top: 24px;
+  padding: 34px 24px;
+  border: 1px dashed #cdd8e8;
+  border-radius: 10px;
+  background: #f8fbff;
+  text-align: center;
+}
+
+.class-empty h2 {
+  color: #26334c;
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.class-empty p {
+  max-width: 560px;
+  margin: 8px auto 0;
+  color: #5f6d83;
+  font-size: 13px;
+  line-height: 1.7;
 }
 
 .class-task-side {
