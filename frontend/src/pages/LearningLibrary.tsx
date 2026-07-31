@@ -30,6 +30,7 @@ type FavoriteItem = {
   badgeClass: "green" | "purple" | "orange";
   tags: string[];
   description: string;
+  courseId: string;
   course: string;
   className: string;
   teacherName: string;
@@ -80,6 +81,7 @@ function taskToFavorite(task: StudentTaskCard): FavoriteItem {
     ...typeInfo,
     tags: ["教师下发", ...task.knowledge_points].slice(0, 4),
     description: task.description || task.latest_summary,
+    courseId: task.course_id,
     course: task.course_name,
     className: task.class_name,
     teacherName: task.teacher_name,
@@ -102,6 +104,7 @@ export default function LearningLibrary() {
   const [activeTab, setActiveTab] = useState("全部收藏");
   const [query, setQuery] = useState("");
   const [context, setContext] = useState<LearningContext | null>(null);
+  const [selectedCourseId, setSelectedCourseId] = useState("");
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [tasks, setTasks] = useState<StudentTaskCard[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
@@ -122,7 +125,7 @@ export default function LearningLibrary() {
 
         const courseId = data.courses[0]?.course_id;
         const [taskResult, profileResult] = await Promise.allSettled([
-          api.listStudentTasks(courseId),
+          api.listStudentTasks(),
           courseId ? api.getStudentProfile(courseId) : Promise.resolve(null)
         ]);
         if (!alive) return;
@@ -153,10 +156,30 @@ export default function LearningLibrary() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!selectedCourseId) return;
+    let alive = true;
+    api
+      .getStudentProfile(selectedCourseId)
+      .then((data) => {
+        if (alive) setProfile(data);
+      })
+      .catch(() => {
+        if (alive) setProfile(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [selectedCourseId]);
+
   const allItems = useMemo(() => tasks.map(taskToFavorite), [tasks]);
+  const courseItems = useMemo(
+    () => (selectedCourseId ? allItems.filter((item) => item.courseId === selectedCourseId) : allItems),
+    [allItems, selectedCourseId]
+  );
   const visibleItems = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    return allItems.filter((item) => {
+    return courseItems.filter((item) => {
       const isFavorite = favoriteIds.has(item.id);
       const wasRecentlyChanged = recentlyChangedIds.has(item.id);
       if (!isFavorite && !wasRecentlyChanged) return false;
@@ -169,9 +192,9 @@ export default function LearningLibrary() {
         item.tags.some((tag) => tag.toLowerCase().includes(normalizedQuery));
       return typeMatch && queryMatch;
     });
-  }, [activeTab, allItems, favoriteIds, query, recentlyChangedIds]);
+  }, [activeTab, courseItems, favoriteIds, query, recentlyChangedIds]);
 
-  const favoriteItems = useMemo(() => allItems.filter((item) => favoriteIds.has(item.id)), [allItems, favoriteIds]);
+  const favoriteItems = useMemo(() => courseItems.filter((item) => favoriteIds.has(item.id)), [courseItems, favoriteIds]);
   const typeCounts = useMemo(() => {
     return favoriteItems.reduce(
       (counts, item) => {
@@ -182,8 +205,6 @@ export default function LearningLibrary() {
     );
   }, [favoriteItems]);
 
-  const courseName = context?.courses[0]?.course_name ?? "数据结构与程序设计基础";
-  const className = context?.student.class_name ?? "当前班级";
   const weakPoint = profile?.knowledge_states.find((item) => item.state === "WEAK")?.knowledge_point ?? "链表边界处理";
 
   function toggleFavorite(item: FavoriteItem) {
@@ -213,14 +234,21 @@ export default function LearningLibrary() {
         <header className="library-head">
           <div className="library-head-left">
             <h1>收藏夹</h1>
-            <button type="button" className="library-select">
-              {className}
+            <div className="library-select library-course-select">
+              <select
+                value={selectedCourseId}
+                onChange={(event) => setSelectedCourseId(event.target.value)}
+                aria-label="按课程筛选收藏"
+              >
+                <option value="">全部课程</option>
+                {(context?.courses ?? []).map((course) => (
+                  <option key={course.course_id} value={course.course_id}>
+                    {course.course_name}
+                  </option>
+                ))}
+              </select>
               <ChevronDown size={17} />
-            </button>
-            <button type="button" className="library-select library-select-sm">
-              {courseName}
-              <ChevronDown size={17} />
-            </button>
+            </div>
           </div>
           <label className="library-search">
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索已收藏任务" />
