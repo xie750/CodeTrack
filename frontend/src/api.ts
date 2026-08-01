@@ -120,12 +120,19 @@ export type TaskDetail = {
     editable_region: string;
     student_template: string;
     rules: string[];
+    runner_profile: string;
+    supported_languages: string[];
+    default_language: string;
+    language_templates: Record<string, string>;
+    language_labels: Record<string, string>;
+    comparison: string;
   };
   learning_objectives: string[];
   public_tests: Array<{
     test_case_id: string;
     name: string;
-    input_summary: { values: number[]; position: number };
+    input_summary: Record<string, unknown>;
+    expected_output: unknown;
     expected_output_summary: string;
   }>;
   current_progress: {
@@ -474,14 +481,14 @@ export const api = {
     cachedGet<StudentTaskCard[]>(studentTasksUrl(courseId)),
   getStudentProfile: (courseId?: string) =>
     cachedGet<StudentProfile>(studentProfileUrl(courseId)),
-  submitCode: async (taskId: string, sourceCode: string) => {
+  submitCode: async (taskId: string, language: string, sourceCode: string) => {
     const result = await request<SubmitResponse>(`/api/v1/tasks/${taskId}/submissions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Idempotency-Key": crypto.randomUUID()
       },
-      body: JSON.stringify({ language: "CPP", source_code: sourceCode })
+      body: JSON.stringify({ language, source_code: sourceCode })
     });
     clearApiCache((url) => url.startsWith("/api/v1/student/") || url === "/api/v1/tasks");
     return result;
@@ -491,6 +498,7 @@ export const api = {
       `/api/v1/student/assignments/${assignmentId}/answers`,
       {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ answers })
       }
     );
@@ -500,6 +508,7 @@ export const api = {
   submitQuestionAnswers: async (assignmentId: string, answers: Array<{ question_id: string; selected_option_ids: string[] }>) => {
     const result = await request<SubmitQuestionResult>(`/api/v1/student/assignments/${assignmentId}/submit-answers`, {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ answers })
     });
     clearApiCache((url) => url.startsWith("/api/v1/student/"));

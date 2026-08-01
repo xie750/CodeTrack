@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -5,9 +7,11 @@ class SandboxCase(BaseModel):
     test_case_id: str
     name: str
     visibility: str
-    input_values: list[int]
-    position: int
-    expected_values: list[int]
+    input_values: list[int] | None = None
+    position: int | None = None
+    expected_values: list[int] | None = None
+    input_data: Any | None = None
+    expected_output: Any | None = None
     expected_output_summary: str
     hidden_failure_summary: str | None = None
     error_tag: str
@@ -16,7 +20,7 @@ class SandboxCase(BaseModel):
 
 class SandboxRunRequest(BaseModel):
     execution_id: str
-    language: str = Field(pattern="^CPP$")
+    language: str
     source_code: str
     test_cases: list[SandboxCase]
     timeout_seconds: int = 3
@@ -31,4 +35,3 @@ class SandboxRunResponse(BaseModel):
     tests: list[dict]
     failure_reason: str | None = None
     resource_usage: dict = Field(default_factory=dict)
-

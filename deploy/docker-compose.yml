@@ -26,6 +26,7 @@ services:
       CODETRACK_DEMO_USER_ID: user_student_001
       CODETRACK_SANDBOX_TIMEOUT_SECONDS: "3"
       CODETRACK_SANDBOX_SERVICE_URL: http://sandbox:8011
+      CODETRACK_PISTON_BASE_URL: http://piston:2000
       CODETRACK_MODEL_GATEWAY_URL: ""
       CODETRACK_MODEL_API_KEY: ""
       CODETRACK_MODEL_API_BASE_URL: https://api.openai.com/v1
@@ -34,6 +35,8 @@ services:
       postgres:
         condition: service_healthy
       sandbox:
+        condition: service_started
+      piston:
         condition: service_started
     ports:
       - "8000:8000"
@@ -63,6 +66,16 @@ services:
     networks:
       - app_net
 
+  piston:
+    image: ghcr.io/engineer-man/piston
+    privileged: true
+    volumes:
+      - piston_packages:/piston/packages
+    tmpfs:
+      - /tmp:exec
+    networks:
+      - app_net
+
   frontend:
     image: node:20-alpine
     working_dir: /app/frontend
@@ -78,6 +91,7 @@ services:
 
 volumes:
   codetrack_pg:
+  piston_packages:
 
 networks:
   app_net:

@@ -10,8 +10,8 @@ from backend.app.core.config import get_settings
 from backend.app.core.database import SessionLocal, get_db
 from backend.app.core.security import current_user, ensure_course_member, require_role
 from backend.app.models import Course, Enrollment, Submission, Task, TestCase, User
-from backend.app.services.seed import STUDENT_TEMPLATE
 from backend.app.services.audit import record_audit
+from backend.app.services.programming_specs import get_programming_spec
 from backend.app.services.submissions import create_submission_version, iso, run_execution
 
 router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
@@ -31,6 +31,7 @@ def run_execution_background(execution_id: str, timeout_seconds: int) -> None:
 
 
 def progress_for(db: Session, task_id: str, student_id: str) -> dict:
+    total_required = db.query(TestCase).filter(TestCase.task_id == task_id, TestCase.required.is_(True)).count()
     submission = db.scalar(
         select(Submission).where(Submission.task_id == task_id, Submission.student_id == student_id)
     )
@@ -41,7 +42,7 @@ def progress_for(db: Session, task_id: str, student_id: str) -> dict:
             "status": "NOT_STARTED",
             "version_no": None,
             "passed_count": 0,
-            "total_required_count": 5,
+            "total_required_count": total_required,
             "highest_hint_level": 0,
         }
     latest = submission.versions[-1] if submission.versions else None
@@ -116,6 +117,7 @@ def get_task(
         .order_by(TestCase.sort_order.asc())
         .all()
     )
+    spec = get_programming_spec(task)
     data = {
         "task_id": task.id,
         "course_id": task.course_id,
@@ -123,22 +125,14 @@ def get_task(
         "language": task.language,
         "status": task.status,
         "description": task.description,
-        "interface_spec": {
-            "function_signature": task.interface_spec,
-            "editable_region": "FUNCTION_ONLY",
-            "student_template": STUDENT_TEMPLATE,
-            "rules": [
-                "空链表返回 nullptr",
-                "非法位置返回原链表",
-                "删除头节点时返回新的头节点",
-            ],
-        },
+        "interface_spec": spec.to_api(),
         "learning_objectives": json.loads(task.learning_objectives),
         "public_tests": [
             {
                 "test_case_id": case.id,
                 "name": case.name,
                 "input_summary": json.loads(case.input_data),
+                "expected_output": json.loads(case.expected_output),
                 "expected_output_summary": case.expected_output_summary,
             }
             for case in public_tests

@@ -21,6 +21,7 @@ from backend.app.models import (
 from backend.app.models.entities import utc_now
 from backend.app.services.audit import record_audit
 from backend.app.services.diagnosis import create_diagnosis_for_version
+from backend.app.services.programming_specs import get_programming_spec, normalize_language
 from backend.app.services.sandbox_client import run_sandbox_execution
 
 
@@ -64,8 +65,11 @@ def create_submission_version(
     task = one_or_404(db, Task, task_id, "TASK_NOT_FOUND", "任务不存在")
     if task.status != "OPEN":
         raise ApiError(422, "TASK_NOT_OPEN", "任务未开放")
-    if language != "CPP":
-        raise ApiError(400, "SUBMISSION_LANGUAGE_NOT_SUPPORTED", "当前任务仅支持 CPP")
+    spec = get_programming_spec(task)
+    normalized_language = normalize_language(language)
+    if not spec.supports(normalized_language):
+        supported = ", ".join(spec.supported_languages)
+        raise ApiError(400, "SUBMISSION_LANGUAGE_NOT_SUPPORTED", f"当前任务支持语言：{supported}")
     if source_code.strip() == "":
         raise ApiError(400, "SUBMISSION_CODE_EMPTY", "代码不能为空")
     if len(source_code.encode("utf-8")) > 20 * 1024:
@@ -108,7 +112,7 @@ def create_submission_version(
         id=prefixed_id("ver"),
         submission_id=submission.id,
         version_no=next_version_no,
-        language=language,
+        language=normalized_language,
         source_code=source_code,
         code_hash=code_hash(source_code),
         created_at=now,
@@ -157,6 +161,7 @@ def run_execution(db: Session, execution_id: str, timeout_seconds: int, audit_re
     )
     submission = one_or_404(db, Submission, version.submission_id, "SUBMISSION_NOT_FOUND", "提交不存在")
     task = one_or_404(db, Task, submission.task_id, "TASK_NOT_FOUND", "任务不存在")
+    spec = get_programming_spec(task)
     test_cases = (
         db.query(TestCase)
         .filter(TestCase.task_id == task.id)
@@ -171,6 +176,7 @@ def run_execution(db: Session, execution_id: str, timeout_seconds: int, audit_re
 
     sandbox_result = run_sandbox_execution(
         execution_id=execution.id,
+        task=task,
         language=version.language,
         source_code=version.source_code,
         test_cases=test_cases,
@@ -247,7 +253,7 @@ def run_execution(db: Session, execution_id: str, timeout_seconds: int, audit_re
             "compile_status": "SUCCEEDED" if execution.compile_exit_code == 0 else "FAILED",
             "passed_count": passed_count,
             "failed_count": failed_count,
-            "resource_profile": "demo_cpp_v0_1",
+            "resource_profile": spec.runner_profile,
             "failure_reason": execution.failure_reason,
         },
     )
@@ -263,6 +269,8 @@ def create_capability_evidence(db: Session, submission: Submission, version: Sub
     if existing is not None:
         return
 
+    capability_ids = json.loads(submission.task.capability_ids or "[]")
+    capability_id = capability_ids[0] if capability_ids else "cap_linked_list_boundary"
     highest_hint = max((item.highest_hint_level for item in submission.versions), default=0)
     viewed_reference = any(item.viewed_reference_answer for item in submission.versions)
     if viewed_reference:
@@ -273,23 +281,23 @@ def create_capability_evidence(db: Session, submission: Submission, version: Sub
     elif highest_hint == 0 and version.version_no == 1:
         strength = "STRONG"
         evidence_type = "INDEPENDENT_PASS"
-        explanation = "学生首次独立通过全部必要测试，形成链表边界处理强正向证据。"
+        explanation = "学生首次独立通过全部必要测试，形成强正向掌握证据。"
         state = "MASTERED"
     elif highest_hint <= 1:
         strength = "MODERATE"
         evidence_type = "PASSED_AFTER_LEVEL_1_HINT"
-        explanation = "学生在一级提示或少量尝试后修复并通过全部必要测试，形成链表边界处理中等正向证据。"
+        explanation = "学生在一级提示或少量尝试后修复并通过全部必要测试，形成中等正向证据。"
         state = "EMERGING"
     else:
         strength = "WEAK"
         evidence_type = "PASSED_AFTER_HIGH_LEVEL_HINT"
-        explanation = "学生在较高层级提示后通过全部必要测试，形成链表边界处理弱正向证据。"
+        explanation = "学生在较高层级提示后通过全部必要测试，形成弱正向证据。"
         state = "OBSERVING"
     db.add(
         CapabilityEvidence(
             id=prefixed_id("evi"),
             student_id=submission.student_id,
-            capability_id="cap_linked_list_boundary",
+            capability_id=capability_id,
             task_id=submission.task_id,
             submission_version_id=version.id,
             evidence_type=evidence_type,
@@ -297,7 +305,7 @@ def create_capability_evidence(db: Session, submission: Submission, version: Sub
             explanation=explanation,
         )
     )
-    update_capability_state(db, submission.student_id, "cap_linked_list_boundary", state, explanation)
+    update_capability_state(db, submission.student_id, capability_id, state, explanation)
 
 
 def create_negative_capability_evidence(
@@ -349,7 +357,7 @@ def create_negative_capability_evidence(
     capability_id = repeated[0][1]
     repeated_tags = sorted({error_tag for error_tag, _ in repeated})
     tag_summary = "、".join(repeated_tags)
-    explanation = f"同类链表边界错误在多个提交版本中重复出现（{tag_summary}），形成需要支持的负向能力证据。"
+    explanation = f"同类错误在多个提交版本中重复出现（{tag_summary}），形成需要支持的负向能力证据。"
     db.add(
         CapabilityEvidence(
             id=prefixed_id("evi"),
@@ -357,7 +365,7 @@ def create_negative_capability_evidence(
             capability_id=capability_id,
             task_id=submission.task_id,
             submission_version_id=version.id,
-            evidence_type="REPEATED_BOUNDARY_FAILURE",
+            evidence_type="REPEATED_TEST_FAILURE",
             strength="NEGATIVE",
             explanation=explanation,
         )
