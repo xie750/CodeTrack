@@ -5,13 +5,23 @@ import type {
   AiReviewDetailData,
   AiReviewQueue,
   AiReviewQueueFilters,
+  ChapterCreatePayload,
+  ChapterUpdatePayload,
   ClassAlerts,
   ClassAnalytics,
+  CourseClassFilters,
+  CourseClassListData,
+  CourseRosterData,
+  CourseRosterFilters,
+  CourseSyllabusData,
   DiagnosisClassOption,
   DiagnosisStudentOption,
   DiagnosisTaskOption,
   ImprovementStrategyData,
   ImprovementStrategyFilters,
+  KnowledgePointCreatePayload,
+  KnowledgePointUpdatePayload,
+  KnowledgePointUsageDetail,
   MonitorBoardData,
   MonitorBoardFilters,
   ResourceCreatePayload,
@@ -19,6 +29,9 @@ import type {
   ResourceUpdatePayload,
   ResourceUploadPayload,
   StudentAnalytics,
+  SyllabusChapter,
+  SyllabusKnowledgePoint,
+  SyllabusReorderPayload,
   TeacherCourse,
   TeacherDashboardData,
   TeacherDashboardFilters,
@@ -355,4 +368,134 @@ export const copyTeacherResource = (resourceId: string, targetCourseId: string) 
 export const getResourceReferences = (resourceId: string) =>
   request<ResourceReferences>(
     `/api/v1/teacher/resources/${encodeURIComponent(resourceId)}/references`
+  );
+
+// ===== 课程教学（开发方案 §六） =====
+
+/**
+ * 教学班卡片（§6.1）。一行 = 一个「行政班 × 课程」教学安排。
+ *
+ * 注意这里用 /course-classes 而不是 getTeacherCourses()：后者按课程聚合，
+ * §6.1 要的是教学班，同一门课的两个班要分开显示。
+ */
+export const getCourseClasses = (filters: CourseClassFilters = {}) =>
+  request<CourseClassListData>(
+    withQuery("/api/v1/teacher/course-classes", {
+      term: filters.term,
+      keyword: filters.keyword,
+    })
+  );
+
+/** 教学班学生名单（§6.1）。只读，风险等级与预警中心同源 */
+export const getCourseRoster = (
+  teachingAssignmentId: string,
+  filters: CourseRosterFilters = {}
+) =>
+  request<CourseRosterData>(
+    withQuery(
+      `/api/v1/teacher/course-classes/${encodeURIComponent(teachingAssignmentId)}/students`,
+      {
+        keyword: filters.keyword,
+        risk: filters.risk || undefined,
+        page: filters.page ? String(filters.page) : undefined,
+        page_size: filters.pageSize ? String(filters.pageSize) : undefined,
+      }
+    )
+  );
+
+/** 编辑课程教学说明（§6.1 唯一的写操作）。课程的建立和归档是管理员端职责 */
+export const updateCourseDescription = (courseId: string, description: string) =>
+  request<{ course_id: string; title: string; description: string; status: string }>(
+    `/api/v1/teacher/courses/${encodeURIComponent(courseId)}/description`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ description }),
+    }
+  );
+
+/** 整棵章节—知识点树（§6.2）。一次取全量，章节树本来就要整棵展示 */
+export const getCourseSyllabus = (courseId: string) =>
+  request<CourseSyllabusData>(
+    `/api/v1/teacher/courses/${encodeURIComponent(courseId)}/syllabus`
+  );
+
+export const createChapter = (courseId: string, payload: ChapterCreatePayload) =>
+  request<SyllabusChapter>(`/api/v1/teacher/courses/${encodeURIComponent(courseId)}/chapters`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+export const updateChapter = (chapterId: string, payload: ChapterUpdatePayload) =>
+  request<SyllabusChapter>(`/api/v1/teacher/chapters/${encodeURIComponent(chapterId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+/** 删除章节。名下还有生效知识点会返回 409 CHAPTER_NOT_EMPTY（§6.2） */
+export const deleteChapter = (chapterId: string) =>
+  request<{ chapter_id: string; deleted: boolean }>(
+    `/api/v1/teacher/chapters/${encodeURIComponent(chapterId)}`,
+    { method: "DELETE" }
+  );
+
+export const createKnowledgePoint = (
+  chapterId: string,
+  payload: KnowledgePointCreatePayload
+) =>
+  request<SyllabusKnowledgePoint>(
+    `/api/v1/teacher/chapters/${encodeURIComponent(chapterId)}/knowledge-points`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
+  );
+
+/**
+ * 编辑知识点（§6.2）。跨章节移动也走这里的 chapter_id。
+ *
+ * 被引用过的知识点改名会返回 409 KNOWLEDGE_POINT_IN_USE —— 软关联靠名字，
+ * 改了名历史资料、题目和画像的引用会静默变成孤儿。
+ */
+export const updateKnowledgePoint = (
+  knowledgePointId: string,
+  payload: KnowledgePointUpdatePayload
+) =>
+  request<SyllabusKnowledgePoint>(
+    `/api/v1/teacher/knowledge-points/${encodeURIComponent(knowledgePointId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
+  );
+
+/** 删除知识点。被资料/题目/画像引用过会返回 409 KNOWLEDGE_POINT_IN_USE（§6.2） */
+export const deleteKnowledgePoint = (knowledgePointId: string) =>
+  request<{ knowledge_point_id: string; deleted: boolean }>(
+    `/api/v1/teacher/knowledge-points/${encodeURIComponent(knowledgePointId)}`,
+    { method: "DELETE" }
+  );
+
+/** 引用明细，删除确认框据此列出具体资料和任务（§6.2） */
+export const getKnowledgePointUsage = (knowledgePointId: string) =>
+  request<KnowledgePointUsageDetail>(
+    `/api/v1/teacher/knowledge-points/${encodeURIComponent(knowledgePointId)}/usage`
+  );
+
+/**
+ * 拖拽排序（§6.2）。整层一次性提交而不是逐个 PATCH：
+ * 拖一次会改动多行顺序，分开发会出现中间态。返回刷新后的整棵树。
+ */
+export const reorderSyllabus = (courseId: string, payload: SyllabusReorderPayload) =>
+  request<CourseSyllabusData>(
+    `/api/v1/teacher/courses/${encodeURIComponent(courseId)}/syllabus/reorder`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
   );

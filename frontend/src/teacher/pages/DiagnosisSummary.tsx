@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { RefreshCw } from "lucide-react";
 import {
   getDiagnosisClassOptions,
@@ -40,17 +41,28 @@ const TABS: Array<{ key: Tab; label: string }> = [
 ];
 
 export default function DiagnosisSummary() {
+  /**
+   * 支持带范围的深链：课程与班级（§六 6.1）的「查看学情」会带上
+   * ?course_id=&class_id=&student_id=，落地就该是对应范围，不用教师再手选一遍。
+   * 只作为初值读一次，之后由页面内的选择器接管。
+   */
+  const [searchParams] = useSearchParams();
+  const initialCourseId = searchParams.get("course_id") ?? "";
+  const initialClassId = searchParams.get("class_id") ?? "";
+  const initialStudentId = searchParams.get("student_id") ?? "";
+
   const [assignments, setAssignments] = useState<TeacherTeachingAssignment[]>([]);
   const [classes, setClasses] = useState<DiagnosisClassOption[]>([]);
   const [students, setStudents] = useState<DiagnosisStudentOption[]>([]);
   const [tasks, setTasks] = useState<DiagnosisTaskOption[]>([]);
 
-  const [courseId, setCourseId] = useState("");
-  const [classId, setClassId] = useState("");
+  const [courseId, setCourseId] = useState(initialCourseId);
+  const [classId, setClassId] = useState(initialClassId);
   const [taskId, setTaskId] = useState("");
-  const [studentId, setStudentId] = useState("");
+  const [studentId, setStudentId] = useState(initialStudentId);
 
-  const [tab, setTab] = useState<Tab>("class");
+  // 带了 student_id 就直接落到个体诊断，否则看班级总览
+  const [tab, setTab] = useState<Tab>(initialStudentId ? "student" : "class");
   const [contextLoading, setContextLoading] = useState(true);
   const [error, setError] = useState("");
   // 改这个值即可强制三个子页重新拉数据，不必把 loader 提到本层

@@ -35,6 +35,13 @@ SAFE_DETAIL_KEYS = {
     "status",
     "target_course_id",
     "revision_id",
+    # 教师课程教学（§六 / §15.2）
+    "course_id",
+    "course_action",
+    "chapter_id",
+    "knowledge_point_id",
+    "knowledge_point_name",
+    "syllabus_action",
 }
 
 

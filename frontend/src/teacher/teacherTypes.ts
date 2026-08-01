@@ -1132,3 +1132,201 @@ export interface ResourceReferences {
     created_at: string | null;
   }>;
 }
+
+// ===== 课程教学（开发方案 §六） =====
+
+/** §6.1 风险筛选器。NORMAL 是「没命中任何预警规则」，不是预警中心的一个等级 */
+export type StudentRiskLevel = "NORMAL" | "NOTICE" | "WATCH" | "HIGH";
+
+/** §6.2 知识点标签：类型 */
+export type KnowledgePointType = "CONCEPT" | "SKILL" | "SYNTAX" | "ALGORITHM";
+
+/** §6.2 知识点标签：难度 */
+export type KnowledgePointDifficulty = "BASIC" | "INTERMEDIATE" | "ADVANCED";
+
+export type SyllabusStatus = "ACTIVE" | "ARCHIVED";
+
+/** §6.1 教学班卡片。一行 = 一个「行政班 × 课程」教学安排，不是按课程聚合 */
+export interface CourseClassCard {
+  teaching_assignment_id: string;
+  course_id: string;
+  title: string;
+  description: string;
+  class_id: string;
+  class_name: string;
+  grade: string;
+  major_name: string;
+  semester: string;
+  status: string;
+  student_count: number;
+  task_count: number;
+  created_at: string | null;
+}
+
+export interface CourseClassListData {
+  scope: { term: string };
+  stats: {
+    class_count: number;
+    course_count: number;
+    student_total: number;
+    task_total: number;
+  };
+  items: CourseClassCard[];
+  filters: {
+    terms: string[];
+    courses: Array<{ course_id: string; name: string }>;
+  };
+}
+
+/** §6.1 学生名单行。只读 —— 教师不能删学生或改行政班归属（§二 2.3） */
+export interface CourseRosterStudent {
+  student_id: string;
+  student_name: string;
+  username: string | null;
+  risk_level: StudentRiskLevel;
+  /** 命中的预警规则中文名。不只靠颜色表达状态 */
+  risk_rules: string[];
+  task_total: number;
+  completed_count: number;
+  in_progress_count: number;
+  not_started_count: number;
+  overdue_count: number;
+  /** null = 还没有成绩，与 0 分是两件事 */
+  avg_score: number | null;
+  last_activity_at: string | null;
+}
+
+export interface CourseRosterData {
+  scope: {
+    teaching_assignment_id: string;
+    course_id: string;
+    class_id: string;
+    term: string;
+  };
+  stats: {
+    total: number;
+    risk_counts: Record<StudentRiskLevel, number>;
+    task_total: number;
+  };
+  items: CourseRosterStudent[];
+  filters: {
+    risk_options: StudentRiskLevel[];
+    rules: Array<{ code: string; label: string }>;
+  };
+  /** 分页在 data 里：request() 只返回 data，meta 拿不到（对齐监控看板） */
+  page: number;
+  page_size: number;
+  /** 当前筛选后的总条数。整班人数看 stats.total */
+  total: number;
+  total_pages: number;
+}
+
+/** 知识点被谁引用（§6.2 删除前必须检查任务、资料和画像关联） */
+export interface KnowledgePointUsage {
+  resource_count: number;
+  question_count: number;
+  profile_count: number;
+  resources: Array<{ resource_id: string; title: string }>;
+  tasks: Array<{ task_id: string; title: string }>;
+}
+
+export interface SyllabusKnowledgePoint {
+  knowledge_point_id: string;
+  chapter_id: string;
+  course_id: string;
+  name: string;
+  summary: string;
+  point_type: KnowledgePointType;
+  difficulty: KnowledgePointDifficulty;
+  sort_order: number;
+  status: SyllabusStatus;
+  usage: KnowledgePointUsage;
+  /** false 时禁用删除按钮并用 blocked_reason 解释，不假装能删 */
+  deletable: boolean;
+  blocked_reason: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface SyllabusChapter {
+  chapter_id: string;
+  course_id: string;
+  title: string;
+  summary: string;
+  sort_order: number;
+  status: SyllabusStatus;
+  knowledge_points: SyllabusKnowledgePoint[];
+  knowledge_point_count: number;
+  deletable: boolean;
+  blocked_reason: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface CourseSyllabusData {
+  scope: { course_id: string; course_title: string };
+  stats: {
+    chapter_count: number;
+    knowledge_point_count: number;
+    /** 已被资料/题目/画像引用的知识点数 —— 这些不能删也不能改名 */
+    bound_point_count: number;
+  };
+  chapters: SyllabusChapter[];
+  filters: {
+    point_type_options: KnowledgePointType[];
+    difficulty_options: KnowledgePointDifficulty[];
+  };
+}
+
+export interface KnowledgePointUsageDetail extends KnowledgePointUsage {
+  knowledge_point_id: string;
+  name: string;
+  deletable: boolean;
+  blocked_reason: string | null;
+}
+
+export interface ChapterCreatePayload {
+  title: string;
+  summary?: string;
+}
+
+export interface ChapterUpdatePayload {
+  title?: string;
+  summary?: string;
+  status?: SyllabusStatus;
+}
+
+export interface KnowledgePointCreatePayload {
+  name: string;
+  summary?: string;
+  point_type?: KnowledgePointType;
+  difficulty?: KnowledgePointDifficulty;
+}
+
+export interface KnowledgePointUpdatePayload {
+  name?: string;
+  summary?: string;
+  point_type?: KnowledgePointType;
+  difficulty?: KnowledgePointDifficulty;
+  chapter_id?: string;
+  status?: SyllabusStatus;
+}
+
+/** 一次只重排一层：要么章节，要么某章节下的知识点 */
+export interface SyllabusReorderPayload {
+  chapters?: string[];
+  chapter_id?: string;
+  knowledge_points?: string[];
+}
+
+export interface CourseClassFilters {
+  term?: string;
+  keyword?: string;
+}
+
+export interface CourseRosterFilters {
+  keyword?: string;
+  risk?: StudentRiskLevel | "";
+  page?: number;
+  pageSize?: number;
+}

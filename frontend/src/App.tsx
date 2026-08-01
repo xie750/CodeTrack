@@ -13,7 +13,7 @@ import LearningLibrary from "./pages/LearningLibrary";
 import LearningProfile from "./pages/LearningProfile";
 import LoginPage from "./pages/LoginPage";
 import Dashboard from "./teacher/pages/Dashboard";
-import CourseList from "./teacher/pages/CourseList";
+import CourseClasses from "./teacher/pages/courses/CourseClasses";
 import CourseSyllabus from "./teacher/pages/courses/CourseSyllabus";
 import ResourceCenter from "./teacher/pages/resources/ResourceCenter";
 import TaskList from "./teacher/pages/tasks/TaskList";
@@ -330,9 +330,15 @@ function TeacherAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
             <Route path="dashboard" element={<Dashboard />} />
 
             {/* 模块二 课程教学 */}
-            <Route path="courses" element={<CourseList />} />
-            <Route path="courses/:courseId" element={<CourseList />} />
-            <Route path="courses/:courseId/syllabus" element={<CourseSyllabus />} />
+            <Route path="courses" element={<CourseClasses />} />
+            <Route path="courses/syllabus" element={<CourseSyllabus />} />
+            {/*
+              旧路径保留重定向：课程大纲改用页内课程选择器（与资料中心、任务监控一致），
+              不再用 :courseId 路径参数。`courses/:courseId` 原来渲染的还是列表本身、
+              组件也从不读 useParams，是条死链，一并收敛到模块根页。
+            */}
+            <Route path="courses/:courseId/syllabus" element={<Navigate to="/teacher/courses/syllabus" replace />} />
+            <Route path="courses/:courseId" element={<Navigate to="/teacher/courses" replace />} />
 
             {/* 模块三 资料中心 */}
             <Route path="resources" element={<ResourceCenter />} />
