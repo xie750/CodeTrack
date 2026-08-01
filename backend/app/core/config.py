@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     auth_secret_key: str = Field(default="codetrack-demo-secret-change-me")
     auth_access_token_minutes: int = Field(default=30)
     auth_allow_demo_header: bool = Field(default=True)
+    # 教师端资料中心上传目录（§七）。第一版只落盘 + 记元数据，不做解析和切片。
+    resource_storage_dir: str = Field(default="./var/resources")
+    # 单个上传资料的大小上限，超过直接拒绝而不是写坏磁盘
+    resource_max_upload_mb: int = Field(default=20)
 
 
 @lru_cache

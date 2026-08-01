@@ -18,6 +18,11 @@ from backend.app.models import (
     User,
 )
 from backend.app.services.submissions import iso
+from backend.app.services.teacher_dashboard import (
+    build_overview,
+    empty_overview,
+    resolve_context,
+)
 from backend.app.services.teacher_scope import (
     SUBMITTED_PROGRESS_STATUSES,
     class_student_ids,
@@ -454,3 +459,29 @@ def teacher_dashboard(
             "recent_submissions": recent_submissions,
         }
     )
+
+
+@router.get("/dashboard/overview")
+def teacher_dashboard_overview(
+    teaching_assignment_id: str | None = Query(
+        default=None, description="直接锁定教学班，优先于 term/course_id/class_id"
+    ),
+    term: str | None = Query(default=None, description="学期选择器"),
+    course_id: str | None = Query(default=None, description="课程选择器"),
+    class_id: str | None = Query(default=None, description="班级选择器"),
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    """教学首页（开发方案 §五）。
+
+    单个教学班的概览卡片、今日待办、最近任务和班级学情摘要。全程只读，指标全部由后端
+    确定性计算，AI 不参与（§5.3、§10.1）。范围以 `teaching_assignment_id` 为准（§15.1）。
+
+    与既有的 `/dashboard` 并存而不是替换：那个接口返回的是「课程 + 最近提交」，
+    §六 课程与班级页仍在用。等前端全部切过来之后再收敛成一个。
+    """
+    require_role(user, "TEACHER")
+    context = resolve_context(db, user.id, teaching_assignment_id, term, course_id, class_id)
+    if context is None:
+        return ok(empty_overview("当前账号还没有生效的教学安排，请联系管理员分配授课关系"))
+    return ok(build_overview(db, user.id, context))

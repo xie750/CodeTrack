@@ -24,9 +24,7 @@ from backend.app.models import (
     CapabilityEvidence,
     Diagnosis,
     HintRecord,
-    LearnerErrorStat,
     LearnerEvent,
-    LearnerKnowledgeState,
     LearnerProfileSnapshot,
     StudentClassMembership,
     StudentTaskProgress,
@@ -36,6 +34,10 @@ from backend.app.models import (
     User,
 )
 from backend.app.services.learner_profile import loads_list, serialize_learner_profile
+from backend.app.services.learner_stats import (
+    class_error_distribution,
+    class_knowledge_matrix,
+)
 from backend.app.services.learning_alerts import as_utc, compute_class_alerts
 from backend.app.services.submissions import iso
 from backend.app.services.teacher_scope import (
@@ -331,105 +333,13 @@ def _score_trend(db: Session, scope: DiagnosisScope, task_id: str | None) -> lis
 
 
 def _knowledge_matrix(db: Session, scope: DiagnosisScope) -> dict:
-    """知识点掌握热力图：行是学生，列是知识点。"""
-    if not scope.student_ids:
-        return {"points": [], "rows": [], "point_averages": []}
-
-    states = list(
-        db.scalars(
-            select(LearnerKnowledgeState).where(
-                LearnerKnowledgeState.student_id.in_(scope.student_ids),
-                LearnerKnowledgeState.course_id == scope.course_id,
-            )
-        ).all()
-    )
-    if not states:
-        return {"points": [], "rows": [], "point_averages": []}
-
-    points = sorted({item.knowledge_point for item in states})
-    names = {
-        row.id: row.display_name
-        for row in db.scalars(select(User).where(User.id.in_(scope.student_ids))).all()
-    }
-    by_student: dict[str, dict[str, LearnerKnowledgeState]] = {}
-    for item in states:
-        by_student.setdefault(item.student_id, {})[item.knowledge_point] = item
-
-    rows = []
-    for student_id in sorted(by_student):
-        cells = []
-        for point in points:
-            state = by_student[student_id].get(point)
-            cells.append(
-                {
-                    "knowledge_point": point,
-                    # None 表示该学生这个知识点没有证据，热力图要画成空格而不是 0 分
-                    "mastery_score": state.mastery_score if state else None,
-                    "state": state.state if state else None,
-                    "evidence_count": state.evidence_count if state else 0,
-                }
-            )
-        rows.append(
-            {
-                "student_id": student_id,
-                "student_name": names.get(student_id, ""),
-                "cells": cells,
-            }
-        )
-
-    averages = []
-    for index, point in enumerate(points):
-        scores = [
-            row["cells"][index]["mastery_score"]
-            for row in rows
-            if row["cells"][index]["mastery_score"] is not None
-        ]
-        averages.append(
-            {
-                "knowledge_point": point,
-                "avg_mastery": _mean(scores) if scores else None,
-                "covered_students": len(scores),
-            }
-        )
-
-    return {"points": points, "rows": rows, "point_averages": averages}
+    """知识点掌握热力图。实现在 `services/learner_stats`，与教学首页摘要同口径。"""
+    return class_knowledge_matrix(db, scope)
 
 
 def _error_distribution(db: Session, scope: DiagnosisScope) -> list[dict]:
-    """班级高频错误，按影响人数排序。"""
-    if not scope.student_ids:
-        return []
-    rows = db.scalars(
-        select(LearnerErrorStat).where(
-            LearnerErrorStat.student_id.in_(scope.student_ids),
-            LearnerErrorStat.course_id == scope.course_id,
-        )
-    ).all()
-
-    merged: dict[str, dict] = {}
-    for item in rows:
-        bucket = merged.setdefault(
-            item.error_type,
-            {
-                "error_type": item.error_type,
-                "label": item.label,
-                "student_count": 0,
-                "total_count": 0,
-                "severity": item.severity,
-                "related_knowledge_points": [],
-            },
-        )
-        bucket["student_count"] += 1
-        bucket["total_count"] += item.count
-        if item.severity == "HIGH":
-            bucket["severity"] = "HIGH"
-        for point in loads_list(item.related_knowledge_points):
-            if point not in bucket["related_knowledge_points"]:
-                bucket["related_knowledge_points"].append(point)
-
-    data = list(merged.values())
-    data.sort(key=lambda row: (-row["student_count"], -row["total_count"], row["error_type"]))
-    return data
+    """班级高频错误。实现在 `services/learner_stats`，与教学首页摘要同口径。"""
+    return class_error_distribution(db, scope)
 
 
 def _hint_distribution(db: Session, scope: DiagnosisScope) -> dict:
