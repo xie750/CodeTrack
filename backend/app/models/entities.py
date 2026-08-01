@@ -382,6 +382,33 @@ class HintRecord(Base):
     diagnosis: Mapped[Diagnosis] = relationship(back_populates="hints")
 
 
+class DiagnosisReview(Base):
+    """教师对一条 AI 诊断的审核结论。
+
+    开发方案 §11.4 要求「原始 AI 输出不能覆盖，教师审核单独保存」，所以这里是一张
+    只追加的记录表：`diagnoses` 行永不被审核流程改写，某条诊断的当前审核状态取它
+    最新一条 review 的 action，没有 review 就是 PENDING（§14.4）。
+
+    同一条诊断允许多行：教师改主意（先驳回又接受）要留痕，不能就地改旧结论。
+    """
+
+    __tablename__ = "diagnosis_reviews"
+    __table_args__ = (Index("ix_diagnosis_reviews_diagnosis_id", "diagnosis_id"),)
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    diagnosis_id: Mapped[str] = mapped_column(ForeignKey("diagnoses.id"), nullable=False)
+    reviewer_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    # ACCEPTED / MODIFIED / REJECTED，见 §14.4；PENDING 是「没有记录」而不是一行数据
+    action: Mapped[str] = mapped_column(String(20), nullable=False)
+    # 仅 MODIFIED 有值：教师修订后的最终解释，学生端显示为「教师已修改」
+    revised_explanation: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    note: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    diagnosis: Mapped[Diagnosis] = relationship()
+    reviewer: Mapped[User] = relationship()
+
+
 class CapabilityEvidence(Base):
     __tablename__ = "capability_evidence"
 

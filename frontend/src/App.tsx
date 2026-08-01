@@ -30,7 +30,9 @@ import GradingWorkspace from "./teacher/pages/GradingWorkspace";
 import DiagnosisSummary from "./teacher/pages/DiagnosisSummary";
 import AiReviewList from "./teacher/pages/aiReview/AiReviewList";
 import AiReviewDetail from "./teacher/pages/aiReview/AiReviewDetail";
-import TeachingImprovement from "./teacher/pages/improvement/TeachingImprovement";
+import StrategyOptimization from "./teacher/pages/improvement/StrategyOptimization";
+import TaskAdjustment from "./teacher/pages/improvement/TaskAdjustment";
+import EffectEvaluation from "./teacher/pages/improvement/EffectEvaluation";
 import avatarImg from "./assets/ui-home/avatar.png";
 import { api, apiCache } from "./api";
 import { clearAccessToken, getAccessToken, type AuthUser } from "./authSession";
@@ -360,8 +362,10 @@ function TeacherAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
             <Route path="ai-review" element={<AiReviewList />} />
             <Route path="ai-review/:reviewId" element={<AiReviewDetail />} />
 
-            {/* 模块八 教学改进 */}
-            <Route path="improvement" element={<TeachingImprovement />} />
+            {/* 模块八 教学改进。三个子页各自一条路由，刷新和直接输网址都能落到对应子页 */}
+            <Route path="improvement" element={<StrategyOptimization />} />
+            <Route path="improvement/adjustment" element={<TaskAdjustment />} />
+            <Route path="improvement/effect" element={<EffectEvaluation />} />
 
             <Route path="*" element={<Navigate to="dashboard" replace />} />
           </Routes>

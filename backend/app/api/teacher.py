@@ -10,7 +10,6 @@ from backend.app.models import (
     CapabilityEvidence,
     Course,
     Enrollment,
-    StudentClassMembership,
     StudentTaskProgress,
     Submission,
     Task,
@@ -19,84 +18,15 @@ from backend.app.models import (
     User,
 )
 from backend.app.services.submissions import iso
+from backend.app.services.teacher_scope import (
+    SUBMITTED_PROGRESS_STATUSES,
+    class_student_ids,
+    derive_progress_status,
+    published_task_ids,
+    teacher_assignments,
+)
 
 router = APIRouter(prefix="/api/v1/teacher", tags=["teacher"])
-
-# 学生任务进度状态中，代表“至少提交过一次”的集合
-SUBMITTED_PROGRESS_STATUSES = {"SUBMITTED", "NEEDS_REVISION", "COMPLETED"}
-
-# 编码类任务不写 StudentTaskProgress（只有题目流程维护它），
-# 所以监控状态要能从 Submission.status 回退推导，否则已交的学生会被算成未开始，
-# 或停在进度表写死的 IN_PROGRESS 上。
-SUBMISSION_STATUS_TO_PROGRESS = {
-    "PASSED": "COMPLETED",
-    "REVIEW_REQUIRED": "NEEDS_REVISION",
-    "FEEDBACK_READY": "SUBMITTED",
-    "FAILED": "SUBMITTED",
-    "QUEUED": "SUBMITTED",
-    "RUNNING": "SUBMITTED",
-}
-
-# 进度先后顺序，用于在进度表与提交状态之间取更靠后的那个
-PROGRESS_STATUS_RANK = {
-    "NOT_STARTED": 0,
-    "IN_PROGRESS": 1,
-    "SUBMITTED": 2,
-    "NEEDS_REVISION": 3,
-    "COMPLETED": 4,
-}
-
-
-def _derive_progress_status(
-    progress: StudentTaskProgress | None, submission: Submission | None
-) -> str:
-    """取进度表与提交状态中更靠后的一个，两者都缺则视为未开始。"""
-    candidates = ["NOT_STARTED"]
-    if progress is not None:
-        candidates.append(progress.status)
-    if submission is not None:
-        candidates.append(SUBMISSION_STATUS_TO_PROGRESS.get(submission.status, "SUBMITTED"))
-    return max(candidates, key=lambda item: PROGRESS_STATUS_RANK.get(item, 0))
-
-
-def _teacher_assignments(
-    db: Session, teacher_id: str, course_id: str | None = None
-) -> list[TeachingAssignment]:
-    """当前教师生效中的教学安排，可按课程过滤。"""
-    query = select(TeachingAssignment).where(
-        TeachingAssignment.teacher_id == teacher_id,
-        TeachingAssignment.status == "ACTIVE",
-    )
-    if course_id:
-        query = query.where(TeachingAssignment.course_id == course_id)
-    return list(db.scalars(query.order_by(TeachingAssignment.created_at.asc())).all())
-
-
-def _class_student_ids(db: Session, class_ids: list[str]) -> set[str]:
-    """行政班在册学生，跨班去重。"""
-    if not class_ids:
-        return set()
-    return set(
-        db.scalars(
-            select(StudentClassMembership.student_id).where(
-                StudentClassMembership.class_id.in_(class_ids),
-                StudentClassMembership.status == "ACTIVE",
-            )
-        ).all()
-    )
-
-
-def _published_task_ids(db: Session, teaching_assignment_ids: list[str]) -> set[str]:
-    if not teaching_assignment_ids:
-        return set()
-    return set(
-        db.scalars(
-            select(TaskAssignment.task_id).where(
-                TaskAssignment.teaching_assignment_id.in_(teaching_assignment_ids),
-                TaskAssignment.publish_status == "PUBLISHED",
-            )
-        ).all()
-    )
 
 
 def _course_payload(
@@ -110,8 +40,8 @@ def _course_payload(
         "teacher_id": course.owner_teacher_id,
         "semester": course.term,
         "status": course.status,
-        "student_count": len(_class_student_ids(db, [item.class_id for item in assignments])),
-        "task_count": len(_published_task_ids(db, [item.id for item in assignments])),
+        "student_count": len(class_student_ids(db, [item.class_id for item in assignments])),
+        "task_count": len(published_task_ids(db, [item.id for item in assignments])),
         "created_at": iso(min((item.created_at for item in assignments), default=None)),
     }
 
@@ -138,7 +68,7 @@ def teacher_courses(
             )
         ).all()
     )
-    grouped = _group_by_course(_teacher_assignments(db, user.id))
+    grouped = _group_by_course(teacher_assignments(db, user.id))
 
     data = []
     for course_id in sorted(enrolled_course_ids | set(grouped)):
@@ -157,7 +87,7 @@ def teacher_teaching_assignments(
     """当前教师的教学安排，一个班级一门课一行。"""
     require_role(user, "TEACHER")
     data = []
-    for assignment in _teacher_assignments(db, user.id):
+    for assignment in teacher_assignments(db, user.id):
         course = db.get(Course, assignment.course_id)
         if course is None:
             continue
@@ -173,8 +103,8 @@ def teacher_teaching_assignments(
                 "teacher_id": assignment.teacher_id,
                 "semester": assignment.term,
                 "status": course.status,
-                "student_count": len(_class_student_ids(db, [assignment.class_id])),
-                "task_count": len(_published_task_ids(db, [assignment.id])),
+                "student_count": len(class_student_ids(db, [assignment.class_id])),
+                "task_count": len(published_task_ids(db, [assignment.id])),
                 "created_at": iso(assignment.created_at),
             }
         )
@@ -192,7 +122,7 @@ def teacher_course_detail(
     if course is None:
         raise ApiError(404, "COURSE_NOT_FOUND", "课程不存在")
     ensure_course_member(db, course_id, user.id, role="TEACHER")
-    return ok(_course_payload(db, course, _teacher_assignments(db, user.id, course_id)))
+    return ok(_course_payload(db, course, teacher_assignments(db, user.id, course_id)))
 
 
 @router.get("/courses/{course_id}/submissions")
@@ -358,7 +288,7 @@ def teacher_task_monitor(
     ensure_course_member(db, task.course_id, user.id, role="TEACHER")
     course = db.get(Course, task.course_id)
 
-    assignments = _teacher_assignments(db, user.id, task.course_id)
+    assignments = teacher_assignments(db, user.id, task.course_id)
     assignments_by_id = {item.id: item for item in assignments}
     task_assignments = (
         list(
@@ -379,7 +309,7 @@ def teacher_task_monitor(
         for item in task_assignments
         if item.teaching_assignment_id in assignments_by_id
     ]
-    student_ids = _class_student_ids(db, class_ids)
+    student_ids = class_student_ids(db, class_ids)
     assignment_ids = [item.id for item in task_assignments]
 
     progress_by_student = {
@@ -420,7 +350,7 @@ def teacher_task_monitor(
                 "submission_id": submission.id if submission else None,
                 "student_id": student_id,
                 "student_name": student.display_name if student else "",
-                "status": _derive_progress_status(progress, submission),
+                "status": derive_progress_status(progress, submission),
                 "submission_status": submission.status if submission else None,
                 "version_count": len(submission.versions) if submission else 0,
                 "highest_hint_level": progress.highest_hint_level if progress else 0,
@@ -455,7 +385,7 @@ def teacher_dashboard(
 ):
     """教学首页聚合：课程、统计卡片和最近提交。"""
     require_role(user, "TEACHER")
-    assignments = _teacher_assignments(db, user.id)
+    assignments = teacher_assignments(db, user.id)
     if teaching_assignment_id:
         assignments = [item for item in assignments if item.id == teaching_assignment_id]
         if not assignments:
@@ -468,8 +398,8 @@ def teacher_dashboard(
         if course is not None:
             courses.append(_course_payload(db, course, grouped[course_id]))
 
-    student_ids = _class_student_ids(db, [item.class_id for item in assignments])
-    task_ids = _published_task_ids(db, [item.id for item in assignments])
+    student_ids = class_student_ids(db, [item.class_id for item in assignments])
+    task_ids = published_task_ids(db, [item.id for item in assignments])
 
     rows = (
         list(

@@ -622,7 +622,20 @@ request<T>()
 
 ## 7.4 图表库
 
-教师诊断页面使用 `recharts`。
+> **实际实现偏离本节（2026-08-01，学情诊断落地时）**
+>
+> 教师学情诊断页最终**没有引入 `recharts`**，而是沿用学生端的内联 SVG 方案：
+> 雷达图抽成 `frontend/src/teacher/components/RadarChart.tsx`（按维度数真实计算顶点，
+> 复用 `.profile-radar` 样式），成绩趋势用 `.line-chart`，热力图和错误分布用
+> CSS grid / flex（`.diagnosis-heatmap`、`.diagnosis-error-bars`）。
+>
+> 原因：本节的目标是"控件样式贴合学生端"，而学生端全站零图表依赖、所有图都是内联
+> SVG + `styles.css` 类。引入 recharts 反而要手动改配色去贴合，且 recharts 没有原生
+> 热力图。当前方案视觉与学生端完全一致，也不增加依赖。
+>
+> 后续若有交互需求（tooltip、缩放、图例联动）再评估引入图表库，届时**仍只能引入一个**。
+
+原始约定（保留作为历史参考）：教师诊断页面使用 `recharts`。
 
 学生端目前没有该依赖。迁移诊断图表时可以新增：
 
@@ -1400,10 +1413,20 @@ GET /api/v1/teacher/analytics/student
 
 ### 验收
 
-- [ ] 选择项只显示当前教师的数据
-- [ ] 班级数据与学生个人数据口径一致
-- [ ] 真实零值和无数据明确区分
-- [ ] 不使用教师项目中的演示班级数据
+- [x] 选择项只显示当前教师的数据
+- [x] 班级数据与学生个人数据口径一致
+- [x] 真实零值和无数据明确区分
+- [x] 不使用教师项目中的演示班级数据
+
+> 落地说明（2026-08-01）：
+> - 课程下拉改用 `/api/v1/teacher/teaching-assignments` 而不是 `/courses`。后者会把
+>   「教师只是课程成员但没有教学安排」的课程也算进来，选中即 403，因为学情范围按
+>   教学安排算（§15.1）。
+> - 口径一致靠 `backend/app/services/learner_profile.py::serialize_learner_profile`
+>   —— 学生端 `/student/profile` 和教师端 `/analytics/student` 调同一个函数，
+>   `tests/test_teacher_diagnosis.py` 里有一条测试逐字段比对两端返回，防止漂移。
+> - 零值与无数据：没有评分的任务 `avg_score` 返回 `null` 而不是 0；名册内没有画像的
+>   学生不计入均值，并在页面常驻「N/M 名学生已有画像数据」提示。
 
 ---
 
@@ -1543,7 +1566,20 @@ CodeTrack/frontend/src/teacher/pages/diagnosis/AlertCenter.tsx
 
 ### 第一阶段处理
 
-两种选择：
+> **实际实现（2026-08-01）：没有走方案 A 或 B，而是实现了真实规则预警（只读）。**
+>
+> §10.3 那七条第一版规则全部可以从现有表实时算出来，所以新增了
+> `backend/app/services/learning_alerts.py`，由 `GET /api/v1/teacher/alerts` 返回
+> 命中的学生、命中的规则和每条规则的**可追查证据**（例如「头节点返回值遗漏 已累计
+> 出现 3 次」）。不新建预警表、不写任何库。
+>
+> 写操作（标记已处理、发送提醒、下发干预）仍然缺 `LearningAlert` 状态表，所以接口
+> 返回 `actions_available: false` 和 `actions_disabled_reason`，前端按此把三个按钮
+> 渲染成禁用并显示原因 —— 符合 §15.2，也不是方案 B 那种整页「暂未接入」。
+>
+> 代码相似度和抄袭判定仍然**没有实现**，也不在本轮范围内。
+
+原始两个候选方案（保留作为历史参考）：
 
 #### 方案 A：暂不显示预警 Tab
 
