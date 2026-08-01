@@ -2,7 +2,18 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from backend.app.api import auth, executions, health, student, tasks, teacher, versions
+from backend.app.api import (
+    auth,
+    executions,
+    health,
+    student,
+    tasks,
+    teacher,
+    teacher_ai_review,
+    teacher_analytics,
+    teacher_improvement,
+    versions,
+)
 from backend.app.core.api_response import ApiError, api_error_handler
 from backend.app.core.database import SessionLocal, engine
 from backend.app.models import Base
@@ -30,6 +41,9 @@ def create_app() -> FastAPI:
     app.include_router(executions.router)
     app.include_router(versions.router)
     app.include_router(teacher.router)
+    app.include_router(teacher_ai_review.router)
+    app.include_router(teacher_analytics.router)
+    app.include_router(teacher_improvement.router)
 
     return app
 

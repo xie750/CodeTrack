@@ -24,6 +24,10 @@ SAFE_DETAIL_KEYS = {
     "llm_error_code",
     "attempts",
     "agent_run_id",
+    # 教师 AI 审核（§11 / §15.2「所有关键写操作必须记录审计日志」）
+    "diagnosis_id",
+    "review_action",
+    "review_id",
 }
 
 

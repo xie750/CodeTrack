@@ -1,5 +1,3 @@
-import json
-
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -11,10 +9,6 @@ from backend.app.core.security import current_user, require_role
 from backend.app.models import (
     AdministrativeClass,
     Course,
-    LearnerErrorStat,
-    LearnerKnowledgeState,
-    LearnerProfileSnapshot,
-    Recommendation,
     StudentClassMembership,
     StudentTaskProgress,
     Task,
@@ -22,6 +16,7 @@ from backend.app.models import (
     TeachingAssignment,
     User,
 )
+from backend.app.services.learner_profile import serialize_learner_profile
 from backend.app.services.submissions import iso
 from backend.app.services.question_workflow import (
     question_workspace_payload,
@@ -39,14 +34,6 @@ class QuestionAnswerPayload(BaseModel):
 
 class SaveQuestionAnswersRequest(BaseModel):
     answers: list[QuestionAnswerPayload]
-
-
-def loads_list(value: str) -> list:
-    try:
-        parsed = json.loads(value)
-    except json.JSONDecodeError:
-        return []
-    return parsed if isinstance(parsed, list) else []
 
 
 def task_knowledge_points(task: Task) -> list[str]:
@@ -267,106 +254,14 @@ def learner_profile(
 ):
     require_role(user, "STUDENT")
     administrative_class, _ = require_active_class(db, user)
-    profile_query = select(LearnerProfileSnapshot).where(
-        LearnerProfileSnapshot.student_id == user.id,
-        LearnerProfileSnapshot.class_id == administrative_class.id,
+    # 序列化逻辑放在 services/learner_profile.py，教师端个体诊断读同一个函数，
+    # 保证两端口径一致（开发方案 §10.2）。
+    payload = serialize_learner_profile(
+        db,
+        student_id=user.id,
+        course_id=course_id,
+        class_id=administrative_class.id,
     )
-    if course_id:
-        profile_query = profile_query.where(LearnerProfileSnapshot.course_id == course_id)
-    profile = db.scalar(profile_query.order_by(LearnerProfileSnapshot.updated_at.desc()))
-    if profile is None:
+    if payload is None:
         raise ApiError(404, "LEARNER_PROFILE_NOT_FOUND", "当前课程暂无足够画像数据")
-
-    course = db.get(Course, profile.course_id)
-    teaching = db.scalar(
-        select(TeachingAssignment).where(
-            TeachingAssignment.class_id == administrative_class.id,
-            TeachingAssignment.course_id == profile.course_id,
-            TeachingAssignment.status == "ACTIVE",
-        )
-    )
-    teacher = db.get(User, teaching.teacher_id) if teaching else None
-
-    knowledge_states = db.scalars(
-        select(LearnerKnowledgeState)
-        .where(
-            LearnerKnowledgeState.student_id == user.id,
-            LearnerKnowledgeState.course_id == profile.course_id,
-        )
-        .order_by(LearnerKnowledgeState.mastery_score.asc())
-    ).all()
-    error_stats = db.scalars(
-        select(LearnerErrorStat)
-        .where(
-            LearnerErrorStat.student_id == user.id,
-            LearnerErrorStat.course_id == profile.course_id,
-        )
-        .order_by(LearnerErrorStat.count.desc())
-    ).all()
-    recommendations = db.scalars(
-        select(Recommendation)
-        .where(
-            Recommendation.student_id == user.id,
-            Recommendation.course_id == profile.course_id,
-            Recommendation.status == "ACTIVE",
-        )
-        .order_by(Recommendation.priority.desc())
-    ).all()
-
-    return ok(
-        {
-            "student": {
-                "id": user.id,
-                "name": user.display_name,
-                "class_id": administrative_class.id,
-                "class_name": administrative_class.name,
-            },
-            "course": {
-                "id": course.id if course else profile.course_id,
-                "name": course.name if course else "",
-                "teacher_name": teacher.display_name if teacher else "",
-            },
-            "overview": {
-                "overall_progress": profile.overall_progress,
-                "hint_dependency_level": profile.hint_dependency_level,
-                "compile_error_rate": profile.compile_error_rate,
-                "logic_error_rate": profile.logic_error_rate,
-                "recent_task_completion": profile.recent_task_completion,
-                "summary": profile.summary_text,
-                "recommendation": profile.recommendation_text,
-                "updated_at": iso(profile.updated_at),
-            },
-            "knowledge_states": [
-                {
-                    "knowledge_point": item.knowledge_point,
-                    "mastery_score": item.mastery_score,
-                    "state": item.state,
-                    "evidence_count": item.evidence_count,
-                    "last_evidence": item.last_evidence,
-                }
-                for item in knowledge_states
-            ],
-            "frequent_errors": [
-                {
-                    "error_type": item.error_type,
-                    "label": item.label,
-                    "count": item.count,
-                    "severity": item.severity,
-                    "related_knowledge_points": loads_list(item.related_knowledge_points),
-                }
-                for item in error_stats
-            ],
-            "recommendations": [
-                {
-                    "id": item.id,
-                    "title": item.title,
-                    "reason": item.reason,
-                    "priority": item.priority,
-                    "related_task_id": item.related_task_id,
-                    "related_knowledge_points": loads_list(item.related_knowledge_points),
-                    "suggested_action": item.suggested_action,
-                }
-                for item in recommendations
-            ],
-        }
-    )
+    return ok(payload)

@@ -67,6 +67,13 @@ def test_openapi_contains_demo_contract_paths():
             "/api/v1/teacher/tasks/{task_id}/monitor",
             "/api/v1/teacher/dashboard",
             "/api/v1/teacher/submissions/{submission_id}/timeline",
+            # 学情诊断（开发方案 §十）
+            "/api/v1/teacher/diagnosis/options/classes",
+            "/api/v1/teacher/diagnosis/options/students",
+            "/api/v1/teacher/diagnosis/options/tasks",
+            "/api/v1/teacher/analytics/class",
+            "/api/v1/teacher/analytics/student",
+            "/api/v1/teacher/alerts",
         }
         assert required_paths.issubset(set(paths))
 
