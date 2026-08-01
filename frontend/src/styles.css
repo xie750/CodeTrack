@@ -4394,6 +4394,17 @@ html[data-route-motion="deeper"] .workspace-route-stage {
   background: transparent;
 }
 
+.program-editor header select {
+  min-width: 118px;
+  height: 32px;
+  padding: 0 28px 0 10px;
+  border: 1px solid #dbe4f0;
+  border-radius: 6px;
+  color: #21304a;
+  background: #ffffff;
+  font-weight: 800;
+}
+
 .program-editor header button:first-child {
   min-width: 58px;
   border: 1px solid #dbe4f0;
@@ -4431,6 +4442,13 @@ html[data-route-motion="deeper"] .workspace-route-stage {
 
 .program-editor pre code {
   color: #1f6feb;
+}
+
+.program-monaco {
+  flex: 1 1 auto;
+  min-height: 220px;
+  overflow: hidden;
+  background: #ffffff;
 }
 
 .program-editor footer {

@@ -323,6 +323,16 @@ def seed_demo_data(db: Session) -> None:
             "description": "能够处理链表删除中的头节点、空链表、尾节点和非法位置等边界情况",
         },
     )
+    upsert(
+        db,
+        Capability,
+        "cap_array_hash_lookup",
+        {
+            "code": "ARRAY_HASH_LOOKUP",
+            "name": "数组与哈希查找",
+            "description": "能够使用哈希表记录已访问元素，并根据目标值查找互补元素。",
+        },
+    )
 
     learning_objectives = [
         "理解单链表删除操作",
@@ -344,6 +354,25 @@ def seed_demo_data(db: Session) -> None:
             "interface_spec": "ListNode* deleteAt(ListNode* head, int position);",
             "learning_objectives": json.dumps(learning_objectives, ensure_ascii=False),
             "capability_ids": json.dumps(["cap_linked_list_boundary"], ensure_ascii=False),
+            "status": "OPEN",
+        },
+    )
+    upsert(
+        db,
+        Task,
+        "task_two_sum_001",
+        {
+            "course_id": "course_ds_001",
+            "title": "两数之和",
+            "description": "给定整数数组 nums 和目标值 target，请返回两个数的下标，使它们相加等于 target。",
+            "workspace_type": "CODING",
+            "language": "PYTHON",
+            "interface_spec": "twoSum(nums, target) -> indices",
+            "learning_objectives": json.dumps(
+                ["理解数组遍历", "使用哈希表查找补数", "区分元素值和下标", "通过样例验证边界输入"],
+                ensure_ascii=False,
+            ),
+            "capability_ids": json.dumps(["cap_array_hash_lookup"], ensure_ascii=False),
             "status": "OPEN",
         },
     )
@@ -432,6 +461,21 @@ def seed_demo_data(db: Session) -> None:
             "allow_hint_level_3": True,
             "published_at": datetime(2026, 7, 20, 8, 0, tzinfo=timezone.utc),
             "deadline": datetime(2026, 8, 5, 23, 59, tzinfo=timezone.utc),
+        },
+    )
+    upsert(
+        db,
+        TaskAssignment,
+        "assign_se1_ds_two_sum_001",
+        {
+            "task_id": "task_two_sum_001",
+            "teaching_assignment_id": "ta_se1_ds_001",
+            "published_by": "user_teacher_001",
+            "publish_status": "PUBLISHED",
+            "assignment_mode": "PRACTICE",
+            "allow_hint_level_3": True,
+            "published_at": datetime(2026, 7, 21, 8, 0, tzinfo=timezone.utc),
+            "deadline": datetime(2026, 8, 6, 23, 59, tzinfo=timezone.utc),
         },
     )
     upsert(
@@ -582,6 +626,71 @@ def seed_demo_data(db: Session) -> None:
                 "hidden_failure_summary": hidden_summary,
                 "error_tag": tag,
                 "capability_id": "cap_linked_list_boundary",
+                "required": True,
+                "sort_order": order,
+            },
+        )
+    two_sum_cases = [
+        (
+            "tc_two_sum_basic",
+            "公开样例：基础补数",
+            "PUBLIC",
+            {"nums": [2, 7, 11, 15], "target": 9},
+            [0, 1],
+            "[0,1]",
+            None,
+            "TWO_SUM_BASIC_COMPLEMENT",
+            1,
+        ),
+        (
+            "tc_two_sum_reuse_guard",
+            "公开样例：不能复用同一元素",
+            "PUBLIC",
+            {"nums": [3, 2, 4], "target": 6},
+            [1, 2],
+            "[1,2]",
+            None,
+            "TWO_SUM_REUSE_GUARD",
+            2,
+        ),
+        (
+            "tc_two_sum_duplicate",
+            "重复元素",
+            "HIDDEN",
+            {"nums": [3, 3], "target": 6},
+            [0, 1],
+            "[0,1]",
+            "重复元素场景未通过",
+            "TWO_SUM_DUPLICATE_VALUES",
+            3,
+        ),
+        (
+            "tc_two_sum_negative",
+            "负数与零",
+            "HIDDEN",
+            {"nums": [-1, 0, 4, 8], "target": 7},
+            [0, 3],
+            "[0,3]",
+            "负数或零相关场景未通过",
+            "TWO_SUM_NEGATIVE_VALUES",
+            4,
+        ),
+    ]
+    for case_id, name, visibility, input_data, expected, summary, hidden_summary, tag, order in two_sum_cases:
+        upsert(
+            db,
+            TestCase,
+            case_id,
+            {
+                "task_id": "task_two_sum_001",
+                "name": name,
+                "visibility": visibility,
+                "input_data": json.dumps(input_data, ensure_ascii=False),
+                "expected_output": json.dumps(expected, ensure_ascii=False),
+                "expected_output_summary": summary,
+                "hidden_failure_summary": hidden_summary,
+                "error_tag": tag,
+                "capability_id": "cap_array_hash_lookup",
                 "required": True,
                 "sort_order": order,
             },

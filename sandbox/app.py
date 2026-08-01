@@ -28,6 +28,8 @@ def run_code(payload: SandboxRunRequest) -> SandboxRunResponse:
             hidden_failure_summary=case.hidden_failure_summary,
             error_tag=case.error_tag,
             sort_order=case.sort_order,
+            input_data=case.input_data,
+            expected_output=case.expected_output,
         )
         for case in payload.test_cases
     ]

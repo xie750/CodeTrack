@@ -14,13 +14,15 @@ class SandboxTestCase:
     test_case_id: str
     name: str
     visibility: str
-    input_values: list[int]
-    position: int
-    expected_values: list[int]
+    input_values: list[int] | None
+    position: int | None
+    expected_values: list[int] | None
     expected_output_summary: str
     hidden_failure_summary: str | None
     error_tag: str
     sort_order: int
+    input_data: Any | None = None
+    expected_output: Any | None = None
 
 
 @dataclass(frozen=True)
@@ -53,8 +55,8 @@ def _cpp_vector(values: list[int]) -> str:
 def build_driver_source(source_code: str, tests: list[SandboxTestCase]) -> str:
     test_lines = []
     for case in tests:
-        expected = _cpp_vector(case.expected_values)
-        values = _cpp_vector(case.input_values)
+        expected = _cpp_vector(case.expected_values or [])
+        values = _cpp_vector(case.input_values or [])
         test_lines.append(
             f'    runTest("{case.test_case_id}", "{case.name}", vector<int>{values}, '
             f"{case.position}, vector<int>{expected});"
@@ -202,7 +204,7 @@ def parse_test_stdout(stdout: str, tests: list[SandboxTestCase]) -> list[dict[st
     results = []
     for case in tests:
         actual, duration_ms = output_by_id.get(case.test_case_id, ("", 0))
-        expected = format_array(case.expected_values)
+        expected = format_array(case.expected_values or [])
         passed = actual == expected
         if case.visibility == "HIDDEN":
             visible_actual = "已通过" if passed else (case.hidden_failure_summary or "隐藏测试未通过")
@@ -337,15 +339,18 @@ def run_linked_list_tests(
 
 def case_from_record(record: Any) -> SandboxTestCase:
     input_data = json.loads(record.input_data)
+    expected_output = json.loads(record.expected_output)
     return SandboxTestCase(
         test_case_id=record.id,
         name=record.name,
         visibility=record.visibility,
-        input_values=input_data["values"],
-        position=input_data["position"],
-        expected_values=json.loads(record.expected_output),
+        input_values=input_data.get("values"),
+        position=input_data.get("position"),
+        expected_values=expected_output if isinstance(expected_output, list) else None,
         expected_output_summary=record.expected_output_summary,
         hidden_failure_summary=record.hidden_failure_summary,
         error_tag=record.error_tag,
         sort_order=record.sort_order,
+        input_data=input_data,
+        expected_output=expected_output,
     )
