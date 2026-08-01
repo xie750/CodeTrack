@@ -1,4 +1,5 @@
 import { request } from "../api";
+import { authHeaders } from "../authSession";
 import type {
   AiReviewActionPayload,
   AiReviewDetailData,
@@ -11,11 +12,25 @@ import type {
   DiagnosisTaskOption,
   ImprovementStrategyData,
   ImprovementStrategyFilters,
+  MonitorBoardData,
+  MonitorBoardFilters,
+  ResourceCreatePayload,
+  ResourceReferences,
+  ResourceUpdatePayload,
+  ResourceUploadPayload,
   StudentAnalytics,
   TeacherCourse,
   TeacherDashboardData,
+  TeacherDashboardFilters,
+  TeacherDashboardOverview,
+  TeacherResource,
+  TeacherResourceDetail,
+  TeacherResourceFilters,
+  TeacherResourceListData,
   TeacherTeachingAssignment,
   TaskMonitorData,
+  TeacherTaskListData,
+  TeacherTaskListFilters,
   TeacherTimeline,
 } from "./teacherTypes";
 
@@ -66,6 +81,22 @@ export const getTeacherDashboard = (teachingAssignmentId?: string) =>
   request<TeacherDashboardData>(teachingAssignmentId
     ? `/api/v1/teacher/dashboard?teaching_assignment_id=${encodeURIComponent(teachingAssignmentId)}`
     : "/api/v1/teacher/dashboard"
+  );
+
+/**
+ * 教学首页聚合（§五）。一次拿全六张概览卡片、今日待办、最近任务和班级学情摘要。
+ *
+ * 刻意不在前端拼几个接口：`/monitor/board` 一次只看一个任务，而首页的平均完成率和
+ * 逾期人数要横跨该班全部任务；分开打还会让教师切换班级时几张卡片落在不同班上。
+ */
+export const getTeacherDashboardOverview = (filters: TeacherDashboardFilters = {}) =>
+  request<TeacherDashboardOverview>(
+    withQuery("/api/v1/teacher/dashboard/overview", {
+      teaching_assignment_id: filters.teachingAssignmentId,
+      term: filters.term,
+      course_id: filters.courseId,
+      class_id: filters.classId,
+    })
   );
 
 // ===== AI 审核（开发方案 §十一） =====
@@ -185,4 +216,143 @@ export const getImprovementStrategy = (filters: ImprovementStrategyFilters) =>
       // withQuery 会丢掉 falsy 值，window_days=0（全部）本来就是后端默认，正好不必传
       window_days: filters.windowDays ? String(filters.windowDays) : undefined,
     })
+  );
+
+// ===== 任务中心（开发方案 §八 8.1 任务列表） =====
+
+/**
+ * 任务列表。只读：筛选、分页和统计都在后端算，`stats` 覆盖整个范围而不是当前页，
+ * 所以切换状态标签时其它卡片的计数不会掉成 0。
+ */
+export const getTeacherTasks = (filters: TeacherTaskListFilters = {}) =>
+  request<TeacherTaskListData>(
+    withQuery("/api/v1/teacher/tasks", {
+      course_id: filters.courseId,
+      class_id: filters.classId,
+      task_type: filters.taskType,
+      content_status: filters.contentStatus,
+      keyword: filters.keyword,
+      page: filters.page ? String(filters.page) : undefined,
+      page_size: filters.pageSize ? String(filters.pageSize) : undefined,
+    })
+  );
+
+// ===== 任务监控（开发方案 §九 9.1 提交进度看板） =====
+
+/**
+ * 提交进度看板。只读：概览卡片、筛选和分页都在后端算，`stats` 覆盖整个名册而不是当前页，
+ * 所以点开「逾期」筛选后其它卡片的计数不会掉成 0。
+ */
+export const getMonitorBoard = (filters: MonitorBoardFilters = {}) =>
+  request<MonitorBoardData>(withQuery("/api/v1/teacher/monitor/board", monitorQuery(filters)));
+
+/**
+ * 导出当前筛选结果。走与看板相同的取数路径，权限校验在后端（§15.1）。
+ * 返回 Blob 而不是 JSON，所以不能用 request()。
+ */
+export async function exportMonitorBoard(filters: MonitorBoardFilters = {}) {
+  const url = withQuery("/api/v1/teacher/monitor/board/export", monitorQuery(filters));
+  const response = await fetch(url, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`导出失败：${response.status}`);
+  return response.blob();
+}
+
+// 分页参数只在看板用，导出要全量，所以分页字段留给调用方决定是否传
+function monitorQuery(filters: MonitorBoardFilters): Record<string, string | undefined> {
+  return {
+    course_id: filters.courseId,
+    class_id: filters.classId,
+    task_id: filters.taskId,
+    status: filters.status,
+    // hint_level 为 0 是「未使用提示」这个有效筛选值，不能被 falsy 判断吞掉
+    hint_level: filters.hintLevel === undefined ? undefined : String(filters.hintLevel),
+    error_type: filters.errorType,
+    keyword: filters.keyword,
+    page: filters.page ? String(filters.page) : undefined,
+    page_size: filters.pageSize ? String(filters.pageSize) : undefined,
+  };
+}
+
+// ===== 资料中心（开发方案 §七） =====
+
+/**
+ * 资料列表（§7.2 A）。`stats` 和 `filters` 覆盖整个课程而不是当前页，
+ * 所以切换状态标签时统计卡不会掉成 0、章节和知识点下拉也不会把自己筛没了。
+ */
+export const getTeacherResources = (filters: TeacherResourceFilters) =>
+  request<TeacherResourceListData>(
+    withQuery("/api/v1/teacher/resources", {
+      course_id: filters.courseId,
+      status: filters.status || undefined,
+      chapter: filters.chapter,
+      knowledge_point: filters.knowledgePoint,
+      source_type: filters.sourceType,
+      q: filters.keyword,
+      page: filters.page ? String(filters.page) : undefined,
+      page_size: filters.pageSize ? String(filters.pageSize) : undefined,
+    })
+  );
+
+// 资料详情，附版本记录和可复制的目标课程（§7.2 B / C）
+export const getTeacherResource = (resourceId: string) =>
+  request<TeacherResourceDetail>(`/api/v1/teacher/resources/${encodeURIComponent(resourceId)}`);
+
+// 新建文本资料（§7.2 A）
+export const createTeacherResource = (payload: ResourceCreatePayload) =>
+  request<TeacherResource>("/api/v1/teacher/resources", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+/**
+ * 编辑资料（§7.2 B），也承担 §7.2 A 的停用与启用：传 `status` 即可。
+ * 返回值带上更新后的版本记录，前端不用再拉一次详情。
+ */
+export const updateTeacherResource = (resourceId: string, payload: ResourceUpdatePayload) =>
+  request<TeacherResourceDetail>(`/api/v1/teacher/resources/${encodeURIComponent(resourceId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+// 删除未被引用的资料。被历史诊断引用过的会返回 409 RESOURCE_IN_USE（§7.4）
+export const deleteTeacherResource = (resourceId: string) =>
+  request<{ resource_id: string; deleted: boolean }>(
+    `/api/v1/teacher/resources/${encodeURIComponent(resourceId)}`,
+    { method: "DELETE" }
+  );
+
+/**
+ * 上传资料（§7.2 A）。第一版只落盘 + 记元数据，不做切片，
+ * 所以上传件回来是 PARSE_PENDING 且不参与 AI 检索（§7.4）。
+ *
+ * 注意不要设 Content-Type：`request` 会把传入的 header 覆盖上去，
+ * 手动写死 multipart/form-data 会丢掉 fetch 自动生成的 boundary。
+ */
+export const uploadTeacherResource = (file: File, payload: ResourceUploadPayload) => {
+  const form = new FormData();
+  form.append("file", file);
+  Object.entries(payload).forEach(([key, value]) => {
+    if (value === undefined || value === null) return;
+    form.append(key, Array.isArray(value) ? JSON.stringify(value) : String(value));
+  });
+  return request<TeacherResource>("/api/v1/teacher/resources/upload", {
+    method: "POST",
+    body: form,
+  });
+};
+
+// 复制到其它课程（§7.2 C）。副本落成停用状态，由教师在新课程里确认后再启用
+export const copyTeacherResource = (resourceId: string, targetCourseId: string) =>
+  request<TeacherResource>(`/api/v1/teacher/resources/${encodeURIComponent(resourceId)}/copy`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ target_course_id: targetCourseId }),
+  });
+
+// 引用明细（§7.2 C「引用次数」下钻）。只读历史
+export const getResourceReferences = (resourceId: string) =>
+  request<ResourceReferences>(
+    `/api/v1/teacher/resources/${encodeURIComponent(resourceId)}/references`
   );

@@ -25,7 +25,6 @@ import TaskPublish from "./teacher/pages/tasks/TaskPublish";
 import MonitorHome from "./teacher/pages/monitor/MonitorHome";
 import GradingProgress from "./teacher/pages/monitor/GradingProgress";
 import TaskQuality from "./teacher/pages/monitor/TaskQuality";
-import TaskMonitor from "./teacher/pages/TaskMonitor";
 import GradingWorkspace from "./teacher/pages/GradingWorkspace";
 import DiagnosisSummary from "./teacher/pages/DiagnosisSummary";
 import AiReviewList from "./teacher/pages/aiReview/AiReviewList";
@@ -350,7 +349,11 @@ function TeacherAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
             <Route path="monitor" element={<MonitorHome />} />
             <Route path="monitor/grading" element={<GradingProgress />} />
             <Route path="monitor/quality" element={<TaskQuality />} />
-            <Route path="monitor/tasks/:taskId" element={<TaskMonitor />} />
+            {/*
+              带 taskId 的深链落到同一个看板，由页面把该任务预选中。
+              §9.1 的看板本身就带任务选择器，另开一个只看单任务的页面会变成第二套口径。
+            */}
+            <Route path="monitor/tasks/:taskId" element={<MonitorHome />} />
             <Route path="submissions/:submissionId/grade" element={<GradingWorkspace />} />
             {/* 旧路径保留重定向，避免历史链接失效 */}
             <Route path="tasks/:taskId/monitor" element={<TaskMonitorRedirect />} />

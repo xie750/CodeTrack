@@ -121,9 +121,51 @@ def ensure_task_workspace_columns(db: Session) -> None:
     db.commit()
 
 
+def ensure_knowledge_source_columns(db: Session) -> None:
+    """资料中心（§七）给 knowledge_sources 补的列，在没跑 alembic 的库上兜底。
+
+    `main.py` 的 lifespan 只跑 `create_all` + seed，而 `create_all` 对**已存在**的表
+    不会补列。开发库和测试库里这张表早就建好了，少了这个兜底，任何 SELECT
+    knowledge_sources 都会因为缺列直接报错。
+    """
+    columns = {column["name"] for column in inspect(db.bind).get_columns("knowledge_sources")}
+    additions = [
+        ("chapter", "VARCHAR(120) NOT NULL DEFAULT ''"),
+        ("knowledge_points", "TEXT NOT NULL DEFAULT '[]'"),
+        ("content", "TEXT NOT NULL DEFAULT ''"),
+        ("status", "VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'"),
+        ("ai_retrievable", "BOOLEAN NOT NULL DEFAULT 1"),
+        ("share_scope", "VARCHAR(20) NOT NULL DEFAULT 'COURSE'"),
+        ("file_name", "VARCHAR(255)"),
+        ("file_size", "INTEGER"),
+        ("mime_type", "VARCHAR(120)"),
+        ("storage_path", "VARCHAR(500)"),
+        ("created_by", "VARCHAR(64)"),
+        ("created_at", "DATETIME"),
+        ("updated_at", "DATETIME"),
+    ]
+    for name, ddl in additions:
+        if name not in columns:
+            db.execute(text(f"ALTER TABLE knowledge_sources ADD COLUMN {name} {ddl}"))
+    # 新加的时间戳列对已有行是 NULL（ALTER TABLE 不会追认 ORM 的 default），
+    # 补一次当前时间，免得资料中心列表里老资料的创建时间是空的
+    db.execute(
+        text(
+            "UPDATE knowledge_sources SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL"
+        )
+    )
+    db.execute(
+        text(
+            "UPDATE knowledge_sources SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL"
+        )
+    )
+    db.commit()
+
+
 def seed_demo_data(db: Session) -> None:
     ensure_auth_columns(db)
     ensure_task_workspace_columns(db)
+    ensure_knowledge_source_columns(db)
     users = {
         "user_teacher_001": {
             "username": "teacher_wang",
@@ -759,29 +801,52 @@ def seed_demo_data(db: Session) -> None:
         },
     )
 
+    # 资料中心种子（§七）。知识点沿用课程里已有的名字（见上面的 questions 和
+    # LearnerKnowledgeState），这样资料中心的知识点筛选器和学情诊断的知识点维度
+    # 指向同一批名称，不会出现两套叫法。
     sources = {
         "kb_linked_list_delete_basic": (
             "单链表删除基本规则",
             "删除链表节点时，需要找到目标节点并维护相邻节点之间的连接关系。",
             "HIGH",
+            "第三章 线性表",
+            ["链表边界处理", "指针遍历"],
+            "单链表删除的三步：定位前驱节点、改写前驱的 next、释放目标节点。"
+            "定位时要同时持有前驱指针和当前指针，只有当前指针无法完成改链。"
+            "释放前必须先把 next 接好，否则后半段链表会丢失。",
         ),
         "kb_head_node_delete": (
             "删除头节点时的链表起点更新",
             "删除第一个节点时，没有前驱节点，需要更新代表链表起点的头指针或返回新的头节点。",
             "HIGH",
+            "第三章 线性表",
+            ["头节点删除", "链表边界处理"],
+            "头节点没有前驱，通用的改链写法在 position == 0 时不成立。"
+            "两种正确做法：一是函数返回新的头指针并要求调用方接收；"
+            "二是使用带哨兵的头结点，让头节点也有前驱，从而与中间节点走同一条分支。",
         ),
         "kb_empty_list_guard": (
             "空链表与非法位置保护",
             "空链表、负数位置和超过长度的位置都应先判断，避免空指针访问或错误修改。",
             "HIGH",
+            "第三章 线性表",
+            ["非法位置保护", "链表边界处理"],
+            "进入循环前先判断 head == nullptr；position < 0 直接拒绝；"
+            "遍历过程中每次前进都要检查当前指针是否已经为空，"
+            "position 超过链表长度时应当原样返回而不是继续解引用。",
         ),
         "kb_boundary_test_reasoning": (
             "用边界测试验证链表删除",
             "链表删除不能只测试中间节点，还应覆盖头节点、尾节点、空链表和非法位置。",
             "MEDIUM",
+            "第三章 线性表",
+            ["边界测试", "链表边界处理"],
+            "一组最小但完整的用例：空链表、单节点删第 0 个、删头节点、删尾节点、"
+            "删中间节点、position 等于长度、position 为负数。"
+            "只测中间节点的代码几乎必然在头节点上出错，因为那是唯一没有前驱的位置。",
         ),
     }
-    for source_id, (title, summary, level) in sources.items():
+    for source_id, (title, summary, level, chapter, points, content) in sources.items():
         upsert(
             db,
             KnowledgeSource,
@@ -794,6 +859,13 @@ def seed_demo_data(db: Session) -> None:
                 "version": "v0.1",
                 "authority_level": level,
                 "student_visible": True,
+                "chapter": chapter,
+                "knowledge_points": json.dumps(points, ensure_ascii=False),
+                "content": content,
+                "status": "ACTIVE",
+                "ai_retrievable": True,
+                "share_scope": "COURSE",
+                "created_by": "user_teacher_001",
             },
         )
 

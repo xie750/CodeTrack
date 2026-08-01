@@ -226,6 +226,17 @@ class QuestionAnswer(Base):
 
 
 class KnowledgeSource(Base):
+    """课程知识源，即教师端「资料中心」维护的资料（开发方案 §七）。
+
+    三个开关互相独立，不要合并：
+    - `status`      资料本身是否在用（ACTIVE / DISABLED / PARSE_PENDING / PARSE_FAILED）
+    - `student_visible` 学生能否直接查看
+    - `ai_retrievable`  是否参与 AI 检索
+
+    `chapter` 存字符串、`knowledge_points` 存 JSON 列表，是因为 §六 6.2 课程大纲还
+    没开发，没有章节表可以外键。等章节—知识点建模落地再迁成外键。
+    """
+
     __tablename__ = "knowledge_sources"
 
     id: Mapped[str] = mapped_column(String(80), primary_key=True)
@@ -236,6 +247,45 @@ class KnowledgeSource(Base):
     version: Mapped[str] = mapped_column(String(40), nullable=False)
     authority_level: Mapped[str] = mapped_column(String(20), nullable=False)
     student_visible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    chapter: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    # JSON 字符串数组，写法对齐 Question.knowledge_points
+    knowledge_points: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    # 文本资料正文，AI 检索真正读的内容；上传文件在第一版为空（§7.4 不做切片）
+    content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="ACTIVE")
+    ai_retrievable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    share_scope: Mapped[str] = mapped_column(String(20), nullable=False, default="COURSE")
+
+    file_name: Mapped[str | None] = mapped_column(String(255))
+    file_size: Mapped[int | None] = mapped_column(Integer)
+    mime_type: Mapped[str | None] = mapped_column(String(120))
+    storage_path: Mapped[str | None] = mapped_column(String(500))
+
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class KnowledgeSourceRevision(Base):
+    """资料历史版本，只追加（§7.2 C 版本记录 / §15.2 历史不得物理覆盖）。
+
+    做法与 `DiagnosisReview` 一致：编辑资料时先把改动前的内容抄一行进来，
+    再更新主表。旧行永不改写、永不删除，所以「引用了 v0.1 的历史诊断」始终能
+    还原当时读到的正文。
+    """
+
+    __tablename__ = "knowledge_source_revisions"
+
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    source_id: Mapped[str] = mapped_column(ForeignKey("knowledge_sources.id"), nullable=False)
+    version: Mapped[str] = mapped_column(String(40), nullable=False)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    editor_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+    change_note: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
 class Submission(Base):

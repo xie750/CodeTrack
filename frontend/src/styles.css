@@ -7363,3 +7363,1952 @@ html.workspace-resizing-y * {
     justify-self: start;
   }
 }
+
+/* ==========================================================================
+   任务中心（开发方案 §八 8.1 任务列表）
+
+   复用 AI 审核那套外壳：.review-page / .review-head / .review-stats /
+   .review-filters / .review-list / .review-badge / .review-pagination，
+   只有任务行独有的四列结构（发布情况、完成率、行内操作）在这里新增。
+   任务行比审核行多一列，所以 .task-row 自己定义栅格，不改 .review-row。
+   ========================================================================== */
+
+/* 新建任务：主按钮外观，但接口未就绪时靠 title 说明，不做成能点出假成功的样子 */
+.task-primary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid #176cf5;
+  border-radius: 7px;
+  color: #ffffff;
+  background: linear-gradient(180deg, #2c83ff, #1165ed);
+  box-shadow: 0 8px 18px rgba(25, 103, 239, 0.18);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.task-page .teacher-subnav {
+  margin: -8px 0 0;
+}
+
+.task-row {
+  min-height: 92px;
+  padding: 15px 18px;
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) 186px 150px 178px;
+  align-items: center;
+  gap: 18px;
+  transition:
+    border-color 180ms var(--motion-soft),
+    transform 180ms var(--motion-soft),
+    box-shadow 180ms var(--motion-soft);
+}
+
+.task-row:hover {
+  border-color: #cfe0ff;
+  transform: translateY(-1px);
+  box-shadow: 0 12px 30px rgba(31, 59, 105, 0.09);
+}
+
+/* 已发布只做轻量标识，和审核页 .review-row.pending 一致的处理 */
+.task-row.published {
+  border-color: #cddfff;
+  background: linear-gradient(180deg, #f7fbff, #ffffff 58%);
+}
+
+.task-row-main {
+  min-width: 0;
+}
+
+.task-row-main h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #17243b;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.task-row-main h2 > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-row-main > p {
+  margin-top: 5px;
+  color: #657187;
+  font-size: 12.5px;
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.task-type-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: #45536b;
+  background: #f1f4f9;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.task-row-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 8px;
+}
+
+.task-row-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #7a8598;
+  font-size: 12px;
+}
+
+.task-row-meta svg {
+  color: #9aa6b8;
+}
+
+/* ---- 发布情况：一个任务可以按不同模式发给多个班级（§八 8.6） ---- */
+
+.task-pubs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.task-pub {
+  display: grid;
+  gap: 2px;
+  padding: 6px 9px;
+  border: 1px solid #e8edf5;
+  border-radius: 7px;
+  background: #fbfcfe;
+}
+
+.task-pub > b {
+  color: #253149;
+  font-size: 12px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-pub > i {
+  color: #1a5fd0;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.task-pub > u {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #7a8598;
+  font-size: 11px;
+  text-decoration: none;
+}
+
+.task-pub-empty {
+  color: #98a3b4;
+  font-size: 12px;
+}
+
+/* ---- 完成率：null（未发布）与 0%（发布了没人完成）必须看得出区别 ---- */
+
+.task-progress {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.task-progress > b {
+  color: #17243b;
+  font-size: 15px;
+}
+
+.task-progress i {
+  height: 6px;
+  border-radius: 999px;
+  background: #eaf0f9;
+  overflow: hidden;
+}
+
+.task-progress i > b {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: #20bd79;
+}
+
+.task-progress em {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #657187;
+  font-size: 11.5px;
+  font-style: normal;
+}
+
+.task-progress-none {
+  color: #98a3b4;
+}
+
+/* ---- 行内操作：只有查看监控是真接口，其余按 unavailable_actions 禁用 ---- */
+
+.task-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.task-actions > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  border: 1px solid #dce5f2;
+  border-radius: 7px;
+  color: #253149;
+  background: #ffffff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    border-color 180ms var(--motion-soft),
+    color 180ms var(--motion-soft),
+    background 180ms var(--motion-soft);
+}
+
+.task-actions > button:hover:not(:disabled) {
+  border-color: #b6d1ff;
+  color: #176cf5;
+  background: #f5f8ff;
+}
+
+.task-actions > button.primary {
+  border-color: #176cf5;
+  color: #ffffff;
+  background: linear-gradient(180deg, #2c83ff, #1165ed);
+  box-shadow: 0 8px 18px rgba(25, 103, 239, 0.18);
+}
+
+.task-actions > button:disabled {
+  color: #a8b2c2;
+  background: #f7f9fc;
+  cursor: not-allowed;
+}
+
+/* 五个禁用动作两列排布：三列会把「学生视角」压成两行，读起来像乱码 */
+.task-actions-secondary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.task-actions-secondary button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 27px;
+  padding: 0 6px;
+  border: 1px solid #e8edf5;
+  border-radius: 6px;
+  color: #a8b2c2;
+  background: #f7f9fc;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: not-allowed;
+}
+
+/* 奇数个按钮，最后一个占满整行，不留半个空格子 */
+.task-actions-secondary button:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+/* ---- 内容状态徽标：沿用 .review-badge 的形状，只补五个状态的配色 ---- */
+
+.review-badge.published {
+  color: #12885a;
+  background: #e6f8ef;
+}
+
+.review-badge.ready {
+  color: #1a5fd0;
+  background: #e8f1ff;
+}
+
+.review-badge.closed {
+  color: #a06414;
+  background: #fdf3e3;
+}
+
+.review-badge.draft,
+.review-badge.archived {
+  color: #5a6579;
+  background: #f1f4f9;
+}
+
+/* ---- 响应式 ---- */
+
+@media (max-width: 1240px) {
+  .task-row {
+    grid-template-columns: 88px minmax(0, 1fr) 168px 140px;
+  }
+
+  /* 窄屏先把操作列换到第二行整宽，宁可换行也不要把按钮压成两个字 */
+  .task-actions {
+    grid-column: 2 / -1;
+    grid-template-columns: 152px minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .task-actions-secondary {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .task-actions-secondary button:last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 980px) {
+  .task-page .review-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .task-row {
+    grid-template-columns: 88px minmax(0, 1fr);
+  }
+
+  .task-pubs,
+  .task-progress {
+    grid-column: 2;
+  }
+}
+
+@media (max-width: 720px) {
+  .task-page .review-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .task-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .task-actions-secondary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .task-actions-secondary button:last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+}
+
+/* ===== 任务监控：提交进度看板（开发方案 §九 9.1） =====
+   复用 .review-page / .class-card / .class-stat / .review-list 那套 token，
+   只补看板独有的六列概览、任务信息条和学生明细行。 */
+
+.monitor-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* 六张概览卡（§9.1 比 AI 审核队列多一张），窄屏按三列再两列退化 */
+.monitor-stats {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.monitor-stats .class-stat {
+  min-height: 126px;
+  padding: 20px 21px;
+}
+
+.monitor-stats .class-stat strong {
+  margin-top: 12px;
+  font-size: 27px;
+}
+
+/* 非数值（暂无数据 / 不适用）降一档，否则 27px 的中文会顶到卡片边缘 */
+.monitor-stats .class-stat strong.monitor-stat-text {
+  font-size: 19px;
+  line-height: 1.25;
+}
+
+/* 卡片即筛选入口，选中态复用 .review-stats 已有的 aria-pressed 规则 */
+.monitor-stat-button {
+  display: block;
+  width: 100%;
+}
+
+.monitor-task-field {
+  min-width: 280px;
+  flex: 1 1 280px;
+}
+
+/* ---------- 任务信息条 ---------- */
+
+.monitor-task-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 108px;
+  align-items: center;
+  gap: 22px;
+  padding: 20px 24px;
+}
+
+.monitor-task-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.monitor-task-title h2 {
+  margin: 0;
+  color: #17243b;
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.monitor-publish-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 6px;
+  color: #16a66d;
+  background: #e8faf2;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.monitor-publish-badge.paused,
+.monitor-publish-badge.scheduled {
+  color: #c07800;
+  background: #fff6e6;
+}
+
+.monitor-publish-badge.closed,
+.monitor-publish-badge.draft {
+  color: #657187;
+  background: #f1f4f9;
+}
+
+.monitor-task-meta {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  color: #657187;
+  font-size: 12px;
+}
+
+/* 成绩口径说明来自后端，必须显示：编程任务没有分数，教师需要知道为什么 */
+.monitor-task-note {
+  margin: 12px 0 0;
+  padding: 9px 12px;
+  border-left: 3px solid #cfe0ff;
+  border-radius: 0 6px 6px 0;
+  background: #f7fbff;
+  color: #4a5568;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.monitor-task-side {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.monitor-task-side em {
+  color: #657187;
+  font-size: 12px;
+  font-style: normal;
+}
+
+/* ---------- 学生明细行 ---------- */
+
+.monitor-list {
+  gap: 12px;
+}
+
+.monitor-row {
+  min-height: 84px;
+  padding: 15px 18px;
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) 118px 168px;
+  align-items: center;
+  gap: 18px;
+  transition:
+    border-color 180ms var(--motion-soft),
+    transform 180ms var(--motion-soft),
+    box-shadow 180ms var(--motion-soft);
+}
+
+.monitor-row:hover {
+  border-color: #cfe0ff;
+  transform: translateY(-1px);
+  box-shadow: 0 12px 30px rgba(31, 59, 105, 0.09);
+}
+
+/* 逾期只做左侧色条，不整行变红：一行可能同时是「已提交」和「逾期」 */
+.monitor-row.overdue {
+  border-left: 3px solid #ff941f;
+}
+
+.monitor-row-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.monitor-row-title strong {
+  color: #17243b;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.monitor-row-title small {
+  color: #98a2b4;
+  font-size: 12px;
+}
+
+.monitor-overdue-tag,
+.monitor-review-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.monitor-overdue-tag {
+  color: #c07800;
+  background: #fff6e6;
+}
+
+.monitor-review-tag {
+  color: #6b4ef0;
+  background: #f2ecff;
+}
+
+.monitor-row-meta {
+  margin-top: 7px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  color: #657187;
+  font-size: 12px;
+}
+
+.monitor-row-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.monitor-row-errors {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.monitor-row-errors em {
+  padding: 3px 8px;
+  border-radius: 5px;
+  color: #b4453f;
+  background: #fff0f0;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.monitor-row-score {
+  display: grid;
+  gap: 5px;
+  justify-items: center;
+  text-align: center;
+}
+
+.monitor-row-score strong {
+  color: #17243b;
+  font-size: 19px;
+}
+
+.monitor-row-score em {
+  color: #657187;
+  font-size: 11px;
+  font-style: normal;
+}
+
+.monitor-row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.monitor-row-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid #dce5f2;
+  border-radius: 7px;
+  color: #253149;
+  background: #ffffff;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.monitor-row-actions button.primary {
+  border-color: #176cf5;
+  color: #ffffff;
+  background: #176cf5;
+}
+
+.monitor-row-actions button:disabled {
+  color: #a8b2c2;
+  background: #f6f8fc;
+  cursor: not-allowed;
+}
+
+/* 状态徽标补足看板用到的色档，.class-badge 原来只有 red / green / purple */
+.class-badge.grey {
+  color: #657187;
+  background: #f1f4f9;
+}
+
+.class-badge.blue {
+  color: #176cf5;
+  background: #eaf2ff;
+}
+
+.class-badge.indigo {
+  color: #4e84ff;
+  background: #eef4ff;
+}
+
+.class-badge.orange {
+  color: #c07800;
+  background: #fff6e6;
+}
+
+/* ---------- 缺失能力说明 ---------- */
+
+.monitor-gaps {
+  padding: 18px 22px;
+}
+
+.monitor-gaps ul {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #657187;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+@media (max-width: 1280px) {
+  .monitor-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1080px) {
+  .monitor-row {
+    grid-template-columns: 88px minmax(0, 1fr);
+    row-gap: 12px;
+  }
+
+  .monitor-row-score,
+  .monitor-row-actions {
+    grid-column: 2;
+    justify-items: start;
+    justify-content: flex-start;
+    text-align: left;
+  }
+}
+
+@media (max-width: 760px) {
+  .monitor-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .monitor-task-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .monitor-task-side {
+    justify-items: start;
+  }
+}
+
+/* ==========================================================================
+   资料中心（开发方案 §七）
+
+   与 AI 审核 / 学情诊断 / 教学改进 / 任务监控同一套做法：控件沿用学生端 token ——
+   卡片 1px #e3e9f2 + 10px 圆角 + 淡蓝投影、主色 #176cf5、正文 #111a30、
+   次要文字 #657187、8px 间距系统，不用 antd 默认外观。
+   复用 .class-card / .class-stat / .class-tabs / .class-empty / .review-head /
+   .review-stats / .review-filters / .review-select / .review-search /
+   .review-pagination / .review-message / .skeleton-block，
+   本模块独有的资料行、编辑面板和开关才在这里新增。
+
+   注意 .resource-page 下面那段排版 reset 是必须的，不是装饰：.class-card /
+   .class-stat 依赖的 h1/h2/p margin 归零和 h2 字号，原本只写在 .profile-page
+   作用域里（见「学习画像」一节），不重新声明的话所有面板标题都会捡回全局
+   margin 和字号。
+   ========================================================================== */
+
+.resource-page {
+  width: 100%;
+  padding: 36px 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  color: #111a30;
+}
+
+.resource-page h1,
+.resource-page h2,
+.resource-page h3,
+.resource-page p {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.resource-page h2 {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.resource-page h3 {
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #111a30;
+}
+
+/* ===== 教学上下文：课程选择器 ===== */
+
+.resource-context {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.resource-context label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: #657187;
+}
+
+.resource-context label > span {
+  font-weight: 600;
+}
+
+.resource-context-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #8a93a5;
+  padding-bottom: 8px;
+}
+
+.resource-context-note > svg {
+  flex: none;
+  color: #d98324;
+}
+
+/* 文件选择框藏起来，交互走「上传资料」按钮 */
+.resource-file-input {
+  display: none;
+}
+
+/* ===== 上传确认条 ===== */
+
+.resource-upload-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px auto;
+  align-items: end;
+  gap: 16px;
+  padding: 16px 18px;
+  border: 1px solid #cfe0fb;
+  border-radius: 10px;
+  background: #f5f9ff;
+}
+
+.resource-upload-bar strong {
+  font-size: 14px;
+  color: #111a30;
+  margin-right: 8px;
+}
+
+.resource-upload-bar em {
+  font-style: normal;
+  font-size: 12px;
+  color: #657187;
+}
+
+.resource-upload-bar p {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #657187;
+}
+
+.resource-upload-bar label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #657187;
+}
+
+.resource-upload-bar input {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid #d7dfec;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #111a30;
+  background: #fff;
+}
+
+.resource-upload-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.resource-upload-actions button,
+.resource-confirm-actions button,
+.resource-editor-actions button,
+.resource-share-row button,
+.resource-references button,
+.resource-row-actions button {
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid #d7dfec;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 13px;
+  color: #3c4658;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.resource-upload-actions button:hover:not(:disabled),
+.resource-confirm-actions button:hover:not(:disabled),
+.resource-editor-actions button:hover:not(:disabled),
+.resource-share-row button:hover:not(:disabled),
+.resource-references button:hover:not(:disabled),
+.resource-row-actions button:hover:not(:disabled) {
+  border-color: #176cf5;
+  color: #176cf5;
+}
+
+.resource-upload-actions button.primary,
+.resource-editor-actions button.primary,
+.resource-row-actions button.primary {
+  border-color: #176cf5;
+  background: #176cf5;
+  color: #fff;
+}
+
+.resource-upload-actions button.primary:hover:not(:disabled),
+.resource-editor-actions button.primary:hover:not(:disabled),
+.resource-row-actions button.primary:hover:not(:disabled) {
+  background: #0f5ad6;
+  color: #fff;
+}
+
+.resource-confirm-actions button.danger {
+  border-color: #e2574c;
+  background: #e2574c;
+  color: #fff;
+}
+
+.resource-confirm-actions button.danger:hover:not(:disabled) {
+  background: #c9453b;
+  color: #fff;
+}
+
+.resource-row-actions button:disabled,
+.resource-editor-actions button:disabled,
+.resource-upload-actions button:disabled,
+.resource-confirm-actions button:disabled,
+.resource-share-row button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ===== 资料行卡 ===== */
+
+.resource-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.resource-row {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr) 168px 128px;
+  align-items: start;
+  gap: 16px;
+  padding: 16px 18px;
+  min-height: 104px;
+}
+
+.resource-row.skeleton-block {
+  min-height: 104px;
+}
+
+.resource-row.muted {
+  background: #fafbfd;
+}
+
+.resource-row.muted .resource-row-main h2 span,
+.resource-row.muted .resource-row-main > p {
+  color: #8a93a5;
+}
+
+.resource-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.resource-badge.active {
+  background: #e8f7ee;
+  color: #1f8a4c;
+  border-color: #bfe6cd;
+}
+
+.resource-badge.disabled {
+  background: #f1f3f7;
+  color: #657187;
+  border-color: #dde2ea;
+}
+
+.resource-badge.pending {
+  background: #fff5e6;
+  color: #b3701a;
+  border-color: #f2ddba;
+}
+
+.resource-badge.failed {
+  background: #fdecea;
+  color: #c9453b;
+  border-color: #f5cdc8;
+}
+
+.resource-row-main {
+  min-width: 0;
+}
+
+.resource-row-main h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.resource-row-main h2 span {
+  color: #111a30;
+}
+
+.resource-row-main > p {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #657187;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.resource-tag {
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #eef4ff;
+  color: #176cf5;
+}
+
+.resource-tag.ghost {
+  background: #f1f3f7;
+  color: #657187;
+}
+
+.resource-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.resource-tags span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #f6f8fc;
+  color: #3c4658;
+  border: 1px solid #e8ecf3;
+}
+
+.resource-tags span.chapter {
+  background: #fff;
+  border-color: #cfe0fb;
+  color: #176cf5;
+  font-weight: 600;
+}
+
+.resource-tags span.ghost {
+  background: transparent;
+  border-style: dashed;
+  color: #8a93a5;
+}
+
+.resource-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #8a93a5;
+}
+
+.resource-row-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ===== 两个开关的状态灯 =====
+   「学生可见」和「AI 检索」是独立开关，行卡上必须能分别看到当前值，
+   否则教师无法判断停用后到底是哪一侧被切断了。 */
+
+.resource-flags {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.resource-flags span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #f1f3f7;
+  color: #8a93a5;
+  border: 1px solid #e4e8ef;
+  width: fit-content;
+}
+
+.resource-flags span.on {
+  background: #eef4ff;
+  color: #176cf5;
+  border-color: #cfe0fb;
+  font-weight: 600;
+}
+
+.resource-flags em {
+  font-style: normal;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #8a93a5;
+  margin-top: 2px;
+}
+
+.resource-row-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.resource-row-actions button {
+  justify-content: center;
+}
+
+.resource-row-actions button.ghost {
+  border-style: dashed;
+  color: #8a93a5;
+}
+
+.resource-row-actions button.ghost:hover:not(:disabled) {
+  border-color: #e2574c;
+  color: #e2574c;
+}
+
+/* ===== 删除二次确认（§14.5）===== */
+
+.resource-confirm {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(17, 26, 48, 0.32);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.resource-confirm-box {
+  width: min(440px, 100%);
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e3e9f2;
+  box-shadow: 0 18px 44px rgba(23, 108, 245, 0.16);
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.resource-confirm-box h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #111a30;
+}
+
+.resource-confirm-box p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #657187;
+}
+
+.resource-confirm-box p.warn {
+  color: #b3701a;
+  background: #fff5e6;
+  border: 1px solid #f2ddba;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.resource-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* ===== 右侧编辑面板（§7.2 B / C）=====
+   刻意用面板而不是 antd Modal：编辑资料时要同时看得到版本记录和引用明细，
+   弹窗那点高度放不下，而且遮住列表会让教师失去上下文。 */
+
+.resource-editor {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 55;
+  width: min(520px, 100%);
+  background: #fff;
+  border-left: 1px solid #e3e9f2;
+  box-shadow: -12px 0 32px rgba(23, 108, 245, 0.1);
+  padding: 20px 22px 28px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  color: #111a30;
+}
+
+.resource-editor > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  position: sticky;
+  top: -20px;
+  background: #fff;
+  padding: 12px 0;
+  margin: -12px 0 0;
+  border-bottom: 1px solid #eef1f6;
+  z-index: 1;
+}
+
+.resource-editor > header h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.resource-editor > header button {
+  width: 30px;
+  height: 30px;
+  border: 1px solid #e3e9f2;
+  border-radius: 8px;
+  background: #fff;
+  color: #657187;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.resource-editor > header button:hover {
+  border-color: #176cf5;
+  color: #176cf5;
+}
+
+.resource-editor-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.resource-editor-body label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.resource-editor-body label > span {
+  font-size: 12px;
+  font-weight: 600;
+  color: #657187;
+}
+
+.resource-editor-body label > em {
+  font-style: normal;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #8a93a5;
+}
+
+.resource-editor-body input,
+.resource-editor-body textarea {
+  width: 100%;
+  border: 1px solid #d7dfec;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #111a30;
+  background: #fff;
+  font-family: inherit;
+}
+
+.resource-editor-body input {
+  height: 34px;
+  padding: 0 10px;
+}
+
+.resource-editor-body textarea {
+  padding: 8px 10px;
+  line-height: 1.7;
+  resize: vertical;
+}
+
+.resource-editor-body input:focus-visible,
+.resource-editor-body textarea:focus-visible {
+  outline: none;
+  border-color: #176cf5;
+  box-shadow: 0 0 0 3px rgba(23, 108, 245, 0.12);
+}
+
+.resource-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+/* ===== 手写开关，不用 antd Switch ===== */
+
+.resource-switches {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid #e8ecf3;
+  border-radius: 10px;
+  background: #fafbfd;
+}
+
+.resource-switch {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.resource-switch button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  color: #111a30;
+}
+
+.resource-switch button i {
+  width: 18px;
+  height: 18px;
+  border: 1px solid #c9d3e2;
+  border-radius: 5px;
+  background: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  flex: none;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.resource-switch button[aria-checked="true"] i {
+  background: #176cf5;
+  border-color: #176cf5;
+}
+
+.resource-switch button b {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.resource-switch em {
+  font-style: normal;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #8a93a5;
+  padding-left: 26px;
+}
+
+.resource-switch.disabled button {
+  cursor: not-allowed;
+}
+
+.resource-switch.disabled button b {
+  color: #8a93a5;
+}
+
+.resource-editor-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+/* ===== 资料共享 / 引用次数 / 版本记录（§7.2 C）===== */
+
+.resource-share,
+.resource-references,
+.resource-revisions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid #eef1f6;
+}
+
+.resource-share-row {
+  display: flex;
+  gap: 8px;
+}
+
+.resource-share-row .review-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.resource-note {
+  font-size: 12px;
+  line-height: 1.7;
+  color: #8a93a5;
+}
+
+.resource-references ul,
+.resource-revisions ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.resource-references li,
+.resource-revisions li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid #e8ecf3;
+  border-radius: 8px;
+  background: #fafbfd;
+}
+
+.resource-references li strong,
+.resource-revisions li strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: #111a30;
+}
+
+.resource-references li span,
+.resource-revisions li span {
+  font-size: 12px;
+  color: #3c4658;
+}
+
+.resource-revisions li em {
+  font-style: normal;
+  font-size: 11px;
+  color: #8a93a5;
+}
+
+/* ---- 响应式 ---- */
+
+@media (max-width: 1180px) {
+  .resource-row {
+    grid-template-columns: 84px minmax(0, 1fr) 150px;
+  }
+
+  .resource-row-actions {
+    grid-column: 2 / -1;
+    flex-direction: row;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 900px) {
+  .resource-page {
+    padding: 24px 16px 24px;
+  }
+
+  .resource-upload-bar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .resource-row {
+    grid-template-columns: 84px minmax(0, 1fr);
+  }
+
+  .resource-flags {
+    grid-column: 2;
+  }
+
+  .resource-editor-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .resource-editor {
+    width: 100%;
+  }
+}
+
+/* ==========================================================================
+   教学首页（开发方案 §五 页面模块一）
+   控件全部复用学生端设计系统：home-card / task-row / mini-progress /
+   outline-btn / type-tag / reminder-item / empty-panel / skeleton。
+   这里只补教师端特有的排布：三级教学上下文、六张概览卡片和学情摘要三栏。
+   ========================================================================== */
+
+/* 待办条目带按钮，比学生端的提醒宽一些 */
+.home-dashboard.teacher-home {
+  grid-template-columns: minmax(0, 1fr) 320px;
+}
+
+/* 加载失败时只剩一列，别留一条空的右栏 */
+.home-dashboard.teacher-home.single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* 教学上下文没有插画，标题和选择器各占一半 */
+.teacher-hero {
+  min-height: 0;
+  padding: 26px 28px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 20px;
+}
+
+.teacher-hero .hero-copy {
+  width: 100%;
+}
+
+.teacher-hero .hero-copy h1 {
+  margin-bottom: 8px;
+  font-size: 26px;
+}
+
+.teacher-hero .hero-copy p {
+  margin: 0;
+}
+
+.teacher-hero-warn {
+  margin-top: 8px !important;
+  color: #d4700f !important;
+  font-size: 13px !important;
+}
+
+.teacher-context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.teacher-context label {
+  min-width: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.teacher-context label span {
+  color: #68758b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.teacher-context select {
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid #d8e2ef;
+  border-radius: 8px;
+  color: #1c2a44;
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.teacher-context select:focus-visible {
+  outline: 2px solid #176cf5;
+  outline-offset: 1px;
+}
+
+.teacher-context select:disabled {
+  color: #97a2b5;
+  background: #f4f7fb;
+  cursor: not-allowed;
+}
+
+.teacher-meta {
+  color: #8b97ab;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.teacher-note {
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid #edf1f6;
+  color: #8b97ab;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* §5.2 B 六张概览卡片，整卡可点，点击进入对应明细页 */
+.teacher-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.teacher-stat {
+  min-height: 92px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid #e8edf4;
+  border-radius: 10px;
+  background: #ffffff;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 180ms var(--motion-soft), background 180ms var(--motion-soft),
+    transform 180ms var(--motion-soft), box-shadow 180ms var(--motion-soft);
+}
+
+.teacher-stat:hover:not(:disabled) {
+  border-color: #cadcff;
+  background: #fbfdff;
+  box-shadow: 0 6px 18px rgba(23, 108, 245, 0.08);
+}
+
+.teacher-stat:disabled {
+  cursor: default;
+}
+
+.teacher-stat-icon {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+}
+
+.teacher-stat-icon.blue {
+  color: #176cf5;
+  background: #edf4ff;
+}
+
+.teacher-stat-icon.green {
+  color: #19a96d;
+  background: #e9faf2;
+}
+
+.teacher-stat-icon.orange {
+  color: #ff8e22;
+  background: #fff1dc;
+}
+
+.teacher-stat-icon.purple {
+  color: #8151e6;
+  background: #f2ecff;
+}
+
+.teacher-stat-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.teacher-stat-body em {
+  color: #68758b;
+  font-size: 12px;
+  font-weight: 700;
+  font-style: normal;
+}
+
+.teacher-stat-body strong {
+  color: #17243b;
+  font-size: 21px;
+  font-weight: 800;
+}
+
+.teacher-stat-body small {
+  overflow: hidden;
+  color: #97a2b5;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* §5.2 D 最近任务：学生端 task-row 加一列教师操作 */
+.teacher-task-row {
+  grid-template-columns: 40px minmax(200px, 1fr) 170px 116px;
+}
+
+.teacher-task-row .task-title-line {
+  flex-wrap: wrap;
+}
+
+.teacher-remaining {
+  margin-left: 8px;
+  color: #8b97ab;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.teacher-danger-note {
+  color: #ff4b51;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.teacher-row-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.type-tag.orange {
+  color: #d4700f;
+  background: #fff1dc;
+}
+
+/* §5.2 E 班级学情摘要三栏 */
+.teacher-summary-grid {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr 1fr;
+  gap: 14px;
+}
+
+.teacher-summary-card {
+  min-height: 196px;
+  padding: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid #e6ebf3;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.teacher-summary-card h3 {
+  color: #17243b;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.teacher-summary-card .skeleton-block,
+.teacher-summary-card.skeleton-block {
+  min-height: 196px;
+}
+
+/* 完成率趋势：按任务发布顺序的竖条，鼠标悬停给完整口径 */
+.teacher-trend {
+  height: 132px;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.teacher-trend-col {
+  min-width: 0;
+  height: 100%;
+  flex: 1;
+  display: grid;
+  grid-template-rows: 16px minmax(0, 1fr) 28px;
+  align-items: end;
+  gap: 4px;
+  text-align: center;
+}
+
+.teacher-trend-col i {
+  width: 100%;
+  min-height: 3px;
+  align-self: end;
+  border-radius: 6px 6px 0 0;
+  background: linear-gradient(180deg, #4195ff, #246ef3);
+}
+
+.teacher-trend-value {
+  color: #17243b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.teacher-trend-label {
+  overflow: hidden;
+  color: #8b97ab;
+  font-size: 10px;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* 高频错误 / 薄弱知识点排行 */
+.teacher-rank {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+}
+
+.teacher-rank li {
+  padding: 9px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.teacher-rank li + li {
+  border-top: 1px solid #edf1f6;
+}
+
+.teacher-rank-name {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  color: #1c2a44;
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.teacher-rank-name svg {
+  flex: none;
+  color: #ff8e22;
+}
+
+.teacher-rank-metric {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.teacher-rank-metric b {
+  color: #17243b;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.teacher-rank-metric small {
+  color: #97a2b5;
+  font-size: 11px;
+}
+
+/* §5.2 C 今日待办：学生端 reminder-item 加标签和操作 */
+.teacher-aside .reminder-item {
+  min-height: 0;
+  padding: 14px 0;
+  align-items: start;
+}
+
+.teacher-todo strong {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: #17243b;
+  font-size: 14px;
+}
+
+.teacher-todo > div > span {
+  display: block;
+  margin-top: 6px;
+  color: #68758b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.teacher-todo em {
+  display: block;
+  margin-top: 6px;
+  color: #8b97ab;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.teacher-todo-actions {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.teacher-todo-actions .outline-btn {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+.teacher-quick-links {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.teacher-quick-links .outline-btn {
+  height: 40px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+@media (max-width: 1180px) {
+  .home-dashboard.teacher-home {
+    grid-template-columns: 1fr;
+  }
+
+  .teacher-summary-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .teacher-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .teacher-context label {
+    min-width: 130px;
+    flex: 1;
+  }
+
+  /* 窄屏下操作列换到内容下方，避免任务标题被挤成一列竖字 */
+  .teacher-task-row {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  .teacher-task-row .task-progress,
+  .teacher-task-row .teacher-row-actions {
+    grid-column: 2;
+  }
+
+  .teacher-row-actions {
+    flex-direction: row;
+  }
+}

@@ -28,6 +28,13 @@ SAFE_DETAIL_KEYS = {
     "diagnosis_id",
     "review_action",
     "review_id",
+    # 教师资料中心（§七 / §15.2）
+    "resource_id",
+    "resource_action",
+    "source_type",
+    "status",
+    "target_course_id",
+    "revision_id",
 }
 
 
