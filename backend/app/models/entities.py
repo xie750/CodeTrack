@@ -288,6 +288,67 @@ class KnowledgeSourceRevision(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
+class CourseChapter(Base):
+    """课程章节（开发方案 §六 6.2 课程大纲）。
+
+    第一版只做「章节 — 知识点」两层，不做知识图谱，所以这里没有 parent_id。
+    `sort_order` 是教师拖拽排序的落点，删除章节前要求它名下没有生效知识点。
+    """
+
+    __tablename__ = "course_chapters"
+    __table_args__ = (UniqueConstraint("course_id", "title", name="uq_course_chapter_title"),)
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id"), nullable=False)
+    title: Mapped[str] = mapped_column(String(120), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="ACTIVE")
+
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    knowledge_points: Mapped[list["CourseKnowledgePoint"]] = relationship(
+        order_by="CourseKnowledgePoint.sort_order"
+    )
+
+
+class CourseKnowledgePoint(Base):
+    """章节下的知识点（开发方案 §六 6.2）。
+
+    `course_id` 冗余存一份，并且 (course_id, name) 唯一 —— 这是软关联的前提。
+    历史数据里知识点一直是**名称**而不是外键（`knowledge_sources.knowledge_points`、
+    `questions.knowledge_points` 是 JSON 名称数组，`learner_knowledge_states` 的唯一键
+    就是 (student_id, course_id, knowledge_point)），所以名称在课程内必须唯一，
+    否则按名字回查资料／题目／画像会歧义。
+
+    同理，被引用的知识点**不允许改名**：软关联靠名字，改了名历史引用会静默变成孤儿。
+    这条在 `api/teacher_courses.py` 的 PATCH 里挡。本轮不把那些自由文本列迁成外键。
+    """
+
+    __tablename__ = "course_knowledge_points"
+    __table_args__ = (
+        UniqueConstraint("course_id", "name", name="uq_course_knowledge_point_name"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id"), nullable=False)
+    chapter_id: Mapped[str] = mapped_column(ForeignKey("course_chapters.id"), nullable=False)
+    # 长度对齐 learner_knowledge_states.knowledge_point，两边存的是同一个名字
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # §6.2 知识点标签：类型 + 难度
+    point_type: Mapped[str] = mapped_column(String(20), nullable=False, default="CONCEPT")
+    difficulty: Mapped[str] = mapped_column(String(20), nullable=False, default="BASIC")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="ACTIVE")
+
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
 class Submission(Base):
     __tablename__ = "submissions"
     __table_args__ = (UniqueConstraint("student_id", "task_id", name="uq_submission_student_task"),)

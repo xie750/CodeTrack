@@ -9312,3 +9312,519 @@ html.workspace-resizing-y * {
     flex-direction: row;
   }
 }
+
+/* ==========================================================================
+   课程教学（开发方案 §六 6.1 课程与班级 / 6.2 课程大纲）
+
+   刻意不用 antd 默认外观：卡片、统计、徽章、标签、空态、筛选、分页全部复用学生端
+   那套 token（.class-card / .class-stat / .class-badge / .class-tag-row /
+   .class-empty / .review-* / .skeleton-block），这里只写这两页独有的结构。
+   ========================================================================== */
+
+/* §6.1 概览是 4 张卡、§6.2 是 3 张，覆盖 .review-stats 默认的 5 列 */
+.course-page .review-stats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.syllabus-page .review-stats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* --- §6.1 教学班卡片 --- */
+
+.course-class-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 14px;
+}
+
+.course-class-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 22px;
+  min-height: 232px;
+}
+
+.course-class-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.course-class-head h2 {
+  margin: 0;
+  color: #111a30;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.course-class-course {
+  margin: 4px 0 0;
+  color: #657187;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.course-class-desc {
+  margin: 0;
+  color: #56647a;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.course-class-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: auto;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.course-class-metrics span {
+  display: block;
+  color: #657187;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.course-class-metrics b {
+  color: #111a30;
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.course-class-metrics small {
+  color: #657187;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.course-class-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.course-desc-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.course-desc-editor label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.course-desc-editor label > span {
+  color: #657187;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.course-desc-editor textarea {
+  padding: 10px 12px;
+  border: 1px solid #dce5f2;
+  border-radius: 7px;
+  color: #111a30;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.7;
+  resize: vertical;
+}
+
+.course-desc-editor textarea:focus {
+  border-color: #9dc2ff;
+  box-shadow: 0 0 0 3px rgba(23, 108, 245, 0.14);
+  outline: none;
+}
+
+.course-desc-hint {
+  margin: 0;
+  color: #748198;
+  font-size: 12px;
+}
+
+/* --- §6.1 学生名单 --- */
+
+.course-roster {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px 24px;
+}
+
+.course-roster-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.course-roster-head h2 {
+  margin: 0;
+  color: #111a30;
+  font-size: 19px;
+  font-weight: 900;
+}
+
+.course-roster-head p {
+  margin: 6px 0 0;
+  color: #657187;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.course-roster-row {
+  display: grid;
+  grid-template-columns: 168px minmax(0, 1fr) 108px 92px 168px 132px;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border-radius: 8px;
+}
+
+.course-roster-name strong {
+  display: block;
+  color: #111a30;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.course-roster-name span {
+  color: #748198;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.course-roster-risk {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+/* 风险徽章里带图标时要和文字对齐 */
+.course-roster-risk .class-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.course-roster-risk em {
+  color: #a8b2c2;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.course-roster-metric span {
+  display: block;
+  color: #657187;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.course-roster-metric b {
+  display: block;
+  color: #111a30;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.course-roster-metric em {
+  color: #748198;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+/* --- §6.2 章节与知识点 --- */
+
+.syllabus-create {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.syllabus-create-input {
+  flex: 1;
+  min-width: 260px;
+  max-width: 520px;
+}
+
+/* .review-search input 写死了 216px，这里要让它跟着外层一起伸展 */
+.syllabus-create-input input {
+  width: 100%;
+}
+
+.syllabus-list {
+  gap: 14px;
+}
+
+.syllabus-chapter {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 22px;
+}
+
+/* 拖拽反馈。拖拽之外还有上移/下移按钮，键盘用户不依赖这个 */
+.syllabus-chapter[draggable="true"] {
+  cursor: grab;
+}
+
+.syllabus-chapter-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.syllabus-chapter-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.syllabus-chapter-title h2 {
+  margin: 0;
+  color: #111a30;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.syllabus-order {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: #176cf5;
+  background: #eef3fb;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.syllabus-chapter-actions,
+.syllabus-point-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.syllabus-chapter-summary {
+  margin: 0;
+  color: #56647a;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.syllabus-input {
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid #dce5f2;
+  border-radius: 7px;
+  color: #111a30;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.syllabus-textarea {
+  padding: 10px 12px;
+  border: 1px solid #dce5f2;
+  border-radius: 7px;
+  color: #111a30;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.7;
+  resize: vertical;
+}
+
+.syllabus-input:focus,
+.syllabus-textarea:focus {
+  border-color: #9dc2ff;
+  box-shadow: 0 0 0 3px rgba(23, 108, 245, 0.14);
+  outline: none;
+}
+
+.syllabus-input:disabled {
+  color: #748198;
+  background: #f0f3f8;
+}
+
+.syllabus-points {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid #eef3fb;
+}
+
+.syllabus-point {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 168px auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid #e3e9f2;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.syllabus-point-editing {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  background: #f8fbff;
+}
+
+.syllabus-point-main strong {
+  display: block;
+  color: #111a30;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.syllabus-point-main p {
+  margin: 6px 0 0;
+  color: #657187;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.syllabus-point-main .class-tag-row {
+  margin-top: 6px;
+}
+
+/* 引用数是删除保护的依据，用文字而不是只用颜色表达 */
+.syllabus-point-usage {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #657187;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.syllabus-point-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+  gap: 12px;
+}
+
+.syllabus-point-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.syllabus-point-fields label > span {
+  color: #657187;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.syllabus-add-point {
+  align-self: flex-start;
+}
+
+/* 为什么这个控件被锁住 —— 不留看起来能用但存不下去的按钮 */
+.syllabus-locked {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  color: #a06414;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.syllabus-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+  padding: 12px 14px;
+  border: 1px solid #ffd9db;
+  border-radius: 8px;
+  background: #fff5f5;
+}
+
+.syllabus-confirm p {
+  margin: 0;
+  color: #c0392b;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.syllabus-confirm-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.syllabus-danger {
+  min-width: 120px;
+  border-color: #ff4f57;
+  background: linear-gradient(180deg, #ff6a70, #ec3b44);
+  box-shadow: 0 8px 18px rgba(236, 59, 68, 0.2);
+}
+
+@media (max-width: 1180px) {
+  .course-page .review-stats,
+  .syllabus-page .review-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* 名单行的指标列在窄屏挤不下，换成两段式 */
+  .course-roster-row {
+    grid-template-columns: 168px minmax(0, 1fr);
+  }
+
+  .course-roster-row .course-roster-metric,
+  .course-roster-row > button {
+    grid-column: 2;
+  }
+}
+
+@media (max-width: 900px) {
+  .course-class-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .course-page .review-stats,
+  .syllabus-page .review-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .course-roster-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .course-roster-row .course-roster-metric,
+  .course-roster-row > button {
+    grid-column: 1;
+  }
+
+  .syllabus-point {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

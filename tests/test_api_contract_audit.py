@@ -77,6 +77,17 @@ def test_openapi_contains_demo_contract_paths():
             # 任务监控（开发方案 §九 9.1）
             "/api/v1/teacher/monitor/board",
             "/api/v1/teacher/monitor/board/export",
+            # 课程教学（开发方案 §六 6.1 / 6.2）
+            "/api/v1/teacher/course-classes",
+            "/api/v1/teacher/course-classes/{teaching_assignment_id}/students",
+            "/api/v1/teacher/courses/{course_id}/description",
+            "/api/v1/teacher/courses/{course_id}/syllabus",
+            "/api/v1/teacher/courses/{course_id}/syllabus/reorder",
+            "/api/v1/teacher/courses/{course_id}/chapters",
+            "/api/v1/teacher/chapters/{chapter_id}",
+            "/api/v1/teacher/chapters/{chapter_id}/knowledge-points",
+            "/api/v1/teacher/knowledge-points/{knowledge_point_id}",
+            "/api/v1/teacher/knowledge-points/{knowledge_point_id}/usage",
         }
         assert required_paths.issubset(set(paths))
 

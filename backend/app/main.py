@@ -11,6 +11,7 @@ from backend.app.api import (
     teacher,
     teacher_ai_review,
     teacher_analytics,
+    teacher_courses,
     teacher_improvement,
     teacher_monitor,
     teacher_resources,
@@ -46,6 +47,7 @@ def create_app() -> FastAPI:
     app.include_router(teacher.router)
     app.include_router(teacher_ai_review.router)
     app.include_router(teacher_analytics.router)
+    app.include_router(teacher_courses.router)
     app.include_router(teacher_improvement.router)
     app.include_router(teacher_monitor.router)
     app.include_router(teacher_resources.router)

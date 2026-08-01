@@ -9,6 +9,8 @@ from backend.app.models import (
     AdministrativeClass,
     Capability,
     Course,
+    CourseChapter,
+    CourseKnowledgePoint,
     Enrollment,
     KnowledgeSource,
     LearnerErrorStat,
@@ -800,6 +802,59 @@ def seed_demo_data(db: Session) -> None:
             "score": None,
         },
     )
+
+    # 课程大纲种子（§六 6.2）。章节标题与下面资料中心的 `chapter` 字符串、知识点名称
+    # 与资料和 LearnerKnowledgeState 里的名字**逐字对齐** —— 知识点是按名称软关联的，
+    # 差一个字就对不上，删除保护也就测不出来。
+    #
+    # 「第四章 栈与队列」下面那个知识点故意不被任何资料、题目或画像引用，
+    # 用来演示和测试「没有引用的知识点可以删」这条路径。
+    chapters = {
+        "chp_ds_linear_list": {
+            "course_id": "course_ds_001",
+            "title": "第三章 线性表",
+            "summary": "顺序表与链表的存储结构、基本操作和边界情况。",
+            "sort_order": 0,
+            "status": "ACTIVE",
+            "created_by": "user_teacher_001",
+        },
+        "chp_ds_stack_queue": {
+            "course_id": "course_ds_001",
+            "title": "第四章 栈与队列",
+            "summary": "栈与队列的顺序实现、链式实现和典型应用。",
+            "sort_order": 1,
+            "status": "ACTIVE",
+            "created_by": "user_teacher_001",
+        },
+    }
+    for chapter_id, values in chapters.items():
+        upsert(db, CourseChapter, chapter_id, values)
+
+    knowledge_points = {
+        "kp_ds_linked_list_boundary": ("chp_ds_linear_list", "链表边界处理", "SKILL", "INTERMEDIATE", 0),
+        "kp_ds_head_node_delete": ("chp_ds_linear_list", "头节点删除", "SKILL", "INTERMEDIATE", 1),
+        "kp_ds_illegal_position": ("chp_ds_linear_list", "非法位置保护", "SKILL", "BASIC", 2),
+        "kp_ds_pointer_traverse": ("chp_ds_linear_list", "指针遍历", "CONCEPT", "BASIC", 3),
+        "kp_ds_boundary_test": ("chp_ds_linear_list", "边界测试", "SKILL", "INTERMEDIATE", 4),
+        "kp_ds_stack_basic": ("chp_ds_stack_queue", "栈的基本操作", "CONCEPT", "BASIC", 0),
+    }
+    for point_id, (chapter_id, name, point_type, difficulty, order) in knowledge_points.items():
+        upsert(
+            db,
+            CourseKnowledgePoint,
+            point_id,
+            {
+                "course_id": "course_ds_001",
+                "chapter_id": chapter_id,
+                "name": name,
+                "summary": "",
+                "point_type": point_type,
+                "difficulty": difficulty,
+                "sort_order": order,
+                "status": "ACTIVE",
+                "created_by": "user_teacher_001",
+            },
+        )
 
     # 资料中心种子（§七）。知识点沿用课程里已有的名字（见上面的 questions 和
     # LearnerKnowledgeState），这样资料中心的知识点筛选器和学情诊断的知识点维度
