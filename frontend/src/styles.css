@@ -994,46 +994,108 @@ html[data-route-motion="deeper"] .workspace-route-stage {
   font-size: 15px;
 }
 
-.authed-user {
+.account-trigger {
   min-height: 48px;
-  padding: 4px 6px 4px 4px;
+  padding: 4px 10px 4px 4px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  transition: background 180ms var(--motion-soft), border-color 180ms var(--motion-soft), box-shadow 180ms var(--motion-soft);
 }
 
-.authed-user-copy {
+.account-trigger:hover,
+.account-trigger:focus-visible,
+.account-trigger.ant-dropdown-open {
+  border-color: rgba(255, 255, 255, 0.36);
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+}
+
+.account-trigger:focus-visible {
+  outline: 2px solid rgba(120, 193, 255, 0.85);
+  outline-offset: 2px;
+}
+
+.account-avatar {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(186, 224, 255, 0.84);
+  border-radius: 50%;
+  color: #ffffff;
+  background: linear-gradient(135deg, #1677ff 0%, #13c2c2 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24), 0 0 0 2px rgba(42, 132, 255, 0.22);
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.account-trigger-copy {
   min-width: 92px;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  text-align: left;
 }
 
-.authed-user-copy small {
+.account-trigger-copy strong,
+.account-trigger-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-trigger-copy small {
   color: rgba(255, 255, 255, 0.72);
   font-size: 11px;
 }
 
-.logout-btn {
-  min-width: 70px;
-  height: 36px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 8px;
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.08);
-  font-size: 13px;
-  font-weight: 800;
-  cursor: pointer;
-  transition: background 180ms var(--motion-soft), border-color 180ms var(--motion-soft);
+.account-chevron {
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.78);
+  transition: color 180ms var(--motion-soft), transform 180ms var(--motion-soft);
 }
 
-.logout-btn:hover {
-  border-color: rgba(255, 255, 255, 0.42);
-  background: rgba(255, 255, 255, 0.14);
+.account-trigger:hover .account-chevron,
+.account-trigger:focus-visible .account-chevron,
+.account-trigger.ant-dropdown-open .account-chevron {
+  color: #ffffff;
+  transform: translateY(1px);
+}
+
+.account-dropdown-overlay .ant-dropdown-menu {
+  min-width: 196px;
+  padding: 8px;
+  border: 1px solid rgba(21, 37, 64, 0.08);
+  border-radius: 8px;
+  box-shadow: 0 18px 40px rgba(7, 19, 43, 0.18);
+}
+
+.account-dropdown-overlay .ant-dropdown-menu-item {
+  min-height: 38px;
+  border-radius: 6px;
+  color: #22314a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.account-dropdown-overlay .ant-dropdown-menu-item .ant-dropdown-menu-item-icon {
+  color: #5a6f8f;
+}
+
+.account-dropdown-overlay .ant-dropdown-menu-item-danger {
+  color: #cf1322;
+}
+
+.account-dropdown-overlay .ant-dropdown-menu-item-danger .ant-dropdown-menu-item-icon {
+  color: #cf1322;
+}
+
+.account-dropdown-overlay .ant-dropdown-menu-item-disabled {
+  color: #99a4b5 !important;
 }
 
 .user-switcher {
@@ -5380,27 +5442,17 @@ html.workspace-resizing-y * {
     height: 44px;
   }
 
-  .top-user strong,
-  .top-user svg {
+  .account-trigger {
+    min-width: 58px;
+    padding: 3px 7px 3px 3px;
+    gap: 4px;
+  }
+
+  .account-trigger-copy {
     display: none;
   }
 
-  .authed-user {
-    min-width: 98px;
-    padding-right: 4px;
-  }
-
-  .authed-user-copy {
-    display: none;
-  }
-
-  .logout-btn {
-    min-width: 42px;
-    padding: 0 8px;
-    font-size: 0;
-  }
-
-  .logout-btn svg {
+  .account-chevron {
     display: block;
   }
 
