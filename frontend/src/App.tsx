@@ -1,7 +1,7 @@
 import { useEffect, useState, type MouseEvent } from "react";
 import { Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
-import { Activity, Bell, BookOpen, ChartNoAxesColumnIncreasing, ChevronsLeft, ChevronsRight, ClipboardList, FolderOpen, House, LayoutDashboard, LogOut, Search, ShieldCheck, Star, TrendingUp } from "lucide-react";
-import { ConfigProvider } from "antd";
+import { Activity, Bell, BookOpen, ChartNoAxesColumnIncreasing, ChevronDown, ChevronsLeft, ChevronsRight, ClipboardList, FolderOpen, House, LayoutDashboard, LogOut, Search, ShieldCheck, Star, TrendingUp, UserRound } from "lucide-react";
+import { ConfigProvider, Dropdown, type MenuProps } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import LearningHome from "./pages/LearningHome";
 import CourseTasks from "./pages/CourseTasks";
@@ -32,7 +32,6 @@ import AiReviewDetail from "./teacher/pages/aiReview/AiReviewDetail";
 import StrategyOptimization from "./teacher/pages/improvement/StrategyOptimization";
 import TaskAdjustment from "./teacher/pages/improvement/TaskAdjustment";
 import EffectEvaluation from "./teacher/pages/improvement/EffectEvaluation";
-import avatarImg from "./assets/ui-home/avatar.png";
 import { api, apiCache } from "./api";
 import { clearAccessToken, getAccessToken, type AuthUser } from "./authSession";
 
@@ -89,6 +88,61 @@ function homePathForRole(role: string) {
   if (role === "TEACHER") return "/teacher/dashboard";
   if (role === "STUDENT") return "/";
   return "/unauthorized";
+}
+
+function avatarInitial(user: AuthUser) {
+  const source = (user.display_name || user.username || "").trim();
+  const [firstChar] = Array.from(source);
+  return firstChar?.toLocaleUpperCase("zh-CN") ?? "用";
+}
+
+function AccountMenu({
+  authUser,
+  onLogout,
+  onNavigate
+}: {
+  authUser: AuthUser;
+  onLogout: () => void;
+  onNavigate: (path: string) => void;
+}) {
+  const roleLabel = authUser.role === "STUDENT" ? "学生账号" : authUser.role === "TEACHER" ? "教师账号" : "账号";
+  const isStudent = authUser.role === "STUDENT";
+  const menuItems: MenuProps["items"] = isStudent
+    ? [
+        { key: "/profile", label: "学习者画像", icon: <ChartNoAxesColumnIncreasing size={16} strokeWidth={2.2} /> },
+        { key: "/library", label: "我的资料", icon: <FolderOpen size={16} strokeWidth={2.2} /> },
+        { key: "account", label: "账号信息", icon: <UserRound size={16} strokeWidth={2.2} />, disabled: true },
+        { type: "divider" },
+        { key: "logout", label: "退出登录", icon: <LogOut size={16} strokeWidth={2.2} />, danger: true }
+      ]
+    : [
+        { key: "/teacher/dashboard", label: "教学首页", icon: <LayoutDashboard size={16} strokeWidth={2.2} /> },
+        { key: "/teacher/resources", label: "资料中心", icon: <FolderOpen size={16} strokeWidth={2.2} /> },
+        { key: "account", label: "账号信息", icon: <UserRound size={16} strokeWidth={2.2} />, disabled: true },
+        { type: "divider" },
+        { key: "logout", label: "退出登录", icon: <LogOut size={16} strokeWidth={2.2} />, danger: true }
+      ];
+
+  function handleMenuClick({ key }: { key: string }) {
+    if (key === "logout") {
+      onLogout();
+      return;
+    }
+    if (key.startsWith("/")) onNavigate(key);
+  }
+
+  return (
+    <Dropdown menu={{ items: menuItems, onClick: handleMenuClick }} trigger={["click"]} placement="bottomRight" overlayClassName="account-dropdown-overlay">
+      <button type="button" className="top-user account-trigger" aria-label={`${authUser.display_name}账号菜单`}>
+        <span className="account-avatar" aria-hidden="true">{avatarInitial(authUser)}</span>
+        <span className="account-trigger-copy">
+          <strong>{authUser.display_name}</strong>
+          <small>{roleLabel}</small>
+        </span>
+        <ChevronDown className="account-chevron" size={16} strokeWidth={2.4} aria-hidden="true" />
+      </button>
+    </Dropdown>
+  );
 }
 
 function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogout: () => void }) {
@@ -164,17 +218,7 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
             <Bell size={25} strokeWidth={2.1} />
             <span className="notification-badge">3</span>
           </button>
-          <div className="top-user authed-user">
-            <img className="avatar" src={avatarImg} alt={authUser.display_name} />
-            <span className="authed-user-copy">
-              <strong>{authUser.display_name}</strong>
-              <small>{authUser.role === "STUDENT" ? "学生账号" : "教师账号"}</small>
-            </span>
-            <button type="button" className="logout-btn" onClick={onLogout} aria-label="退出登录">
-              <LogOut size={17} />
-              退出
-            </button>
-          </div>
+          <AccountMenu authUser={authUser} onLogout={onLogout} onNavigate={transitionTo} />
         </div>
       </header>
 
@@ -276,17 +320,7 @@ function TeacherAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
           </span>
         </NavLink>
         <div className="top-actions" aria-label="顶部工具栏">
-          <div className="top-user authed-user">
-            <img className="avatar" src={avatarImg} alt={authUser.display_name} />
-            <span className="authed-user-copy">
-              <strong>{authUser.display_name}</strong>
-              <small>教师账号</small>
-            </span>
-            <button type="button" className="logout-btn" onClick={onLogout} aria-label="退出登录">
-              <LogOut size={17} />
-              退出
-            </button>
-          </div>
+          <AccountMenu authUser={authUser} onLogout={onLogout} onNavigate={navigate} />
         </div>
       </header>
 
