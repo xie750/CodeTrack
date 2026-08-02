@@ -13,7 +13,7 @@ LANGUAGE_LABELS = {
 }
 
 PISTON_LANGUAGE_ALIASES = {
-    "CPP": "cpp",
+    "CPP": "c++",
     "PYTHON": "python",
     "JAVASCRIPT": "javascript",
 }
@@ -153,4 +153,3 @@ def get_programming_spec(task: Task) -> ProgrammingSpec:
     if "deleteAt" in signature:
         return LINKED_LIST_DELETE_SPEC
     return STDIO_CPP_SPEC
-

@@ -22,9 +22,12 @@
 """
 
 import json
+from datetime import datetime
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from pydantic import BaseModel, Field, model_validator
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.app.core.api_response import ApiError, ok
@@ -34,6 +37,8 @@ from backend.app.models import (
     AdministrativeClass,
     Course,
     Question,
+    QuestionOption,
+    StudentClassMembership,
     StudentTaskProgress,
     Submission,
     Task,
@@ -49,6 +54,7 @@ from backend.app.services.teacher_scope import (
     derive_progress_status,
     teacher_assignments,
 )
+from backend.app.models.entities import utc_now
 
 router = APIRouter(prefix="/api/v1/teacher", tags=["teacher-tasks"])
 
@@ -89,11 +95,6 @@ CLASS_SCOPED_NOTE = (
 # 六个行内动作背后的写接口都还没有。理由写在后端，前端按 action 找对应文案。
 UNAVAILABLE_ACTIONS = [
     {
-        "action": "CREATE_TASK",
-        "reason": "任务创建接口（§八 8.2）尚未实现，可以进入框架页查看控件清单，但保存草稿还不可用。",
-        "target_route": "/teacher/tasks/new",
-    },
-    {
         "action": "EDIT_TASK",
         "reason": "客观题编辑器与编程任务编辑器（§八 8.3 / 8.4）尚未接入写接口，进去只能看到控件清单。",
         "target_route": None,
@@ -109,16 +110,269 @@ UNAVAILABLE_ACTIONS = [
         "target_route": None,
     },
     {
-        "action": "PUBLISH_TASK",
-        "reason": "发布会批量初始化全班学生任务进度（§八 8.6），必须与写接口、二次确认和审计日志一起上线。",
-        "target_route": None,
-    },
-    {
         "action": "STUDENT_PREVIEW",
         "reason": "学生视角预览需要一个教师可读的渲染接口；教师账号不能直接进入学生端路由。",
         "target_route": None,
     },
 ]
+
+
+class QuestionOptionPayload(BaseModel):
+    label: str = Field(min_length=1, max_length=8)
+    content: str = Field(min_length=1, max_length=1000)
+    is_correct: bool = False
+
+
+class QuestionPayload(BaseModel):
+    question_type: str = "SINGLE_CHOICE"
+    stem: str = Field(min_length=1, max_length=4000)
+    analysis: str = ""
+    knowledge_points: list[str] = Field(default_factory=list)
+    difficulty: str = "BASIC"
+    score: float = Field(default=10, gt=0)
+    error_type: str | None = None
+    options: list[QuestionOptionPayload] = Field(min_length=2)
+
+    @model_validator(mode="after")
+    def validate_options(self):
+        correct_count = len([item for item in self.options if item.is_correct])
+        if correct_count == 0:
+            raise ValueError("At least one option must be marked correct.")
+        if self.question_type in {"SINGLE_CHOICE", "TRUE_FALSE"} and correct_count != 1:
+            raise ValueError("Single choice and true/false questions must have exactly one correct option.")
+        return self
+
+
+class TeacherTaskCreateRequest(BaseModel):
+    course_id: str
+    title: str = Field(min_length=1, max_length=160)
+    description: str = Field(min_length=1, max_length=8000)
+    workspace_type: str = "QUESTION_SET"
+    language: str = "CPP"
+    interface_spec: str = "ListNode* deleteAt(ListNode* head, int position);"
+    learning_objectives: list[str] = Field(default_factory=list)
+    capability_ids: list[str] = Field(default_factory=list)
+    questions: list[QuestionPayload] = Field(default_factory=list)
+
+
+class TeacherTaskPublishRequest(BaseModel):
+    class_ids: list[str] = Field(min_length=1)
+    assignment_mode: str = "QUIZ"
+    allow_hint_level_3: bool = True
+    deadline: datetime | None = None
+
+
+def _new_id(prefix: str) -> str:
+    return f"{prefix}_{uuid4().hex[:12]}"
+
+
+def _teacher_course_assignments(
+    db: Session, user: User, course_id: str
+) -> list[TeachingAssignment]:
+    assignments = teacher_assignments(db, user.id, course_id)
+    if not assignments:
+        raise ApiError(403, "AUTH_FORBIDDEN", "当前教师没有该课程的生效教学安排")
+    return assignments
+
+
+def _ensure_task_owned_by_teacher(db: Session, user: User, task_id: str) -> tuple[Task, list[TeachingAssignment]]:
+    task = db.get(Task, task_id)
+    if task is None:
+        raise ApiError(404, "TASK_NOT_FOUND", "任务不存在")
+    assignments = _teacher_course_assignments(db, user, task.course_id)
+    return task, assignments
+
+
+def _student_ids_for_class(db: Session, class_id: str) -> list[str]:
+    return list(
+        db.scalars(
+            select(StudentClassMembership.student_id)
+            .where(
+                StudentClassMembership.class_id == class_id,
+                StudentClassMembership.status == "ACTIVE",
+            )
+            .order_by(StudentClassMembership.student_id.asc())
+        ).all()
+    )
+
+
+def _question_count_for_task(db: Session, task_id: str) -> int:
+    return db.scalar(select(func.count(Question.id)).where(Question.task_id == task_id)) or 0
+
+
+def _required_count_for_task(db: Session, task: Task) -> int:
+    if task.workspace_type == "QUESTION_SET":
+        return db.scalar(select(func.count(Question.id)).where(Question.task_id == task.id)) or 0
+    return (
+        db.scalar(
+            select(func.count(TestCase.id)).where(
+                TestCase.task_id == task.id, TestCase.required.is_(True)
+            )
+        )
+        or 0
+    )
+
+
+def _add_questions(db: Session, task_id: str, questions: list[QuestionPayload]) -> None:
+    for question_index, question in enumerate(questions, start=1):
+        question_id = _new_id("q")
+        db.add(
+            Question(
+                id=question_id,
+                task_id=task_id,
+                question_type=question.question_type,
+                stem=question.stem.strip(),
+                analysis=question.analysis.strip(),
+                knowledge_points=json.dumps(question.knowledge_points, ensure_ascii=False),
+                difficulty=question.difficulty,
+                score=question.score,
+                error_type=question.error_type,
+                sort_order=question_index,
+            )
+        )
+        for option_index, option in enumerate(question.options, start=1):
+            db.add(
+                QuestionOption(
+                    id=_new_id("qopt"),
+                    question_id=question_id,
+                    label=option.label.strip(),
+                    content=option.content.strip(),
+                    is_correct=option.is_correct,
+                    sort_order=option_index,
+                )
+            )
+
+
+def _publish_task(
+    db: Session,
+    task: Task,
+    teacher: User,
+    assignments: list[TeachingAssignment],
+    payload: TeacherTaskPublishRequest,
+) -> list[dict]:
+    allowed_by_class = {item.class_id: item for item in assignments}
+    unknown = [class_id for class_id in payload.class_ids if class_id not in allowed_by_class]
+    if unknown:
+        raise ApiError(403, "AUTH_FORBIDDEN", f"无权向这些班级发布任务：{', '.join(unknown)}")
+    if task.workspace_type == "QUESTION_SET" and _required_count_for_task(db, task) == 0:
+        raise ApiError(422, "QUESTION_SET_EMPTY", "客观题任务至少需要一道题目才能发布")
+
+    total_required_count = _required_count_for_task(db, task)
+    published_at = utc_now()
+    rows = []
+    for class_id in payload.class_ids:
+        teaching = allowed_by_class[class_id]
+        assignment = db.scalar(
+            select(TaskAssignment).where(
+                TaskAssignment.task_id == task.id,
+                TaskAssignment.teaching_assignment_id == teaching.id,
+            )
+        )
+        if assignment is None:
+            assignment = TaskAssignment(
+                id=_new_id("assign"),
+                task_id=task.id,
+                teaching_assignment_id=teaching.id,
+                published_by=teacher.id,
+            )
+            db.add(assignment)
+        assignment.publish_status = "PUBLISHED"
+        assignment.assignment_mode = payload.assignment_mode
+        assignment.allow_hint_level_3 = payload.allow_hint_level_3
+        assignment.published_at = published_at
+        assignment.deadline = payload.deadline
+        db.flush()
+
+        initialized = 0
+        for student_id in _student_ids_for_class(db, class_id):
+            progress = db.scalar(
+                select(StudentTaskProgress).where(
+                    StudentTaskProgress.assignment_id == assignment.id,
+                    StudentTaskProgress.student_id == student_id,
+                )
+            )
+            if progress is None:
+                db.add(
+                    StudentTaskProgress(
+                        assignment_id=assignment.id,
+                        student_id=student_id,
+                        status="NOT_STARTED",
+                        total_required_count=total_required_count,
+                        updated_at=published_at,
+                    )
+                )
+                initialized += 1
+            else:
+                progress.total_required_count = total_required_count
+                progress.updated_at = published_at
+        rows.append(
+            {
+                "assignment_id": assignment.id,
+                "class_id": class_id,
+                "teaching_assignment_id": teaching.id,
+                "publish_status": assignment.publish_status,
+                "assignment_mode": assignment.assignment_mode,
+                "initialized_student_count": initialized,
+            }
+        )
+    return rows
+
+
+@router.post("/tasks", status_code=201)
+def create_teacher_task(
+    payload: TeacherTaskCreateRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "TEACHER")
+    _teacher_course_assignments(db, user, payload.course_id)
+    workspace_type = payload.workspace_type.upper()
+    if workspace_type not in {"QUESTION_SET", "CODING"}:
+        raise ApiError(422, "TASK_TYPE_UNSUPPORTED", "当前只支持创建客观题任务和编程任务")
+    if workspace_type == "QUESTION_SET" and not payload.questions:
+        raise ApiError(422, "QUESTION_SET_EMPTY", "客观题任务至少需要一道题目")
+
+    task = Task(
+        id=_new_id("task"),
+        course_id=payload.course_id,
+        title=payload.title.strip(),
+        description=payload.description.strip(),
+        workspace_type=workspace_type,
+        language=payload.language or "CPP",
+        interface_spec=payload.interface_spec or "ListNode* deleteAt(ListNode* head, int position);",
+        learning_objectives=json.dumps(payload.learning_objectives, ensure_ascii=False),
+        capability_ids=json.dumps(payload.capability_ids, ensure_ascii=False),
+        status="OPEN",
+    )
+    db.add(task)
+    db.flush()
+    if workspace_type == "QUESTION_SET":
+        _add_questions(db, task.id, payload.questions)
+    db.commit()
+    return ok(
+        {
+            "task_id": task.id,
+            "course_id": task.course_id,
+            "title": task.title,
+            "workspace_type": task.workspace_type,
+            "question_count": len(payload.questions),
+            "status": task.status,
+        }
+    )
+
+
+@router.post("/tasks/{task_id}/publish")
+def publish_teacher_task(
+    task_id: str,
+    payload: TeacherTaskPublishRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "TEACHER")
+    task, assignments = _ensure_task_owned_by_teacher(db, user, task_id)
+    rows = _publish_task(db, task, user, assignments, payload)
+    db.commit()
+    return ok({"task_id": task.id, "publications": rows})
 
 
 def _json_list(raw: str | None) -> list:

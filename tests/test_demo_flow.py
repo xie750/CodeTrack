@@ -124,6 +124,38 @@ def test_wrong_head_update_fails_head_case_and_keeps_hidden_details_masked():
         assert "HINT_VIEWED" in event_types
 
 
+def test_task_detail_returns_teacher_configured_cases_with_hidden_masks():
+    with client() as c:
+        response = c.get("/api/v1/tasks/task_linked_list_delete_001")
+        assert response.status_code == 200
+        data = response.json()["data"]
+
+        assert len(data["public_tests"]) == 3
+        assert len(data["test_cases"]) == 5
+        by_id = {item["test_case_id"]: item for item in data["test_cases"]}
+        assert by_id["tc_delete_middle"]["input_summary"] == {"values": [1, 2, 3], "position": 1}
+        assert by_id["tc_delete_middle"]["input_visible"] is True
+        assert by_id["tc_delete_tail"]["visibility"] == "HIDDEN"
+        assert by_id["tc_delete_tail"]["input_summary"] is None
+        assert by_id["tc_delete_tail"]["expected_output"] is None
+        assert by_id["tc_delete_tail"]["input_visible"] is False
+        assert by_id["tc_delete_tail"]["expected_output_visible"] is False
+        assert by_id["tc_delete_tail"]["expected_output_summary"] == "边界位置删除结果应正确"
+
+
+def test_subnet_programming_task_has_seeded_teacher_cases():
+    with client() as c:
+        response = c.get("/api/v1/tasks/task_subnet_mask_001")
+        assert response.status_code == 200
+        data = response.json()["data"]
+
+        assert data["interface_spec"]["runner_profile"] == "stdio_cpp_v1"
+        assert len(data["test_cases"]) == 3
+        assert data["test_cases"][0]["input_summary"] == {"stdin": "192.168.1.10 255.255.255.0\n"}
+        assert data["test_cases"][2]["visibility"] == "HIDDEN"
+        assert data["test_cases"][2]["input_summary"] is None
+
+
 def test_configured_model_gateway_result_is_used_when_schema_is_valid(monkeypatch):
     def gateway_body(payload):
         evidence_id = payload["tool_evidence"][0]["test_result_id"]

@@ -45,6 +45,9 @@ type WorkspaceMetrics = {
 };
 
 type RunState = "IDLE" | "QUEUED" | "RUNNING" | "DONE" | "ERROR";
+type ResultPanelTab = "cases" | "results";
+
+type TeacherTestCase = TaskDetail["test_cases"][number];
 
 const WORKSPACE_LAYOUT_KEY = "codetrack.taskWorkspace.layout.v1";
 const DEFAULT_PROBLEM_WIDTH = 316;
@@ -111,8 +114,96 @@ function compactJson(value: unknown) {
   return JSON.stringify(value);
 }
 
+function formatCaseValue(value: unknown) {
+  if (value === null || value === undefined) return "教师保留";
+  if (typeof value === "string") return value.trimEnd();
+  return compactJson(value);
+}
+
+function visibilityLabel(visibility: string | undefined) {
+  return visibility === "HIDDEN" ? "隐藏" : "公开";
+}
+
+function statusLabel(status: string) {
+  const labels: Record<string, string> = {
+    PASSED: "通过",
+    FAILED: "未通过",
+    PENDING: "待运行"
+  };
+  return labels[status] ?? status;
+}
+
+function statusClass(status: string) {
+  if (status === "PASSED") return "pass";
+  if (status === "FAILED") return "fail";
+  return "";
+}
+
+function caseFields(testCase: TeacherTestCase | null) {
+  if (!testCase) return [];
+  if (!testCase.input_visible || testCase.input_summary === null) {
+    return [{ name: "input", value: "教师保留，提交后仅显示判题状态" }];
+  }
+  const input = testCase.input_summary;
+  if (typeof input === "object" && input !== null && !Array.isArray(input)) {
+    return Object.entries(input).map(([name, value]) => ({ name, value: formatCaseValue(value) }));
+  }
+  return [{ name: "input", value: formatCaseValue(input) }];
+}
+
 function isPassed(result: VersionResult | null) {
   return Boolean(result?.tests.length) && result?.tests.every((test) => test.status === "PASSED");
+}
+
+function normalizeTaskDetail(rawTask: TaskDetail): TaskDetail {
+  const rawSpec = rawTask.interface_spec as Partial<TaskDetail["interface_spec"]>;
+  const publicTests = rawTask.public_tests ?? [];
+  const testCases = rawTask.test_cases?.length
+    ? rawTask.test_cases
+    : publicTests.map((test) => ({
+      test_case_id: test.test_case_id,
+      name: test.name,
+      visibility: test.visibility ?? "PUBLIC",
+      required: test.required ?? true,
+      input_summary: test.input_summary,
+      input_visible: test.input_visible ?? true,
+      expected_output: test.expected_output,
+      expected_output_visible: test.expected_output_visible ?? true,
+      expected_output_summary: test.expected_output_summary
+    }));
+  const defaultLanguage = rawSpec.default_language || rawTask.language || "CPP";
+  const languageTemplates =
+    rawSpec.language_templates && Object.keys(rawSpec.language_templates).length
+      ? rawSpec.language_templates
+      : { [defaultLanguage]: rawSpec.student_template ?? "" };
+  const supportedLanguages =
+    rawSpec.supported_languages?.length
+      ? rawSpec.supported_languages
+      : Object.keys(languageTemplates).length
+        ? Object.keys(languageTemplates)
+        : [defaultLanguage];
+  const languageLabels =
+    rawSpec.language_labels && Object.keys(rawSpec.language_labels).length
+      ? rawSpec.language_labels
+      : Object.fromEntries(supportedLanguages.map((language) => [language, language === "CPP" ? "C++17" : language]));
+
+  return {
+    ...rawTask,
+    public_tests: publicTests,
+    test_cases: testCases,
+    interface_spec: {
+      function_signature: rawSpec.function_signature ?? "",
+      editable_region: rawSpec.editable_region ?? "FUNCTION_ONLY",
+      student_template: rawSpec.student_template ?? languageTemplates[defaultLanguage] ?? "",
+      rules: rawSpec.rules ?? [],
+      runner_profile: rawSpec.runner_profile ?? "legacy_linked_list_delete_v1",
+      supported_languages: supportedLanguages,
+      default_language: defaultLanguage,
+      language_templates: languageTemplates,
+      language_labels: languageLabels,
+      comparison: rawSpec.comparison ?? "exact_json"
+    }
+  };
 }
 
 export default function TaskWorkspace({ taskId, onBack }: PageProps) {
@@ -128,6 +219,8 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
   const [sourceCode, setSourceCode] = useState("");
   const [runState, setRunState] = useState<RunState>("IDLE");
   const [runMessage, setRunMessage] = useState("等待提交");
+  const [activeResultTab, setActiveResultTab] = useState<ResultPanelTab>("cases");
+  const [selectedCaseIndex, setSelectedCaseIndex] = useState(0);
   const [latestResult, setLatestResult] = useState<VersionResult | null>(null);
   const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null);
   const [hints, setHints] = useState<Hint[]>([]);
@@ -143,12 +236,14 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
     setLatestResult(null);
     setDiagnosis(null);
     setHints([]);
+    setActiveResultTab("cases");
+    setSelectedCaseIndex(0);
 
     Promise.allSettled([api.getTask(taskId), api.getLearningContext()])
       .then(([taskResult, contextResult]) => {
         if (!alive) return;
         if (taskResult.status === "fulfilled") {
-          const nextTask = taskResult.value;
+          const nextTask = normalizeTaskDetail(taskResult.value);
           const defaultLanguage = nextTask.interface_spec.default_language || nextTask.language || "CPP";
           setTask(nextTask);
           setSelectedLanguage(defaultLanguage);
@@ -192,6 +287,7 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
           const result = await api.getResults(status.version_id);
           if (cancelled) return;
           setLatestResult(result);
+          setActiveResultTab("results");
           if (result.diagnosis.status === "READY") {
             try {
               const nextDiagnosis = await api.getDiagnosis(result.version_id);
@@ -277,28 +373,44 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
     };
   }, [aiCollapsed, loading, task, error]);
 
-  const publicRows = useMemo(() => {
-    if (latestResult) {
-      return latestResult.tests.map((test) => ({
-        key: test.test_case_id,
+  const teacherCases = useMemo(() => task?.test_cases ?? [], [task]);
+  const selectedCase = teacherCases[selectedCaseIndex] ?? teacherCases[0] ?? null;
+  const selectedCaseFields = useMemo(() => caseFields(selectedCase), [selectedCase]);
+  const resultRows = useMemo(() => {
+    const resultByCase = new Map((latestResult?.tests ?? []).map((test) => [test.test_case_id, test]));
+    const baseCases = teacherCases.length
+      ? teacherCases
+      : (latestResult?.tests ?? []).map((test) => ({
+        test_case_id: test.test_case_id,
         name: test.name,
-        input: "-",
-        expected: test.expected_output_summary,
-        actual: test.actual_output,
-        status: test.status,
-        duration: `${test.duration_ms} ms`
+        visibility: test.visibility,
+        required: true,
+        input_summary: null,
+        input_visible: false,
+        expected_output: null,
+        expected_output_visible: false,
+        expected_output_summary: test.expected_output_summary
       }));
+    return baseCases.map((testCase, index) => {
+      const result = resultByCase.get(testCase.test_case_id);
+      return {
+        key: testCase.test_case_id,
+        name: testCase.name || `Case ${index + 1}`,
+        visibility: testCase.visibility,
+        input: testCase.input_visible ? formatCaseValue(testCase.input_summary) : "教师保留",
+        expected: testCase.expected_output_summary,
+        actual: result?.actual_output ?? "-",
+        status: result?.status ?? "PENDING",
+        duration: result ? `${result.duration_ms} ms` : "-"
+      };
+    });
+  }, [latestResult, teacherCases]);
+
+  useEffect(() => {
+    if (selectedCaseIndex >= teacherCases.length && teacherCases.length > 0) {
+      setSelectedCaseIndex(0);
     }
-    return (task?.public_tests ?? []).map((test, index) => ({
-      key: test.test_case_id,
-      name: test.name || `公开样例 ${index + 1}`,
-      input: compactJson(test.input_summary),
-      expected: test.expected_output_summary,
-      actual: "-",
-      status: "待运行",
-      duration: "-"
-    }));
-  }, [latestResult, task]);
+  }, [selectedCaseIndex, teacherCases.length]);
 
   const knowledgeTags = task?.learning_objectives.length ? task.learning_objectives : ["等待任务知识点"];
   const studentName = context?.student.name ?? "学生";
@@ -557,30 +669,84 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
 
                 <article className="program-card program-result">
                   <header>
-                    <nav><button className="active" type="button">测试结果</button><button type="button">运行输出</button></nav>
+                    <nav>
+                      <button className={activeResultTab === "cases" ? "active" : ""} type="button" onClick={() => setActiveResultTab("cases")}>测试用例</button>
+                      <button className={activeResultTab === "results" ? "active" : ""} type="button" onClick={() => setActiveResultTab("results")}>测试结果</button>
+                    </nav>
                     <div>执行状态：<b>{runMessage}</b></div>
                   </header>
-                  <table>
-                    <thead><tr><th>测试点</th><th>输入</th><th>期望输出</th><th>你的输出</th><th>结果</th><th>耗时</th></tr></thead>
-                    <tbody>
-                      {publicRows.map((row) => (
-                        <tr key={row.key}>
-                          <td>{row.name}</td>
-                          <td>{row.input}</td>
-                          <td>{row.expected}</td>
-                          <td>{row.actual}</td>
-                          <td className={row.status === "PASSED" ? "pass" : row.status === "FAILED" ? "fail" : ""}>
-                            <span>{row.status === "PASSED" ? <Check size={13} /> : <Circle size={12} fill="currentColor" />} {row.status}</span>
-                          </td>
-                          <td>{row.duration}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <div className="program-pass">
-                    <CheckCircle2 size={18} />
-                    {isPassed(latestResult) ? "已通过全部测试，可以生成总结并更新学习画像。" : "提交后会显示编译结果、测试点和 AI 诊断。"}
-                  </div>
+                  {activeResultTab === "cases" ? (
+                    <div className="program-case-panel">
+                      {teacherCases.length ? (
+                        <>
+                          <div className="program-case-tabs" role="tablist" aria-label="教师测试用例">
+                            {teacherCases.map((testCase, index) => (
+                              <button
+                                className={index === selectedCaseIndex ? "active" : ""}
+                                type="button"
+                                role="tab"
+                                aria-selected={index === selectedCaseIndex}
+                                key={testCase.test_case_id}
+                                onClick={() => setSelectedCaseIndex(index)}
+                              >
+                                Case {index + 1}
+                              </button>
+                            ))}
+                          </div>
+                          <section className="program-case-detail">
+                            <div className="program-case-title">
+                              <strong>{selectedCase?.name ?? "测试用例"}</strong>
+                              <span>{visibilityLabel(selectedCase?.visibility)}</span>
+                            </div>
+                            <div className="program-case-fields">
+                              {selectedCaseFields.map((field) => (
+                                <label key={field.name}>
+                                  <span>{field.name} =</span>
+                                  <code>{field.value}</code>
+                                </label>
+                              ))}
+                            </div>
+                            <label className="program-case-expected">
+                              <span>expected =</span>
+                              <code>{selectedCase?.expected_output_summary ?? "-"}</code>
+                            </label>
+                          </section>
+                        </>
+                      ) : (
+                        <div className="program-result-empty">当前编程题还没有配置教师测试用例。</div>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      <table>
+                        <thead><tr><th>测试点</th><th>输入</th><th>期望输出</th><th>你的输出</th><th>结果</th><th>耗时</th></tr></thead>
+                        <tbody>
+                          {resultRows.map((row) => (
+                            <tr key={row.key}>
+                              <td>{row.name}<small>{visibilityLabel(row.visibility)}</small></td>
+                              <td>{row.input}</td>
+                              <td>{row.expected}</td>
+                              <td>{row.actual}</td>
+                              <td className={statusClass(row.status)}>
+                                <span>{row.status === "PASSED" ? <Check size={13} /> : <Circle size={12} fill="currentColor" />} {statusLabel(row.status)}</span>
+                              </td>
+                              <td>{row.duration}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {(latestResult?.execution.compiler_stderr || latestResult?.execution.compiler_stdout) && (
+                        <div className="program-compiler-output">
+                          <strong>编译输出</strong>
+                          <pre>{latestResult.execution.compiler_stderr || latestResult.execution.compiler_stdout}</pre>
+                        </div>
+                      )}
+                      <div className="program-pass">
+                        <CheckCircle2 size={18} />
+                        {isPassed(latestResult) ? "已通过全部测试，可以生成总结并更新学习画像。" : "提交后会按教师测试用例显示运行结果和 AI 诊断。"}
+                      </div>
+                    </>
+                  )}
                 </article>
               </div>
 

@@ -846,6 +846,63 @@ export interface TeacherTaskListFilters {
   pageSize?: number;
 }
 
+export interface TeacherQuestionOptionPayload {
+  label: string;
+  content: string;
+  is_correct: boolean;
+}
+
+export interface TeacherQuestionPayload {
+  question_type: "SINGLE_CHOICE" | "MULTIPLE_CHOICE" | "TRUE_FALSE" | string;
+  stem: string;
+  analysis?: string;
+  knowledge_points?: string[];
+  difficulty?: string;
+  score?: number;
+  error_type?: string | null;
+  options: TeacherQuestionOptionPayload[];
+}
+
+export interface TeacherTaskCreatePayload {
+  course_id: string;
+  title: string;
+  description: string;
+  workspace_type?: "QUESTION_SET" | "CODING" | string;
+  language?: string;
+  interface_spec?: string;
+  learning_objectives?: string[];
+  capability_ids?: string[];
+  questions?: TeacherQuestionPayload[];
+}
+
+export interface TeacherTaskCreateResult {
+  task_id: string;
+  course_id: string;
+  title: string;
+  workspace_type: string;
+  question_count: number;
+  status: string;
+}
+
+export interface TeacherTaskPublishPayload {
+  class_ids: string[];
+  assignment_mode?: string;
+  allow_hint_level_3?: boolean;
+  deadline?: string | null;
+}
+
+export interface TeacherTaskPublishResult {
+  task_id: string;
+  publications: Array<{
+    assignment_id: string;
+    class_id: string;
+    teaching_assignment_id: string;
+    publish_status: string;
+    assignment_mode: string;
+    initialized_student_count: number;
+  }>;
+}
+
 // ===== 任务监控（开发方案 §九 9.1 提交进度看板） =====
 
 /** §14.3 学生任务状态。OVERDUE 只作为筛选值出现，不是行上的 status 取值 */

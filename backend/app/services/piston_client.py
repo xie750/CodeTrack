@@ -150,6 +150,14 @@ for (const testCase of tests) {{
 """
 
 
+def _stdio_filename(language: str) -> str:
+    return {
+        "CPP": "main.cpp",
+        "PYTHON": "main.py",
+        "JAVASCRIPT": "main.js",
+    }.get(language, "main.txt")
+
+
 def build_piston_source(language: str, spec: ProgrammingSpec, source_code: str, cases: list[dict[str, Any]]) -> tuple[str, str]:
     normalized = normalize_language(language)
     if spec.runner_profile == "leetcode_two_sum_v1":
@@ -159,6 +167,8 @@ def build_piston_source(language: str, spec: ProgrammingSpec, source_code: str, 
             return "main.cpp", _build_cpp_two_sum(source_code, cases)
         if normalized == "JAVASCRIPT":
             return "main.js", _build_javascript_two_sum(source_code, cases)
+    if spec.runner_profile == "stdio_cpp_v1" and normalized == "CPP":
+        return _stdio_filename(normalized), source_code
     raise ValueError(f"Unsupported runner profile/language: {spec.runner_profile}/{normalized}")
 
 
@@ -220,6 +230,171 @@ def map_tests(stdout: str, cases: list[dict[str, Any]], comparison: str) -> list
     return results
 
 
+def _expected_stdout(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    return _json(value)
+
+
+def _case_stdin(input_data: Any) -> str:
+    if isinstance(input_data, dict) and "stdin" in input_data:
+        return str(input_data["stdin"])
+    if isinstance(input_data, str):
+        return input_data
+    return _json(input_data)
+
+
+def _stdio_case_result(case: dict[str, Any], stdout: str, stderr: str, *, duration_ms: int) -> dict[str, Any]:
+    actual = stdout.rstrip()
+    expected = _expected_stdout(case["expected_output"]).rstrip()
+    passed = actual == expected and stderr.strip() == ""
+    if case["visibility"] == "HIDDEN":
+        visible_actual = "已通过" if passed else (case["hidden_failure_summary"] or "隐藏测试未通过")
+    else:
+        visible_actual = actual if actual else stderr[-1000:]
+    return {
+        "test_case_id": case["test_case_id"],
+        "name": case["name"],
+        "visibility": case["visibility"],
+        "status": "PASSED" if passed else "FAILED",
+        "expected_output_summary": case["expected_output_summary"],
+        "actual_output": visible_actual,
+        "duration_ms": duration_ms,
+        "error_tag": case["error_tag"],
+        "sort_order": case["sort_order"],
+        "error_message": "" if passed else "Output did not match expected stdout.",
+    }
+
+
+def _post_execute(
+    *,
+    base_url: str,
+    piston_language: str,
+    filename: str,
+    content: str,
+    stdin: str,
+    timeout_seconds: int,
+) -> dict[str, Any]:
+    response = httpx.post(
+        f"{base_url.rstrip('/')}/api/v2/execute",
+        json={
+            "language": piston_language,
+            "version": "*",
+            "files": [{"name": filename, "content": content}],
+            "stdin": stdin,
+            "compile_timeout": max(1000, timeout_seconds * 1000),
+            "run_timeout": max(1000, timeout_seconds * 1000),
+        },
+        timeout=max(20, timeout_seconds + 15),
+        trust_env=False,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def _compile_error_result(compile_data: dict[str, Any], spec: ProgrammingSpec, started: float) -> PistonRunResult:
+    return PistonRunResult(
+        status="COMPILE_ERROR",
+        compile_exit_code=int(compile_data.get("code") or 1),
+        compiler_stdout=(compile_data.get("stdout") or "")[-4000:],
+        compiler_stderr=(compile_data.get("stderr") or compile_data.get("output") or "")[-4000:],
+        tests=[],
+        failure_reason=None,
+        resource_usage={"profile": spec.runner_profile, "piston_ms": int((perf_counter() - started) * 1000)},
+    )
+
+
+def execute_stdio_with_piston(
+    *,
+    base_url: str,
+    piston_language: str,
+    filename: str,
+    content: str,
+    cases: list[dict[str, Any]],
+    spec: ProgrammingSpec,
+    timeout_seconds: int,
+) -> PistonRunResult:
+    started = perf_counter()
+    results: list[dict[str, Any]] = []
+    compiler_stdout = ""
+    compiler_stderr = ""
+    try:
+        for case in cases:
+            case_started = perf_counter()
+            data = _post_execute(
+                base_url=base_url,
+                piston_language=piston_language,
+                filename=filename,
+                content=content,
+                stdin=_case_stdin(case["input_data"]),
+                timeout_seconds=timeout_seconds,
+            )
+            compile_data = data.get("compile") or {}
+            run_data = data.get("run") or {}
+            compile_code = compile_data.get("code")
+            compiler_stdout = (compile_data.get("stdout") or "")[-4000:]
+            compiler_stderr = (compile_data.get("stderr") or compile_data.get("output") or "")[-4000:]
+            if compile_code not in (None, 0):
+                return _compile_error_result(compile_data, spec, started)
+
+            signal = run_data.get("signal")
+            stdout = run_data.get("stdout") or ""
+            stderr = run_data.get("stderr") or run_data.get("output") or ""
+            if signal:
+                return PistonRunResult(
+                    status="TIMEOUT" if "KILL" in str(signal).upper() else "RUNTIME_ERROR",
+                    compile_exit_code=0,
+                    compiler_stdout=stdout[-4000:],
+                    compiler_stderr=stderr[-4000:],
+                    tests=results,
+                    failure_reason=f"SIGNAL_{signal}",
+                    resource_usage={"profile": spec.runner_profile, "piston_ms": int((perf_counter() - started) * 1000)},
+                )
+            run_code = run_data.get("code")
+            if run_code not in (None, 0):
+                return PistonRunResult(
+                    status="RUNTIME_ERROR",
+                    compile_exit_code=0,
+                    compiler_stdout=stdout[-4000:],
+                    compiler_stderr=stderr[-4000:],
+                    tests=results,
+                    failure_reason=f"EXIT_CODE_{run_code}",
+                    resource_usage={"profile": spec.runner_profile, "piston_ms": int((perf_counter() - started) * 1000)},
+                )
+            results.append(
+                _stdio_case_result(
+                    case,
+                    stdout,
+                    stderr,
+                    duration_ms=int((perf_counter() - case_started) * 1000),
+                )
+            )
+    except Exception as exc:
+        return PistonRunResult(
+            status="INFRASTRUCTURE_ERROR",
+            compile_exit_code=None,
+            compiler_stdout="",
+            compiler_stderr="",
+            tests=[],
+            failure_reason=f"PISTON_UNAVAILABLE: {type(exc).__name__}",
+            resource_usage={"profile": spec.runner_profile, "piston_url": base_url},
+        )
+
+    return PistonRunResult(
+        status="SUCCEEDED",
+        compile_exit_code=0,
+        compiler_stdout=compiler_stdout,
+        compiler_stderr=compiler_stderr,
+        tests=results,
+        failure_reason=None,
+        resource_usage={
+            "profile": spec.runner_profile,
+            "piston_ms": int((perf_counter() - started) * 1000),
+            "case_count": len(cases),
+        },
+    )
+
+
 def execute_with_piston(
     *,
     base_url: str,
@@ -257,23 +432,27 @@ def execute_with_piston(
             resource_usage={"profile": spec.runner_profile, "execution_id": execution_id},
         )
 
+    if spec.runner_profile == "stdio_cpp_v1":
+        return execute_stdio_with_piston(
+            base_url=base_url,
+            piston_language=piston_language,
+            filename=filename,
+            content=content,
+            cases=cases,
+            spec=spec,
+            timeout_seconds=timeout_seconds,
+        )
+
     started = perf_counter()
     try:
-        response = httpx.post(
-            f"{base_url.rstrip('/')}/api/v2/execute",
-            json={
-                "language": piston_language,
-                "version": "*",
-                "files": [{"name": filename, "content": content}],
-                "stdin": "",
-                "compile_timeout": max(1000, timeout_seconds * 1000),
-                "run_timeout": max(1000, timeout_seconds * 1000),
-            },
-            timeout=max(20, timeout_seconds + 15),
-            trust_env=False,
+        data = _post_execute(
+            base_url=base_url,
+            piston_language=piston_language,
+            filename=filename,
+            content=content,
+            stdin="",
+            timeout_seconds=timeout_seconds,
         )
-        response.raise_for_status()
-        data = response.json()
     except Exception as exc:
         return PistonRunResult(
             status="INFRASTRUCTURE_ERROR",
@@ -289,15 +468,7 @@ def execute_with_piston(
     run_data = data.get("run") or {}
     compile_code = compile_data.get("code")
     if compile_code not in (None, 0):
-        return PistonRunResult(
-            status="COMPILE_ERROR",
-            compile_exit_code=int(compile_code),
-            compiler_stdout=(compile_data.get("stdout") or "")[-4000:],
-            compiler_stderr=(compile_data.get("stderr") or compile_data.get("output") or "")[-4000:],
-            tests=[],
-            failure_reason=None,
-            resource_usage={"profile": spec.runner_profile, "piston_ms": int((perf_counter() - started) * 1000)},
-        )
+        return _compile_error_result(compile_data, spec, started)
 
     run_code = run_data.get("code")
     signal = run_data.get("signal")
@@ -333,4 +504,3 @@ def execute_with_piston(
         failure_reason=None,
         resource_usage={"profile": spec.runner_profile, "piston_ms": int((perf_counter() - started) * 1000)},
     )
-

@@ -13,8 +13,12 @@
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import delete, select
+from uuid import uuid4
 
+from backend.app.core.database import SessionLocal
 from backend.app.main import app
+from backend.app.models import Question, QuestionOption, StudentTaskProgress, Task, TaskAssignment
 
 TEACHER = {"X-Demo-User-Id": "user_teacher_001"}
 OTHER_TEACHER = {"X-Demo-User-Id": "user_teacher_002"}
@@ -38,6 +42,29 @@ def _row(data: dict, task_id: str) -> dict:
     match = [item for item in data["items"] if item["task_id"] == task_id]
     assert match, f"{task_id} 不在返回列表里：{[item['task_id'] for item in data['items']]}"
     return match[0]
+
+
+def _cleanup_task(task_id: str | None) -> None:
+    if not task_id:
+        return
+    db = SessionLocal()
+    try:
+        assignment_ids = list(
+            db.scalars(select(TaskAssignment.id).where(TaskAssignment.task_id == task_id)).all()
+        )
+        question_ids = list(db.scalars(select(Question.id).where(Question.task_id == task_id)).all())
+        if assignment_ids:
+            db.execute(
+                delete(StudentTaskProgress).where(StudentTaskProgress.assignment_id.in_(assignment_ids))
+            )
+            db.execute(delete(TaskAssignment).where(TaskAssignment.id.in_(assignment_ids)))
+        if question_ids:
+            db.execute(delete(QuestionOption).where(QuestionOption.question_id.in_(question_ids)))
+            db.execute(delete(Question).where(Question.id.in_(question_ids)))
+        db.execute(delete(Task).where(Task.id == task_id))
+        db.commit()
+    finally:
+        db.close()
 
 
 # ------------------------------------------------------------------ 范围与权限
@@ -84,9 +111,81 @@ def test_students_cannot_read_the_teacher_task_list():
         assert response.status_code == 403
 
 
-def test_module_is_read_only():
+def test_teacher_can_create_publish_and_student_can_open_question_workspace(request):
+    task_id = None
+    request.addfinalizer(lambda: _cleanup_task(task_id))
     with TestClient(app) as c:
-        assert c.post("/api/v1/teacher/tasks", headers=TEACHER).status_code == 405
+        title = f"chain-smoke-{uuid4().hex[:8]}"
+        created = c.post(
+            "/api/v1/teacher/tasks",
+            headers=TEACHER,
+            json={
+                "course_id": DS_COURSE,
+                "title": title,
+                "description": "Smoke task for the teacher publish to student receive chain.",
+                "workspace_type": "QUESTION_SET",
+                "language": "CPP",
+                "interface_spec": "",
+                "learning_objectives": ["Verify publish chain"],
+                "capability_ids": [],
+                "questions": [
+                    {
+                        "question_type": "SINGLE_CHOICE",
+                        "stem": "Which option is marked as correct?",
+                        "analysis": "A is the intended answer.",
+                        "knowledge_points": ["publish chain"],
+                        "difficulty": "BASIC",
+                        "score": 5,
+                        "options": [
+                            {"label": "A", "content": "Correct", "is_correct": True},
+                            {"label": "B", "content": "Incorrect", "is_correct": False},
+                        ],
+                    }
+                ],
+            },
+        )
+        assert created.status_code == 201, created.text
+        task_id = created.json()["data"]["task_id"]
+
+        draft_row = _row(_tasks(c, TEACHER, keyword=title), task_id)
+        assert draft_row["content_status"] == "READY"
+        assert draft_row["question_count"] == 1
+
+        published = c.post(
+            f"/api/v1/teacher/tasks/{task_id}/publish",
+            headers=TEACHER,
+            json={"class_ids": [SE_CLASS], "assignment_mode": "QUIZ"},
+        )
+        assert published.status_code == 200, published.text
+        publication = published.json()["data"]["publications"][0]
+        assert publication["class_id"] == SE_CLASS
+        assert publication["publish_status"] == "PUBLISHED"
+        assert publication["initialized_student_count"] > 0
+
+        published_row = _row(_tasks(c, TEACHER, keyword=title), task_id)
+        assert published_row["content_status"] == "PUBLISHED"
+        assert {item["class_id"] for item in published_row["publications"]} == {SE_CLASS}
+
+        student_tasks = c.get(
+            "/api/v1/student/tasks",
+            headers=STUDENT,
+            params={"course_id": DS_COURSE},
+        )
+        assert student_tasks.status_code == 200, student_tasks.text
+        student_row = next(item for item in student_tasks.json()["data"] if item["task_id"] == task_id)
+        assert student_row["workspace_type"] == "QUESTION_SET"
+        assert student_row["status"] == "NOT_STARTED"
+        assert student_row["total_required_count"] == 1
+
+        workspace = c.get(
+            f"/api/v1/student/assignments/{student_row['assignment_id']}/workspace",
+            headers=STUDENT,
+        )
+        assert workspace.status_code == 200, workspace.text
+        workspace_data = workspace.json()["data"]
+        assert workspace_data["task"]["task_id"] == task_id
+        assert len(workspace_data["questions"]) == 1
+        assert workspace_data["questions"][0]["stem"] == "Which option is marked as correct?"
 
 
 # ------------------------------------------------------------------ 行内容
@@ -254,15 +353,12 @@ def test_write_actions_are_reported_as_unavailable_with_reasons():
         actions = {item["action"]: item for item in data["unavailable_actions"]}
         # §八 8.1 的六个写动作都还没有写接口，必须逐个给出原因，前端才能禁用并解释
         assert set(actions) == {
-            "CREATE_TASK",
             "EDIT_TASK",
             "DUPLICATE_TASK",
             "ARCHIVE_TASK",
-            "PUBLISH_TASK",
             "STUDENT_PREVIEW",
         }
         assert all(item["reason"] for item in actions.values())
-        assert actions["CREATE_TASK"]["target_route"] == "/teacher/tasks/new"
 
 
 def test_status_derivation_is_explained_to_the_frontend():

@@ -70,7 +70,7 @@ def run_sandbox_execution(
     settings = get_settings()
     spec = get_programming_spec(task) if task is not None else LINKED_LIST_DELETE_SPEC
     piston_base_url = getattr(settings, "piston_base_url", None)
-    if piston_base_url and spec.runner_profile == "leetcode_two_sum_v1":
+    if piston_base_url and spec.runner_profile != "legacy_linked_list_delete_v1":
         result = execute_with_piston(
             base_url=piston_base_url,
             execution_id=execution_id,
