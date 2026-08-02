@@ -9,12 +9,14 @@ from backend.app.models import Task
 LANGUAGE_LABELS = {
     "CPP": "C++17",
     "PYTHON": "Python 3",
+    "JAVA": "Java 15",
     "JAVASCRIPT": "JavaScript",
 }
 
 PISTON_LANGUAGE_ALIASES = {
     "CPP": "c++",
     "PYTHON": "python",
+    "JAVA": "java",
     "JAVASCRIPT": "javascript",
 }
 
@@ -58,6 +60,7 @@ def normalize_language(language: str) -> str:
         "C++": "CPP",
         "CXX": "CPP",
         "PY": "PYTHON",
+        "JAVA15": "JAVA",
         "JS": "JAVASCRIPT",
         "NODE": "JAVASCRIPT",
         "NODEJS": "JAVASCRIPT",
@@ -67,7 +70,7 @@ def normalize_language(language: str) -> str:
 
 TWO_SUM_SPEC = ProgrammingSpec(
     runner_profile="leetcode_two_sum_v1",
-    supported_languages=["PYTHON", "CPP", "JAVASCRIPT"],
+    supported_languages=["PYTHON", "JAVA"],
     default_language="PYTHON",
     function_signature="twoSum(nums, target) -> indices",
     editable_region="SOLUTION_ONLY",
@@ -86,6 +89,13 @@ public:
     }
 };
 """,
+        "JAVA": """class Solution {
+    public int[] twoSum(int[] nums, int target) {
+        // Return the indices of two numbers whose sum is target.
+        return new int[]{};
+    }
+}
+""",
         "JAVASCRIPT": """function twoSum(nums, target) {
   // Return the indices of two numbers whose sum is target.
   return [];
@@ -102,12 +112,24 @@ public:
 
 
 LINKED_LIST_DELETE_SPEC = ProgrammingSpec(
-    runner_profile="legacy_linked_list_delete_v1",
-    supported_languages=["CPP"],
-    default_language="CPP",
-    function_signature="ListNode* deleteAt(ListNode* head, int position);",
-    editable_region="FUNCTION_ONLY",
+    runner_profile="linked_list_delete_transform_v1",
+    supported_languages=["PYTHON", "JAVA"],
+    default_language="PYTHON",
+    function_signature="deleteAt(values, position) -> values",
+    editable_region="SOLUTION_ONLY",
     language_templates={
+        "PYTHON": """class Solution:
+    def deleteAt(self, values, position):
+        # Return a new list after deleting the node at position.
+        return values
+""",
+        "JAVA": """class Solution {
+    public int[] deleteAt(int[] values, int position) {
+        // Return a new array after deleting the node at position.
+        return values;
+    }
+}
+""",
         "CPP": """ListNode* deleteAt(ListNode* head, int position) {
     // Implement deletion at the given position.
     return head;
@@ -115,9 +137,10 @@ LINKED_LIST_DELETE_SPEC = ProgrammingSpec(
 """,
     },
     rules=[
-        "Return nullptr for an empty list.",
-        "Return the original list for an invalid position.",
-        "When deleting the head node, return the new head.",
+        "Return an empty list or array for an empty input.",
+        "Return the original values for an invalid position.",
+        "When deleting the head node, return the values starting from the new head.",
+        "Python and Java are enabled first; C++ pointer-based judging will be adapted later.",
     ],
 )
 

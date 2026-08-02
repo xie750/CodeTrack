@@ -64,6 +64,7 @@ const GRID_COLUMN_GAPS = 24;
 const MONACO_LANGUAGE: Record<string, string> = {
   CPP: "cpp",
   PYTHON: "python",
+  JAVA: "java",
   JAVASCRIPT: "javascript"
 };
 
@@ -196,7 +197,7 @@ function normalizeTaskDetail(rawTask: TaskDetail): TaskDetail {
       editable_region: rawSpec.editable_region ?? "FUNCTION_ONLY",
       student_template: rawSpec.student_template ?? languageTemplates[defaultLanguage] ?? "",
       rules: rawSpec.rules ?? [],
-      runner_profile: rawSpec.runner_profile ?? "legacy_linked_list_delete_v1",
+      runner_profile: rawSpec.runner_profile ?? "linked_list_delete_transform_v1",
       supported_languages: supportedLanguages,
       default_language: defaultLanguage,
       language_templates: languageTemplates,
