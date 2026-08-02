@@ -9,7 +9,7 @@ import pytest
 import backend.app.services.piston_client as piston_client
 import backend.app.services.sandbox_client as sandbox_client
 from backend.app.services.seed import STANDARD_WRONG_CODE
-from backend.app.services.programming_specs import STDIO_CPP_SPEC
+from backend.app.services.programming_specs import LINKED_LIST_DELETE_SPEC, STDIO_CPP_SPEC, TWO_SUM_SPEC
 from backend.app.services.piston_client import PistonRunResult
 from sandbox import runner
 from sandbox.app import app
@@ -158,6 +158,114 @@ def test_sandbox_client_routes_supported_runner_profiles_to_piston(monkeypatch):
     assert result.status == "SUCCEEDED"
     assert result.tests[0]["status"] == "PASSED"
     assert result.resource_usage["piston_ms"] == 12
+
+
+def test_piston_linked_list_delete_supports_python_and_java(monkeypatch):
+    calls = []
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "compile": {"code": 0, "stdout": "", "stderr": ""},
+                "run": {
+                    "code": 0,
+                    "stdout": '{"id":"tc_delete_head","actual":[2,3],"duration_ms":1}\n',
+                    "stderr": "",
+                },
+            }
+
+    def fake_post(url, *, json, timeout, trust_env):
+        calls.append(json)
+        return FakeResponse()
+
+    test_case = SimpleNamespace(
+        id="tc_delete_head",
+        name="delete head",
+        visibility="PUBLIC",
+        input_data='{"values":[1,2,3],"position":0}',
+        expected_output="[2,3]",
+        expected_output_summary="[2,3]",
+        hidden_failure_summary=None,
+        error_tag="LINKED_LIST_HEAD_UPDATE_ERROR",
+        sort_order=1,
+    )
+    monkeypatch.setattr(piston_client.httpx, "post", fake_post)
+
+    for language, source in [
+        ("PYTHON", "class Solution:\n    def deleteAt(self, values, position):\n        return values[1:]\n"),
+        ("JAVA", "class Solution {\n    public int[] deleteAt(int[] values, int position) { return new int[]{2,3}; }\n}\n"),
+    ]:
+        result = piston_client.execute_with_piston(
+            base_url="http://piston.test",
+            execution_id=f"exe_linked_{language.lower()}",
+            language=language,
+            spec=LINKED_LIST_DELETE_SPEC,
+            source_code=source,
+            test_cases=[test_case],
+            timeout_seconds=3,
+        )
+
+        assert result.status == "SUCCEEDED"
+        assert result.tests[0]["status"] == "PASSED"
+
+    assert calls[0]["language"] == "python"
+    assert calls[0]["files"][0]["name"] == "main.py"
+    assert calls[1]["language"] == "java"
+    assert calls[1]["files"][0]["name"] == "Main.java"
+    assert calls[1]["files"][0]["content"].index("public class Main") < calls[1]["files"][0]["content"].index("class Solution")
+
+
+def test_piston_two_sum_supports_java(monkeypatch):
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "compile": {"code": 0, "stdout": "", "stderr": ""},
+                "run": {
+                    "code": 0,
+                    "stdout": '{"id":"tc_two_sum_basic","actual":[0,1],"duration_ms":1}\n',
+                    "stderr": "",
+                },
+            }
+
+    captured = []
+
+    def fake_post(url, *, json, timeout, trust_env):
+        captured.append(json)
+        return FakeResponse()
+
+    test_case = SimpleNamespace(
+        id="tc_two_sum_basic",
+        name="basic complement",
+        visibility="PUBLIC",
+        input_data='{"nums":[2,7,11,15],"target":9}',
+        expected_output="[0,1]",
+        expected_output_summary="[0,1]",
+        hidden_failure_summary=None,
+        error_tag="TWO_SUM_BASIC_COMPLEMENT",
+        sort_order=1,
+    )
+    monkeypatch.setattr(piston_client.httpx, "post", fake_post)
+
+    result = piston_client.execute_with_piston(
+        base_url="http://piston.test",
+        execution_id="exe_two_sum_java",
+        language="JAVA",
+        spec=TWO_SUM_SPEC,
+        source_code="class Solution {\n    public int[] twoSum(int[] nums, int target) { return new int[]{0,1}; }\n}\n",
+        test_cases=[test_case],
+        timeout_seconds=3,
+    )
+
+    assert captured[0]["language"] == "java"
+    assert captured[0]["files"][0]["name"] == "Main.java"
+    assert result.status == "SUCCEEDED"
+    assert result.tests[0]["status"] == "PASSED"
 
 
 def test_piston_stdio_cpp_runner_maps_stdin_stdout_cases(monkeypatch):

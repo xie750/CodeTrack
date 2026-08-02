@@ -81,8 +81,38 @@ for case in TESTS:
 """
 
 
+def _build_python_linked_list_delete(source_code: str, cases: list[dict[str, Any]]) -> str:
+    return f"""import json
+import time
+
+{source_code}
+
+TESTS = {_safe_case_json(cases)}
+
+for case in TESTS:
+    started = time.perf_counter()
+    try:
+        values = list(case["input"]["values"])
+        position = case["input"]["position"]
+        actual = Solution().deleteAt(values, position)
+        duration_ms = int((time.perf_counter() - started) * 1000)
+        print(json.dumps({{"id": case["id"], "actual": actual, "duration_ms": duration_ms}}, ensure_ascii=False))
+    except Exception as exc:
+        duration_ms = int((time.perf_counter() - started) * 1000)
+        print(json.dumps({{"id": case["id"], "error": type(exc).__name__ + ": " + str(exc), "duration_ms": duration_ms}}, ensure_ascii=False))
+"""
+
+
 def _cpp_vector(values: list[int]) -> str:
     return "{" + ",".join(str(value) for value in values) + "}"
+
+
+def _java_array(values: list[int]) -> str:
+    return "new int[]{" + ",".join(str(value) for value in values) + "}"
+
+
+def _java_string(value: str) -> str:
+    return json.dumps(value)
 
 
 def _build_cpp_two_sum(source_code: str, cases: list[dict[str, Any]]) -> str:
@@ -133,6 +163,100 @@ int main() {{
 """
 
 
+def _build_java_two_sum(source_code: str, cases: list[dict[str, Any]]) -> str:
+    test_lines = []
+    for case in cases:
+        input_data = case["input_data"]
+        nums = _java_array(input_data["nums"])
+        test_lines.append(
+            f'        runTest({_java_string(case["test_case_id"])}, {nums}, {int(input_data["target"])});'
+        )
+    return f"""import java.util.*;
+
+public class Main {{
+    static String jsonArray(int[] values) {{
+        if (values == null) return "null";
+        StringBuilder out = new StringBuilder("[");
+        for (int i = 0; i < values.length; i++) {{
+            if (i > 0) out.append(",");
+            out.append(values[i]);
+        }}
+        out.append("]");
+        return out.toString();
+    }}
+
+    static String jsonString(String value) {{
+        return value.replace("\\\\", "\\\\\\\\").replace("\\"", "\\\\\\"");
+    }}
+
+    static void runTest(String id, int[] nums, int target) {{
+        long started = System.nanoTime();
+        try {{
+            int[] actual = new Solution().twoSum(nums, target);
+            long durationMs = (System.nanoTime() - started) / 1_000_000;
+            System.out.println("{{\\"id\\":\\"" + id + "\\",\\"actual\\":" + jsonArray(actual) + ",\\"duration_ms\\":" + durationMs + "}}");
+        }} catch (Exception exc) {{
+            long durationMs = (System.nanoTime() - started) / 1_000_000;
+            System.out.println("{{\\"id\\":\\"" + id + "\\",\\"error\\":\\"" + jsonString(exc.getClass().getSimpleName() + ": " + exc.getMessage()) + "\\",\\"duration_ms\\":" + durationMs + "}}");
+        }}
+    }}
+
+    public static void main(String[] args) {{
+{chr(10).join(test_lines)}
+    }}
+}}
+
+{source_code}
+"""
+
+
+def _build_java_linked_list_delete(source_code: str, cases: list[dict[str, Any]]) -> str:
+    test_lines = []
+    for case in cases:
+        input_data = case["input_data"]
+        values = _java_array(input_data["values"])
+        test_lines.append(
+            f'        runTest({_java_string(case["test_case_id"])}, {values}, {int(input_data["position"])});'
+        )
+    return f"""import java.util.*;
+
+public class Main {{
+    static String jsonArray(int[] values) {{
+        if (values == null) return "null";
+        StringBuilder out = new StringBuilder("[");
+        for (int i = 0; i < values.length; i++) {{
+            if (i > 0) out.append(",");
+            out.append(values[i]);
+        }}
+        out.append("]");
+        return out.toString();
+    }}
+
+    static String jsonString(String value) {{
+        return value.replace("\\\\", "\\\\\\\\").replace("\\"", "\\\\\\"");
+    }}
+
+    static void runTest(String id, int[] values, int position) {{
+        long started = System.nanoTime();
+        try {{
+            int[] actual = new Solution().deleteAt(values, position);
+            long durationMs = (System.nanoTime() - started) / 1_000_000;
+            System.out.println("{{\\"id\\":\\"" + id + "\\",\\"actual\\":" + jsonArray(actual) + ",\\"duration_ms\\":" + durationMs + "}}");
+        }} catch (Exception exc) {{
+            long durationMs = (System.nanoTime() - started) / 1_000_000;
+            System.out.println("{{\\"id\\":\\"" + id + "\\",\\"error\\":\\"" + jsonString(exc.getClass().getSimpleName() + ": " + exc.getMessage()) + "\\",\\"duration_ms\\":" + durationMs + "}}");
+        }}
+    }}
+
+    public static void main(String[] args) {{
+{chr(10).join(test_lines)}
+    }}
+}}
+
+{source_code}
+"""
+
+
 def _build_javascript_two_sum(source_code: str, cases: list[dict[str, Any]]) -> str:
     return f"""{source_code}
 
@@ -154,6 +278,7 @@ def _stdio_filename(language: str) -> str:
     return {
         "CPP": "main.cpp",
         "PYTHON": "main.py",
+        "JAVA": "Main.java",
         "JAVASCRIPT": "main.js",
     }.get(language, "main.txt")
 
@@ -163,10 +288,17 @@ def build_piston_source(language: str, spec: ProgrammingSpec, source_code: str, 
     if spec.runner_profile == "leetcode_two_sum_v1":
         if normalized == "PYTHON":
             return "main.py", _build_python_two_sum(source_code, cases)
+        if normalized == "JAVA":
+            return "Main.java", _build_java_two_sum(source_code, cases)
         if normalized == "CPP":
             return "main.cpp", _build_cpp_two_sum(source_code, cases)
         if normalized == "JAVASCRIPT":
             return "main.js", _build_javascript_two_sum(source_code, cases)
+    if spec.runner_profile == "linked_list_delete_transform_v1":
+        if normalized == "PYTHON":
+            return "main.py", _build_python_linked_list_delete(source_code, cases)
+        if normalized == "JAVA":
+            return "Main.java", _build_java_linked_list_delete(source_code, cases)
     if spec.runner_profile == "stdio_cpp_v1" and normalized == "CPP":
         return _stdio_filename(normalized), source_code
     raise ValueError(f"Unsupported runner profile/language: {spec.runner_profile}/{normalized}")

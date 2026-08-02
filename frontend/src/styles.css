@@ -864,6 +864,9 @@ html[data-route-motion="deeper"] .workspace-route-stage {
 }
 
 .replica-shell {
+  position: fixed;
+  inset: 0;
+  width: 100%;
   height: 100dvh;
   min-height: 100vh;
   overflow: hidden;

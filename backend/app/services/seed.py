@@ -395,7 +395,7 @@ def seed_demo_data(db: Session) -> None:
             "title": "IP 地址与子网划分练习",
             "description": "根据给定 IP 和掩码完成子网划分与可用主机数计算。",
             "workspace_type": "CODING",
-            "language": "CPP",
+            "language": "PYTHON",
             "interface_spec": "int analyzeSubnet(string ip, string mask);",
             "learning_objectives": json.dumps(
                 ["理解 IP 地址结构", "掌握子网掩码计算", "识别网络号与主机号"],
@@ -419,7 +419,7 @@ def seed_demo_data(db: Session) -> None:
             "title": "链表边界处理巩固练习",
             "description": "围绕单链表删除任务补充一组边界场景练习，重点检查头节点返回值和越界位置保护。",
             "workspace_type": "CODING",
-            "language": "CPP",
+            "language": "PYTHON",
             "interface_spec": "ListNode* deleteAt(ListNode* head, int position);",
             "learning_objectives": json.dumps(linked_list_review_objectives, ensure_ascii=False),
             "capability_ids": json.dumps(["cap_linked_list_boundary"], ensure_ascii=False),
