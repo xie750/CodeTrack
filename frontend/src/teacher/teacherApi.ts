@@ -42,8 +42,12 @@ import type {
   TeacherResourceListData,
   TeacherTeachingAssignment,
   TaskMonitorData,
+  TeacherTaskCreatePayload,
+  TeacherTaskCreateResult,
   TeacherTaskListData,
   TeacherTaskListFilters,
+  TeacherTaskPublishPayload,
+  TeacherTaskPublishResult,
   TeacherTimeline,
 } from "./teacherTypes";
 
@@ -249,6 +253,20 @@ export const getTeacherTasks = (filters: TeacherTaskListFilters = {}) =>
       page_size: filters.pageSize ? String(filters.pageSize) : undefined,
     })
   );
+
+export const createTeacherTask = (payload: TeacherTaskCreatePayload) =>
+  request<TeacherTaskCreateResult>("/api/v1/teacher/tasks", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+export const publishTeacherTask = (taskId: string, payload: TeacherTaskPublishPayload) =>
+  request<TeacherTaskPublishResult>(`/api/v1/teacher/tasks/${encodeURIComponent(taskId)}/publish`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 
 // ===== 任务监控（开发方案 §九 9.1 提交进度看板） =====
 

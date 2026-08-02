@@ -4476,6 +4476,107 @@ html[data-route-motion="deeper"] .workspace-route-stage {
   min-width: 680px;
 }
 
+.program-case-panel {
+  padding: 16px 18px 18px;
+}
+
+.program-case-tabs {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 14px;
+  overflow-x: auto;
+}
+
+.program-case-tabs button {
+  min-width: 76px;
+  height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  color: #344058;
+  background: transparent;
+  font-weight: 900;
+}
+
+.program-case-tabs button.active {
+  color: #111827;
+  background: #f1f4f8;
+}
+
+.program-case-detail {
+  display: grid;
+  gap: 12px;
+}
+
+.program-case-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #17243b;
+}
+
+.program-case-title strong {
+  font-size: 14px;
+}
+
+.program-case-title span,
+.program-result td small {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid #dbe4f0;
+  border-radius: 999px;
+  color: #657187;
+  background: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.program-case-fields {
+  display: grid;
+  gap: 10px;
+}
+
+.program-case-fields label,
+.program-case-expected {
+  display: grid;
+  gap: 7px;
+}
+
+.program-case-fields span,
+.program-case-expected span {
+  color: #6b7280;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.program-case-fields code,
+.program-case-expected code {
+  min-height: 46px;
+  padding: 13px 16px;
+  display: flex;
+  align-items: center;
+  border-radius: 8px;
+  color: #111827;
+  background: #f4f6f8;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.program-result-empty {
+  min-height: 120px;
+  display: grid;
+  place-items: center;
+  color: #657187;
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .program-splitter {
   position: relative;
   display: grid;
@@ -4664,6 +4765,39 @@ html.workspace-resizing-y * {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+}
+
+.program-result td small {
+  width: fit-content;
+  height: 20px;
+  margin-left: 8px;
+  padding: 0 6px;
+  font-size: 11px;
+}
+
+.program-compiler-output {
+  margin: 14px 16px 0;
+  display: grid;
+  gap: 8px;
+}
+
+.program-compiler-output strong {
+  color: #253149;
+  font-size: 13px;
+}
+
+.program-compiler-output pre {
+  max-height: 92px;
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border: 1px solid #edf1f6;
+  border-radius: 8px;
+  color: #344058;
+  background: #f8fafc;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
 }
 
 .program-pass {
@@ -9845,4 +9979,61 @@ html.workspace-resizing-y * {
   .syllabus-point {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+/* Teacher task create/publish forms */
+.task-create-form {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 18px;
+}
+
+.task-form-field {
+  display: grid;
+  gap: 6px;
+  min-width: 180px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.task-form-field.wide {
+  min-width: 100%;
+}
+
+.task-form-field input,
+.task-form-field textarea,
+.task-option-row input[type="text"],
+.task-option-row input:not([type]) {
+  width: 100%;
+  border: 1px solid #d8e0ec;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #0f172a;
+  font: inherit;
+  font-weight: 500;
+  background: #fff;
+}
+
+.task-form-field textarea {
+  resize: vertical;
+}
+
+.task-option-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.task-option-row {
+  display: grid;
+  grid-template-columns: 24px 24px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  color: #334155;
+}
+
+.task-create-actions {
+  justify-content: flex-end;
+  margin: 18px 0 0;
 }

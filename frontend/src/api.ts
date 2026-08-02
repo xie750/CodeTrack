@@ -128,11 +128,26 @@ export type TaskDetail = {
     comparison: string;
   };
   learning_objectives: string[];
+  test_cases: Array<{
+    test_case_id: string;
+    name: string;
+    visibility: string;
+    required: boolean;
+    input_summary: Record<string, unknown> | null;
+    input_visible: boolean;
+    expected_output: unknown;
+    expected_output_visible: boolean;
+    expected_output_summary: string;
+  }>;
   public_tests: Array<{
     test_case_id: string;
     name: string;
-    input_summary: Record<string, unknown>;
+    visibility?: string;
+    required?: boolean;
+    input_summary: Record<string, unknown> | null;
+    input_visible?: boolean;
     expected_output: unknown;
+    expected_output_visible?: boolean;
     expected_output_summary: string;
   }>;
   current_progress: {

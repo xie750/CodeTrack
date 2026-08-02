@@ -113,7 +113,7 @@ def test_endpoint_is_read_only():
 def test_summary_matches_seeded_class_data():
     with TestClient(app) as c:
         summary = _strategy(c, TEACHER, course_id=DS_COURSE, class_id=SE_CLASS)["summary"]
-        assert summary["published_task_count"] == 4
+        assert summary["published_task_count"] == 5
         assert summary["active_student_count"] == 1
         # 完成率是实测值而不是「无数据」：seed 里没有 COMPLETED 的进度，所以是 0.0
         assert summary["completion_rate"] is not None

@@ -176,7 +176,6 @@ export default function TaskList() {
     [stats]
   );
 
-  const createAction = reasonFor("CREATE_TASK");
   const hasNextPage = data ? page < data.total_pages : false;
 
   return (
@@ -196,8 +195,7 @@ export default function TaskList() {
           <button
             className="task-primary-btn"
             type="button"
-            title={createAction?.reason}
-            onClick={() => createAction?.target_route && navigate(createAction.target_route)}
+            onClick={() => navigate("/teacher/tasks/new")}
           >
             <Plus size={15} /> 新建任务
           </button>
@@ -348,6 +346,7 @@ export default function TaskList() {
               row={row}
               reasonFor={reasonFor}
               onOpenMonitor={() => navigate(`/teacher/monitor/tasks/${row.task_id}`)}
+              onPublish={() => navigate(`/teacher/tasks/${row.task_id}/publish`)}
             />
           ))}
         </section>
@@ -374,9 +373,10 @@ interface RowProps {
   row: TeacherTaskRow;
   reasonFor: (action: string) => { reason: string; target_route: string | null } | undefined;
   onOpenMonitor: () => void;
+  onPublish: () => void;
 }
 
-function TaskRow({ row, reasonFor, onOpenMonitor }: RowProps) {
+function TaskRow({ row, reasonFor, onOpenMonitor, onPublish }: RowProps) {
   const published = row.content_status === "PUBLISHED";
   const isProgramming = row.task_type === "PROGRAMMING";
   const rate = row.completion_rate;
@@ -474,7 +474,7 @@ function TaskRow({ row, reasonFor, onOpenMonitor }: RowProps) {
           <button type="button" disabled title={reasonFor("STUDENT_PREVIEW")?.reason}>
             <Eye size={13} /> 学生视角
           </button>
-          <button type="button" disabled title={reasonFor("PUBLISH_TASK")?.reason}>
+          <button type="button" disabled={published} title={published ? "任务已发布" : "发布到班级"} onClick={onPublish}>
             <Send size={13} /> 发布
           </button>
           <button type="button" disabled title={reasonFor("ARCHIVE_TASK")?.reason}>

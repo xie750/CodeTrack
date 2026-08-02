@@ -1,65 +1,127 @@
-import { useParams } from "react-router-dom";
-import { Descriptions } from "antd";
-import TeacherModuleScaffold from "../../components/TeacherModuleScaffold";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { Send } from "lucide-react";
+import TeacherSubNav from "../../components/TeacherSubNav";
+import { getTeacherTasks, publishTeacherTask } from "../../teacherApi";
+import type { TeacherTaskListData, TeacherTaskRow } from "../../teacherTypes";
+import { taskCenterNav } from "./taskCenterNav";
 
-/**
- * 开发方案 §八 8.6 任务发布
- * 发布是全流程里唯一会批量写学生数据的动作：
- * 发布后必须初始化班级所有学生的任务进度。
- */
 export default function TaskPublish() {
   const { taskId } = useParams<{ taskId: string }>();
+  const navigate = useNavigate();
+  const [data, setData] = useState<TeacherTaskListData | null>(null);
+  const [task, setTask] = useState<TeacherTaskRow | null>(null);
+  const [classId, setClassId] = useState("");
+  const [assignmentMode, setAssignmentMode] = useState("QUIZ");
+  const [deadline, setDeadline] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [publishing, setPublishing] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!taskId) return;
+    let alive = true;
+    setLoading(true);
+    getTeacherTasks({ page: 1, pageSize: 100 })
+      .then((result) => {
+        if (!alive) return;
+        setData(result);
+        const found = result.items.find((item) => item.task_id === taskId) ?? null;
+        setTask(found);
+        setClassId(result.class_options[0]?.class_id ?? "");
+      })
+      .catch(() => setError("发布信息加载失败。"))
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [taskId]);
+
+  const classOptions = useMemo(() => data?.class_options ?? [], [data]);
+
+  async function publish() {
+    if (!taskId || !classId) return;
+    setPublishing(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await publishTeacherTask(taskId, {
+        class_ids: [classId],
+        assignment_mode: assignmentMode,
+        allow_hint_level_3: true,
+        deadline: deadline ? new Date(deadline).toISOString() : null,
+      });
+      setMessage(`发布成功，初始化 ${result.publications[0]?.initialized_student_count ?? 0} 名学生。`);
+      window.setTimeout(() => navigate("/teacher/tasks"), 800);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "发布失败");
+    } finally {
+      setPublishing(false);
+    }
+  }
 
   return (
-    <TeacherModuleScaffold
-      title="任务发布"
-      description="选择班级、设置发布与截止时间和提交规则，确认后正式下发到学生端。发布后会初始化班级所有学生的任务进度。"
-      docRef="§八 8.6 任务发布"
-      pendingApis={[
-        "POST /api/v1/teacher/tasks/{task_id}/publish",
-        "POST /api/v1/teacher/assignments/{assignment_id}/pause",
-        "POST /api/v1/teacher/assignments/{assignment_id}/withdraw",
-        "POST /api/v1/teacher/assignments/{assignment_id}/close",
-      ]}
-      boundaries={[
-        "未验证完成的任务不能发布",
-        "截止时间不得早于发布时间",
-        "发布后必须初始化所有学生任务进度",
-        "暂停后学生不能继续提交",
-        "关闭任务不得删除历史提交",
-        "任务内容与班级发布状态必须分开管理",
-      ]}
-      sections={[
-        {
-          title: "发布配置控件",
-          controls: [
-            { name: "班级选择器", desc: "选择一个或多个班级" },
-            { name: "任务模式选择器", desc: "设置练习、测验、考试或补救" },
-            { name: "发布时间选择器", desc: "立即或定时发布" },
-            { name: "截止时间选择器", desc: "设置截止时间" },
-            { name: "允许迟交开关", desc: "控制截止后提交" },
-            { name: "最大提交次数", desc: "限制提交次数" },
-            { name: "是否计分开关", desc: "决定是否进入成绩" },
-            { name: "解析开放时间", desc: "控制解析显示" },
-            { name: "参考答案开放时间", desc: "控制答案显示" },
-          ],
-        },
-        {
-          title: "发布与生命周期控件",
-          note: "对应班级任务发布状态 DRAFT / SCHEDULED / PUBLISHED / PAUSED / CLOSED，见 §十四 14.2。",
-          controls: [
-            { name: "发布预览", desc: "汇总发布规则" },
-            { name: "确认发布按钮", desc: "正式发布，需二次确认弹窗" },
-            { name: "撤回按钮", desc: "撤回尚未开始或允许撤回的任务" },
-            { name: "暂停按钮", desc: "暂停学生继续提交" },
-            { name: "关闭按钮", desc: "结束任务并保留历史数据" },
-          ],
-        },
-      ]}
-    >
-      <Descriptions size="small" bordered column={1} style={{ marginBottom: 16 }}>
-        <Descriptions.Item label="任务 ID">{taskId || "缺少任务 ID"}</Descriptions.Item>
-      </Descriptions>
-    </TeacherModuleScaffold>
+    <div className="review-page task-page">
+      <header className="review-head">
+        <div className="review-head-copy">
+          <h1>任务发布</h1>
+          <p>选择班级并正式下发任务。发布后学生端班级任务列表会读取到对应 assignment。</p>
+        </div>
+        <div className="review-head-actions">
+          <button className="review-back" type="button" onClick={() => navigate("/teacher/tasks")}>
+            返回列表
+          </button>
+        </div>
+      </header>
+
+      <TeacherSubNav items={taskCenterNav} ariaLabel="任务中心二级导航" />
+
+      {error ? <p className="review-message error">{error}</p> : null}
+      {message ? <p className="review-message success">{message}</p> : null}
+
+      <section className="class-card task-create-form" aria-busy={loading}>
+        <h2>{task?.title ?? "正在加载任务"}</h2>
+        <p>{task?.description ?? "请稍候..."}</p>
+        <div className="task-row-meta">
+          <span>任务 ID：{taskId}</span>
+          <span>类型：{task?.workspace_type ?? "-"}</span>
+          <span>题目数：{task?.question_count ?? "-"}</span>
+        </div>
+
+        <div className="review-filter-group">
+          <label className="task-form-field">
+            <span>发布班级</span>
+            <select className="review-select" value={classId} disabled={loading} onChange={(event) => setClassId(event.target.value)}>
+              {classOptions.map((option) => (
+                <option value={option.class_id} key={option.class_id}>
+                  {option.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="task-form-field">
+            <span>发布模式</span>
+            <select className="review-select" value={assignmentMode} onChange={(event) => setAssignmentMode(event.target.value)}>
+              <option value="QUIZ">练习</option>
+              <option value="EXAM">考核</option>
+              <option value="PRACTICE">普通任务</option>
+            </select>
+          </label>
+          <label className="task-form-field">
+            <span>截止时间</span>
+            <input className="review-select" type="datetime-local" value={deadline} onChange={(event) => setDeadline(event.target.value)} />
+          </label>
+        </div>
+
+        <div className="review-head-actions task-create-actions">
+          <button className="task-primary-btn" type="button" disabled={!task || !classId || publishing} onClick={publish}>
+            <Send size={15} /> {publishing ? "发布中" : "确认发布"}
+          </button>
+        </div>
+      </section>
+    </div>
   );
 }

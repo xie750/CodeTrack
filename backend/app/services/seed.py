@@ -333,6 +333,16 @@ def seed_demo_data(db: Session) -> None:
             "description": "能够使用哈希表记录已访问元素，并根据目标值查找互补元素。",
         },
     )
+    upsert(
+        db,
+        Capability,
+        "cap_subnet_host_count",
+        {
+            "code": "SUBNET_HOST_COUNT",
+            "name": "子网可用主机数计算",
+            "description": "能够根据子网掩码位数推导地址规模，并计算常规子网中的可用主机数。",
+        },
+    )
 
     learning_objectives = [
         "理解单链表删除操作",
@@ -691,6 +701,60 @@ def seed_demo_data(db: Session) -> None:
                 "hidden_failure_summary": hidden_summary,
                 "error_tag": tag,
                 "capability_id": "cap_array_hash_lookup",
+                "required": True,
+                "sort_order": order,
+            },
+        )
+    subnet_cases = [
+        (
+            "tc_subnet_24",
+            "公开样例：/24 子网",
+            "PUBLIC",
+            {"stdin": "192.168.1.10 255.255.255.0\n"},
+            "254",
+            "254",
+            None,
+            "SUBNET_24_HOST_COUNT",
+            1,
+        ),
+        (
+            "tc_subnet_30",
+            "公开样例：/30 点到点子网",
+            "PUBLIC",
+            {"stdin": "10.0.0.1 255.255.255.252\n"},
+            "2",
+            "2",
+            None,
+            "SUBNET_30_HOST_COUNT",
+            2,
+        ),
+        (
+            "tc_subnet_16",
+            "隐藏样例：/16 大子网",
+            "HIDDEN",
+            {"stdin": "172.16.5.9 255.255.0.0\n"},
+            "65534",
+            "大子网可用主机数应正确",
+            "大子网可用主机数未通过",
+            "SUBNET_16_HOST_COUNT",
+            3,
+        ),
+    ]
+    for case_id, name, visibility, input_data, expected, summary, hidden_summary, tag, order in subnet_cases:
+        upsert(
+            db,
+            TestCase,
+            case_id,
+            {
+                "task_id": "task_subnet_mask_001",
+                "name": name,
+                "visibility": visibility,
+                "input_data": json.dumps(input_data, ensure_ascii=False),
+                "expected_output": json.dumps(expected, ensure_ascii=False),
+                "expected_output_summary": summary,
+                "hidden_failure_summary": hidden_summary,
+                "error_tag": tag,
+                "capability_id": "cap_subnet_host_count",
                 "required": True,
                 "sort_order": order,
             },

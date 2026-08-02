@@ -6,8 +6,11 @@ from types import SimpleNamespace
 
 import pytest
 
+import backend.app.services.piston_client as piston_client
 import backend.app.services.sandbox_client as sandbox_client
 from backend.app.services.seed import STANDARD_WRONG_CODE
+from backend.app.services.programming_specs import STDIO_CPP_SPEC
+from backend.app.services.piston_client import PistonRunResult
 from sandbox import runner
 from sandbox.app import app
 from sandbox.docker_runner import docker_run_command
@@ -94,6 +97,115 @@ def test_sandbox_client_maps_remote_service_failure_to_infrastructure_error(monk
     assert result.tests == []
     assert result.compile_exit_code is None
     assert result.failure_reason.startswith("SANDBOX_SERVICE_UNAVAILABLE")
+
+
+def test_sandbox_client_routes_supported_runner_profiles_to_piston(monkeypatch):
+    test_case = SimpleNamespace(
+        id="tc_two_sum_basic",
+        name="basic complement",
+        visibility="PUBLIC",
+        input_data='{"nums":[2,7,11,15],"target":9}',
+        expected_output="[0,1]",
+        expected_output_summary="[0,1]",
+        hidden_failure_summary=None,
+        error_tag="TWO_SUM_BASIC_COMPLEMENT",
+        sort_order=1,
+    )
+    task = SimpleNamespace(id="task_two_sum_001", interface_spec="twoSum(nums, target) -> indices")
+
+    def fake_execute_with_piston(**kwargs):
+        assert kwargs["base_url"] == "http://piston.test"
+        assert kwargs["execution_id"] == "exe_piston_001"
+        return PistonRunResult(
+            status="SUCCEEDED",
+            compile_exit_code=0,
+            compiler_stdout="",
+            compiler_stderr="",
+            tests=[
+                {
+                    "test_case_id": "tc_two_sum_basic",
+                    "name": "basic complement",
+                    "visibility": "PUBLIC",
+                    "status": "PASSED",
+                    "expected_output_summary": "[0,1]",
+                    "actual_output": "[0,1]",
+                    "duration_ms": 1,
+                    "error_tag": "TWO_SUM_BASIC_COMPLEMENT",
+                    "sort_order": 1,
+                    "error_message": "",
+                }
+            ],
+            failure_reason=None,
+            resource_usage={"profile": "leetcode_two_sum_v1", "piston_ms": 12},
+        )
+
+    monkeypatch.setattr(
+        sandbox_client,
+        "get_settings",
+        lambda: SimpleNamespace(piston_base_url="http://piston.test", sandbox_service_url=None),
+    )
+    monkeypatch.setattr(sandbox_client, "execute_with_piston", fake_execute_with_piston)
+
+    result = sandbox_client.run_sandbox_execution(
+        execution_id="exe_piston_001",
+        language="PYTHON",
+        source_code="class Solution:\n    def twoSum(self, nums, target):\n        return [0, 1]\n",
+        test_cases=[test_case],
+        timeout_seconds=3,
+        task=task,
+    )
+
+    assert result.status == "SUCCEEDED"
+    assert result.tests[0]["status"] == "PASSED"
+    assert result.resource_usage["piston_ms"] == 12
+
+
+def test_piston_stdio_cpp_runner_maps_stdin_stdout_cases(monkeypatch):
+    calls = []
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "compile": {"code": 0, "stdout": "", "stderr": ""},
+                "run": {"code": 0, "stdout": "5\n", "stderr": ""},
+            }
+
+    def fake_post(url, *, json, timeout, trust_env):
+        calls.append({"url": url, "json": json, "timeout": timeout, "trust_env": trust_env})
+        return FakeResponse()
+
+    test_case = SimpleNamespace(
+        id="tc_stdio_sum",
+        name="sum two integers",
+        visibility="PUBLIC",
+        input_data='{"stdin":"2 3\\n"}',
+        expected_output='"5\\n"',
+        expected_output_summary="5",
+        hidden_failure_summary=None,
+        error_tag="STDIO_OUTPUT_MISMATCH",
+        sort_order=1,
+    )
+    monkeypatch.setattr(piston_client.httpx, "post", fake_post)
+
+    result = piston_client.execute_with_piston(
+        base_url="http://piston.test",
+        execution_id="exe_stdio_001",
+        language="CPP",
+        spec=STDIO_CPP_SPEC,
+        source_code="#include <iostream>\nint main(){ int a,b; std::cin>>a>>b; std::cout << a + b << '\\n'; }",
+        test_cases=[test_case],
+        timeout_seconds=3,
+    )
+
+    assert calls[0]["url"] == "http://piston.test/api/v2/execute"
+    assert calls[0]["json"]["language"] == "c++"
+    assert calls[0]["json"]["stdin"] == "2 3\n"
+    assert calls[0]["json"]["files"][0]["name"] == "main.cpp"
+    assert result.status == "SUCCEEDED"
+    assert result.tests[0]["status"] == "PASSED"
 
 
 def test_local_runner_truncates_large_compile_output(monkeypatch):

@@ -22,6 +22,29 @@ class SubmitCodeRequest(BaseModel):
     source_code: str
 
 
+def safe_json_loads(raw: str | None, fallback):
+    if not raw:
+        return fallback
+    try:
+        return json.loads(raw)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def serialize_test_case(case: TestCase, reveal_io: bool) -> dict:
+    return {
+        "test_case_id": case.id,
+        "name": case.name,
+        "visibility": case.visibility,
+        "required": case.required,
+        "input_summary": safe_json_loads(case.input_data, {}) if reveal_io else None,
+        "input_visible": reveal_io,
+        "expected_output": safe_json_loads(case.expected_output, None) if reveal_io else None,
+        "expected_output_visible": reveal_io,
+        "expected_output_summary": case.expected_output_summary,
+    }
+
+
 def run_execution_background(execution_id: str, timeout_seconds: int) -> None:
     db = SessionLocal()
     try:
@@ -111,12 +134,13 @@ def get_task(
     if task.workspace_type != "CODING":
         raise ApiError(400, "NOT_CODING_TASK", "当前任务不是编程任务，请使用题目作答工作台")
     ensure_course_member(db, task.course_id, user.id)
-    public_tests = (
+    test_cases = (
         db.query(TestCase)
-        .filter(TestCase.task_id == task.id, TestCase.visibility == "PUBLIC")
+        .filter(TestCase.task_id == task.id)
         .order_by(TestCase.sort_order.asc())
         .all()
     )
+    public_tests = [case for case in test_cases if case.visibility == "PUBLIC"]
     spec = get_programming_spec(task)
     data = {
         "task_id": task.id,
@@ -126,17 +150,9 @@ def get_task(
         "status": task.status,
         "description": task.description,
         "interface_spec": spec.to_api(),
-        "learning_objectives": json.loads(task.learning_objectives),
-        "public_tests": [
-            {
-                "test_case_id": case.id,
-                "name": case.name,
-                "input_summary": json.loads(case.input_data),
-                "expected_output": json.loads(case.expected_output),
-                "expected_output_summary": case.expected_output_summary,
-            }
-            for case in public_tests
-        ],
+        "learning_objectives": safe_json_loads(task.learning_objectives, []),
+        "public_tests": [serialize_test_case(case, reveal_io=True) for case in public_tests],
+        "test_cases": [serialize_test_case(case, reveal_io=case.visibility == "PUBLIC") for case in test_cases],
         "current_progress": progress_for(db, task.id, user.id),
     }
     return ok(data)
