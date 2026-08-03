@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CodeTrack 业务流程与数据流</title>
+    <link rel="stylesheet" href="./assets/style.css" />
+  </head>
+  <body>
+    <div class="prototype-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">CT</div>
+          <div>
+            <div class="brand-title">CodeTrack</div>
+            <div class="brand-subtitle">业务流程原型</div>
+          </div>
+        </div>
+        <nav class="nav" aria-label="原型导航">
+          <a href="./index.html"><span class="nav-dot"></span>总览</a>
+          <a class="is-active" href="./flow.html"><span class="nav-dot"></span>流程</a>
+          <a href="./student.html"><span class="nav-dot"></span>学生端</a>
+          <a href="./teacher.html"><span class="nav-dot"></span>教师端</a>
+        </nav>
+        <div class="sidebar-note">流程页用于解释业务怎么跑、数据从哪里来、AI 在哪些环节参与。</div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <div class="kicker">Flow & Data</div>
+            <h1>业务闭环与 AI 工作流</h1>
+            <p>用三条流程把教师输入、学生学习、系统采集、AI 分析、画像更新和资料沉淀串起来。</p>
+          </div>
+          <div class="topbar-actions">
+            <a class="button" href="./index.html">返回总览</a>
+            <a class="button primary" href="./student.html">看学生闭环</a>
+          </div>
+        </header>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>1. 总业务闭环</h2>
+              <p class="muted">教师配置学习输入，学生产生学习过程数据，AI 和系统把反馈返回双端。</p>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="flow-strip">
+              <div class="flow-node">
+                <strong>教师建课</strong>
+                <small>输入：课程目标、章节、知识点</small>
+                <span class="meta-pill">AI：暂不参与</span>
+              </div>
+              <div class="flow-node">
+                <strong>发布任务</strong>
+                <small>动作：配置题目、难度、提示规则</small>
+                <span class="meta-pill">来源：教师配置</span>
+              </div>
+              <div class="flow-node">
+                <strong>学生学习</strong>
+                <small>动作：写代码、运行、提交、追问</small>
+                <span class="meta-pill">采集行为</span>
+              </div>
+              <div class="flow-node">
+                <strong>系统采集</strong>
+                <small>输出：编译结果、测试通过率、失败摘要</small>
+                <span class="meta-pill">工具事实</span>
+              </div>
+              <div class="flow-node">
+                <strong>AI 分析</strong>
+                <small>输入：上下文、画像、知识库、测试结果</small>
+                <span class="meta-pill">需引用</span>
+              </div>
+              <div class="flow-node">
+                <strong>双端反馈</strong>
+                <small>学生得建议，教师看学情并调整教学</small>
+                <span class="meta-pill">闭环更新</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" style="margin-top: 16px">
+          <div class="panel-header">
+            <div>
+              <h2>2. 学生助学闭环</h2>
+              <p class="muted">这是本阶段 P0 主线，所有页面状态优先服务这条链路。</p>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="flow-strip">
+              <div class="flow-node"><strong>学习首页</strong><small>输出：今日任务、薄弱点、推荐下一步</small><span class="meta-pill">画像参与</span></div>
+              <div class="flow-node"><strong>课程任务</strong><small>动作：筛选任务、查看截止、进入工作台</small><span class="meta-pill">教师任务</span></div>
+              <div class="flow-node"><strong>编程工作区</strong><small>动作：编辑代码、运行、提交</small><span class="meta-pill">系统验证</span></div>
+              <div class="flow-node"><strong>AI 诊断</strong><small>输出：错因、解释、引用、置信度</small><span class="meta-pill">AI 生成</span></div>
+              <div class="flow-node"><strong>分层提示</strong><small>动作：逐级解锁，不直接给完整答案</small><span class="meta-pill">规则约束</span></div>
+              <div class="flow-node"><strong>总结与资料</strong><small>输出：任务总结、画像更新、资料保存</small><span class="meta-pill">下一步推荐</span></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="grid grid-2" style="margin-top: 16px">
+          <div class="panel">
+            <div class="panel-header">
+              <div>
+                <h2>3. AI 工作流</h2>
+                <p class="muted">避免一个巨大聊天框，改用小型智能体和稳定输入输出。</p>
+              </div>
+            </div>
+            <div class="panel-body stack">
+              <div class="quote-box">页面上下文 + 学生画像 + 课程知识库 + 测试结果</div>
+              <div class="timeline">
+                <div class="timeline-item"><div class="timeline-index">A</div><div><h3>代码诊断代理</h3><p class="muted">识别错因类型、失败证据和知识点映射。</p></div></div>
+                <div class="timeline-item"><div class="timeline-index">B</div><div><h3>渐进式提示代理</h3><p class="muted">按一级、二级、三级提示逐步给帮助。</p></div></div>
+                <div class="timeline-item"><div class="timeline-index">C</div><div><h3>引用守卫代理</h3><p class="muted">检查来源是否来自课程知识库，标出置信度和风险。</p></div></div>
+                <div class="timeline-item"><div class="timeline-index">D</div><div><h3>画像与资料代理</h3><p class="muted">更新学习状态，并生成可保存的笔记、卡片或总结。</p></div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <div>
+                <h2>节点说明模板</h2>
+                <p class="muted">每个页面状态都需要带业务说明，便于团队评审和后续开发。</p>
+              </div>
+            </div>
+            <div class="panel-body">
+              <div class="business-note">
+                <dl>
+                  <dt>当前角色</dt><dd>学生 / 教师</dd>
+                  <dt>当前状态</dt><dd>未加入课程、任务失败、再次提交通过、已产生学情等</dd>
+                  <dt>用户动作</dt><dd>进入任务、提交代码、解锁提示、保存资料</dd>
+                  <dt>系统反馈</dt><dd>测试结果、AI 诊断、资料保存、画像更新</dd>
+                  <dt>数据来源</dt><dd>教师课程、学生提交、沙箱测试、课程知识源</dd>
+                  <dt>AI 参与</dt><dd>是否生成内容，是否结合画像，是否需要引用</dd>
+                  <dt>下一步</dt><dd>复习知识点、重新提交、生成练习、查看学情</dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="./data/mock.js"></script>
+    <script src="./assets/app.js"></script>
+  </body>
+</html>
