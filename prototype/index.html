@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CodeTrack 产品原型总览</title>
+    <link rel="stylesheet" href="./assets/style.css" />
+  </head>
+  <body>
+    <div class="prototype-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">CT</div>
+          <div>
+            <div class="brand-title">CodeTrack</div>
+            <div class="brand-subtitle">学科垂类 AI 助学系统</div>
+          </div>
+        </div>
+        <nav class="nav" aria-label="原型导航">
+          <a class="is-active" href="./index.html"><span class="nav-dot"></span>总览</a>
+          <a href="./flow.html"><span class="nav-dot"></span>流程</a>
+          <a href="./student.html"><span class="nav-dot"></span>学生端</a>
+          <a href="./teacher.html"><span class="nav-dot"></span>教师端</a>
+        </nav>
+        <div class="sidebar-note">首版聚焦数据结构与程序设计课程的学生助学闭环，教师端只作为任务和知识源输入侧展示。</div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <div class="kicker">Prototype V0.1</div>
+            <h1>CodeTrack HTML 产品原型雏形</h1>
+            <p>面向计算机类专业基础课，以数据结构编程任务为主线，展示可追溯 AI 诊断、分层提示、画像更新和资料沉淀。</p>
+          </div>
+          <div class="topbar-actions">
+            <a class="button primary" href="./hifi.html">查看高保真画板</a>
+            <a class="button primary" href="./student.html">进入学生端</a>
+            <a class="button" href="./flow.html">查看业务流程</a>
+          </div>
+        </header>
+
+        <section class="grid grid-4" aria-label="核心定位">
+          <article class="card metric">
+            <span class="tag">特定学科</span>
+            <div class="metric-value">数据结构</div>
+            <p class="muted">首门课程为“数据结构与程序设计基础”，避免泛教育平台失焦。</p>
+          </article>
+          <article class="card metric">
+            <span class="tag">真实痛点</span>
+            <div class="metric-value">代码调试</div>
+            <p class="muted">围绕边界条件、指针、递归和栈队列应用错误展开。</p>
+          </article>
+          <article class="card metric">
+            <span class="tag">AI 能力</span>
+            <div class="metric-value">5 类代理</div>
+            <p class="muted">诊断、提示、导师、资料生成、画像更新以小型智能体协作。</p>
+          </article>
+          <article class="card metric">
+            <span class="tag">可信输出</span>
+            <div class="metric-value">引用可查</div>
+            <p class="muted">专业回答展示来源、置信度、AI 生成标识和下一步动作。</p>
+          </article>
+        </section>
+
+        <section class="grid grid-2" style="margin-top: 16px">
+          <div class="panel">
+            <div class="panel-header">
+              <div>
+                <h2>演示路径</h2>
+                <p class="muted">一条主线讲清赛题要求和产品价值。</p>
+              </div>
+            </div>
+            <div class="panel-body">
+              <div class="timeline">
+                <div class="timeline-item">
+                  <div class="timeline-index">1</div>
+                  <div>
+                    <h3>教师配置课程资源和任务</h3>
+                    <p class="muted">创建课程、绑定知识点、挂接讲义/PPT/代码样例、发布编程任务。</p>
+                  </div>
+                </div>
+                <div class="timeline-item">
+                  <div class="timeline-index">2</div>
+                  <div>
+                    <h3>学生完成任务并提交代码</h3>
+                    <p class="muted">工作台先呈现系统测试事实，再展示 AI 诊断和分层提示。</p>
+                  </div>
+                </div>
+                <div class="timeline-item">
+                  <div class="timeline-index">3</div>
+                  <div>
+                    <h3>通过后沉淀学习资产</h3>
+                    <p class="muted">生成总结、更新画像、保存资料，并推荐下一步学习路径。</p>
+                  </div>
+                </div>
+                <div class="timeline-item">
+                  <div class="timeline-index">4</div>
+                  <div>
+                    <h3>教师查看学情并调整教学</h3>
+                    <p class="muted">班级薄弱点、高频错因、提示依赖和 AI 教学建议形成反馈。</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <div>
+                <h2>页面状态入口</h2>
+                <p class="muted">用于演示不同业务阶段，而非真实登录。</p>
+              </div>
+            </div>
+            <div class="panel-body stack">
+              <div class="tabs" data-tabs="#overviewPanels">
+                <button class="is-active" data-tab-button="overview">原型总览</button>
+                <button data-tab-button="student">学生主线</button>
+                <button data-tab-button="teacher">教师输入侧</button>
+                <button data-tab-button="boundary">边界说明</button>
+              </div>
+              <div id="overviewPanels">
+                <div class="stack is-active" data-tab-panel="overview">
+                  <p>评审或老师进入后先看到作品定位、学科场景、智能体应用和可追溯机制。</p>
+                  <div class="row">
+                    <button class="primary" data-jump="./hifi.html">查看高保真画板</button>
+                    <button data-jump="./flow.html">查看闭环图</button>
+                    <button data-jump="./student.html">演示学生端</button>
+                  </div>
+                </div>
+                <div class="stack" data-tab-panel="student">
+                  <p>学生端覆盖未加入课程、学习首页、课程任务、工作台、AI 助学、自主学习和我的资料。</p>
+                  <button class="primary" data-jump="./student.html">进入学生端原型</button>
+                </div>
+                <div class="stack" data-tab-panel="teacher">
+                  <p>教师端只呈现与学生助学闭环直接相关的建课、资源、任务发布和学情分析。</p>
+                  <button class="primary" data-jump="./teacher.html">进入教师端原型</button>
+                </div>
+                <div class="stack" data-tab-panel="boundary">
+                  <p>本轮不做完整教务系统、科研助手、多学科平台、真实 PPT/Word 导出、视频生成、积分排行和社交社区。</p>
+                  <a class="button" href="../Dorc/第二阶段/00_stage_scope.md">查看阶段边界文档</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" style="margin-top: 16px">
+          <div class="panel-header">
+            <div>
+              <h2>赛题对齐摘要</h2>
+              <p class="muted">把“人工智能 + 学科”落在一个可演示、可验证的教学闭环里。</p>
+            </div>
+          </div>
+          <div class="panel-body">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>赛题要求</th>
+                  <th>原型表达</th>
+                  <th>首版状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>特定学科垂类场景</td>
+                  <td>计算机类专业基础课，聚焦数据结构与程序设计。</td>
+                  <td><span class="status success">主线已覆盖</span></td>
+                </tr>
+                <tr>
+                  <td>学生个性化学习</td>
+                  <td>画像影响首页推荐、提示策略、自主学习内容和资料生成。</td>
+                  <td><span class="status success">原型展示</span></td>
+                </tr>
+                <tr>
+                  <td>智能体创新应用</td>
+                  <td>代码诊断、渐进提示、概念导师、资料生成、画像代理协作。</td>
+                  <td><span class="status">Mock 结构</span></td>
+                </tr>
+                <tr>
+                  <td>知识可信可追溯</td>
+                  <td>AI 输出展示课程知识源、置信度、AI 标识和风险提示。</td>
+                  <td><span class="status success">显性展示</span></td>
+                </tr>
+                <tr>
+                  <td>助教和助研扩展</td>
+                  <td>教师端有限覆盖，助研只保留后续扩展口径。</td>
+                  <td><span class="status warning">边界控制</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="./data/mock.js"></script>
+    <script src="./assets/app.js"></script>
+  </body>
+</html>

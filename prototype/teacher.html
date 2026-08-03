@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CodeTrack 教师端原型</title>
+    <link rel="stylesheet" href="./assets/style.css" />
+  </head>
+  <body>
+    <div class="prototype-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">CT</div>
+          <div>
+            <div class="brand-title">CodeTrack</div>
+            <div class="brand-subtitle">教师输入侧原型</div>
+          </div>
+        </div>
+        <nav class="nav" aria-label="原型导航">
+          <a href="./index.html"><span class="nav-dot"></span>总览</a>
+          <a href="./flow.html"><span class="nav-dot"></span>流程</a>
+          <a href="./student.html"><span class="nav-dot"></span>学生端</a>
+          <a class="is-active" href="./teacher.html"><span class="nav-dot"></span>教师端</a>
+        </nav>
+        <div class="sidebar-note">教师端是有限对齐：建课、资源、知识点、任务、学情，不展开完整教务系统。</div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <div class="kicker">Teacher Prototype</div>
+            <h1>王老师的课程工作台</h1>
+            <p>教师端为学生助学闭环提供可信课程知识源、任务输入和班级学情反馈。</p>
+          </div>
+          <div class="topbar-actions">
+            <a class="button" href="./student.html">查看学生端</a>
+            <a class="button primary" href="./flow.html">查看数据流</a>
+          </div>
+        </header>
+
+        <div class="segmented" data-stage-controls="#teacherStages" aria-label="教师端状态切换">
+          <button class="is-active" data-stage-button="empty">T0 无课程</button>
+          <button data-stage-button="course">T1 创建课程</button>
+          <button data-stage-button="students">T2 绑定学生</button>
+          <button data-stage-button="resources">T3 知识库</button>
+          <button data-stage-button="publish">T4 发布任务</button>
+          <button data-stage-button="analytics">T5 学情分析</button>
+        </div>
+
+        <div id="teacherStages" class="grid" style="margin-top: 16px">
+          <section class="panel is-active" data-stage-panel="empty">
+            <div class="empty-state">
+              <div class="empty-state-inner">
+                <span class="status">首次登录</span>
+                <h2>暂无课程</h2>
+                <p class="muted">课程是资源、知识库、任务和学情分析的前置条件。首版只引导教师建立与学生助学闭环直接相关的课程空间。</p>
+                <div class="row" style="justify-content: center">
+                  <button class="primary">创建课程</button>
+                  <button>导入课程资料</button>
+                  <button>查看示例课程</button>
+                </div>
+              </div>
+            </div>
+            <div class="panel-body">
+              <div class="business-note">
+                <dl>
+                  <dt>当前角色</dt><dd>教师</dd>
+                  <dt>当前状态</dt><dd>首次登录，无课程</dd>
+                  <dt>用户动作</dt><dd>点击创建课程</dd>
+                  <dt>系统反馈</dt><dd>进入课程创建表单</dd>
+                  <dt>数据来源</dt><dd>教师手动填写课程信息</dd>
+                  <dt>AI 参与</dt><dd>暂不参与</dd>
+                  <dt>下一步</dt><dd>创建课程并绑定学生或班级</dd>
+                </dl>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel" data-stage-panel="course">
+            <div class="panel-header">
+              <div>
+                <h2>创建课程</h2>
+                <p class="muted">课程信息决定学生端任务、知识库引用和画像更新范围。</p>
+              </div>
+              <span class="status">手动配置</span>
+            </div>
+            <div class="panel-body stack">
+              <div class="form-grid">
+                <div class="field"><label for="courseName">课程名称</label><input id="courseName" value="数据结构与程序设计基础" /></div>
+                <div class="field"><label for="major">面向专业</label><input id="major" value="软件工程 / 计算机科学与技术" /></div>
+                <div class="field"><label for="term">学期</label><input id="term" value="2026 秋季" /></div>
+                <div class="field"><label for="scope">知识范围</label><input id="scope" value="链表、栈与队列、二叉树" /></div>
+                <div class="field"><label for="intro">课程简介</label><textarea id="intro">面向计算机类专业基础学习，强调数据结构概念理解、代码实现和调试能力。</textarea></div>
+                <div class="field"><label for="goal">教学目标</label><textarea id="goal">让学生能解释核心结构、完成基本实现、识别常见错因，并形成可复习的学习资料。</textarea></div>
+              </div>
+              <div class="row"><button class="primary">保存并进入课程工作台</button><span class="status success">课程创建成功后进入 T2</span></div>
+            </div>
+          </section>
+
+          <section class="grid grid-2" data-stage-panel="students">
+            <div class="panel">
+              <div class="panel-header">
+                <div>
+                  <h2>添加学生或绑定班级</h2>
+                  <p class="muted">原型不做真实导入，只展示入口和导入后的列表状态。</p>
+                </div>
+              </div>
+              <div class="panel-body stack">
+                <div class="row">
+                  <button class="primary">手动添加学生</button>
+                  <button>批量导入学生</button>
+                  <button>绑定已有班级</button>
+                </div>
+                <table class="data-table">
+                  <thead><tr><th>学生</th><th>班级</th><th>加入状态</th><th>最近学习状态</th></tr></thead>
+                  <tbody>
+                    <tr><td>王同学</td><td>软件工程 1 班</td><td><span class="status success">已加入</span></td><td>链表任务待修正</td></tr>
+                    <tr><td>李同学</td><td>软件工程 1 班</td><td><span class="status success">已加入</span></td><td>暂无提交</td></tr>
+                    <tr><td>陈同学</td><td>软件工程 1 班</td><td><span class="status">待激活</span></td><td>未进入课程</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="business-note">
+              <dl>
+                <dt>当前角色</dt><dd>教师</dd>
+                <dt>当前状态</dt><dd>课程已创建，但需要学生对象</dd>
+                <dt>用户动作</dt><dd>添加学生、批量导入或绑定班级</dd>
+                <dt>系统反馈</dt><dd>学生端可看到课程入口</dd>
+                <dt>数据来源</dt><dd>教师导入或已有班级</dd>
+                <dt>AI 参与</dt><dd>暂不参与</dd>
+                <dt>下一步</dt><dd>建设课程资源和知识点</dd>
+              </dl>
+            </div>
+          </section>
+
+          <section class="grid grid-3" data-stage-panel="resources">
+            <div class="panel">
+              <div class="panel-header"><div><h2>章节列表</h2><p class="muted">课程知识结构。</p></div></div>
+              <div class="panel-body timeline">
+                <div class="timeline-item"><div class="timeline-index">1</div><div><h3>线性表与链表</h3><p class="muted">链表、指针、边界处理。</p></div></div>
+                <div class="timeline-item"><div class="timeline-index">2</div><div><h3>栈与队列</h3><p class="muted">LIFO、FIFO、括号匹配。</p></div></div>
+                <div class="timeline-item"><div class="timeline-index">3</div><div><h3>二叉树</h3><p class="muted">递归遍历、终止条件。</p></div></div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-header"><div><h2>资源列表</h2><p class="muted">AI 引用只能来自已配置资源。</p></div></div>
+              <div class="panel-body stack">
+                <div class="card"><strong>S1 链表头节点删除讲义</strong><p class="muted">类型：讲义 · 绑定：链表</p></div>
+                <div class="card"><strong>S2 指针与边界条件 PPT</strong><p class="muted">类型：PPT · 绑定：链表、指针</p></div>
+                <div class="card"><strong>S4 括号匹配示例</strong><p class="muted">类型：代码样例 · 绑定：栈与队列</p></div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-header"><div><h2>知识点绑定</h2><p class="muted">建立 RAG 和诊断引用的可追溯基础。</p></div></div>
+              <div class="panel-body stack">
+                <div class="quote-box">链表：S1、S2</div>
+                <div class="quote-box">栈与队列：S3、S4</div>
+                <div class="quote-box">二叉树：S5、S6</div>
+                <span class="status success">学生端 AI 回答将展示这些来源</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="grid grid-2" data-stage-panel="publish">
+            <div class="panel">
+              <div class="panel-header">
+                <div>
+                  <h2>发布课程任务</h2>
+                  <p class="muted">发布后学生端课程任务列表出现该任务。</p>
+                </div>
+              </div>
+              <div class="panel-body stack">
+                <div class="form-grid">
+                  <div class="field"><label for="taskName">任务名称</label><input id="taskName" value="单链表指定位置节点删除" /></div>
+                  <div class="field"><label for="taskType">任务类型</label><select id="taskType"><option>编程任务</option></select></div>
+                  <div class="field"><label for="points">关联知识点</label><input id="points" value="链表、边界处理、指针" /></div>
+                  <div class="field"><label for="difficulty">难度层级</label><select id="difficulty"><option>基础</option><option>进阶</option></select></div>
+                  <div class="field"><label for="hints">三级提示</label><select id="hints"><option>允许</option><option>不允许</option></select></div>
+                  <div class="field"><label for="target">发布对象</label><input id="target" value="软件工程 1 班" /></div>
+                </div>
+                <button class="primary">发布任务</button>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-header"><div><h2>发布结果</h2><p class="muted">学生端会收到可执行任务。</p></div><span class="status success">已发布</span></div>
+              <div class="panel-body stack">
+                <p>任务已进入王同学的课程任务列表，并成为学习首页“今日优先”推荐。</p>
+                <div class="business-note">
+                  <dl>
+                    <dt>系统反馈</dt><dd>学生端出现任务卡和工作台入口</dd>
+                    <dt>AI 参与</dt><dd>发布时暂不参与，提交后参与诊断</dd>
+                    <dt>引用要求</dt><dd>AI 诊断只能引用绑定知识源 S1/S2</dd>
+                    <dt>下一步</dt><dd>等待学生提交并产生学情</dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="grid" data-stage-panel="analytics">
+            <div class="grid grid-4">
+              <article class="card metric"><span class="tag">任务完成率</span><div class="metric-value">68%</div><div class="progress"><span style="width: 68%"></span></div></article>
+              <article class="card metric"><span class="tag">测试通过率</span><div class="metric-value">54%</div><div class="progress"><span style="width: 54%"></span></div></article>
+              <article class="card metric"><span class="tag">提示依赖</span><div class="metric-value">中等</div><p class="muted">38% 学生使用到二级提示。</p></article>
+              <article class="card metric"><span class="tag">风险学生</span><div class="metric-value">5 人</div><p class="muted">连续两次提交失败或未进入任务。</p></article>
+            </div>
+
+            <div class="grid grid-2">
+              <div class="panel">
+                <div class="panel-header"><div><h2>薄弱知识点与高频错因</h2><p class="muted">由提交、测试、诊断和提示使用记录聚合。</p></div></div>
+                <div class="panel-body">
+                  <table class="data-table">
+                    <thead><tr><th>排名</th><th>薄弱点</th><th>证据</th><th>建议动作</th></tr></thead>
+                    <tbody>
+                      <tr><td>1</td><td>链表边界处理</td><td>头节点删除失败 21 次</td><td>补充一组边界样例</td></tr>
+                      <tr><td>2</td><td>指针更新顺序</td><td>释放节点后访问 9 次</td><td>讲解临时指针保存</td></tr>
+                      <tr><td>3</td><td>递归终止条件</td><td>二叉树任务空节点处理错误 7 次</td><td>下节课前 10 分钟复盘</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-header"><div><h2>AI 教学调整建议</h2><p class="muted">必须标注 AI 生成、数据依据、置信度和下一步。</p></div><span class="status">AI 生成 · 置信度 0.79</span></div>
+                <div class="panel-body stack">
+                  <p>建议在下次课前加入“删除头节点”和“删除普通节点”的对照示例，并开放一组只覆盖边界条件的短练习。</p>
+                  <details open>
+                    <summary>数据依据</summary>
+                    <p class="muted">任务 T1 提交记录、测试失败摘要、提示解锁记录、课程知识源 S1/S2。</p>
+                  </details>
+                  <div class="row">
+                    <button class="primary">生成补充练习入口</button>
+                    <button>查看风险学生</button>
+                    <button>调整任务说明</button>
+                  </div>
+                  <div class="business-note">
+                    <dl>
+                      <dt>当前角色</dt><dd>教师</dd>
+                      <dt>当前状态</dt><dd>已产生提交、诊断和提示使用记录</dd>
+                      <dt>用户动作</dt><dd>查看班级学情并调整教学</dd>
+                      <dt>系统反馈</dt><dd>聚合指标、错因 Top 3、AI 教学建议</dd>
+                      <dt>数据来源</dt><dd>学生提交、系统测试、AI 诊断、提示记录</dd>
+                      <dt>AI 参与</dt><dd>生成教学调整建议，标注置信度和依据</dd>
+                      <dt>下一步</dt><dd>发布补充练习或调整课程资源</dd>
+                    </dl>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+    <script src="./data/mock.js"></script>
+    <script src="./assets/app.js"></script>
+  </body>
+</html>

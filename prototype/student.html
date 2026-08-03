@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CodeTrack 学生端原型</title>
+    <link rel="stylesheet" href="./assets/style.css" />
+  </head>
+  <body>
+    <div class="prototype-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">CT</div>
+          <div>
+            <div class="brand-title">CodeTrack</div>
+            <div class="brand-subtitle">学生助学工作台</div>
+          </div>
+        </div>
+        <nav class="nav" aria-label="原型导航">
+          <a href="./index.html"><span class="nav-dot"></span>总览</a>
+          <a href="./flow.html"><span class="nav-dot"></span>流程</a>
+          <a class="is-active" href="./student.html"><span class="nav-dot"></span>学生端</a>
+          <a href="./teacher.html"><span class="nav-dot"></span>教师端</a>
+        </nav>
+        <div class="sidebar-note">学生端是本轮主线：任务、诊断、提示、总结、画像、资料、推荐必须完整闭合。</div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <div class="kicker">Student Prototype</div>
+            <h1>王同学的学习工作台</h1>
+            <p>当前课程：数据结构与程序设计基础。画像提示：链表边界处理和指针更新顺序需要优先巩固。</p>
+          </div>
+          <div class="topbar-actions">
+            <a class="button" href="./flow.html">查看闭环</a>
+            <button class="primary" data-jump="#workspace">演示任务提交</button>
+          </div>
+        </header>
+
+        <div class="segmented" data-stage-controls="#studentStages" aria-label="学生端状态切换">
+          <button class="is-active" data-stage-button="home">S1 学习首页</button>
+          <button data-stage-button="empty">S0 首次登录</button>
+          <button data-stage-button="tasks">S2 课程任务</button>
+          <button data-stage-button="workspace">S3-S5 工作台</button>
+          <button data-stage-button="self">S6 自主学习</button>
+          <button data-stage-button="ai">S7 AI 助学</button>
+          <button data-stage-button="library">S8 我的资料</button>
+        </div>
+
+        <div id="studentStages" class="grid" style="margin-top: 16px">
+          <section class="grid is-active" data-stage-panel="home">
+            <div class="grid grid-4">
+              <article class="card metric">
+                <span class="tag">今日优先</span>
+                <div class="metric-value">1 项</div>
+                <p class="muted">单链表指定位置节点删除，距离截止还有 5 天。</p>
+              </article>
+              <article class="card metric">
+                <span class="tag">课程进度</span>
+                <div class="metric-value">62%</div>
+                <div class="progress"><span style="width: 62%"></span></div>
+              </article>
+              <article class="card metric">
+                <span class="tag">薄弱点</span>
+                <div class="metric-value">3 个</div>
+                <p class="muted">链表边界、指针更新、递归终止。</p>
+              </article>
+              <article class="card metric">
+                <span class="tag">资料沉淀</span>
+                <div class="metric-value">5 份</div>
+                <p class="muted">最近保存：链表边界条件卡片。</p>
+              </article>
+            </div>
+
+            <div class="grid grid-3">
+              <div class="panel">
+                <div class="panel-header">
+                  <div>
+                    <h2>推荐下一步</h2>
+                    <p class="muted">推荐由截止时间、上次提交和画像共同决定。</p>
+                  </div>
+                </div>
+                <div class="panel-body timeline">
+                  <div class="timeline-item"><div class="timeline-index">1</div><div><h3>继续修正链表删除任务</h3><p class="muted">上次 7/10 用例通过，头节点删除失败。</p></div></div>
+                  <div class="timeline-item"><div class="timeline-index">2</div><div><h3>复习边界条件清单</h3><p class="muted">结合课程讲义 S1 和 PPT S2。</p></div></div>
+                  <div class="timeline-item"><div class="timeline-index">3</div><div><h3>生成 5 道巩固练习</h3><p class="muted">完成后更新画像中的链表掌握度。</p></div></div>
+                </div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-header">
+                  <div>
+                    <h2>今日任务</h2>
+                    <p class="muted">来自教师发布的课程任务。</p>
+                  </div>
+                  <span class="status warning">待修正</span>
+                </div>
+                <div class="panel-body stack">
+                  <h3>单链表指定位置节点删除</h3>
+                  <p class="muted">知识点：链表、边界处理、指针。最近提交：头节点删除失败。</p>
+                  <div class="row">
+                    <span class="meta-pill">基础</span>
+                    <span class="meta-pill">允许三级提示</span>
+                    <span class="meta-pill">2026-08-08 截止</span>
+                  </div>
+                  <button class="primary" data-jump="#workspace">进入任务工作台</button>
+                </div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-header">
+                  <div>
+                    <h2>AI 快捷提问</h2>
+                    <p class="muted">回答会展示引用来源和置信度。</p>
+                  </div>
+                </div>
+                <div class="panel-body stack">
+                  <button>为什么删除头节点要特殊处理？</button>
+                  <button>帮我生成链表边界条件清单</button>
+                  <button>根据我的错因安排 20 分钟复习</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="business-note">
+              <dl>
+                <dt>当前角色</dt><dd>学生</dd>
+                <dt>当前状态</dt><dd>已加入课程，存在待修正任务</dd>
+                <dt>用户动作</dt><dd>查看推荐，进入课程任务或 AI 快捷提问</dd>
+                <dt>系统反馈</dt><dd>按任务截止、失败记录和画像给出下一步</dd>
+                <dt>数据来源</dt><dd>教师任务、提交记录、学习画像、资料库</dd>
+                <dt>AI 参与</dt><dd>学习导航代理参与推荐，回答需引用课程来源</dd>
+                <dt>下一步跳转</dt><dd>进入任务工作台或自主学习页</dd>
+              </dl>
+            </div>
+          </section>
+
+          <section class="panel" data-stage-panel="empty">
+            <div class="empty-state">
+              <div class="empty-state-inner">
+                <span class="status">首次登录</span>
+                <h2>暂无课程任务</h2>
+                <p class="muted">课堂学习需要教师建课或课程码；自主学习不依赖教师下发任务，可以直接选择知识点生成讲解、练习和资料。</p>
+                <div class="row" style="justify-content: center">
+                  <button class="primary">加入课程</button>
+                  <button>进入自主学习</button>
+                </div>
+              </div>
+            </div>
+            <div class="panel-body">
+              <div class="business-note">
+                <dl>
+                  <dt>当前角色</dt><dd>学生</dd>
+                  <dt>当前状态</dt><dd>未加入课程</dd>
+                  <dt>用户动作</dt><dd>输入课程码或进入自主学习</dd>
+                  <dt>系统反馈</dt><dd>加入课程后显示课程任务，自学区直接可用</dd>
+                  <dt>数据来源</dt><dd>教师课程、学生自主选择</dd>
+                  <dt>AI 参与</dt><dd>自学区可参与</dd>
+                  <dt>下一步跳转</dt><dd>查看课程任务或选择知识点学习</dd>
+                </dl>
+              </div>
+            </div>
+          </section>
+
+          <section class="grid" data-stage-panel="tasks">
+            <div class="panel">
+              <div class="panel-header">
+                <div>
+                  <h2>课程任务列表</h2>
+                  <p class="muted">支持按课程、状态和截止时间筛选。</p>
+                </div>
+                <div class="row">
+                  <select aria-label="课程筛选"><option>数据结构与程序设计基础</option></select>
+                  <select aria-label="状态筛选"><option>全部状态</option><option>待修正</option><option>未开始</option><option>已完成</option></select>
+                </div>
+              </div>
+              <div class="panel-body">
+                <table class="data-table">
+                  <thead><tr><th>任务</th><th>知识点</th><th>状态</th><th>最近提交</th><th>操作</th></tr></thead>
+                  <tbody>
+                    <tr>
+                      <td><strong>单链表指定位置节点删除</strong><br /><span class="muted">王老师 · 2026-08-08 截止</span></td>
+                      <td>链表、边界处理、指针</td>
+                      <td><span class="status warning">待修正</span></td>
+                      <td>7/10 用例通过</td>
+                      <td><button class="primary" data-jump="#workspace">进入任务</button></td>
+                    </tr>
+                    <tr>
+                      <td><strong>栈实现括号匹配</strong><br /><span class="muted">王老师 · 2026-08-12 截止</span></td>
+                      <td>栈与队列、字符串扫描</td>
+                      <td><span class="status">未开始</span></td>
+                      <td>暂无提交</td>
+                      <td><button>查看说明</button></td>
+                    </tr>
+                    <tr>
+                      <td><strong>二叉树前序遍历</strong><br /><span class="muted">王老师 · 已完成</span></td>
+                      <td>二叉树、递归</td>
+                      <td><span class="status success">已完成</span></td>
+                      <td>10/10 用例通过</td>
+                      <td><button>查看总结</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section class="grid" id="workspace" data-stage-panel="workspace">
+            <div class="segmented" data-workspace-controls>
+              <button class="is-active" data-workspace-button="unsubmitted">未提交</button>
+              <button data-workspace-button="failed">提交失败与诊断</button>
+              <button data-workspace-button="passed">再次提交通过</button>
+            </div>
+
+            <div class="workspace" data-workspace>
+              <aside class="panel">
+                <div class="panel-header">
+                  <div>
+                    <h2>任务说明</h2>
+                    <p class="muted">单链表指定位置节点删除</p>
+                  </div>
+                </div>
+                <div class="panel-body stack">
+                  <p>实现函数 <strong>deleteAt(head, pos)</strong>，删除单链表中第 pos 个节点，并返回新的头指针。</p>
+                  <div class="row">
+                    <span class="tag">链表</span>
+                    <span class="tag">边界处理</span>
+                    <span class="tag">指针</span>
+                  </div>
+                  <details open>
+                    <summary>公开样例</summary>
+                    <p class="muted">输入：1 -> 2 -> 3, pos = 1；输出：2 -> 3。</p>
+                  </details>
+                  <details>
+                    <summary>课程知识源</summary>
+                    <p class="muted">S1 链表头节点删除讲义；S2 指针与边界条件 PPT。</p>
+                  </details>
+                </div>
+              </aside>
+
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <h2>代码编辑器</h2>
+                    <p class="muted">原型阶段用静态代码区模拟 Monaco Editor。</p>
+                  </div>
+                </div>
+                <div class="panel-body stack">
+                  <pre class="code-editor">Node* deleteAt(Node* head, int pos) {
+    if (head == NULL) return head;
+    Node* cur = head;
+    for (int i = 1; i &lt; pos - 1 && cur != NULL; i++) {
+        cur = cur-&gt;next;
+    }
+    if (cur != NULL && cur-&gt;next != NULL) {
+        Node* target = cur-&gt;next;
+        cur-&gt;next = target-&gt;next;
+        delete target;
+    }
+    return head;
+}</pre>
+                  <div class="code-toolbar">
+                    <div class="row">
+                      <span class="meta-pill">C++17</span>
+                      <span class="meta-pill">版本 v3</span>
+                    </div>
+                    <div class="row">
+                      <button>运行样例</button>
+                      <button class="primary">提交代码</button>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <aside class="panel">
+                <div class="panel-header">
+                  <div>
+                    <h2>验证与 AI 辅助</h2>
+                    <p class="muted">系统事实先展示，AI 解释后展示。</p>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <div class="stack is-active" data-workspace-state="unsubmitted">
+                    <span class="status">未提交</span>
+                    <p class="muted">提交后将显示编译状态、测试通过情况、失败用例摘要和 AI 诊断。</p>
+                    <div class="business-note"><dl><dt>AI 参与</dt><dd>当前未参与</dd><dt>下一步</dt><dd>运行样例或提交代码</dd></dl></div>
+                  </div>
+
+                  <div class="stack" data-workspace-state="failed">
+                    <span class="status danger">部分测试未通过</span>
+                    <div class="card stack">
+                      <h3>系统验证</h3>
+                      <p>编译成功；7/10 用例通过；失败集中在 pos=1 和空链表边界。</p>
+                    </div>
+                    <div class="ai-box">
+                      <div class="row between"><h3>AI 诊断</h3><span class="status">AI 生成 · 置信度 0.86</span></div>
+                      <p>更可能的问题是没有单独处理头节点变化，导致返回的链表头仍指向旧节点。</p>
+                      <details>
+                        <summary>引用来源与风险</summary>
+                        <p class="muted">S1 链表头节点删除讲义；S2 指针与边界条件 PPT。风险：不展示隐藏用例细节，不直接给完整答案。</p>
+                      </details>
+                    </div>
+                    <div class="stack">
+                      <button data-reveal="#hint1">解锁一级提示</button>
+                      <div id="hint1" class="quote-box" hidden>一级提示：先判断删除位置是否会改变 head，再考虑普通节点的前驱连接。</div>
+                      <button data-reveal="#hint2">解锁二级提示</button>
+                      <div id="hint2" class="quote-box" hidden>二级提示：pos=1 时没有前驱节点，此时应让新的 head 指向原 head 的 next。</div>
+                      <button data-reveal="#hint3">解锁三级提示</button>
+                      <div id="hint3" class="quote-box" hidden>三级提示：可以把“删除头节点”和“删除非头节点”拆成两个分支，局部伪代码只处理 head 更新，不提供完整答案。</div>
+                    </div>
+                  </div>
+
+                  <div class="stack" data-workspace-state="passed">
+                    <span class="status success">再次提交通过</span>
+                    <div class="card stack">
+                      <h3>学习总结</h3>
+                      <p>本次修正重点是识别删除头节点会改变链表入口，并在释放节点前保存 next 指针。</p>
+                      <div class="row">
+                        <span class="tag">主要错因：边界条件遗漏</span>
+                        <span class="tag">提示使用：2 级</span>
+                      </div>
+                    </div>
+                    <div class="ai-box">
+                      <h3>画像更新</h3>
+                      <p>链表边界处理从“薄弱”调整为“需巩固”，推荐生成一份边界条件知识卡片。</p>
+                      <button class="primary" data-save-action="#studentSaveToast">保存总结到我的资料</button>
+                      <div id="studentSaveToast" class="saved-toast">已保存：单链表删除任务总结。</div>
+                    </div>
+                  </div>
+                </div>
+              </aside>
+            </div>
+          </section>
+
+          <section class="grid grid-2" data-stage-panel="self">
+            <div class="panel">
+              <div class="panel-header"><div><h2>自主学习</h2><p class="muted">选择知识点和生成类型，输出必须带引用来源。</p></div></div>
+              <div class="panel-body stack">
+                <div class="row"><span class="tag">链表</span><span class="tag">栈与队列</span><span class="tag">二叉树</span></div>
+                <div class="form-grid">
+                  <div class="field"><label for="knowledge">知识点</label><select id="knowledge"><option>链表边界处理</option><option>括号匹配</option><option>二叉树递归遍历</option></select></div>
+                  <div class="field"><label for="artifact">生成类型</label><select id="artifact"><option>概念讲解</option><option>练习题</option><option>复习笔记</option><option>知识卡片</option><option>思维导图</option><option>PPT 大纲</option></select></div>
+                </div>
+                <button class="primary">生成学习内容</button>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-header"><div><h2>生成结果预览</h2><p class="muted">Mock 内容，用于演示结构。</p></div><span class="status">AI 生成</span></div>
+              <div class="panel-body stack">
+                <h3>链表删除边界条件清单</h3>
+                <p>先判断空链表，再判断删除位置是否为头节点，最后处理普通节点的前驱连接。</p>
+                <details open><summary>引用来源</summary><p class="muted">S1 链表头节点删除讲义；S2 指针与边界条件 PPT。置信度 0.84。</p></details>
+                <button data-save-action="#selfSaveToast">保存到我的资料</button>
+                <div id="selfSaveToast" class="saved-toast">已保存：链表删除边界条件清单。</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="grid grid-2" data-stage-panel="ai">
+            <div class="panel">
+              <div class="panel-header"><div><h2>AI 助学对话</h2><p class="muted">不是通用聊天，而是结合页面上下文、课程知识库和画像。</p></div></div>
+              <div class="panel-body chat">
+                <div class="message"><strong>王同学</strong><p>为什么链表删除头节点容易出错？</p></div>
+                <div class="message ai">
+                  <div class="row between"><strong>CodeTrack AI</strong><span class="status">AI 生成 · 结合画像 · 置信度 0.82</span></div>
+                  <p>因为删除头节点会改变链表入口，而普通节点删除只需要修改前驱节点的 next。你最近的提交正好集中在这个边界，可以先把 pos=1、pos=n、空链表三个场景单独列成检查清单。</p>
+                  <details><summary>引用来源</summary><p class="muted">S1 链表头节点删除讲义；S2 指针与边界条件 PPT。</p></details>
+                  <div class="row"><button>生成练习</button><button>整理成笔记</button><button>跳转相关任务</button></div>
+                </div>
+              </div>
+            </div>
+            <aside class="panel">
+              <div class="panel-header"><div><h2>当前上下文</h2><p class="muted">用于解释 AI 为什么这样回答。</p></div></div>
+              <div class="panel-body stack">
+                <div class="business-note">
+                  <dl>
+                    <dt>页面上下文</dt><dd>任务工作台：链表删除</dd>
+                    <dt>画像摘要</dt><dd>边界条件薄弱，提示依赖中等</dd>
+                    <dt>课程知识库</dt><dd>S1、S2 被检索命中</dd>
+                    <dt>下一步动作</dt><dd>保存笔记、生成练习、回到任务</dd>
+                  </dl>
+                </div>
+              </div>
+            </aside>
+          </section>
+
+          <section class="panel" data-stage-panel="library">
+            <div class="panel-header">
+              <div>
+                <h2>我的资料</h2>
+                <p class="muted">承接任务总结、AI 回答、自主学习内容、错题归因、思维导图和 PPT 大纲。</p>
+              </div>
+              <div class="row">
+                <select aria-label="资料类型"><option>全部类型</option><option>任务总结</option><option>知识卡片</option><option>PPT 大纲</option></select>
+                <select aria-label="知识点"><option>全部知识点</option><option>链表</option><option>栈与队列</option><option>二叉树</option></select>
+              </div>
+            </div>
+            <div class="panel-body">
+              <table class="data-table">
+                <thead><tr><th>标题</th><th>类型</th><th>知识点</th><th>来源</th><th>可信信息</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr><td>单链表删除任务总结</td><td>任务总结</td><td>链表</td><td>任务工作台</td><td>AI 生成，引用 S1/S2</td><td><button>继续学习</button></td></tr>
+                  <tr><td>链表边界条件知识卡片</td><td>知识卡片</td><td>链表</td><td>自主学习</td><td>AI 生成，置信度 0.84</td><td><button>生成练习</button></td></tr>
+                  <tr><td>栈实现括号匹配复习笔记</td><td>复习笔记</td><td>栈与队列</td><td>AI 助学</td><td>引用 S3/S4</td><td><button>查看</button></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+    <script src="./data/mock.js"></script>
+    <script src="./assets/app.js"></script>
+  </body>
+</html>
