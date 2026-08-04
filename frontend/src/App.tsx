@@ -12,6 +12,7 @@ import AiTutor from "./pages/AiTutor";
 import LearningLibrary from "./pages/LearningLibrary";
 import LearningProfile from "./pages/LearningProfile";
 import LoginPage from "./pages/LoginPage";
+import AICompanion from "./components/AICompanion";
 import Dashboard from "./teacher/pages/Dashboard";
 import CourseClasses from "./teacher/pages/courses/CourseClasses";
 import CourseSyllabus from "./teacher/pages/courses/CourseSyllabus";
@@ -192,99 +193,105 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
 
   if (isWorkspace) {
     return (
-      <div className="workspace-route-stage" key={location.pathname}>
-        <Routes location={location}>
-          <Route path="/workspace/:taskId" element={<TaskWorkspaceWrapper onBack={() => transitionTo("/tasks")} />} />
-          <Route path="/question-workspace/:assignmentId" element={<QuestionWorkspaceWrapper onBack={() => transitionTo("/tasks")} />} />
-        </Routes>
-      </div>
+      <>
+        <div className="workspace-route-stage" key={location.pathname}>
+          <Routes location={location}>
+            <Route path="/workspace/:taskId" element={<TaskWorkspaceWrapper onBack={() => transitionTo("/tasks")} />} />
+            <Route path="/question-workspace/:assignmentId" element={<QuestionWorkspaceWrapper onBack={() => transitionTo("/tasks")} />} />
+          </Routes>
+        </div>
+        <AICompanion routePath={location.pathname} routeGroup={activeRouteGroup} />
+      </>
     );
   }
 
   return (
-    <div className="replica-shell">
-      <header className="replica-topbar">
-        <NavLink to="/" className="logo-link" aria-label="返回学习首页" onClick={(event) => handleNavClick(event, "/")}>
-          <span className="ct-brand-mark" aria-hidden="true" />
-          <span className="ct-brand-word">
-            Code<span>Track</span>
-          </span>
-        </NavLink>
-        <div className="top-actions" aria-label="顶部工具栏">
-          <button className="top-icon" type="button" aria-label="搜索">
-            <Search size={26} strokeWidth={2.1} />
-          </button>
-          <button className="top-icon notification" type="button" aria-label="通知">
-            <Bell size={25} strokeWidth={2.1} />
-            <span className="notification-badge">3</span>
-          </button>
-          <AccountMenu authUser={authUser} onLogout={onLogout} onNavigate={transitionTo} />
-        </div>
-      </header>
-
-      <div className={`replica-app${sidebarCollapsed ? " collapsed" : ""}`}>
-        <aside className={`replica-sidebar${sidebarCollapsed ? " collapsed" : ""}`}>
-          <nav className="replica-side-nav" aria-label="学生端导航">
-            {navItems.map((item) => (
-              <NavLink
-                key={item.key}
-                to={item.key}
-                end={item.key === "/"}
-                className={activeKey === item.key ? "side-link active" : "side-link"}
-                onClick={(event) => handleNavClick(event, item.key)}
-              >
-                <span className="side-icon">{item.icon}</span>
-                <span>{item.label}</span>
-              </NavLink>
-            ))}
-          </nav>
-          <button className="collapse-btn" type="button" onClick={() => setSidebarCollapsed((prev) => !prev)}>
-            {sidebarCollapsed ? <ChevronsRight size={18} /> : <ChevronsLeft size={18} />}
-            {sidebarCollapsed ? "展开侧栏" : "收起侧栏"}
-          </button>
-        </aside>
-
-        {sidebarCollapsed && (
-          <button className="sidebar-expand-float" type="button" onClick={() => setSidebarCollapsed(false)} aria-label="展开侧栏">
-            <ChevronsRight size={20} />
-          </button>
-        )}
-
-        <main className="app-content" data-route={activeRouteGroup}>
-          <div className="route-stage" key={activeRouteGroup}>
-            <Routes location={location}>
-            <Route path="/" element={<LearningHome onNavigate={handleNavigate} onOpenWorkspace={openTask} />} />
-            <Route path="/tasks" element={<CourseTasks onOpenWorkspace={openTask} />} />
-            <Route path="/workspace/:taskId" element={<TaskWorkspaceWrapper onBack={() => transitionTo("/tasks")} />} />
-            <Route path="/question-workspace/:assignmentId" element={<QuestionWorkspaceWrapper onBack={() => transitionTo("/tasks")} />} />
-            <Route path="/self-study" element={<SelfStudy />} />
-            <Route path="/ai-tutor" element={<AiTutor />} />
-            <Route path="/library" element={<LearningLibrary />} />
-            <Route path="/profile" element={<LearningProfile />} />
-            </Routes>
-          </div>
-        </main>
-      </div>
-
-      <nav className="mobile-nav" aria-label="移动端导航">
-        {navItems.map((item) => (
-          <NavLink
-            key={item.key}
-            to={item.key}
-            end={item.key === "/"}
-            className={({ isActive }) => (isActive ? "active" : "")}
-            onClick={(event) => handleNavClick(event, item.key)}
-          >
-            {item.icon}
-            <span>{item.label}</span>
+    <>
+      <div className="replica-shell">
+        <header className="replica-topbar">
+          <NavLink to="/" className="logo-link" aria-label="返回学习首页" onClick={(event) => handleNavClick(event, "/")}>
+            <span className="ct-brand-mark" aria-hidden="true" />
+            <span className="ct-brand-word">
+              Code<span>Track</span>
+            </span>
           </NavLink>
-        ))}
-        <NavLink to="/self-study" onClick={(event) => handleNavClick(event, "/self-study")}>
-          <BookOpen size={22} />
-          <span>自学</span>
-        </NavLink>
-      </nav>
-    </div>
+          <div className="top-actions" aria-label="顶部工具栏">
+            <button className="top-icon" type="button" aria-label="搜索">
+              <Search size={26} strokeWidth={2.1} />
+            </button>
+            <button className="top-icon notification" type="button" aria-label="通知">
+              <Bell size={25} strokeWidth={2.1} />
+              <span className="notification-badge">3</span>
+            </button>
+            <AccountMenu authUser={authUser} onLogout={onLogout} onNavigate={transitionTo} />
+          </div>
+        </header>
+
+        <div className={`replica-app${sidebarCollapsed ? " collapsed" : ""}`}>
+          <aside className={`replica-sidebar${sidebarCollapsed ? " collapsed" : ""}`}>
+            <nav className="replica-side-nav" aria-label="学生端导航">
+              {navItems.map((item) => (
+                <NavLink
+                  key={item.key}
+                  to={item.key}
+                  end={item.key === "/"}
+                  className={activeKey === item.key ? "side-link active" : "side-link"}
+                  onClick={(event) => handleNavClick(event, item.key)}
+                >
+                  <span className="side-icon">{item.icon}</span>
+                  <span>{item.label}</span>
+                </NavLink>
+              ))}
+            </nav>
+            <button className="collapse-btn" type="button" onClick={() => setSidebarCollapsed((prev) => !prev)}>
+              {sidebarCollapsed ? <ChevronsRight size={18} /> : <ChevronsLeft size={18} />}
+              {sidebarCollapsed ? "展开侧栏" : "收起侧栏"}
+            </button>
+          </aside>
+
+          {sidebarCollapsed && (
+            <button className="sidebar-expand-float" type="button" onClick={() => setSidebarCollapsed(false)} aria-label="展开侧栏">
+              <ChevronsRight size={20} />
+            </button>
+          )}
+
+          <main className="app-content" data-route={activeRouteGroup}>
+            <div className="route-stage" key={activeRouteGroup}>
+              <Routes location={location}>
+              <Route path="/" element={<LearningHome onNavigate={handleNavigate} onOpenWorkspace={openTask} />} />
+              <Route path="/tasks" element={<CourseTasks onOpenWorkspace={openTask} />} />
+              <Route path="/workspace/:taskId" element={<TaskWorkspaceWrapper onBack={() => transitionTo("/tasks")} />} />
+              <Route path="/question-workspace/:assignmentId" element={<QuestionWorkspaceWrapper onBack={() => transitionTo("/tasks")} />} />
+              <Route path="/self-study" element={<SelfStudy />} />
+              <Route path="/ai-tutor" element={<AiTutor />} />
+              <Route path="/library" element={<LearningLibrary />} />
+              <Route path="/profile" element={<LearningProfile />} />
+              </Routes>
+            </div>
+          </main>
+        </div>
+
+        <nav className="mobile-nav" aria-label="移动端导航">
+          {navItems.map((item) => (
+            <NavLink
+              key={item.key}
+              to={item.key}
+              end={item.key === "/"}
+              className={({ isActive }) => (isActive ? "active" : "")}
+              onClick={(event) => handleNavClick(event, item.key)}
+            >
+              {item.icon}
+              <span>{item.label}</span>
+            </NavLink>
+          ))}
+          <NavLink to="/self-study" onClick={(event) => handleNavClick(event, "/self-study")}>
+            <BookOpen size={22} />
+            <span>自学</span>
+          </NavLink>
+        </nav>
+      </div>
+      <AICompanion routePath={location.pathname} routeGroup={activeRouteGroup} />
+    </>
   );
 }
 
