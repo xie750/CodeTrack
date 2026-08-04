@@ -1,0 +1,812 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CodeTrack 学生端高保真原型</title>
+    <link rel="stylesheet" href="./assets/student-hifi.css" />
+  </head>
+  <body>
+    <div class="prototype-shell">
+      <aside class="story-rail" aria-label="学生端高保真闭环">
+        <div class="brand-lockup">
+          <span class="ct-logo" aria-hidden="true"></span>
+          <div>
+            <strong>CodeTrack</strong>
+            <span>学生端高保真原型</span>
+          </div>
+        </div>
+        <div class="rail-note">
+          第一轮只展示学生端：先从学习工作台主窗口进入，再打开加入班级；加入成功后，工作台展示快捷入口、待办任务、任务分布和教师动态。
+        </div>
+        <nav class="story-nav" aria-label="页面目录">
+          <a href="#service">服务入口</a>
+          <a href="#dashboard">学生工作台</a>
+          <a href="#welcome">加入班级</a>
+          <a href="#course-space">课程工作空间</a>
+          <a href="#task-list">课程任务</a>
+          <a href="#ai-assist-page">AI 助学</a>
+          <a href="#ai-float">AI 助学精灵</a>
+          <a href="#complete">总结与画像</a>
+          <a href="#library">我的资料</a>
+        </nav>
+        <div class="rail-meta">
+          <span>垂直学科：计算机学科</span>
+          <span>课程样例：数据结构与程序设计基础</span>
+          <span>学生样例：王同学</span>
+        </div>
+      </aside>
+
+      <main class="prototype-main">
+        <header class="page-hero">
+          <div>
+            <span class="eyebrow">Student Hi-Fi Prototype</span>
+            <h1>学生端助学闭环高保真产品原型</h1>
+            <p>
+              以“服务入口 -> 学习工作台主窗口 -> 加入班级 -> 回到工作台查看待办任务 -> 课程任务 -> AI 助学 -> AI 诊断与提示 -> 学习总结 -> 资料沉淀”为讲解顺序。
+            </p>
+          </div>
+          <div class="hero-stack">
+            <div class="hero-stat">
+              <span>必画状态</span>
+              <strong>18</strong>
+            </div>
+            <div class="hero-stat accent">
+              <span>一级导航</span>
+              <strong>5</strong>
+            </div>
+          </div>
+        </header>
+
+        <section id="service" class="frame-section service-section">
+          <div class="section-title">
+            <div>
+              <span class="step">00</span>
+              <h2>服务页面</h2>
+            </div>
+          </div>
+
+          <article class="service-frame">
+            <header class="service-topbar">
+              <div class="service-brand">
+                <span class="ct-mini" aria-hidden="true"></span>
+                <strong>CodeTrack</strong>
+              </div>
+              <div class="service-title">
+                <span>服务</span>
+              </div>
+              <div class="service-user">王同学<span class="avatar"></span></div>
+            </header>
+            <main class="service-entry-grid" aria-label="服务入口">
+              <button class="service-entry-card primary-entry">
+                <span class="service-entry-icon workspace-icon" aria-hidden="true"></span>
+                <strong>学习工作台</strong>
+              </button>
+              <button class="service-entry-card">
+                <span class="service-entry-icon study-icon" aria-hidden="true"></span>
+                <strong>自主学习入口</strong>
+              </button>
+              <button class="service-entry-card">
+                <span class="service-entry-icon research-icon" aria-hidden="true"></span>
+                <strong>科研入口</strong>
+              </button>
+            </main>
+          </article>
+        </section>
+
+        <section id="welcome" class="frame-section showcase-first">
+          <div class="section-title">
+            <div>
+              <span class="step">02</span>
+              <h2>加入班级页面</h2>
+              <p>页面顶部保留与学习工作台一致的导航路径；主体上方只保留一个加入班级按钮，中间用立体卡片展示已加入班级。</p>
+            </div>
+          </div>
+
+          <article class="reference-window join-reference">
+            <aside class="reference-sidebar">
+              <div class="reference-brand">
+                <span class="ct-mini" aria-hidden="true"></span>
+                <strong>CodeTrack</strong>
+              </div>
+              <div class="ref-menu-group">
+                <span>服务</span>
+                <a><i class="menu-icon dashboard" aria-hidden="true"></i>学习工作台</a>
+                <a class="active"><i class="menu-icon join" aria-hidden="true"></i>加入班级</a>
+                <a><i class="menu-icon self" aria-hidden="true"></i>自主学习</a>
+                <a><i class="menu-icon ai" aria-hidden="true"></i>AI 助学</a>
+              </div>
+              <div class="ref-menu-group">
+                <span>资料</span>
+                <a><i class="menu-icon library" aria-hidden="true"></i>我的资料</a>
+                <a><i class="menu-icon profile" aria-hidden="true"></i>画像摘要</a>
+              </div>
+              <div class="ref-menu-group">
+                <span>系统</span>
+                <a><i class="menu-icon settings" aria-hidden="true"></i>设置</a>
+                <a><i class="menu-icon theme" aria-hidden="true"></i>浅色模式<span class="toggle-pill"></span></a>
+              </div>
+            </aside>
+
+            <main class="reference-main">
+              <nav class="reference-title-nav" aria-label="页面路径">
+                <span>学习服务</span>
+                <b>/</b>
+                <strong>加入班级</strong>
+                <div class="reference-top-user">
+                  <span class="avatar"></span>
+                  <div>
+                    <strong>王同学</strong>
+                    <small>软件工程 1 班</small>
+                  </div>
+                </div>
+              </nav>
+
+              <header class="reference-header">
+                <div>
+                  <h3>加入班级</h3>
+                  <span>已加入 1 门课程</span>
+                </div>
+                <button class="reference-close" aria-label="关闭"></button>
+              </header>
+
+              <div class="join-single-action">
+                <button class="join-primary-button"><i aria-hidden="true"></i>加入班级</button>
+              </div>
+
+              <section class="joined-class-stage" aria-label="已加入课程">
+                <article class="joined-class-card active">
+                  <div class="class-card-top">
+                    <div>
+                      <span class="ref-status green">已加入课程</span>
+                      <h4>数据结构与程序设计基础</h4>
+                      <p>软件工程 1 班 · 王老师</p>
+                    </div>
+                    <span class="class-card-mark">课程</span>
+                  </div>
+                  <div class="joined-card-meta">
+                    <div><span>所属班级</span><strong>软件工程 1 班</strong></div>
+                    <div><span>当前待办</span><strong>4 项</strong></div>
+                    <div><span>学期</span><strong>2026 秋季</strong></div>
+                  </div>
+                  <div class="joined-card-foot">
+                    <span>链表、栈与队列、二叉树</span>
+                    <button>进入课程任务</button>
+                  </div>
+                </article>
+              </section>
+            </article>
+        </section>
+
+        <section id="dashboard" class="frame-section">
+          <div class="section-title">
+            <div>
+              <span class="step">01</span>
+              <h2>主窗口：学习工作台</h2>
+              <p>工作台作为学生进入后的主页面：上方是其他页面的快捷入口，中间用列表呈现待办任务，下方展示任务按班级分布和教师动态日志。</p>
+            </div>
+          </div>
+
+          <article class="reference-window">
+            <aside class="reference-sidebar">
+              <div class="reference-brand">
+                <span class="ct-mini" aria-hidden="true"></span>
+                <strong>CodeTrack</strong>
+              </div>
+              <div class="ref-menu-group">
+                <span>服务</span>
+                <a class="active"><i class="menu-icon dashboard" aria-hidden="true"></i>学习工作台</a>
+                <a><i class="menu-icon join" aria-hidden="true"></i>加入班级</a>
+                <a><i class="menu-icon self" aria-hidden="true"></i>自主学习</a>
+                <a><i class="menu-icon ai" aria-hidden="true"></i>AI 助学</a>
+              </div>
+              <div class="ref-menu-group">
+                <span>资料</span>
+                <a><i class="menu-icon library" aria-hidden="true"></i>我的资料</a>
+                <a><i class="menu-icon profile" aria-hidden="true"></i>画像摘要</a>
+              </div>
+              <div class="ref-menu-group">
+                <span>系统</span>
+                <a><i class="menu-icon settings" aria-hidden="true"></i>设置</a>
+                <a><i class="menu-icon theme" aria-hidden="true"></i>浅色模式<span class="toggle-pill"></span></a>
+              </div>
+            </aside>
+
+            <main class="reference-main">
+              <nav class="reference-title-nav" aria-label="页面路径">
+                <span>学习服务</span>
+                <b>/</b>
+                <strong>学习工作台</strong>
+                <div class="reference-top-user">
+                  <span class="avatar"></span>
+                  <div>
+                    <strong>王同学</strong>
+                    <small>软件工程 1 班</small>
+                  </div>
+                </div>
+              </nav>
+
+              <header class="reference-header">
+                <div>
+                  <h3>学习工作台</h3>
+                  <span>6 项待办任务 · 4 条教师动态</span>
+                </div>
+                <button class="reference-close" aria-label="关闭"></button>
+              </header>
+
+              <div class="reference-tabs quick-entry-tabs" aria-label="快捷入口">
+                <button class="active">课程任务 <span>进入</span></button>
+                <button>加入班级 <span>打开</span></button>
+                <button>自主学习 <span>进入</span></button>
+                <button>AI 助学 <span>提问</span></button>
+                <button>我的资料 <span>查看</span></button>
+              </div>
+
+              <section class="workbench-panel todo-panel">
+                <div class="workbench-panel-head">
+                  <div>
+                    <span class="panel-kicker">待办任务</span>
+                    <h4>按截止时间和状态排序</h4>
+                  </div>
+                  <span>6 项</span>
+                </div>
+                <div class="todo-list">
+                  <article class="todo-row urgent">
+                    <span class="todo-index">01</span>
+                    <div><strong>单链表指定位置节点删除</strong><small>软件工程 1 班 · 待修正 · 7/10 用例通过</small></div>
+                    <span>08-08 23:59</span>
+                    <button>继续</button>
+                  </article>
+                  <article class="todo-row">
+                    <span class="todo-index">02</span>
+                    <div><strong>栈实现括号匹配</strong><small>软件工程 1 班 · 未开始 · 公开样例已开放</small></div>
+                    <span>08-12 23:59</span>
+                    <button>查看</button>
+                  </article>
+                  <article class="todo-row">
+                    <span class="todo-index">03</span>
+                    <div><strong>数组与循环专项小测</strong><small>软件工程 1 班 · 未开始 · 基础练习</small></div>
+                    <span>08-14 20:00</span>
+                    <button>进入</button>
+                  </article>
+                  <article class="todo-row">
+                    <span class="todo-index">04</span>
+                    <div><strong>链表边界条件复习资料</strong><small>软件工程 1 班 · 教师新资料 · 建议阅读</small></div>
+                    <span>本周</span>
+                    <button>打开</button>
+                  </article>
+                </div>
+              </section>
+
+              <section class="workbench-bottom-grid">
+                <article class="workbench-panel task-chart-panel">
+                  <div class="workbench-panel-head">
+                    <div>
+                      <span class="panel-kicker">任务分布</span>
+                      <h4>按班级统计待办任务</h4>
+                    </div>
+                    <span>总计 6 项</span>
+                  </div>
+                  <div class="task-pie-wrap">
+                    <div class="task-pie" aria-label="任务分布饼图"><strong>6</strong><span>总任务</span></div>
+                    <div class="pie-legend">
+                      <div><i class="class-a"></i><span>软件工程 1 班</span><strong>6 项</strong></div>
+                    </div>
+                  </div>
+                </article>
+
+                <article class="teacher-log-panel single-log">
+                  <div class="teacher-log-head">
+                    <h4>教师动态日志</h4>
+                    <span>最近 4 条</span>
+                  </div>
+                  <div class="teacher-log-list">
+                    <article>
+                      <span class="log-dot task"></span>
+                      <div><strong>王老师下发“链表边界条件专项练习”</strong><small>03 Aug 2026 · 11:40 AM</small></div>
+                    </article>
+                    <article>
+                      <span class="log-dot material"></span>
+                      <div><strong>上传资料“指针与边界条件补充 PPT”</strong><small>03 Aug 2026 · 10:55 AM</small></div>
+                    </article>
+                    <article>
+                      <span class="log-dot knowledge"></span>
+                      <div><strong>课程知识库新增 8 个链表引用片段</strong><small>03 Aug 2026 · 10:31 AM</small></div>
+                    </article>
+                    <article>
+                      <span class="log-dot task"></span>
+                      <div><strong>更新“栈实现括号匹配”的公开样例</strong><small>03 Aug 2026 · 09:46 AM</small></div>
+                    </article>
+                  </div>
+                </article>
+              </section>
+            </main>
+          </article>
+        </section>
+
+        <section id="course-space" class="frame-section">
+          <div class="section-title">
+            <div>
+              <span class="step">03</span>
+              <h2>课程页面：课程内导航</h2>
+              <p>从工作台的待办任务或快捷入口进入课程页面。左侧导航保留课程首页、课程任务、AI 助学、我的资料和收藏夹。</p>
+            </div>
+          </div>
+
+          <article class="reference-window course-reference">
+            <aside class="reference-sidebar">
+              <div class="reference-brand">
+                <span class="ct-mini" aria-hidden="true"></span>
+                <strong>CodeTrack</strong>
+              </div>
+              <div class="ref-menu-group">
+                <span>课程</span>
+                <a class="active"><i class="menu-icon dashboard" aria-hidden="true"></i>课程首页</a>
+                <a><i class="menu-icon task" aria-hidden="true"></i>课程任务</a>
+                <a><i class="menu-icon ai" aria-hidden="true"></i>AI 助学</a>
+              </div>
+              <div class="ref-menu-group">
+                <span>资料</span>
+                <a><i class="menu-icon library" aria-hidden="true"></i>我的资料</a>
+                <a><i class="menu-icon favorite" aria-hidden="true"></i>收藏夹</a>
+              </div>
+            </aside>
+
+            <main class="reference-main course-reference-main">
+              <nav class="reference-title-nav" aria-label="页面路径">
+                <span>学习服务</span>
+                <b>/</b>
+                <span>数据结构与程序设计基础</span>
+                <b>/</b>
+                <strong>课程首页</strong>
+                <div class="reference-top-user">
+                  <span class="avatar"></span>
+                  <div>
+                    <strong>王同学</strong>
+                    <small>软件工程 1 班</small>
+                  </div>
+                </div>
+              </nav>
+
+              <header class="reference-header">
+                <div>
+                  <h3>课程首页</h3>
+                  <span>数据结构与程序设计基础 · 王老师</span>
+                </div>
+                <button class="reference-close" aria-label="关闭"></button>
+              </header>
+
+              <div class="course-hero-card">
+                <div>
+                  <span class="ref-status green">知识库已启用</span>
+                  <h4>数据结构与程序设计基础</h4>
+                  <p>软件工程 1 班 · 当前课程数据、任务和 AI 引用都限定在这门课程内。</p>
+                </div>
+                <button class="reference-export">课程说明</button>
+              </div>
+
+              <section class="course-metric-grid">
+                <article><span>未完成任务</span><strong>2</strong><small>含 1 项待修正</small></article>
+                <article><span>已完成任务</span><strong>1</strong><small>已保存学习总结</small></article>
+              </section>
+
+              <section class="course-home-grid">
+                <article class="course-home-panel course-ai-path-panel">
+                  <div class="course-panel-head">
+                    <div>
+                      <span class="panel-kicker">AI 生成学习路径</span>
+                      <h4>结合课程任务与学习画像生成</h4>
+                    </div>
+                    <div class="course-path-actions">
+                      <span>4 步</span>
+                      <button>AI 诊断生成</button>
+                    </div>
+                  </div>
+                  <div class="course-ai-path-note">
+                    <strong>当前建议优先处理链表边界错误。</strong>
+                    <span>系统会结合最近提交、课程画像、已完成任务和薄弱知识点生成路径，诊断后可刷新为新的学习顺序。</span>
+                  </div>
+                  <div class="course-path-list">
+                    <div class="done"><span>01</span><div><strong>确认课程任务状态</strong><small>已加入课程，当前有 2 个未完成任务。</small></div></div>
+                    <div class="active"><span>02</span><div><strong>修正链表边界处理</strong><small>优先回看链表删除的空表、头节点和越界场景。</small></div></div>
+                    <div><span>03</span><div><strong>完成栈与队列巩固练习</strong><small>完成括号匹配任务前，先补一组手写模拟题。</small></div></div>
+                    <div><span>04</span><div><strong>沉淀学习总结</strong><small>提交后自动保存诊断结果、错因和下一步推荐。</small></div></div>
+                  </div>
+                </article>
+              </section>
+            </main>
+          </article>
+        </section>
+
+        <section id="task-list" class="frame-section">
+          <div class="section-title">
+            <div>
+              <span class="step">04</span>
+              <h2>课程任务列表与任务详情预览</h2>
+              <p>任务来自当前班级课程下的教师发布，卡片必须展示状态、知识点、截止时间、最近提交摘要和提示开放级别。</p>
+            </div>
+          </div>
+
+          <article class="reference-window task-reference">
+            <aside class="reference-sidebar">
+              <div class="reference-brand">
+                <span class="ct-mini" aria-hidden="true"></span>
+                <strong>CodeTrack</strong>
+              </div>
+              <div class="ref-menu-group">
+                <span>课程</span>
+                <a><i class="menu-icon dashboard" aria-hidden="true"></i>课程首页</a>
+                <a class="active"><i class="menu-icon task" aria-hidden="true"></i>课程任务</a>
+                <a><i class="menu-icon ai" aria-hidden="true"></i>AI 助学</a>
+              </div>
+              <div class="ref-menu-group">
+                <span>资料</span>
+                <a><i class="menu-icon library" aria-hidden="true"></i>我的资料</a>
+                <a><i class="menu-icon favorite" aria-hidden="true"></i>收藏夹</a>
+              </div>
+            </aside>
+
+            <main class="reference-main task-reference-main">
+              <nav class="reference-title-nav" aria-label="页面路径">
+                <span>学习服务</span>
+                <b>/</b>
+                <span>数据结构与程序设计基础</span>
+                <b>/</b>
+                <strong>课程任务</strong>
+                <div class="reference-top-user">
+                  <span class="avatar"></span>
+                  <div>
+                    <strong>王同学</strong>
+                    <small>软件工程 1 班</small>
+                  </div>
+                </div>
+              </nav>
+
+              <header class="reference-header task-reference-header">
+                <div>
+                  <h3>课程任务</h3>
+                  <span>数据结构与程序设计基础 · 王老师</span>
+                </div>
+                <button class="reference-close" aria-label="关闭"></button>
+              </header>
+
+              <div class="task-filter-bar">
+                <div class="filter-row">
+                  <button class="active">全部</button>
+                  <button>未开始</button>
+                  <button>进行中</button>
+                  <button>待修正</button>
+                  <button>已完成</button>
+                </div>
+              </div>
+
+              <div class="task-grid">
+                <main class="task-list">
+                  <article class="assignment-card selected">
+                    <div class="assignment-status">待修正</div>
+                    <div>
+                      <h4>单链表指定位置节点删除</h4>
+                      <p>知识点：链表、边界处理、指针。最近提交在“删除第 1 个节点”用例失败。</p>
+                    </div>
+                    <div class="assignment-meta">
+                      <span>基础难度</span>
+                      <span>允许三级提示</span>
+                      <span>08-08 截止</span>
+                    </div>
+                    <button class="primary-button small">进入任务</button>
+                  </article>
+                  <article class="assignment-card">
+                    <div class="assignment-status neutral">未开始</div>
+                    <div>
+                      <h4>栈实现括号匹配</h4>
+                      <p>知识点：栈与队列、匹配规则。公开样例已开放。</p>
+                    </div>
+                    <div class="assignment-meta">
+                      <span>基础难度</span>
+                      <span>开放二级提示</span>
+                      <span>08-12 截止</span>
+                    </div>
+                    <button class="secondary-button small">查看说明</button>
+                  </article>
+                  <article class="assignment-card done">
+                    <div class="assignment-status done">已完成</div>
+                    <div>
+                      <h4>二叉树前序遍历</h4>
+                      <p>知识点：二叉树、递归遍历。已生成任务总结并保存到资料库。</p>
+                    </div>
+                    <div class="assignment-meta">
+                      <span>通过 10/10</span>
+                      <span>使用一级提示</span>
+                      <span>已保存总结</span>
+                    </div>
+                    <button class="secondary-button small">查看总结</button>
+                  </article>
+                </main>
+                <aside class="task-preview">
+                  <span class="panel-kicker">任务详情预览</span>
+                  <h4>单链表指定位置节点删除</h4>
+                  <p>实现函数 deleteAt(ListNode* head, int index)，删除指定位置节点并返回新的头节点。</p>
+                  <div class="sample-box">
+                    <strong>公开样例</strong>
+                    <code>输入：1 -> 2 -> 3, index = 1<br />输出：2 -> 3</code>
+                  </div>
+                  <div class="source-box">
+                    <strong>引用来源</strong>
+                    <span>S1 链表头节点删除讲义</span>
+                    <span>S2 指针与边界条件 PPT</span>
+                  </div>
+                  <button class="primary-button full">进入集成任务页</button>
+                </aside>
+              </div>
+            </main>
+          </article>
+        </section>
+
+        <section id="ai-assist-page" class="frame-section">
+          <div class="section-title">
+            <div>
+              <span class="step">05</span>
+              <h2>AI 助学页面</h2>
+              <p>作为课程内独立 AI 助学入口，保留课程侧边栏与顶部路径，中间工作区参考轻量 AI 工作台样式。</p>
+            </div>
+          </div>
+
+          <article class="reference-window ai-assist-reference">
+            <aside class="reference-sidebar">
+              <div class="reference-brand">
+                <span class="ct-mini" aria-hidden="true"></span>
+                <strong>CodeTrack</strong>
+              </div>
+              <div class="ref-menu-group">
+                <span>课程</span>
+                <a><i class="menu-icon dashboard" aria-hidden="true"></i>课程首页</a>
+                <a><i class="menu-icon task" aria-hidden="true"></i>课程任务</a>
+                <a class="active"><i class="menu-icon ai" aria-hidden="true"></i>AI 助学</a>
+              </div>
+              <div class="ref-menu-group">
+                <span>资料</span>
+                <a><i class="menu-icon library" aria-hidden="true"></i>我的资料</a>
+                <a><i class="menu-icon favorite" aria-hidden="true"></i>收藏夹</a>
+              </div>
+            </aside>
+
+            <main class="reference-main ai-assist-main">
+              <nav class="reference-title-nav" aria-label="页面路径">
+                <span>学习服务</span>
+                <b>/</b>
+                <span>数据结构与程序设计基础</span>
+                <b>/</b>
+                <strong>AI 助学</strong>
+                <div class="reference-top-user">
+                  <span class="avatar"></span>
+                  <div>
+                    <strong>王同学</strong>
+                    <small>软件工程 1 班</small>
+                  </div>
+                </div>
+              </nav>
+
+              <header class="reference-header ai-assist-header">
+                <div>
+                  <h3>AI 助学</h3>
+                  <span>读取当前课程、任务和学习画像</span>
+                </div>
+                <button class="reference-close" aria-label="关闭"></button>
+              </header>
+
+              <section class="ai-chat-stage" aria-label="AI 助学工作区">
+                <div class="ai-chat-top">
+                  <button class="ai-model-select">CodeTrack Tutor v1.0</button>
+                  <button class="ai-upgrade">课程知识库已连接</button>
+                  <button class="ai-more" aria-label="更多"></button>
+                </div>
+
+                <div class="ai-welcome">
+                  <div class="ai-orbit" aria-hidden="true"></div>
+                  <h4>你好，王同学</h4>
+                  <p>可以直接描述你遇到的问题，也可以让 AI 根据课程任务帮你生成讲解、练习、笔记或复习计划。</p>
+                </div>
+
+                <div class="ai-capability-grid">
+                  <article>
+                    <span class="ai-card-icon image"></span>
+                    <strong>生成讲解</strong>
+                    <p>把链表、栈、递归等知识点拆成适合当前水平的步骤。</p>
+                  </article>
+                  <article>
+                    <span class="ai-card-icon copy"></span>
+                    <strong>整理笔记</strong>
+                    <p>将诊断、错因和引用来源整理成可保存的学习资料。</p>
+                  </article>
+                  <article>
+                    <span class="ai-card-icon code"></span>
+                    <strong>代码答疑</strong>
+                    <p>围绕提交结果解释错误原因，并给出渐进式提示。</p>
+                  </article>
+                </div>
+
+                <div class="ai-request-box">
+                  <div class="ai-placeholder"><span>AI</span> 输入你的问题，或让 AI 根据当前课程生成学习建议</div>
+                  <div class="ai-input-actions">
+                    <button>链接资料</button>
+                    <button>引用课程</button>
+                    <button>推理</button>
+                    <button>学习风格</button>
+                    <button class="ai-send">发送</button>
+                  </div>
+                </div>
+                <p class="ai-footnote">AI 内容会标注来源、置信度和下一步动作，重要结论建议结合课程资料核查。</p>
+              </section>
+            </main>
+          </article>
+        </section>
+
+        <section id="ai-float" class="frame-section">
+          <div class="section-title">
+            <div>
+              <span class="step">06</span>
+              <h2>AI 助学精灵悬浮窗口状态</h2>
+              <p>AI 不是独立的大聊天框，而是读取当前页面上下文、课程知识库和学习画像的悬浮辅助入口。低置信度和引用不足必须明确提示。</p>
+            </div>
+          </div>
+
+          <div class="float-state-grid">
+            <article class="float-card">
+              <span class="state-dot"></span>
+              <h3>收起态</h3>
+              <div class="mini-page">
+                <div class="float-bubble">AI</div>
+              </div>
+              <p>右下角常驻，不遮挡运行、提交和保存按钮。</p>
+            </article>
+            <article class="float-card">
+              <span class="state-dot active"></span>
+              <h3>展开态</h3>
+              <div class="ai-window">
+                <div class="ai-window-head">
+                  <strong>AI 助学精灵</strong>
+                  <span>当前：链表任务 v3</span>
+                </div>
+                <button>为什么头节点删除失败？</button>
+                <button>查看引用来源</button>
+                <button>同步到右侧诊断</button>
+                <div class="ai-input">继续追问...</div>
+              </div>
+              <p>学生不离开当前课程上下文即可查看诊断和下一步动作。</p>
+            </article>
+            <article class="float-card warning">
+              <span class="state-dot warn"></span>
+              <h3>低置信度态</h3>
+              <div class="ai-window low">
+                <div class="ai-window-head">
+                  <strong>引用不足</strong>
+                  <span>置信度 0.52</span>
+                </div>
+                <p>课程知识库中没有找到足够证据，建议继续追问或联系教师确认。</p>
+                <button>查看已有来源</button>
+              </div>
+              <p>AI 不确定时必须提示核查，避免把猜测包装成结论。</p>
+            </article>
+          </div>
+        </section>
+
+        <section id="complete" class="frame-section">
+          <div class="section-title">
+            <div>
+              <span class="step">07</span>
+              <h2>重新提交、任务完成总结与画像更新</h2>
+              <p>通过后展示学习总结、提示使用、主要错因、画像变化和资料保存入口。学生能看到本次行为如何影响学习画像。</p>
+            </div>
+          </div>
+
+          <article class="browser-frame compact">
+            <div class="completion-layout">
+              <section class="summary-card">
+                <span class="pill green">重新提交通过</span>
+                <h3>任务完成：单链表指定位置节点删除</h3>
+                <p>第 4 次提交通过 10/10 用例。你修正了删除头节点时未更新 head 的问题，并补充了越界保护。</p>
+                <div class="summary-grid">
+                  <div><span>测试结果</span><strong>10/10</strong></div>
+                  <div><span>提示使用</span><strong>2 层</strong></div>
+                  <div><span>主要错因</span><strong>边界遗漏</strong></div>
+                </div>
+                <div class="save-row">
+                  <button class="primary-button">保存任务总结</button>
+                  <button class="secondary-button">生成知识卡片</button>
+                  <button class="secondary-button">生成 5 道练习</button>
+                </div>
+              </section>
+              <aside class="profile-delta">
+                <h4>画像更新</h4>
+                <div class="delta-row up"><span>链表边界处理</span><strong>+12</strong></div>
+                <div class="delta-row down"><span>提示依赖</span><strong>中等</strong></div>
+                <div class="delta-row"><span>高频错因</span><strong>保留观察</strong></div>
+                <div class="evidence-timeline">
+                  <strong>证据时间线</strong>
+                  <span>11:06 提交 v3 失败</span>
+                  <span>11:12 查看一级提示</span>
+                  <span>11:18 查看二级提示</span>
+                  <span>11:25 提交 v4 通过</span>
+                </div>
+              </aside>
+            </div>
+          </article>
+        </section>
+
+        <section id="library" class="frame-section">
+          <div class="section-title">
+            <div>
+              <span class="step">08</span>
+              <h2>我的资料库与下一步推荐</h2>
+              <p>资料库不是静态归档，而是继续学习入口。每份 AI 生成资料都显示类型、知识点、来源页面、引用来源、置信度和继续动作。</p>
+            </div>
+          </div>
+
+          <article class="browser-frame">
+            <div class="library-layout">
+              <aside class="library-filter">
+                <h4>资料类型</h4>
+                <a class="active">全部资料</a>
+                <a>任务总结</a>
+                <a>复习笔记</a>
+                <a>知识卡片</a>
+                <a>错题归因</a>
+                <a>思维导图</a>
+                <a>PPT 大纲</a>
+              </aside>
+              <main class="library-main">
+                <div class="library-header">
+                  <div>
+                    <span class="panel-kicker">我的资料</span>
+                    <h3>数据结构与程序设计基础</h3>
+                  </div>
+                  <div class="filter-row">
+                    <button class="active">链表</button>
+                    <button>栈与队列</button>
+                    <button>二叉树</button>
+                  </div>
+                </div>
+                <div class="artifact-list">
+                  <div class="artifact-row selected">
+                    <span class="type">总结</span>
+                    <div><strong>单链表删除任务总结</strong><small>来自集成任务页 · AI 生成 · 2 个引用</small></div>
+                    <span class="pill green">已保存</span>
+                  </div>
+                  <div class="artifact-row">
+                    <span class="type">卡片</span>
+                    <div><strong>链表边界条件清单</strong><small>自主学习生成 · 置信度 0.84</small></div>
+                    <span class="pill blue">可练习</span>
+                  </div>
+                  <div class="artifact-row">
+                    <span class="type">归因</span>
+                    <div><strong>指针更新顺序错因归纳</strong><small>来自 AI 诊断 · 需要复习</small></div>
+                    <span class="pill orange">建议巩固</span>
+                  </div>
+                </div>
+              </main>
+              <aside class="artifact-preview">
+                <span class="panel-kicker">资料详情</span>
+                <h4>单链表删除任务总结</h4>
+                <p>本次问题集中在头节点删除的特殊分支。普通节点删除可以使用 prev 指针，但 index = 1 时必须先保存 next 作为新的 head。</p>
+                <div class="source-box">
+                  <strong>引用来源</strong>
+                  <span>S1 链表头节点删除讲义</span>
+                  <span>S2 指针与边界条件 PPT</span>
+                </div>
+                <div class="next-actions">
+                  <button class="primary-button full">从资料生成练习</button>
+                  <button class="secondary-button full">继续问 AI</button>
+                  <button class="secondary-button full">加入复习计划</button>
+                </div>
+                <div class="next-step-card">
+                  <strong>下一步推荐</strong>
+                  <span>完成 5 道链表边界条件练习，再进入“栈实现括号匹配”。</span>
+                </div>
+              </aside>
+            </div>
+          </article>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
