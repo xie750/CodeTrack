@@ -1,2 +1,0 @@
-"""CodeTrack backend package."""
-
