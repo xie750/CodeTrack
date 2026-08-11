@@ -1,664 +1,175 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import {
-  AlertTriangle,
-  BookOpen,
-  ChevronDown,
-  ChevronUp,
-  ClipboardList,
-  GraduationCap,
-  LineChart,
-  Pencil,
-  RefreshCw,
-  Search,
-  Users,
-} from "lucide-react";
-import TeacherSubNav from "../../components/TeacherSubNav";
-import { getCourseClasses, getCourseRoster, updateCourseDescription } from "../../teacherApi";
-import type {
-  CourseClassCard,
-  CourseClassListData,
-  CourseRosterData,
-  CourseRosterStudent,
-  StudentRiskLevel,
-} from "../../teacherTypes";
-import { coursesNav } from "./coursesNav";
-import {
-  RISK_EFFECT,
-  RISK_OPTIONS,
-  completionText,
-  formatDate,
-  riskBadgeClass,
-  riskText,
-  scoreText,
-} from "./courseLabels";
+import { BookOpen, Boxes, ChevronLeft, ChevronRight, Database, FileBox, GraduationCap, Layers, MoreVertical, Plus, Search, Settings, ShieldCheck } from "lucide-react";
+import { useMemo, useState } from "react";
 
-/**
- * 课程与班级（开发方案 §六 6.1）
- *
- * 一张卡 = 一个「行政班 × 课程」教学安排，不是按课程聚合 —— 同一门课的两个班要分开看，
- * 学生数和任务数才有意义。所以这里用 `/course-classes` 而不是 `getTeacherCourses()`。
- *
- * 本页**只有一个写操作**：编辑课程教学说明。§二 2.3 把创建行政班、调整学生专业和班级、
- * 删除学生账号划给管理员端，所以名单是只读的，也没有"添加学生"按钮。
- *
- * 学生风险等级直接来自 §10.3 预警中心那套规则（后端复用 `compute_class_alerts`），
- * 并把命中的规则名一起显示 —— 同一个学生在两个页面必须是同一个风险等级，而且不能
- * 只靠颜色表达状态（§7 可访问性）。
- *
- * 「查看班级」与「查看学生」在第一版合并成同一个"展开名单"动作：目前没有独立的班级
- * 详情页，名单本身就是班级详情，再拆一层只会多一次跳转。
- *
- * 概览卡片覆盖整个教学范围，不随学期和搜索变化，否则筛一下总数就掉，教师会以为数据丢了。
- *
- * 控件样式沿用学生端那套 token，与资料中心 / 任务监控一致：.review-page / .review-head /
- * .class-card / .class-stat / .review-select / .review-search / .review-list /
- * .review-pagination / .class-empty，不使用 antd 默认外观。
- *
- * 后端：backend/app/api/teacher_courses.py
- */
+const courses = [
+  { title: "数据结构与程序设计基础", status: "进行中", term: "2024-2025春季学期", major: "计算机科学与技术", classes: 6, progress: 60, nextTask: "实验3：栈与队列的应用", deadline: "05-28 23:59", visual: "cube" },
+  { title: "Java Web 开发技术", status: "进行中", term: "2024-2025春季学期", major: "软件工程", classes: 5, progress: 75, nextTask: "项目实战：图书管理系统", deadline: "06-02 23:59", visual: "code" },
+  { title: "数据库系统原理", status: "进行中", term: "2024-2025春季学期", major: "数据科学与大数据技术", classes: 4, progress: 40, nextTask: "第4章 练习题", deadline: "05-27 23:59", visual: "db" },
+  { title: "操作系统基础", status: "筹备中", term: "2024-2025春季学期", major: "计算机科学与技术", classes: 2, progress: 10, nextTask: "课程大纲已更新", deadline: "5月18日 16:20", visual: "os" },
+  { title: "C++ 程序设计", status: "筹备中", term: "2024-2025春季学期", major: "计算机科学与技术", classes: 3, progress: 5, nextTask: "上传了课程资料（第1章 课件）", deadline: "5月17日 10:15", visual: "cpp" },
+  { title: "计算机网络", status: "已归档", term: "2024-2025秋季学期", major: "软件工程", classes: 3, progress: 100, nextTask: "课程已归档", deadline: "2024年12月30日", visual: "network" }
+];
 
-const PAGE_SIZE = 20;
+const statCards = [
+  { label: "课程总数", value: "6", icon: <BookOpen size={22} />, tone: "green" },
+  { label: "进行中课程", value: "3", icon: <Layers size={22} />, tone: "orange" },
+  { label: "本学期课程", value: "5", icon: <FileBox size={22} />, tone: "blue" },
+  { label: "筹备中课程", value: "2", icon: <GraduationCap size={22} />, tone: "purple" }
+];
+
+const tips = [
+  { title: "课程模板推荐", desc: "参考优质课程模板，快速搭建课程框架", icon: <Boxes size={22} />, tone: "orange" },
+  { title: "批量导入资源", desc: "一次性导入课件、题库等教学资源", icon: <FileBox size={22} />, tone: "green" },
+  { title: "课程公开设置", desc: "设置课程可见范围与访问权限", icon: <ShieldCheck size={22} />, tone: "blue" }
+];
 
 export default function CourseClasses() {
-  const navigate = useNavigate();
-
-  const [term, setTerm] = useState("");
-  const [keywordInput, setKeywordInput] = useState("");
   const [keyword, setKeyword] = useState("");
+  const [term, setTerm] = useState("2024-2025春季学期");
+  const [major, setMajor] = useState("全部专业");
+  const [status, setStatus] = useState("全部状态");
 
-  const [data, setData] = useState<CourseClassListData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
-
-  // 展开中的教学班（一次只展开一个名单，避免同屏几百行）
-  const [expandedId, setExpandedId] = useState("");
-  // 正在编辑说明的课程
-  const [editingCourseId, setEditingCourseId] = useState("");
-  const [draftDescription, setDraftDescription] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  // 搜索框防抖，避免每敲一个字发一次请求
-  useEffect(() => {
-    const timer = window.setTimeout(() => setKeyword(keywordInput.trim()), 320);
-    return () => window.clearTimeout(timer);
-  }, [keywordInput]);
-
-  const filters = useMemo(
-    () => ({ term: term || undefined, keyword: keyword || undefined }),
-    [term, keyword]
-  );
-
-  const load = useCallback(() => {
-    let alive = true;
-    setLoading(true);
-    setError("");
-    getCourseClasses(filters)
-      .then((result) => {
-        if (!alive) return;
-        setData(result);
-      })
-      .catch(() => {
-        if (!alive) return;
-        setData(null);
-        setError("课程与班级数据加载失败。请确认已用教师账号登录，并且当前账号有生效的教学安排。");
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [filters]);
-
-  useEffect(load, [load]);
-
-  function flash(message: string) {
-    setNotice(message);
-    window.setTimeout(() => setNotice(""), 2600);
-  }
-
-  function startEditing(card: CourseClassCard) {
-    setEditingCourseId(card.course_id);
-    setDraftDescription(card.description);
-  }
-
-  async function saveDescription(courseId: string) {
-    setSaving(true);
-    setError("");
-    try {
-      const updated = await updateCourseDescription(courseId, draftDescription);
-      // 同一门课可能有多个教学班，说明是课程级的，要一起刷新
-      setData((current) =>
-        current
-          ? {
-              ...current,
-              items: current.items.map((item) =>
-                item.course_id === courseId
-                  ? { ...item, description: updated.description }
-                  : item
-              ),
-            }
-          : current
-      );
-      setEditingCourseId("");
-      flash("课程教学说明已保存，学生端课程入口同步更新。");
-    } catch {
-      setError("课程说明保存失败，请稍后重试。");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const stats = data?.stats;
+  const filteredCourses = useMemo(() => {
+    return courses.filter((course) => {
+      const matchKeyword = !keyword.trim() || course.title.toLowerCase().includes(keyword.trim().toLowerCase());
+      const matchTerm = term === "全部学期" || course.term === term;
+      const matchMajor = major === "全部专业" || course.major === major;
+      const matchStatus = status === "全部状态" || course.status === status;
+      return matchKeyword && matchTerm && matchMajor && matchStatus;
+    });
+  }, [keyword, term, major, status]);
 
   return (
-    <div className="review-page course-page">
-      <header className="review-head">
-        <div className="review-head-copy">
-          <h1>课程与班级</h1>
-          <p>
-            查看自己负责的课程、教学班和学生名单。本页只读取真实教学安排与学生数据，
-            仅课程教学说明可编辑；创建行政班、调整学生归属属于管理员职责，教师端不提供。
-          </p>
+    <div className="teacher-courses-v2">
+      <section className="teacher-courses-main">
+        <header className="teacher-courses-head">
+          <div>
+            <h1>我的课程</h1>
+            <p>管理您的全部课程，进入课程工作空间继续教学管理。</p>
+          </div>
+        </header>
+
+        <div className="teacher-course-filters">
+          <label className="teacher-searchbox">
+            <Search size={18} />
+            <input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="搜索课程名称、关键词" />
+          </label>
+          <select value={term} onChange={(event) => setTerm(event.target.value)}>
+            <option>2024-2025春季学期</option>
+            <option>2024-2025秋季学期</option>
+            <option>全部学期</option>
+          </select>
+          <select value={major} onChange={(event) => setMajor(event.target.value)}>
+            <option>全部专业</option>
+            <option>计算机科学与技术</option>
+            <option>软件工程</option>
+            <option>数据科学与大数据技术</option>
+          </select>
+          <select value={status} onChange={(event) => setStatus(event.target.value)}>
+            <option>全部状态</option>
+            <option>进行中</option>
+            <option>筹备中</option>
+            <option>已归档</option>
+          </select>
+          <button type="button" className="teacher-new-course"><Plus size={22} />新建课程</button>
         </div>
-        <div className="review-head-actions">
-          <button className="review-back" type="button" onClick={load} disabled={loading}>
-            <RefreshCw size={15} /> 刷新
-          </button>
-        </div>
-      </header>
 
-      <TeacherSubNav items={coursesNav} ariaLabel="课程教学二级导航" />
+        <section className="teacher-course-grid-v2" aria-label="我的课程列表">
+          {filteredCourses.map((course) => (
+            <article className="teacher-course-card-v2 my-course" key={course.title}>
+              <span className={`course-status ${course.status === "筹备中" ? "preparing" : course.status === "已归档" ? "archived" : ""}`}>{course.status}</span>
+              <CourseVisual type={course.visual} />
+              <h3>{course.title}</h3>
+              <p>{course.term} · {course.major}</p>
+              <small>绑定班级 {course.classes} 个</small>
+              <div className="course-progress-line">
+                <span>进度</span>
+                <strong>{course.progress}%</strong>
+                <i><b style={{ width: `${course.progress}%` }} /></i>
+              </div>
+              <dl>
+                <dt>{course.status === "已归档" ? "最近活动" : "下次任务"}</dt>
+                <dd>{course.nextTask}<span>{course.status === "已归档" ? course.deadline : `截止 ${course.deadline}`}</span></dd>
+              </dl>
+              <footer>
+                <button type="button">{course.status === "已归档" ? "查看课程" : "进入课程"}</button>
+                <button type="button">管理课程</button>
+                <button type="button" aria-label={`更多 ${course.title}`}><MoreVertical size={18} /></button>
+              </footer>
+            </article>
+          ))}
+        </section>
 
-      {error ? <p className="review-message error">{error}</p> : null}
-      {notice ? <p className="review-message success">{notice}</p> : null}
-
-      <section className="review-stats" aria-label="教学范围概览">
-        <StatCard
-          icon={<GraduationCap size={26} />}
-          tone="blue"
-          label="教学班"
-          value={loading && !data ? "…" : String(stats?.class_count ?? 0)}
-          unit="个"
-          note="按行政班 × 课程统计"
-        />
-        <StatCard
-          icon={<BookOpen size={26} />}
-          tone="indigo"
-          label="负责课程"
-          value={loading && !data ? "…" : String(stats?.course_count ?? 0)}
-          unit="门"
-          note="仅含生效教学安排"
-        />
-        <StatCard
-          icon={<Users size={26} />}
-          tone="green"
-          label="学生总数"
-          value={loading && !data ? "…" : String(stats?.student_total ?? 0)}
-          unit="人"
-          note="跨班去重后的在册学生"
-        />
-        <StatCard
-          icon={<ClipboardList size={26} />}
-          tone="orange"
-          label="已发布任务"
-          value={loading && !data ? "…" : String(stats?.task_total ?? 0)}
-          unit="个"
-          note="学生端可见的任务数"
-        />
+        <section className="teacher-draft-panel">
+          <header>
+            <h2>最近草稿 / 已归档课程</h2>
+            <button type="button">查看全部</button>
+          </header>
+          <div>
+            <article><span>已归档</span><strong>离散数学</strong><small>2024-2024秋季学期</small><em>已归档 2024-12-25</em><button>查看</button><button><MoreVertical size={16} /></button></article>
+            <article><span className="draft">草稿</span><strong>人工智能导论</strong><small>2024-2025春季学期</small><em>草稿 5月16日</em><button>继续编辑</button><button><MoreVertical size={16} /></button></article>
+          </div>
+        </section>
       </section>
 
-      <div className="review-filters course-filters">
-        <div className="review-filter-group">
-          <select
-            className="review-select"
-            value={term}
-            disabled={loading && !data}
-            onChange={(event) => setTerm(event.target.value)}
-          >
-            <option value="">学期：全部</option>
-            {data?.filters.terms.map((option) => (
-              <option value={option} key={option}>
-                {option}
-              </option>
+      <aside className="teacher-courses-aside">
+        <section className="teacher-panel-v2">
+          <header className="teacher-panel-head-v2">
+            <h2>课程总览</h2>
+            <button type="button">查看全部</button>
+          </header>
+          <div className="course-overview-grid">
+            {statCards.map((card) => (
+              <article key={card.label}>
+                <span className={`teacher-soft-icon ${card.tone}`}>{card.icon}</span>
+                <p>{card.label}</p>
+                <strong>{card.value}</strong>
+                <small>门</small>
+              </article>
             ))}
-          </select>
-
-          <div className="review-search">
-            <Search size={15} />
-            <input
-              type="search"
-              value={keywordInput}
-              placeholder="搜索课程名或班级名"
-              onChange={(event) => setKeywordInput(event.target.value)}
-            />
           </div>
-        </div>
-      </div>
-
-      {loading && !data ? (
-        <section className="course-class-grid" aria-busy="true">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <article className="class-card course-class-card skeleton-block" key={index} />
-          ))}
         </section>
-      ) : !data || data.items.length === 0 ? (
-        <div className="class-empty">
-          <h2>没有符合条件的教学班</h2>
-          <p>
-            {!data || data.stats.class_count === 0
-              ? "当前账号还没有生效的教学安排。教学安排由管理员按「行政班 + 课程 + 教师」分配，分配后这里会自动出现。"
-              : `当前学期与关键词下没有教学班。清空筛选即可看到全部 ${data.stats.class_count} 个教学班。`}
-          </p>
-        </div>
-      ) : (
-        <section className="course-class-grid" aria-label="教学班列表">
-          {data.items.map((card) => (
-            <ClassCard
-              key={card.teaching_assignment_id}
-              card={card}
-              expanded={expandedId === card.teaching_assignment_id}
-              editing={editingCourseId === card.course_id}
-              draft={draftDescription}
-              saving={saving}
-              onToggleRoster={() =>
-                setExpandedId((current) =>
-                  current === card.teaching_assignment_id ? "" : card.teaching_assignment_id
-                )
-              }
-              onStartEditing={() => startEditing(card)}
-              onDraftChange={setDraftDescription}
-              onCancelEditing={() => setEditingCourseId("")}
-              onSaveDescription={() => saveDescription(card.course_id)}
-              onOpenAnalytics={() =>
-                navigate(
-                  `/teacher/diagnosis?course_id=${encodeURIComponent(card.course_id)}` +
-                    `&class_id=${encodeURIComponent(card.class_id)}`
-                )
-              }
-            />
-          ))}
-        </section>
-      )}
 
-      {expandedId ? (
-        <RosterPanel
-          teachingAssignmentId={expandedId}
-          onClose={() => setExpandedId("")}
-          onOpenStudent={(student, courseId, classId) =>
-            navigate(
-              `/teacher/diagnosis?course_id=${encodeURIComponent(courseId)}` +
-                `&class_id=${encodeURIComponent(classId)}` +
-                `&student_id=${encodeURIComponent(student.student_id)}`
-            )
-          }
-        />
-      ) : null}
+        <section className="teacher-panel-v2 quick-tip-panel">
+          <h2>快速提示</h2>
+          {tips.map((tip) => (
+            <article key={tip.title}>
+              <span className={`teacher-soft-icon ${tip.tone}`}>{tip.icon}</span>
+              <div>
+                <strong>{tip.title}</strong>
+                <p>{tip.desc}</p>
+              </div>
+              <ChevronRight size={22} />
+            </article>
+          ))}
+          <button type="button">去设置</button>
+        </section>
+
+        <section className="teacher-panel-v2 sticky-note-panel">
+          <div>
+            <h2>使用小贴士</h2>
+            <p>定期更新课程资料，保持内容时效性，有助于提升学生学习效果。</p>
+          </div>
+          <CourseVisual type="cap" />
+          <footer>
+            <button type="button" aria-label="上一条"><ChevronLeft size={18} /></button>
+            <span>1 / 3</span>
+            <button type="button" aria-label="下一条"><ChevronRight size={18} /></button>
+          </footer>
+        </section>
+      </aside>
     </div>
   );
 }
 
-// --- 教学班卡片 -------------------------------------------------------------
-
-function ClassCard({
-  card,
-  expanded,
-  editing,
-  draft,
-  saving,
-  onToggleRoster,
-  onStartEditing,
-  onDraftChange,
-  onCancelEditing,
-  onSaveDescription,
-  onOpenAnalytics,
-}: {
-  card: CourseClassCard;
-  expanded: boolean;
-  editing: boolean;
-  draft: string;
-  saving: boolean;
-  onToggleRoster: () => void;
-  onStartEditing: () => void;
-  onDraftChange: (value: string) => void;
-  onCancelEditing: () => void;
-  onSaveDescription: () => void;
-  onOpenAnalytics: () => void;
-}) {
+function CourseVisual({ type }: { type: string }) {
+  const Icon = type === "db" ? Database : type === "network" ? ShieldCheck : type === "cap" ? GraduationCap : BookOpen;
   return (
-    <article className="class-card course-class-card">
-      <header className="course-class-head">
-        <div>
-          <h2>{card.class_name || "未命名班级"}</h2>
-          <p className="course-class-course">{card.title}</p>
-        </div>
-        <span className="class-badge blue">{card.semester || "未设学期"}</span>
-      </header>
-
-      <div className="class-tag-row">
-        {card.major_name ? <span>{card.major_name}</span> : null}
-        {card.grade ? <span>{card.grade} 级</span> : null}
-      </div>
-
-      {editing ? (
-        <div className="course-desc-editor">
-          <label>
-            <span>课程教学说明</span>
-            <textarea
-              value={draft}
-              rows={4}
-              maxLength={4000}
-              placeholder="填写本课程的教学说明，学生端课程入口会看到这段文字"
-              onChange={(event) => onDraftChange(event.target.value)}
-            />
-          </label>
-          <p className="course-desc-hint">
-            说明是课程级的，同一门课的其它教学班会一起更新。
-          </p>
-          <div className="course-class-actions">
-            <button className="review-back" type="button" onClick={onCancelEditing} disabled={saving}>
-              取消
-            </button>
-            <button
-              className="class-primary"
-              type="button"
-              onClick={onSaveDescription}
-              disabled={saving}
-            >
-              {saving ? "保存中…" : "保存说明"}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <p className="course-class-desc">{card.description || "还没有填写课程教学说明。"}</p>
-      )}
-
-      <div className="course-class-metrics">
-        <div>
-          <span>学生</span>
-          <b>
-            {card.student_count}
-            <small> 人</small>
-          </b>
-        </div>
-        <div>
-          <span>已发布任务</span>
-          <b>
-            {card.task_count}
-            <small> 个</small>
-          </b>
-        </div>
-      </div>
-
-      {editing ? null : (
-        <div className="course-class-actions">
-          <button className="review-back" type="button" onClick={onToggleRoster}>
-            {expanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}{" "}
-            {expanded ? "收起名单" : "查看学生"}
-          </button>
-          <button className="review-back" type="button" onClick={onOpenAnalytics}>
-            <LineChart size={15} /> 查看学情
-          </button>
-          <button className="review-back" type="button" onClick={onStartEditing}>
-            <Pencil size={15} /> 编辑课程说明
-          </button>
-        </div>
-      )}
-    </article>
-  );
-}
-
-// --- 学生名单 ---------------------------------------------------------------
-
-function RosterPanel({
-  teachingAssignmentId,
-  onClose,
-  onOpenStudent,
-}: {
-  teachingAssignmentId: string;
-  onClose: () => void;
-  onOpenStudent: (student: CourseRosterStudent, courseId: string, classId: string) => void;
-}) {
-  const [keywordInput, setKeywordInput] = useState("");
-  const [keyword, setKeyword] = useState("");
-  const [risk, setRisk] = useState<StudentRiskLevel | "">("");
-  const [page, setPage] = useState(1);
-
-  const [data, setData] = useState<CourseRosterData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setKeyword(keywordInput.trim());
-      setPage(1);
-    }, 320);
-    return () => window.clearTimeout(timer);
-  }, [keywordInput]);
-
-  // 切换教学班时把筛选和分页重置，否则会带着上一个班的条件请求
-  useEffect(() => {
-    setKeywordInput("");
-    setKeyword("");
-    setRisk("");
-    setPage(1);
-  }, [teachingAssignmentId]);
-
-  useEffect(() => {
-    let alive = true;
-    setLoading(true);
-    setError("");
-    getCourseRoster(teachingAssignmentId, {
-      keyword: keyword || undefined,
-      risk: risk || undefined,
-      page,
-      pageSize: PAGE_SIZE,
-    })
-      .then((result) => {
-        if (!alive) return;
-        setData(result);
-      })
-      .catch(() => {
-        if (!alive) return;
-        setData(null);
-        setError("学生名单加载失败。该教学班可能不属于当前教师，或名单尚未导入。");
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [teachingAssignmentId, keyword, risk, page]);
-
-  // stats.total 是整班人数，data.total 是当前筛选后的条数 —— 分页要用后者
-  const rosterTotal = data?.stats.total ?? 0;
-  const filteredTotal = data?.total ?? 0;
-  const totalPages = data?.total_pages ?? 1;
-
-  return (
-    <section className="class-card course-roster" aria-label="学生名单">
-      <header className="course-roster-head">
-        <div>
-          <h2>学生名单</h2>
-          <p>
-            名单只读。风险等级与「学情诊断 → 预警中心」使用同一套规则，命中的规则名一并列出。
-          </p>
-        </div>
-        <button className="review-back" type="button" onClick={onClose}>
-          <ChevronUp size={15} /> 收起
-        </button>
-      </header>
-
-      {error ? <p className="review-message error">{error}</p> : null}
-
-      <div className="review-filters">
-        <div className="review-filter-group">
-          <select
-            className="review-select"
-            value={risk}
-            disabled={loading && !data}
-            onChange={(event) => {
-              setRisk(event.target.value as StudentRiskLevel | "");
-              setPage(1);
-            }}
-          >
-            <option value="">风险：全部</option>
-            {RISK_OPTIONS.map((option) => (
-              <option value={option.value} key={option.value}>
-                {option.label}
-                {data ? `（${data.stats.risk_counts[option.value] ?? 0}）` : ""}
-              </option>
-            ))}
-          </select>
-
-          <div className="review-search">
-            <Search size={15} />
-            <input
-              type="search"
-              value={keywordInput}
-              placeholder="搜索姓名或学号"
-              onChange={(event) => setKeywordInput(event.target.value)}
-            />
-          </div>
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="review-list" aria-busy="true">
-          {Array.from({ length: 3 }).map((_, index) => (
-            <article className="class-card course-roster-row skeleton-block" key={index} />
-          ))}
-        </div>
-      ) : !data || data.items.length === 0 ? (
-        <div className="empty-panel wide">
-          {!data || rosterTotal === 0
-            ? "该教学班还没有在册学生，请确认行政班名单已由管理员导入。"
-            : `当前筛选条件下没有学生。清空筛选即可看到全部 ${rosterTotal} 人。`}
-        </div>
-      ) : (
-        <div className="review-list">
-          {data.items.map((student) => (
-            <RosterRow
-              key={student.student_id}
-              student={student}
-              onOpen={() => onOpenStudent(student, data.scope.course_id, data.scope.class_id)}
-            />
-          ))}
-        </div>
-      )}
-
-      {totalPages > 1 ? (
-        <div className="review-pagination">
-          <button
-            type="button"
-            disabled={page <= 1 || loading}
-            onClick={() => setPage((value) => Math.max(1, value - 1))}
-          >
-            上一页
-          </button>
-          <span>
-            第 {page} / {totalPages} 页 · 共 {filteredTotal} 人
-          </span>
-          <button
-            type="button"
-            disabled={page >= totalPages || loading}
-            onClick={() => setPage((value) => value + 1)}
-          >
-            下一页
-          </button>
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
-function RosterRow({
-  student,
-  onOpen,
-}: {
-  student: CourseRosterStudent;
-  onOpen: () => void;
-}) {
-  return (
-    <article className="class-card course-roster-row">
-      <div className="course-roster-name">
-        <strong>{student.student_name}</strong>
-        <span>{student.username || student.student_id}</span>
-      </div>
-
-      <div className="course-roster-risk">
-        <span
-          className={`class-badge ${riskBadgeClass(student.risk_level)}`}
-          title={RISK_EFFECT[student.risk_level]}
-        >
-          {student.risk_level === "HIGH" ? <AlertTriangle size={13} /> : null}
-          {riskText(student.risk_level)}
-        </span>
-        {student.risk_rules.length ? (
-          <div className="class-tag-row">
-            {student.risk_rules.map((rule) => (
-              <span key={rule}>{rule}</span>
-            ))}
-          </div>
-        ) : (
-          <em>未命中预警规则</em>
-        )}
-      </div>
-
-      <div className="course-roster-metric">
-        <span>完成</span>
-        <b>
-          {student.completed_count}/{student.task_total}
-        </b>
-        <em>{completionText(student.completed_count, student.task_total)}</em>
-      </div>
-
-      <div className="course-roster-metric">
-        <span>逾期</span>
-        <b>{student.overdue_count}</b>
-        <em>{student.overdue_count ? "需要跟进" : "无逾期"}</em>
-      </div>
-
-      <div className="course-roster-metric">
-        <span>平均分</span>
-        <b>{scoreText(student.avg_score)}</b>
-        <em>最近活动 {formatDate(student.last_activity_at)}</em>
-      </div>
-
-      <button className="review-back" type="button" onClick={onOpen}>
-        <LineChart size={15} /> 查看学情
-      </button>
-    </article>
-  );
-}
-
-function StatCard({
-  icon,
-  tone,
-  label,
-  value,
-  unit,
-  note,
-}: {
-  icon: React.ReactNode;
-  tone: string;
-  label: string;
-  value: string;
-  unit?: string;
-  note: string;
-}) {
-  return (
-    <article className="class-card class-stat">
-      <span className={tone}>{icon}</span>
-      <p>{label}</p>
-      <strong>
-        {value}
-        {unit ? <small> {unit}</small> : null}
-      </strong>
-      <em>{note}</em>
-    </article>
+    <div className={`course-visual ${type}`} aria-hidden="true">
+      <Icon size={type === "cap" ? 46 : 62} strokeWidth={1.45} />
+      <span />
+      <span />
+      <span />
+    </div>
   );
 }

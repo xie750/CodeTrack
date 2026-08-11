@@ -1,6 +1,6 @@
 import { useEffect, useState, type MouseEvent } from "react";
 import { Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
-import { Activity, Bell, BookOpen, ChartNoAxesColumnIncreasing, ChevronDown, ChevronsLeft, ChevronsRight, ClipboardList, FolderOpen, House, LayoutDashboard, LogOut, Search, ShieldCheck, Star, TrendingUp, UserRound } from "lucide-react";
+import { Activity, Bell, BookOpen, ChartNoAxesColumnIncreasing, ChevronDown, ChevronsLeft, ChevronsRight, ClipboardList, FolderOpen, House, LayoutDashboard, LogOut, Search, Settings, ShieldCheck, Star, TrendingUp, UserRound } from "lucide-react";
 import { ConfigProvider, Dropdown, type MenuProps } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import LearningHome from "./pages/LearningHome";
@@ -33,6 +33,7 @@ import AiReviewDetail from "./teacher/pages/aiReview/AiReviewDetail";
 import StrategyOptimization from "./teacher/pages/improvement/StrategyOptimization";
 import TaskAdjustment from "./teacher/pages/improvement/TaskAdjustment";
 import EffectEvaluation from "./teacher/pages/improvement/EffectEvaluation";
+import { TeacherEntryPortal, TeacherResearchShowcase } from "./teacher/pages/TeacherPortal";
 import { api, apiCache } from "./api";
 import { clearAccessToken, getAccessToken, type AuthUser } from "./authSession";
 
@@ -86,7 +87,7 @@ function shouldUseNativeNavigation(event: MouseEvent<HTMLAnchorElement>) {
 }
 
 function homePathForRole(role: string) {
-  if (role === "TEACHER") return "/teacher/dashboard";
+  if (role === "TEACHER") return "/teacher";
   if (role === "STUDENT") return "/";
   return "/unauthorized";
 }
@@ -295,20 +296,15 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
   );
 }
 
-// 教师端导航，对应开发方案 §四 教师端总体导航的 8 个模块
 const teacherNavItems = [
-  { key: "/teacher/dashboard", label: "教学首页", icon: <LayoutDashboard size={22} strokeWidth={2.4} /> },
-  { key: "/teacher/courses", label: "课程教学", icon: <BookOpen size={22} strokeWidth={2.1} /> },
-  { key: "/teacher/resources", label: "资料中心", icon: <FolderOpen size={22} strokeWidth={2.1} /> },
-  { key: "/teacher/tasks", label: "任务中心", icon: <ClipboardList size={22} strokeWidth={2.1} /> },
-  { key: "/teacher/monitor", label: "任务监控", icon: <Activity size={22} strokeWidth={2.1} /> },
-  { key: "/teacher/diagnosis", label: "学情诊断", icon: <ChartNoAxesColumnIncreasing size={22} strokeWidth={2.1} /> },
-  { key: "/teacher/ai-review", label: "AI 审核", icon: <ShieldCheck size={22} strokeWidth={2.1} /> },
-  { key: "/teacher/improvement", label: "教学改进", icon: <TrendingUp size={22} strokeWidth={2.1} /> },
+  { key: "/teacher/dashboard", label: "工作台首页", icon: <House size={22} strokeWidth={2.2} /> },
+  { key: "/teacher/courses", label: "我的课程", icon: <BookOpen size={22} strokeWidth={2.1} /> },
+  { key: "/teacher/settings", label: "个人设置", icon: <Settings size={22} strokeWidth={2.1} /> },
 ];
 
 function TeacherAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogout: () => void }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   function handleNavClick(event: MouseEvent<HTMLAnchorElement>, to: string) {
@@ -317,37 +313,57 @@ function TeacherAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
     navigate(to);
   }
 
+  if (location.pathname === "/teacher" || location.pathname === "/teacher/") {
+    return <TeacherEntryPortal authUser={authUser} accountSlot={<AccountMenu authUser={authUser} onLogout={onLogout} onNavigate={navigate} />} />;
+  }
+
+  if (location.pathname === "/teacher/research") {
+    return <TeacherResearchShowcase authUser={authUser} accountSlot={<AccountMenu authUser={authUser} onLogout={onLogout} onNavigate={navigate} />} />;
+  }
+
   return (
-    <div className="replica-shell">
-      <header className="replica-topbar">
-        <NavLink to="/" className="logo-link" aria-label="返回学习首页" onClick={(event) => handleNavClick(event, "/")}>
-          <span className="ct-brand-mark" aria-hidden="true" />
-          <span className="ct-brand-word">
-            Code<span>Track</span>
-          </span>
+    <div className="teacher-workbench-shell">
+      <header className="teacher-workbench-topbar">
+        <NavLink to="/teacher" className="teacher-workbench-logo" aria-label="返回教师端入口" onClick={(event) => handleNavClick(event, "/teacher")}>
+          <span className="teacher-workbench-logo-mark" aria-hidden="true" />
+          <strong>CodeTrack Teacher</strong>
         </NavLink>
-        <div className="top-actions" aria-label="顶部工具栏">
+        <div className="teacher-workbench-actions" aria-label="教师端顶部工具栏">
+          <span className="teacher-workbench-status">
+            <i aria-hidden="true" />
+            课程知识库已连接
+          </span>
+          <button className="teacher-notification" type="button" aria-label="通知">
+            <Bell size={22} strokeWidth={2} />
+            <span>3</span>
+          </button>
           <AccountMenu authUser={authUser} onLogout={onLogout} onNavigate={navigate} />
         </div>
       </header>
 
-      <div className={`replica-app${sidebarCollapsed ? " collapsed" : ""}`}>
-        <aside className={`replica-sidebar${sidebarCollapsed ? " collapsed" : ""}`}>
-          <nav className="replica-side-nav" aria-label="教师端导航">
+      <div className={`teacher-workbench-app${sidebarCollapsed ? " collapsed" : ""}`}>
+        <aside className={`teacher-workbench-sidebar${sidebarCollapsed ? " collapsed" : ""}`}>
+          <nav className="teacher-workbench-nav" aria-label="教师工作台导航">
             {teacherNavItems.map((item) => (
               <NavLink
                 key={item.key}
                 to={item.key}
                 end={item.key === "/teacher/dashboard"}
-                className={({ isActive }) => isActive ? "side-link active" : "side-link"}
+                className={({ isActive }) => isActive ? "teacher-workbench-nav-link active" : "teacher-workbench-nav-link"}
                 onClick={(event) => handleNavClick(event, item.key)}
               >
-                <span className="side-icon">{item.icon}</span>
+                <span>{item.icon}</span>
                 <span>{item.label}</span>
               </NavLink>
             ))}
           </nav>
-          <button className="collapse-btn" type="button" onClick={() => setSidebarCollapsed((prev) => !prev)}>
+          <button className="teacher-ai-entry" type="button">
+            <span aria-hidden="true">AI</span>
+            <strong>AI 助教</strong>
+            <small>智能备课与答疑</small>
+            <ChevronDown size={18} strokeWidth={2.2} />
+          </button>
+          <button className="collapse-btn teacher-collapse" type="button" onClick={() => setSidebarCollapsed((prev) => !prev)}>
             {sidebarCollapsed ? <ChevronsRight size={18} /> : <ChevronsLeft size={18} />}
             {sidebarCollapsed ? "展开侧栏" : "收起侧栏"}
           </button>
@@ -359,7 +375,7 @@ function TeacherAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
           </button>
         )}
 
-        <main className="app-content">
+        <main className="teacher-workbench-content">
           {/*
             注意：外层是 <Route path="/teacher/*">，这里属于 descendant routes，
             路径必须相对于 /teacher 书写。写成 /teacher/xxx 会导致全部不匹配、内容区空白。
@@ -369,6 +385,7 @@ function TeacherAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
 
             {/* 模块一 教学首页 */}
             <Route path="dashboard" element={<Dashboard />} />
+            <Route path="settings" element={<TeacherSettingsPlaceholder />} />
 
             {/* 模块二 课程教学 */}
             <Route path="courses" element={<CourseClasses />} />
@@ -422,6 +439,16 @@ function TeacherAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
         </main>
       </div>
     </div>
+  );
+}
+
+function TeacherSettingsPlaceholder() {
+  return (
+    <section className="teacher-settings-placeholder">
+      <span><Settings size={30} strokeWidth={2.1} /></span>
+      <h1>个人设置</h1>
+      <p>个人设置页面暂未开放，当前先保留入口，后续可接入账号资料、通知偏好和课程知识库连接配置。</p>
+    </section>
   );
 }
 

@@ -1,11 +1,10 @@
-import { useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
 import { Rnd, type DraggableData, type Position } from "react-rnd";
 import {
-  BookMarked,
   ChevronRight,
-  FileText,
+  History,
   Lightbulb,
-  MessageCircleQuestion,
+  MessageSquarePlus,
   Minus,
   RefreshCw,
   Send,
@@ -22,14 +21,6 @@ type CompanionMessage = {
   time: string;
 };
 
-type QuickAction = {
-  key: string;
-  title: string;
-  hint: string;
-  icon: JSX.Element;
-  accent: "green" | "purple" | "blue" | "orange";
-};
-
 type AICompanionProps = {
   routePath: string;
   routeGroup: string;
@@ -40,42 +31,13 @@ type CompanionFrame = Position & {
   height: number;
 };
 
-const LAUNCHER_STORAGE_KEY = "codetrack.aiCompanion.launcher.v1";
-const PANEL_STORAGE_KEY = "codetrack.aiCompanion.panel.v1";
+const COMPANION_FRAME_STORAGE_KEY = "codetrack.aiCompanion.frame.v2";
+const CHAT_SIZE_STORAGE_KEY = "codetrack.aiCompanion.chatSize.v2";
 const LAUNCHER_SIZE = { width: 88, height: 78 };
-const MINI_PANEL_SIZE = { width: 414, height: 442 };
 const DEFAULT_CHAT_SIZE = { width: 492, height: 720 };
-
-const quickActions: QuickAction[] = [
-  {
-    key: "recommend",
-    title: "推荐知识点",
-    hint: "基于当前页面给出复习方向",
-    icon: <BookMarked size={18} strokeWidth={2.3} />,
-    accent: "green"
-  },
-  {
-    key: "summary",
-    title: "总结页面",
-    hint: "整理当前学习内容",
-    icon: <FileText size={18} strokeWidth={2.3} />,
-    accent: "purple"
-  },
-  {
-    key: "advice",
-    title: "学习建议",
-    hint: "给出下一步动作",
-    icon: <Lightbulb size={18} strokeWidth={2.3} />,
-    accent: "blue"
-  },
-  {
-    key: "question",
-    title: "询问问题",
-    hint: "进入对话窗口",
-    icon: <MessageCircleQuestion size={18} strokeWidth={2.3} />,
-    accent: "orange"
-  }
-];
+const MIN_CHAT_SIZE = { width: 420, height: 560 };
+const TRANSITION_MS = 190;
+const CLICK_DRAG_TOLERANCE = 6;
 
 const suggestionSets = [
   ["时间复杂度是什么？如何计算？", "递归和迭代的区别是什么？", "如何选择合适的排序算法？"],
@@ -115,26 +77,6 @@ function saveJson(key: string, value: unknown) {
   window.localStorage.setItem(key, JSON.stringify(value));
 }
 
-function defaultLauncherPosition(): Position {
-  const viewport = viewportSize();
-  return {
-    x: Math.max(16, viewport.width - LAUNCHER_SIZE.width - 44),
-    y: Math.max(16, viewport.height - LAUNCHER_SIZE.height - 34)
-  };
-}
-
-function defaultPanelFrame(): CompanionFrame {
-  const viewport = viewportSize();
-  const width = Math.min(DEFAULT_CHAT_SIZE.width, Math.max(360, viewport.width - 32));
-  const height = Math.min(DEFAULT_CHAT_SIZE.height, Math.max(520, viewport.height - 118));
-  return {
-    width,
-    height,
-    x: Math.max(12, viewport.width - width - 108),
-    y: Math.max(12, viewport.height - height - 112)
-  };
-}
-
 function normalizePosition(position: Position, size: { width: number; height: number }): Position {
   const viewport = viewportSize();
   return {
@@ -143,12 +85,71 @@ function normalizePosition(position: Position, size: { width: number; height: nu
   };
 }
 
+function defaultFloatingFrame(): CompanionFrame {
+  const viewport = viewportSize();
+  return {
+    ...LAUNCHER_SIZE,
+    x: Math.max(16, viewport.width - LAUNCHER_SIZE.width - 44),
+    y: Math.max(16, viewport.height - LAUNCHER_SIZE.height - 34)
+  };
+}
+
 function normalizeFrame(frame: CompanionFrame): CompanionFrame {
   const viewport = viewportSize();
-  const width = clamp(frame.width, 360, Math.max(360, viewport.width - 24));
-  const height = clamp(frame.height, 520, Math.max(520, viewport.height - 24));
-  const position = normalizePosition({ x: frame.x, y: frame.y }, { width, height });
-  return { ...position, width, height };
+  const width = clamp(frame.width, LAUNCHER_SIZE.width, Math.max(LAUNCHER_SIZE.width, viewport.width - 16));
+  const height = clamp(frame.height, LAUNCHER_SIZE.height, Math.max(LAUNCHER_SIZE.height, viewport.height - 16));
+  return {
+    ...normalizePosition({ x: frame.x, y: frame.y }, { width, height }),
+    width,
+    height
+  };
+}
+
+function frameFromCenter(frame: CompanionFrame, size: { width: number; height: number }): CompanionFrame {
+  const center = {
+    x: frame.x + frame.width / 2,
+    y: frame.y + frame.height / 2
+  };
+  const position = normalizePosition(
+    {
+      x: center.x - size.width / 2,
+      y: center.y - size.height / 2
+    },
+    size
+  );
+  return { ...position, ...size };
+}
+
+function readInitialFrame() {
+  return normalizeFrame(readJson(COMPANION_FRAME_STORAGE_KEY, defaultFloatingFrame()));
+}
+
+function readInitialChatSize() {
+  const minSize = chatMinSize();
+  const viewport = viewportSize();
+  const fallback = {
+    width: Math.min(DEFAULT_CHAT_SIZE.width, Math.max(minSize.width, viewport.width - 32)),
+    height: Math.min(DEFAULT_CHAT_SIZE.height, Math.max(minSize.height, viewport.height - 96))
+  };
+  const saved = readJson(CHAT_SIZE_STORAGE_KEY, fallback);
+  return normalizeChatSize(saved);
+}
+
+function chatMinSize() {
+  const viewport = viewportSize();
+  return {
+    width: Math.min(MIN_CHAT_SIZE.width, Math.max(LAUNCHER_SIZE.width, viewport.width - 16)),
+    height: Math.min(MIN_CHAT_SIZE.height, Math.max(360, viewport.height - 16))
+  };
+}
+
+function normalizeChatSize(size: { width: number; height: number }) {
+  const minSize = chatMinSize();
+  const viewport = viewportSize();
+  return {
+    width: clamp(size.width, minSize.width, Math.max(minSize.width, viewport.width - 16)),
+    height: clamp(size.height, minSize.height, Math.max(minSize.height, viewport.height - 16))
+  };
 }
 
 function pageContextLabel(routeGroup: string) {
@@ -173,17 +174,6 @@ function initialMessage(routeGroup: string): CompanionMessage {
     time: nowLabel(),
     content: `你好，我是 CodeTrack AI 助手。我会根据「${contextLabel}」提供知识点梳理、学习建议和渐进式提示。正式 AI 回复接入后端后会显示引用来源和置信度。`
   };
-}
-
-function actionPrompt(action: QuickAction, routeGroup: string) {
-  const contextLabel = pageContextLabel(routeGroup);
-  const prompts: Record<string, string> = {
-    recommend: `请根据「${contextLabel}」推荐我现在最该复习的知识点。`,
-    summary: `帮我总结「${contextLabel}」里的关键学习内容。`,
-    advice: `请结合「${contextLabel}」给我一个下一步学习建议。`,
-    question: ""
-  };
-  return prompts[action.key] ?? "";
 }
 
 function localAssistantReply(userText: string, routeGroup: string) {
@@ -213,42 +203,56 @@ function CompanionBot({ size = "large" }: { size?: "large" | "medium" | "small" 
 
 export default function AICompanion({ routePath, routeGroup }: AICompanionProps) {
   const [mode, setMode] = useState<CompanionMode>("floating");
+  const [frame, setFrame] = useState<CompanionFrame>(readInitialFrame);
+  const [chatSize, setChatSize] = useState(readInitialChatSize);
+  const [transitioning, setTransitioning] = useState(false);
   const [input, setInput] = useState("");
   const [suggestionIndex, setSuggestionIndex] = useState(0);
   const [messages, setMessages] = useState<CompanionMessage[]>(() => [initialMessage(routeGroup)]);
-  const [launcherPosition, setLauncherPosition] = useState<Position>(() =>
-    normalizePosition(readJson(LAUNCHER_STORAGE_KEY, defaultLauncherPosition()), LAUNCHER_SIZE)
-  );
-  const [panelFrame, setPanelFrame] = useState<CompanionFrame>(() =>
-    normalizeFrame(readJson(PANEL_STORAGE_KEY, defaultPanelFrame()))
-  );
   const messageListRef = useRef<HTMLDivElement | null>(null);
-  const launcherDraggedRef = useRef(false);
+  const draggedRef = useRef(false);
+  const pointerStartRef = useRef<Position | null>(null);
+  const transitionTimerRef = useRef<number | null>(null);
 
   const contextLabel = useMemo(() => pageContextLabel(routeGroup), [routeGroup]);
   const suggestions = suggestionSets[suggestionIndex % suggestionSets.length];
+  const isFloating = mode === "floating";
   const isChat = mode === "chat";
-  const isExpanded = mode === "expanded";
-  const activePanelSize = isChat ? panelFrame : MINI_PANEL_SIZE;
-  const activePanelPosition = normalizePosition(panelFrame, activePanelSize);
+  const minChatSize = chatMinSize();
+
+  function persistFrame(nextFrame: CompanionFrame) {
+    const normalized = normalizeFrame(nextFrame);
+    setFrame(normalized);
+    saveJson(COMPANION_FRAME_STORAGE_KEY, normalized);
+  }
+
+  function startMorph(nextMode: CompanionMode, size: { width: number; height: number }) {
+    if (transitionTimerRef.current) window.clearTimeout(transitionTimerRef.current);
+    setTransitioning(true);
+    setMode(nextMode);
+    persistFrame(frameFromCenter(frame, size));
+    transitionTimerRef.current = window.setTimeout(() => {
+      setTransitioning(false);
+    }, TRANSITION_MS);
+  }
 
   function openExpanded() {
-    setMode("expanded");
+    startMorph("expanded", normalizeChatSize(chatSize));
   }
 
   function openChat() {
-    setMode("chat");
+    startMorph("chat", normalizeChatSize(chatSize));
     requestAnimationFrame(() => {
       messageListRef.current?.scrollTo({ top: messageListRef.current.scrollHeight, behavior: "smooth" });
     });
   }
 
   function minimize() {
-    setMode("floating");
+    startMorph("floating", LAUNCHER_SIZE);
   }
 
   function closePanel() {
-    setMode("floating");
+    startMorph("floating", LAUNCHER_SIZE);
   }
 
   function pushMessage(role: MessageRole, content: string) {
@@ -266,11 +270,17 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
     });
   }
 
+  function resetConversation() {
+    setMessages([initialMessage(routeGroup)]);
+    setSuggestionIndex(0);
+    setInput("");
+  }
+
   function submitMessage(messageText = input.trim()) {
     const value = messageText.trim();
     if (!value) return;
     setInput("");
-    setMode("chat");
+    if (!isChat) startMorph("chat", normalizeChatSize(chatSize));
     pushMessage("user", value);
     window.setTimeout(() => {
       pushMessage("assistant", localAssistantReply(value, routeGroup));
@@ -283,65 +293,86 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
     submitMessage();
   }
 
-  function handleQuickAction(action: QuickAction) {
-    if (action.key === "question") {
-      openChat();
+  function handleDragStop(data: DraggableData) {
+    persistFrame({ ...frame, x: data.x, y: data.y });
+  }
+
+  function handleResizeStop(elementRef: HTMLElement, position: Position) {
+    const nextSize = normalizeChatSize({
+      width: elementRef.offsetWidth,
+      height: elementRef.offsetHeight
+    });
+    setChatSize(nextSize);
+    saveJson(CHAT_SIZE_STORAGE_KEY, nextSize);
+    persistFrame({ ...position, ...nextSize });
+  }
+
+  function handleLauncherPointerDown(event: PointerEvent<HTMLButtonElement>) {
+    pointerStartRef.current = { x: event.clientX, y: event.clientY };
+    draggedRef.current = false;
+    event.currentTarget.blur();
+  }
+
+  function handleLauncherPointerMove(event: PointerEvent<HTMLButtonElement>) {
+    if (!pointerStartRef.current) return;
+    const distance = Math.hypot(event.clientX - pointerStartRef.current.x, event.clientY - pointerStartRef.current.y);
+    if (distance > CLICK_DRAG_TOLERANCE) draggedRef.current = true;
+  }
+
+  function handleLauncherClick(event: MouseEvent<HTMLButtonElement>) {
+    event.currentTarget.blur();
+    if (draggedRef.current) {
+      draggedRef.current = false;
+      pointerStartRef.current = null;
       return;
     }
-    const prompt = actionPrompt(action, routeGroup);
-    openChat();
-    submitMessage(prompt);
-  }
-
-  function updateLauncherPosition(position: Position) {
-    const next = normalizePosition(position, LAUNCHER_SIZE);
-    setLauncherPosition(next);
-    saveJson(LAUNCHER_STORAGE_KEY, next);
-  }
-
-  function updatePanelPosition(position: Position) {
-    const next = normalizeFrame({ ...panelFrame, ...position });
-    setPanelFrame(next);
-    saveJson(PANEL_STORAGE_KEY, next);
-  }
-
-  function updatePanelFrame(frame: CompanionFrame) {
-    const next = normalizeFrame(frame);
-    setPanelFrame(next);
-    saveJson(PANEL_STORAGE_KEY, next);
+    pointerStartRef.current = null;
+    openExpanded();
   }
 
   return (
     <aside
-      className={`ai-companion ai-companion-${mode}`}
+      className={`ai-companion ai-companion-${mode}${transitioning ? " morphing" : ""}`}
       data-route={routePath}
       aria-label="CodeTrack AI 助手"
     >
-      {(isExpanded || isChat) && (
-        <Rnd
-          bounds="window"
-          className="ai-companion-panel-rnd"
-          position={activePanelPosition}
-          size={activePanelSize}
-          minWidth={360}
-          minHeight={520}
-          maxWidth="96vw"
-          maxHeight="96vh"
-          enableResizing={isChat}
-          resizeHandleClasses={{ bottomRight: "ai-resize-handle-bottom-right" }}
-          dragHandleClassName="ai-panel-drag-handle"
-          cancel="button, textarea, input, .ai-message-list, .ai-suggestions, .ai-input-shell"
-          onDragStop={(_, data: DraggableData) => updatePanelPosition({ x: data.x, y: data.y })}
-          onResizeStop={(_, __, elementRef, ___, position) =>
-            updatePanelFrame({
-              x: position.x,
-              y: position.y,
-              width: elementRef.offsetWidth,
-              height: elementRef.offsetHeight
-            })
-          }
-        >
-          <section className={isChat ? "ai-chat-panel" : "ai-mini-panel"}>
+      <Rnd
+        bounds="window"
+        className="ai-companion-rnd"
+        position={{ x: frame.x, y: frame.y }}
+        size={{ width: frame.width, height: frame.height }}
+        minWidth={isChat ? minChatSize.width : frame.width}
+        minHeight={isChat ? minChatSize.height : frame.height}
+        maxWidth="96vw"
+        maxHeight="96vh"
+        enableResizing={isChat}
+        resizeHandleClasses={{ bottomRight: "ai-resize-handle-bottom-right" }}
+        dragHandleClassName={isFloating ? "ai-floating-drag-handle" : "ai-panel-drag-handle"}
+        cancel={isFloating ? "" : "button, textarea, input, .ai-message-list, .ai-suggestions, .ai-input-shell"}
+        onDragStart={() => {
+          draggedRef.current = false;
+        }}
+        onDrag={() => {
+          draggedRef.current = true;
+        }}
+        onDragStop={(_, data: DraggableData) => handleDragStop(data)}
+        onResizeStop={(_, __, elementRef, ___, position) => handleResizeStop(elementRef, position)}
+      >
+        {isFloating ? (
+          <button
+            className="ai-launcher ai-floating-drag-handle"
+            type="button"
+            aria-label="打开 CodeTrack AI 助手"
+            onPointerDown={handleLauncherPointerDown}
+            onPointerMove={handleLauncherPointerMove}
+            onClick={handleLauncherClick}
+          >
+            <span className="ai-launcher-glow" aria-hidden="true" />
+            <CompanionBot />
+            <span className="ai-launcher-badge">1</span>
+          </button>
+        ) : (
+          <section className={isChat ? "ai-chat-panel" : "ai-entry-panel"}>
             {isChat ? (
               <>
                 <header className="ai-chat-header ai-panel-drag-handle">
@@ -418,69 +449,68 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
               </>
             ) : (
               <>
-                <button className="ai-panel-close" type="button" aria-label="关闭 AI 助手" onClick={closePanel}>
-                  <X size={18} strokeWidth={2.4} />
-                </button>
-                <div className="ai-mini-hero ai-panel-drag-handle">
+                <header className="ai-chat-header ai-panel-drag-handle">
+                  <div className="ai-panel-identity">
+                    <span className="ai-panel-avatar" aria-hidden="true">
+                      <CompanionBot size="small" />
+                    </span>
+                    <div>
+                      <strong>CodeTrack AI 助手</strong>
+                      <span><i aria-hidden="true" /> 在线 · {contextLabel}</span>
+                    </div>
+                  </div>
+                  <div className="ai-panel-tools">
+                    <button type="button" aria-label="关闭 AI 助手" onClick={closePanel}>
+                      <X size={18} strokeWidth={2.4} />
+                    </button>
+                  </div>
+                </header>
+                <div className="ai-entry-body">
                   <span className="ai-mini-avatar" aria-hidden="true">
                     <CompanionBot size="medium" />
                   </span>
                   <strong>CodeTrack AI 助手</strong>
-                  <p>可快速提问，解答知识点，整理思路</p>
-                  <span className="ai-online"><i aria-hidden="true" /> 在线 · {contextLabel}</span>
-                </div>
-                <div className="ai-quick-grid">
-                  {quickActions.map((action) => (
-                    <button key={action.key} type="button" onClick={() => handleQuickAction(action)}>
-                      <span className={`ai-quick-icon ${action.accent}`} aria-hidden="true">{action.icon}</span>
-                      <span>
-                        <strong>{action.title}</strong>
-                        <small>{action.hint}</small>
+                  <p>选择一个入口开始，后续会接入课程知识库、学习者画像和历史会话。</p>
+                  <div className="ai-entry-actions">
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.currentTarget.blur();
+                        resetConversation();
+                        openChat();
+                      }}
+                    >
+                      <span className="ai-entry-icon green" aria-hidden="true">
+                        <MessageSquarePlus size={20} strokeWidth={2.4} />
                       </span>
+                      <span>
+                        <strong>新建会话</strong>
+                        <small>从当前页面上下文开始提问</small>
+                      </span>
+                      <ChevronRight size={18} strokeWidth={2.3} />
                     </button>
-                  ))}
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.currentTarget.blur();
+                        openChat();
+                      }}
+                    >
+                      <span className="ai-entry-icon blue" aria-hidden="true">
+                        <History size={20} strokeWidth={2.4} />
+                      </span>
+                      <span>
+                        <strong>历史会话</strong>
+                        <small>继续查看当前本地对话记录</small>
+                      </span>
+                      <ChevronRight size={18} strokeWidth={2.3} />
+                    </button>
+                  </div>
                 </div>
-                <button className="ai-history-link" type="button" onClick={openChat}>
-                  查看历史对话
-                  <ChevronRight size={16} strokeWidth={2.3} />
-                </button>
               </>
             )}
           </section>
-        </Rnd>
-      )}
-
-      <Rnd
-        bounds="window"
-        className="ai-launcher-rnd"
-        position={launcherPosition}
-        size={LAUNCHER_SIZE}
-        enableResizing={false}
-        onDragStart={() => {
-          launcherDraggedRef.current = false;
-        }}
-        onDrag={() => {
-          launcherDraggedRef.current = true;
-        }}
-        onDragStop={(_, data: DraggableData) => updateLauncherPosition({ x: data.x, y: data.y })}
-      >
-        <button
-          className="ai-launcher"
-          type="button"
-          aria-label={mode === "floating" ? "打开 CodeTrack AI 助手" : "回到 CodeTrack AI 助手"}
-          onClick={() => {
-            if (launcherDraggedRef.current) {
-              launcherDraggedRef.current = false;
-              return;
-            }
-            if (mode === "floating") openExpanded();
-            else openChat();
-          }}
-        >
-          <span className="ai-launcher-glow" aria-hidden="true" />
-          <CompanionBot />
-          <span className="ai-launcher-badge">1</span>
-        </button>
+        )}
       </Rnd>
     </aside>
   );
