@@ -1,18 +1,17 @@
+node_modules/
+.venv/
+.pnpm-store/
+dist/
+*.db
+*.db-shm
+*.db-wal
+*.log
+*.tsbuildinfo
+.pytest_cache/
 __pycache__/
 *.py[cod]
-.pytest_cache/
-
-*.db
-
-frontend/node_modules/
-frontend/dist/
-frontend/tsconfig.tsbuildinfo
-# 资料中心端到端校验脚本的截图产物
-frontend/.resource-check/
-
-# 教师端资料中心上传件的落盘目录（CODETRACK_RESOURCE_STORAGE_DIR）
-var/
-
-.env
-
-/文件解析.md
+backend/uploads/*
+!backend/uploads/.gitkeep
+artifacts/
+backups/
+reference_extract/
