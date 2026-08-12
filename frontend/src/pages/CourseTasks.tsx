@@ -1,64 +1,66 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  BellRing,
   CalendarDays,
-  Check,
   CheckCircle2,
   ChevronDown,
+  ChevronRight,
+  ClipboardList,
   FileText,
   Filter,
-  Flame,
-  Grid2X2,
-  List,
-  Plus,
-  SquareCode,
-  UserRound
+  Loader2,
+  Search,
+  Send,
+  TimerReset,
+  XCircle
 } from "lucide-react";
 import { api, apiCache, LearningContext, StudentTaskCard } from "../api";
 import type { TaskOpenTarget } from "../App";
 
 type PageProps = {
   onOpenWorkspace: (target?: TaskOpenTarget | string) => void;
+  courseId?: string;
+  embedded?: boolean;
 };
 
 type TaskTab = "全部课程" | string;
-
-type TaskView = "card" | "list";
+type StatusFilter = "ALL" | "NOT_STARTED" | "IN_PROGRESS" | "SUBMITTED" | "COMPLETED" | "NEEDS_REVISION" | "EXPIRED";
+type TypeFilter = "ALL" | "ASSIGNMENT" | "QUIZ" | "EXAM" | "SURVEY";
+type DeadlineFilter = "ALL" | "WEEK" | "SOON" | "OVERDUE";
 
 type TaskViewItem = {
   task: StudentTaskCard;
-  progress: number;
-  hot: boolean;
-  status: string;
-  badge: string;
-  tags: string[];
-  summary: string;
+  statusLabel: string;
+  statusTone: string;
+  typeLabel: string;
+  dueLabel: string;
+  dueTone: string;
   actionLabel: string;
+  progress: number;
 };
 
-type TaskItemProps = {
-  item: TaskViewItem;
-  onOpen: () => void;
-};
+const statusFilters: Array<{ key: StatusFilter; label: string }> = [
+  { key: "ALL", label: "全部状态" },
+  { key: "NOT_STARTED", label: "未开始" },
+  { key: "IN_PROGRESS", label: "进行中" },
+  { key: "SUBMITTED", label: "已提交" },
+  { key: "COMPLETED", label: "已批阅" },
+  { key: "NEEDS_REVISION", label: "迟交" }
+];
 
-const TASK_VIEW_KEY = "codetrack.taskView";
+const typeFilters: Array<{ key: TypeFilter; label: string }> = [
+  { key: "ALL", label: "全部类型" },
+  { key: "ASSIGNMENT", label: "作业" },
+  { key: "QUIZ", label: "测验" },
+  { key: "EXAM", label: "考试" },
+  { key: "SURVEY", label: "问卷调查" }
+];
 
-function readTaskView(): TaskView {
-  if (typeof window === "undefined") return "card";
-  try {
-    return window.localStorage.getItem(TASK_VIEW_KEY) === "list" ? "list" : "card";
-  } catch {
-    return "card";
-  }
-}
-
-function writeTaskView(view: TaskView) {
-  try {
-    window.localStorage.setItem(TASK_VIEW_KEY, view);
-  } catch {
-    /* 隐私模式下写入会抛错，忽略即可，视图仍在本次会话内生效 */
-  }
-}
+const deadlineFilters: Array<{ key: DeadlineFilter; label: string }> = [
+  { key: "ALL", label: "全部截止日期" },
+  { key: "WEEK", label: "本周" },
+  { key: "SOON", label: "即将截止" },
+  { key: "OVERDUE", label: "已过期" }
+];
 
 function formatDeadline(value: string | null) {
   if (!value) return "未设置";
@@ -78,41 +80,103 @@ function statusText(status: string) {
     NOT_STARTED: "未开始",
     IN_PROGRESS: "进行中",
     SUBMITTED: "已提交",
-    NEEDS_REVISION: "待修正",
-    COMPLETED: "已完成",
-    EXPIRED: "已截止"
+    NEEDS_REVISION: "迟交",
+    COMPLETED: "已批阅",
+    EXPIRED: "已过期"
   };
   return map[status] ?? status;
 }
 
-function badgeColor(status: string) {
+function statusTone(status: string) {
   if (status === "COMPLETED") return "green";
+  if (status === "SUBMITTED") return "cyan";
+  if (status === "IN_PROGRESS") return "orange";
   if (status === "NEEDS_REVISION" || status === "EXPIRED") return "red";
-  if (status === "IN_PROGRESS" || status === "SUBMITTED") return "purple";
-  return "green";
+  return "blue";
 }
 
-function taskTypeText(type: string) {
-  if (type === "CODING") return "编程任务";
-  if (type === "QUIZ") return "练习任务";
-  if (type === "EXAM") return "考核任务";
-  return "课程任务";
+function taskTypeText(task: StudentTaskCard) {
+  if (task.task_type === "QUIZ") return "测验";
+  if (task.task_type === "EXAM") return "考试";
+  if (task.task_type === "SURVEY") return "问卷调查";
+  if (task.task_type === "RESOURCE") return "学习资源";
+  return task.workspace_type === "QUESTION_SET" ? "测验" : "作业";
 }
 
-export default function CourseTasks({ onOpenWorkspace }: PageProps) {
+function taskTypeKey(task: StudentTaskCard): TypeFilter {
+  if (task.task_type === "QUIZ" || task.workspace_type === "QUESTION_SET") return "QUIZ";
+  if (task.task_type === "EXAM") return "EXAM";
+  if (task.task_type === "SURVEY") return "SURVEY";
+  return "ASSIGNMENT";
+}
+
+function dueInfo(value: string | null) {
+  if (!value) return { label: "未设置截止时间", tone: "muted" };
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return { label: value, tone: "muted" };
+  const diff = date.getTime() - Date.now();
+  const absHours = Math.ceil(Math.abs(diff) / 36e5);
+  if (diff < 0) {
+    if (absHours < 24) return { label: `已截止 ${absHours} 小时`, tone: "red" };
+    return { label: `已截止 ${Math.ceil(absHours / 24)} 天`, tone: "red" };
+  }
+  if (absHours < 24) return { label: `距截止还有 ${absHours} 小时`, tone: "orange" };
+  return { label: `距截止还有 ${Math.ceil(absHours / 24)} 天`, tone: absHours <= 72 ? "orange" : "blue" };
+}
+
+function isThisWeek(value: string | null) {
+  if (!value) return false;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+  const now = new Date();
+  const day = now.getDay() || 7;
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(now.getDate() - day + 1);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 7);
+  return date >= start && date < end;
+}
+
+function isDueSoon(value: string | null) {
+  if (!value) return false;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+  const diff = date.getTime() - Date.now();
+  return diff >= 0 && diff <= 72 * 36e5;
+}
+
+function isOverdue(value: string | null) {
+  if (!value) return false;
+  const date = new Date(value);
+  return !Number.isNaN(date.getTime()) && date.getTime() < Date.now();
+}
+
+function progressOf(task: StudentTaskCard) {
+  return Math.round((task.passed_count / Math.max(task.total_required_count, 1)) * 100);
+}
+
+export default function CourseTasks({ onOpenWorkspace, courseId, embedded = false }: PageProps) {
   const cachedContext = apiCache.peekLearningContext();
-  const cachedTasks = apiCache.peekStudentTasks();
+  const cachedTasks = apiCache.peekStudentTasks(courseId);
   const [context, setContext] = useState<LearningContext | null>(cachedContext);
   const [selectedTab, setSelectedTab] = useState<TaskTab>("全部课程");
   const [tasks, setTasks] = useState<StudentTaskCard[]>(cachedTasks ?? []);
   const [loadingContext, setLoadingContext] = useState(!cachedContext);
   const [loadingTasks, setLoadingTasks] = useState(!cachedTasks);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<TaskView>(readTaskView);
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("ALL");
+  const [deadlineFilter, setDeadlineFilter] = useState<DeadlineFilter>("ALL");
+  const [openingAssignmentId, setOpeningAssignmentId] = useState<string | null>(null);
+  const openTimer = useRef<number | null>(null);
 
   useEffect(() => {
-    writeTaskView(view);
-  }, [view]);
+    return () => {
+      if (openTimer.current !== null) window.clearTimeout(openTimer.current);
+    };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -126,6 +190,10 @@ export default function CourseTasks({ onOpenWorkspace }: PageProps) {
       .then((data) => {
         if (!alive) return;
         setContext(data);
+        if (courseId) {
+          const selectedCourse = data.courses.find((course) => course.course_id === courseId);
+          if (selectedCourse) setSelectedTab(selectedCourse.course_name);
+        }
       })
       .catch(() => {
         if (!alive) return;
@@ -137,17 +205,25 @@ export default function CourseTasks({ onOpenWorkspace }: PageProps) {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [courseId]);
+
+  useEffect(() => {
+    if (!courseId || !context) return;
+    const selectedCourse = context.courses.find((course) => course.course_id === courseId);
+    if (selectedCourse && selectedTab !== selectedCourse.course_name) {
+      setSelectedTab(selectedCourse.course_name);
+    }
+  }, [context, courseId, selectedTab]);
 
   useEffect(() => {
     let alive = true;
-    const courseId = context?.courses.find((course) => course.course_name === selectedTab)?.course_id;
-    const cachedTaskData = apiCache.peekStudentTasks(courseId);
+    const selectedCourseId = courseId ?? context?.courses.find((course) => course.course_name === selectedTab)?.course_id;
+    const cachedTaskData = apiCache.peekStudentTasks(selectedCourseId);
     setLoadingTasks(!cachedTaskData);
     setError(null);
     setTasks(cachedTaskData ?? []);
     api
-      .listStudentTasks(courseId)
+      .listStudentTasks(selectedCourseId)
       .then((data) => {
         if (alive) setTasks(data);
       })
@@ -162,240 +238,247 @@ export default function CourseTasks({ onOpenWorkspace }: PageProps) {
     return () => {
       alive = false;
     };
-  }, [context, selectedTab]);
+  }, [context, selectedTab, courseId]);
 
-  const courseTabs = useMemo(() => ["全部课程", ...(context?.courses.map((course) => course.course_name) ?? [])], [context]);
   const loading = loadingContext || loadingTasks;
-  const primaryTask = tasks.find((task) => task.status !== "COMPLETED") ?? tasks[0];
-  const inProgress = tasks.filter((task) => ["IN_PROGRESS", "SUBMITTED", "NEEDS_REVISION"].includes(task.status)).length;
-  const completed = tasks.filter((task) => task.status === "COMPLETED").length;
-  const dueSoon = tasks.filter((task) => task.deadline).length;
-  const goalRate = tasks.length ? Math.round((completed / tasks.length) * 100) : 0;
+  const courseTabs = useMemo(() => ["全部课程", ...(context?.courses.map((course) => course.course_name) ?? [])], [context]);
   const currentCourse = selectedTab === "全部课程" ? null : context?.courses.find((course) => course.course_name === selectedTab);
+  const allCount = tasks.length;
+  const inProgress = tasks.filter((task) => ["IN_PROGRESS"].includes(task.status)).length;
+  const submitted = tasks.filter((task) => task.status === "SUBMITTED").length;
+  const reviewed = tasks.filter((task) => task.status === "COMPLETED").length;
+  const late = tasks.filter((task) => task.status === "NEEDS_REVISION" || task.status === "EXPIRED" || isOverdue(task.deadline)).length;
 
   const taskItems = useMemo<TaskViewItem[]>(
     () =>
-      tasks.map((task) => ({
-        task,
-        progress: Math.round((task.passed_count / Math.max(task.total_required_count, 1)) * 100),
-        hot: task.status === "IN_PROGRESS" || task.status === "NEEDS_REVISION",
-        status: statusText(task.status),
-        badge: badgeColor(task.status),
-        tags: [taskTypeText(task.task_type), ...task.knowledge_points].slice(0, 4),
-        summary: task.latest_summary || `${task.course_name} 的教师下发任务。`,
-        actionLabel: task.workspace_type === "QUESTION_SET" ? "开始做题" : "进入编程"
-      })),
+      tasks.map((task) => {
+        const due = dueInfo(task.deadline);
+        return {
+          task,
+          statusLabel: statusText(task.status),
+          statusTone: statusTone(task.status),
+          typeLabel: taskTypeText(task),
+          dueLabel: due.label,
+          dueTone: due.tone,
+          actionLabel: task.status === "COMPLETED" || task.status === "SUBMITTED" ? "查看详情" : "进入任务",
+          progress: progressOf(task)
+        };
+      }),
     [tasks]
   );
 
-  function openTask(task: StudentTaskCard) {
-    onOpenWorkspace({
-      taskId: task.task_id,
-      assignmentId: task.assignment_id,
-      workspaceType: task.workspace_type,
-      taskType: task.task_type
+  const filteredItems = useMemo(() => {
+    const keyword = query.trim().toLocaleLowerCase("zh-CN");
+    return taskItems.filter((item) => {
+      const { task } = item;
+      const matchesKeyword = !keyword || [
+        task.title,
+        task.course_name,
+        task.teacher_name,
+        item.statusLabel,
+        item.typeLabel,
+        ...task.knowledge_points
+      ].some((value) => value.toLocaleLowerCase("zh-CN").includes(keyword));
+      const matchesStatus = statusFilter === "ALL" || task.status === statusFilter;
+      const matchesType = typeFilter === "ALL" || taskTypeKey(task) === typeFilter;
+      const matchesDeadline =
+        deadlineFilter === "ALL" ||
+        (deadlineFilter === "WEEK" && isThisWeek(task.deadline)) ||
+        (deadlineFilter === "SOON" && isDueSoon(task.deadline)) ||
+        (deadlineFilter === "OVERDUE" && isOverdue(task.deadline));
+      return matchesKeyword && matchesStatus && matchesType && matchesDeadline;
     });
+  }, [deadlineFilter, query, statusFilter, taskItems, typeFilter]);
+
+  const hasActiveFilters = Boolean(query.trim()) || statusFilter !== "ALL" || typeFilter !== "ALL" || deadlineFilter !== "ALL";
+
+  function resetFilters() {
+    setQuery("");
+    setStatusFilter("ALL");
+    setTypeFilter("ALL");
+    setDeadlineFilter("ALL");
+  }
+
+  function openTask(task: StudentTaskCard) {
+    if (openingAssignmentId) return;
+    setOpeningAssignmentId(task.assignment_id);
+    openTimer.current = window.setTimeout(() => {
+      onOpenWorkspace({
+        taskId: task.task_id,
+        assignmentId: task.assignment_id,
+        courseId: task.course_id,
+        workspaceType: task.workspace_type,
+        taskType: task.task_type
+      });
+    }, 260);
   }
 
   const stats = [
-    { title: "班级任务总数", value: String(tasks.length), sub: currentCourse?.course_name ?? "全部课程汇总", icon: <FileText size={28} />, color: "blue" },
-    { title: "进行中任务", value: loading ? "..." : String(inProgress), sub: loading ? "正在读取当前课程" : "按课程实时更新", icon: <BellRing size={28} />, color: "orange" },
-    { title: "已完成任务", value: String(completed), sub: "完成后同步画像", icon: <CheckCircle2 size={28} />, color: "green" },
-    { title: "本周截止任务", value: String(dueSoon), sub: "来自教师下发", icon: <CalendarDays size={28} />, color: "indigo" }
+    { label: "全部任务", value: allCount, icon: <ClipboardList size={24} />, tone: "blue" },
+    { label: "进行中", value: inProgress, icon: <CalendarDays size={24} />, tone: "orange" },
+    { label: "已提交", value: submitted, icon: <Send size={24} />, tone: "green" },
+    { label: "已批阅", value: reviewed, icon: <CheckCircle2 size={24} />, tone: "purple" },
+    { label: "迟交", value: late, icon: <XCircle size={24} />, tone: "red" }
   ];
 
   return (
-    <div className="class-task-page">
-      <header className="class-task-head">
-        <div className="class-title-row">
-          <h1>班级任务</h1>
-          <button className="class-select" type="button">
-            {loadingContext ? "正在加载班级" : context?.student.class_name ?? "暂无班级"} <ChevronDown size={16} />
-          </button>
-          <button className="class-ghost" type="button"><Plus size={17} /> 模拟登录已绑定</button>
+    <div className={`class-task-page course-task-workspace${embedded ? " embedded" : ""}`}>
+      <section className="course-task-hero">
+        <div>
+          <p className="course-task-breadcrumb">
+            我的课程 <span>/</span> {currentCourse?.course_name ?? selectedTab} <span>/</span> 课程任务
+          </p>
+          <h1>课程任务</h1>
+          <p>查看本课程的全部任务与提交进度</p>
         </div>
-        <div className="class-title-row">
-          <div className="view-switch" role="group" aria-label="任务视图切换">
-            <button
-              type="button"
-              className={view === "list" ? "active" : ""}
-              aria-pressed={view === "list"}
-              onClick={() => setView("list")}
-            >
-              <List size={17} /> 列表视图
-            </button>
-            <button
-              type="button"
-              className={view === "card" ? "active" : ""}
-              aria-pressed={view === "card"}
-              onClick={() => setView("card")}
-            >
-              <Grid2X2 size={17} /> 卡片视图
-            </button>
-          </div>
-          <button
-            className="class-primary"
-            type="button"
-            disabled={!primaryTask || loading}
-            onClick={() => primaryTask && onOpenWorkspace({
-              taskId: primaryTask.task_id,
-              assignmentId: primaryTask.assignment_id,
-              workspaceType: primaryTask.workspace_type,
-              taskType: primaryTask.task_type
-            })}
-          >
-            <SquareCode size={17} /> 进入当前任务
-          </button>
-        </div>
-      </header>
-
-      <div className="class-task-body">
-        <section className="class-task-main">
-          <section className="class-stats">
-            {stats.map((stat) => (
-              <article className="class-card class-stat" key={stat.title}>
-                <span className={stat.color}>{stat.icon}</span>
-                <p>{stat.title}</p>
-                <strong>{stat.value}<small> 个</small></strong>
-                <em>{stat.sub}</em>
-              </article>
+        {!embedded ? (
+          <div className="course-task-course-tabs" aria-label="课程切换">
+            {courseTabs.map((tab) => (
+              <button className={selectedTab === tab ? "active" : ""} type="button" key={tab} onClick={() => setSelectedTab(tab)}>
+                {tab}
+              </button>
             ))}
-          </section>
-
-          {error ? <p className="class-data-message">{error}</p> : null}
-
-          <div className="class-filters">
-            <div className="class-tabs">
-              {courseTabs.map((tab) => (
-                <button className={selectedTab === tab ? "active" : ""} type="button" key={tab} onClick={() => setSelectedTab(tab)}>
-                  {tab}
-                </button>
-              ))}
-            </div>
-            <div className="class-filter-actions">
-              <button type="button">最新发布 <ChevronDown size={15} /></button>
-              <button type="button">筛选 <Filter size={15} /></button>
-            </div>
           </div>
+        ) : null}
+      </section>
 
-          {!loading && taskItems.length === 0 ? (
-            <div className="class-empty">
-              <h2>{selectedTab} 当前没有下发任务</h2>
-              <p>这个结果来自班级、课程、教师下发任务之间的数据关系。切换其他课程后，任务列表会跟着变化。</p>
+      <section className="course-task-filter-panel" aria-label="任务筛选">
+        <div className="course-task-filter-row top">
+          <label className="course-task-search">
+            <Search size={17} />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索任务名称" />
+          </label>
+          <div className="course-task-chip-group" aria-label="任务类型">
+            <span>任务类型：</span>
+            {typeFilters.map((item) => (
+              <button key={item.key} className={typeFilter === item.key ? "active" : ""} type="button" onClick={() => setTypeFilter(item.key)}>
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="course-task-filter-row">
+          <div className="course-task-chip-group" aria-label="任务状态">
+            <span>任务状态：</span>
+            {statusFilters.map((item) => (
+              <button key={item.key} className={statusFilter === item.key ? "active" : ""} type="button" onClick={() => setStatusFilter(item.key)}>
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <i aria-hidden="true" />
+          <div className="course-task-chip-group" aria-label="截止日期">
+            <span>截止日期：</span>
+            {deadlineFilters.map((item) => (
+              <button key={item.key} className={deadlineFilter === item.key ? "active" : ""} type="button" onClick={() => setDeadlineFilter(item.key)}>
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="course-task-stat-strip" aria-label="任务统计">
+        {stats.map((item) => (
+          <article className={`course-task-stat ${item.tone}`} key={item.label}>
+            <span>{item.icon}</span>
+            <div>
+              <em>{item.label}</em>
+              <strong>{loading ? "..." : item.value}</strong>
             </div>
-          ) : (
-            <section className={view === "card" ? "class-task-grid" : "class-task-list"} aria-label="班级任务列表">
-              {loading
-                ? Array.from({ length: 6 }).map((_, index) => (
-                    <article
-                      className={`class-card ${view === "card" ? "class-task-card" : "class-task-row"} skeleton-block`}
-                      key={index}
-                    />
-                  ))
-                : taskItems.map((item) =>
-                    view === "card" ? (
-                      <TaskCard key={item.task.assignment_id} item={item} onOpen={() => openTask(item.task)} />
-                    ) : (
-                      <TaskRow key={item.task.assignment_id} item={item} onOpen={() => openTask(item.task)} />
-                    )
-                  )}
-            </section>
-          )}
+          </article>
+        ))}
+      </section>
+
+      {error ? <p className="class-data-message">{error}</p> : null}
+
+      {loading ? (
+        <CourseTaskLoading />
+      ) : filteredItems.length === 0 ? (
+        <CourseTaskEmpty hasFilters={hasActiveFilters} selectedTab={selectedTab} onReset={resetFilters} />
+      ) : (
+        <section className="course-task-table" aria-label="课程任务列表">
+          <div className="course-task-table-head" aria-hidden="true">
+            <span>任务名称</span>
+            <span>类型</span>
+            <span>任务状态</span>
+            <span>截止日期</span>
+            <span>操作</span>
+          </div>
+          <div className="course-task-table-body">
+            {filteredItems.map((item) => (
+              <TaskRow
+                key={item.task.assignment_id}
+                item={item}
+                opening={openingAssignmentId === item.task.assignment_id}
+                disabled={Boolean(openingAssignmentId)}
+                onOpen={() => openTask(item.task)}
+              />
+            ))}
+          </div>
         </section>
+      )}
 
-        <aside className="class-task-side">
-          <section className="class-card sidecard">
-            <h2>今日目标</h2>
-            <div className="goal-top">
-              <div><span>目标进度</span><strong>{completed}/{Math.max(tasks.length, 1)} <small>个任务</small></strong></div>
-              <div className="class-ring"><b>{goalRate}%</b></div>
-            </div>
-            <div className="class-side-list">
-              <p className={completed > 0 ? "done" : ""}><Check size={14} /> 完成课程任务 <span>{completed}/{tasks.length}</span></p>
-              <p className={inProgress > 0 ? "done" : ""}><Check size={14} /> 跟进进行中任务 <span>{inProgress}</span></p>
-              <p><i /> 复盘薄弱知识点 <span>{currentCourse?.unfinished_count ?? 0}</span></p>
-            </div>
-            <a href="#">查看全部目标</a>
-          </section>
-
-          <section className="class-card sidecard">
-            <h2>任务提醒</h2>
-            <div className="remind-list">
-              {loading ? (
-                Array.from({ length: 3 }).map((_, index) => <p className="skeleton-row" key={index} />)
-              ) : tasks.slice(0, 3).map((task, index) => (
-                <p key={task.assignment_id}>
-                  <span className={index === 0 ? "red" : index === 1 ? "orange" : "blue"} />
-                  <strong>{task.title}</strong>
-                  <em>{formatDeadline(task.deadline)} 截止</em>
-                </p>
-              ))}
-              {!loading && tasks.length === 0 ? <p><span className="blue" /><strong>暂无提醒</strong><em>等待教师下发任务</em></p> : null}
-            </div>
-            <a href="#">查看全部提醒</a>
-          </section>
-        </aside>
-      </div>
+      {openingAssignmentId ? (
+        <div className="course-task-entering" role="status" aria-live="polite">
+          <Loader2 size={18} />
+          正在进入任务工作区
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function TaskCard({ item, onOpen }: TaskItemProps) {
-  const { task } = item;
+function CourseTaskLoading() {
   return (
-    <article className={`class-card class-task-card ${item.hot ? "highlight" : ""}`}>
-      {item.hot ? <Flame className="hot-icon" size={21} fill="currentColor" /> : null}
-      <span className={`class-badge ${item.badge}`}>{item.status}</span>
-      <h2>{task.title}</h2>
-      <div className="class-tag-row">
-        {item.tags.map((tag) => <span key={tag}>{tag}</span>)}
+    <section className="course-task-table loading" aria-label="任务加载中">
+      <div className="course-task-table-head">
+        <span>任务名称</span>
+        <span>类型</span>
+        <span>任务状态</span>
+        <span>截止日期</span>
+        <span>操作</span>
       </div>
-      <p>{item.summary}</p>
-      <div className="class-meta">
-        <span><CalendarDays size={14} /> 截止时间：{formatDeadline(task.deadline)}</span>
-        <span><UserRound size={14} /> 发布老师：{task.teacher_name}</span>
+      <div className="course-task-table-body">
+        {Array.from({ length: 8 }).map((_, index) => (
+          <article className="course-task-row skeleton-block" key={index} />
+        ))}
       </div>
-      <div className="class-task-bottom">
-        <div>
-          <div className="class-progress-meta">
-            <span>进度</span><b>{item.progress}% <small>({task.passed_count}/{task.total_required_count})</small></b>
-          </div>
-          <div className="class-progress"><i style={{ width: `${Math.max(6, item.progress)}%` }} /></div>
-        </div>
-        <button className={item.hot ? "primary" : ""} type="button" onClick={onOpen}>
-          {item.actionLabel}
-        </button>
-      </div>
-    </article>
+    </section>
   );
 }
 
-function TaskRow({ item, onOpen }: TaskItemProps) {
+function CourseTaskEmpty({ hasFilters, selectedTab, onReset }: { hasFilters: boolean; selectedTab: string; onReset: () => void }) {
+  return (
+    <section className="course-task-empty">
+      <span aria-hidden="true">{hasFilters ? <Filter size={30} /> : <FileText size={30} />}</span>
+      <h2>{hasFilters ? "没有匹配的任务" : `${selectedTab} 当前没有下发任务`}</h2>
+      <p>{hasFilters ? "可以清空筛选条件后再查看全部任务。" : "教师发布任务后，这里会显示任务类型、状态、截止时间和进入入口。"}</p>
+      {hasFilters ? <button type="button" onClick={onReset}>清空筛选</button> : null}
+    </section>
+  );
+}
+
+function TaskRow({ item, opening, disabled, onOpen }: { item: TaskViewItem; opening: boolean; disabled: boolean; onOpen: () => void }) {
   const { task } = item;
   return (
-    <article className={`class-card class-task-row ${item.hot ? "highlight" : ""}`}>
-      <span className={`class-badge ${item.badge}`}>{item.status}</span>
-      <div className="class-row-main">
-        <h2>
-          <span className="class-row-title">{task.title}</span>
-          {item.hot ? <Flame className="class-row-flame" size={15} fill="currentColor" /> : null}
-        </h2>
-        <div className="class-tag-row">
-          {item.tags.map((tag) => <span key={tag}>{tag}</span>)}
-        </div>
+    <article className={`course-task-row ${opening ? "opening" : ""}`}>
+      <span className="course-task-file-icon" aria-hidden="true"><FileText size={17} /></span>
+      <div className="course-task-name">
+        <strong>{task.title}</strong>
+        <small>{task.knowledge_points.slice(0, 3).join(" / ") || task.course_name}</small>
       </div>
-      <div className="class-meta class-row-meta">
-        <span><CalendarDays size={13} /> {formatDeadline(task.deadline)}</span>
-        <span><UserRound size={13} /> {task.teacher_name}</span>
-      </div>
-      <div className="class-row-progress">
-        <div className="class-progress-meta">
-          <span>进度</span><b>{item.progress}% <small>({task.passed_count}/{task.total_required_count})</small></b>
-        </div>
-        <div className="class-progress"><i style={{ width: `${Math.max(6, item.progress)}%` }} /></div>
-      </div>
-      <button className={item.hot ? "primary" : ""} type="button" onClick={onOpen}>
-        {item.actionLabel}
+      <span className="course-task-type">{item.typeLabel}</span>
+      <span className={`course-task-status ${item.statusTone}`}>{item.statusLabel}</span>
+      <span className={`course-task-due ${item.dueTone}`}>
+        <TimerReset size={15} />
+        <span>{item.dueLabel}</span>
+        <small>{formatDeadline(task.deadline)}</small>
+      </span>
+      <button type="button" disabled={disabled} onClick={onOpen}>
+        {opening ? <Loader2 size={15} /> : null}
+        {opening ? "进入中" : item.actionLabel}
+        {!opening ? <ChevronRight size={15} /> : null}
       </button>
     </article>
   );

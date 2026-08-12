@@ -43,7 +43,11 @@ function formatTime(value?: string) {
   }).format(date);
 }
 
-export default function LearningProfile() {
+type LearningProfileProps = {
+  initialCourseId?: string;
+};
+
+export default function LearningProfile({ initialCourseId }: LearningProfileProps = {}) {
   const [context, setContext] = useState<LearningContext | null>(null);
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
   const [profile, setProfile] = useState<StudentProfile | null>(null);
@@ -60,7 +64,10 @@ export default function LearningProfile() {
     api.getLearningContext().then((data) => {
       if (!alive) return;
       setContext(data);
-      setSelectedCourseId(data.courses[0]?.course_id ?? "");
+      const preferredCourse = initialCourseId && data.courses.some((course) => course.course_id === initialCourseId)
+        ? initialCourseId
+        : data.courses[0]?.course_id ?? "";
+      setSelectedCourseId(preferredCourse);
     }).catch(() => {
       if (!alive) return;
       setError("学习画像上下文加载失败，请稍后刷新。");
@@ -70,7 +77,7 @@ export default function LearningProfile() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [initialCourseId]);
 
   useEffect(() => {
     if (!selectedCourseId) return;

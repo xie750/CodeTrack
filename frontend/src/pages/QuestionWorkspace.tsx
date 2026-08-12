@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertCircle,
   ArrowLeft,
   Bot,
   Check,
@@ -9,6 +10,7 @@ import {
   Circle,
   ClipboardCheck,
   Clock3,
+  FileText,
   ListChecks,
   Save,
   Send,
@@ -38,6 +40,7 @@ function statusText(status: string) {
 function typeText(type: string) {
   if (type === "MULTIPLE_CHOICE") return "多选题";
   if (type === "TRUE_FALSE") return "判断题";
+  if (type === "FILL_BLANK" || type === "FILL_IN_BLANK" || type === "SHORT_ANSWER") return "填空题";
   return "单选题";
 }
 
@@ -68,6 +71,12 @@ function toAnswerPayload(answers: AnswerMap) {
   }));
 }
 
+function isAnswerPresent(question: QuestionItem, answers: AnswerMap) {
+  const selected = answers[question.question_id] ?? [];
+  if (!question.options.length) return Boolean(selected[0]?.trim());
+  return selected.length > 0;
+}
+
 export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
   const [workspace, setWorkspace] = useState<QuestionWorkspaceData | null>(null);
   const [result, setResult] = useState<SubmitQuestionResult | null>(null);
@@ -78,6 +87,7 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const questionRefs = useRef<Array<HTMLElement | null>>([]);
 
   useEffect(() => {
     let alive = true;
@@ -124,7 +134,7 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
   const questions = result?.questions ?? workspace?.questions ?? [];
   const activeQuestion = questions[activeIndex];
   const answeredCount = useMemo(() => {
-    return questions.filter((question) => (answers[question.question_id] ?? []).length > 0).length;
+    return questions.filter((question) => isAnswerPresent(question, answers)).length;
   }, [answers, questions]);
   const progress = questions.length ? Math.round((answeredCount / questions.length) * 100) : 0;
   const submitted = Boolean(result);
@@ -142,6 +152,20 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
       return { ...current, [question.question_id]: nextSelected };
     });
     setSaveMessage(null);
+  }
+
+  function fillAnswer(question: QuestionItem, value: string) {
+    if (submitted) return;
+    setAnswers((current) => ({
+      ...current,
+      [question.question_id]: value.trim() ? [value] : []
+    }));
+    setSaveMessage(null);
+  }
+
+  function jumpToQuestion(index: number) {
+    setActiveIndex(index);
+    questionRefs.current[index]?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   async function saveDraft() {
@@ -191,7 +215,7 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
 
   function questionState(question: QuestionItem) {
     if (submitted) return question.is_correct ? "correct" : "wrong";
-    return (answers[question.question_id] ?? []).length ? "answered" : "empty";
+    return isAnswerPresent(question, answers) ? "answered" : "empty";
   }
 
   return (
@@ -242,99 +266,168 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
           </section>
 
           <section className="question-layout">
-            <aside className="question-card question-nav-card">
-              <header>
-                <ListChecks size={20} />
-                <div>
-                  <h2>答题卡</h2>
-                  <p>{answeredCount}/{questions.length} 已作答</p>
-                </div>
-              </header>
-              <div className="question-progress-bar"><i style={{ width: `${progress}%` }} /></div>
-              <div className="question-number-grid">
-                {questions.map((question, index) => (
-                  <button
-                    className={`${activeIndex === index ? "active" : ""} ${questionState(question)}`}
-                    type="button"
-                    key={question.question_id}
-                    onClick={() => setActiveIndex(index)}
-                    aria-label={`第 ${index + 1} 题`}
-                  >
-                    {index + 1}
-                  </button>
-                ))}
-              </div>
-              <div className="question-legend">
-                <span><i className="answered" /> 已答</span>
-                <span><i className="empty" /> 未答</span>
-                {submitted ? <><span><i className="correct" /> 正确</span><span><i className="wrong" /> 错误</span></> : null}
-              </div>
-            </aside>
-
             <article className="question-card question-main-card">
-              <header className="question-main-header">
+              <header className="question-paper-header">
                 <div>
-                  <span className="question-type">{typeText(activeQuestion.question_type)}</span>
-                  <span className="question-score">{activeQuestion.score} 分</span>
+                  <span className="question-paper-eyebrow">{workspace.task.course_name}</span>
+                  <h2>{workspace.task.title}</h2>
+                  <p>{workspace.task.description}</p>
                 </div>
-                <div className="question-knowledge">
-                  {activeQuestion.knowledge_points.map((point) => <span key={point}>{point}</span>)}
+                <div className="question-paper-score">
+                  <strong>{workspace.attempt.max_score}</strong>
+                  <span>总分</span>
                 </div>
               </header>
 
-              <h2>{activeIndex + 1}. {activeQuestion.stem}</h2>
-              <div className="question-options">
-                {activeQuestion.options.map((option) => {
-                  const selected = (answers[activeQuestion.question_id] ?? []).includes(option.option_id);
-                  const correct = submitted && option.is_correct;
-                  const wrongPick = submitted && selected && !option.is_correct;
+              <section className="question-notice">
+                <AlertCircle size={17} />
+                <div>
+                  <strong>作答说明</strong>
+                  <p>请按题目要求完成选择或填空。答案会自动保留在当前页面，交卷前可继续修改。</p>
+                </div>
+              </section>
+
+              <div className="question-list">
+                {questions.map((question, index) => {
+                  const selectedAnswers = answers[question.question_id] ?? [];
+                  const isFillQuestion = !question.options.length;
                   return (
-                    <button
-                      className={`${selected ? "selected" : ""} ${correct ? "correct" : ""} ${wrongPick ? "wrong" : ""}`}
-                      type="button"
-                      key={option.option_id}
-                      onClick={() => chooseOption(activeQuestion, option.option_id)}
+                    <section
+                      className={`question-item ${activeIndex === index ? "active" : ""}`}
+                      key={question.question_id}
+                      ref={(node) => {
+                        questionRefs.current[index] = node;
+                      }}
                     >
-                      <span className="option-marker">
-                        {activeQuestion.question_type === "MULTIPLE_CHOICE"
-                          ? selected ? <Check size={15} /> : null
-                          : selected ? <Circle size={10} fill="currentColor" /> : null}
-                      </span>
-                      <strong>{option.label}</strong>
-                      <p>{option.content}</p>
-                      {correct ? <CheckCircle2 size={18} /> : wrongPick ? <XCircle size={18} /> : null}
-                    </button>
+                      <header className="question-main-header">
+                        <div>
+                          <span className="question-index">{index + 1}</span>
+                          <span className="question-type">{typeText(question.question_type)}</span>
+                          <span className="question-score">{question.score} 分</span>
+                        </div>
+                        <div className="question-knowledge">
+                          {question.knowledge_points.map((point) => <span key={point}>{point}</span>)}
+                        </div>
+                      </header>
+
+                      <h3>{question.stem}</h3>
+
+                      {isFillQuestion ? (
+                        <label className="question-fill">
+                          <span>我的答案</span>
+                          <textarea
+                            value={selectedAnswers[0] ?? ""}
+                            disabled={submitted}
+                            rows={3}
+                            onChange={(event) => fillAnswer(question, event.target.value)}
+                            placeholder="在这里填写答案"
+                          />
+                        </label>
+                      ) : (
+                        <div className="question-options">
+                          {question.options.map((option) => {
+                            const selected = selectedAnswers.includes(option.option_id);
+                            const correct = submitted && option.is_correct;
+                            const wrongPick = submitted && selected && !option.is_correct;
+                            return (
+                              <button
+                                className={`${selected ? "selected" : ""} ${correct ? "correct" : ""} ${wrongPick ? "wrong" : ""}`}
+                                type="button"
+                                key={option.option_id}
+                                onClick={() => {
+                                  setActiveIndex(index);
+                                  chooseOption(question, option.option_id);
+                                }}
+                                aria-pressed={selected}
+                              >
+                                <span className="option-marker">
+                                  {question.question_type === "MULTIPLE_CHOICE"
+                                    ? selected ? <Check size={15} /> : null
+                                    : selected ? <Circle size={10} fill="currentColor" /> : null}
+                                </span>
+                                <strong>{option.label}</strong>
+                                <p>{option.content}</p>
+                                {correct ? <CheckCircle2 size={18} /> : wrongPick ? <XCircle size={18} /> : null}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {submitted ? (
+                        <section className={`question-analysis ${question.is_correct ? "correct" : "wrong"}`}>
+                          <h4>{question.is_correct ? "回答正确" : "回答有误"}</h4>
+                          <p>{question.analysis || "本题暂无解析。"}</p>
+                        </section>
+                      ) : null}
+                    </section>
                   );
                 })}
               </div>
 
-              {submitted ? (
-                <section className={`question-analysis ${activeQuestion.is_correct ? "correct" : "wrong"}`}>
-                  <h3>{activeQuestion.is_correct ? "回答正确" : "回答有误"}</h3>
-                  <p>{activeQuestion.analysis || "本题暂无解析。"}</p>
-                </section>
-              ) : (
-                <section className="question-tip">
-                  <ClipboardCheck size={18} />
-                  <p>{activeQuestion.question_type === "MULTIPLE_CHOICE" ? "本题为多选，少选或多选都不得分。" : "选择后可继续切换题号，交卷前仍可修改。"}</p>
-                </section>
-              )}
+              <section className="question-tip">
+                <ClipboardCheck size={18} />
+                <p>{activeQuestion.question_type === "MULTIPLE_CHOICE" ? "当前题为多选，少选或多选都不得分。" : "可以通过右侧题号快速定位题目，交卷前仍可修改答案。"}</p>
+              </section>
 
               <footer className="question-main-footer">
-                <button type="button" disabled={activeIndex === 0} onClick={() => setActiveIndex((index) => Math.max(0, index - 1))}><ChevronLeft size={16} /> 上一题</button>
-                <button className="primary" type="button" disabled={activeIndex === questions.length - 1} onClick={() => setActiveIndex((index) => Math.min(questions.length - 1, index + 1))}>下一题 <ChevronRight size={16} /></button>
+                <button type="button" disabled={activeIndex === 0} onClick={() => jumpToQuestion(Math.max(0, activeIndex - 1))}><ChevronLeft size={16} /> 上一题</button>
+                <span>{activeIndex + 1} / {questions.length}</span>
+                <button className="primary" type="button" disabled={activeIndex === questions.length - 1} onClick={() => jumpToQuestion(Math.min(questions.length - 1, activeIndex + 1))}>下一题 <ChevronRight size={16} /></button>
               </footer>
             </article>
 
             <aside className="question-card question-side-card">
               <section>
-                <h2><Clock3 size={19} /> 作答概览</h2>
-                <div className="question-score-ring">
-                  <strong>{result ? Math.round(result.score_percent) : progress}<small>%</small></strong>
-                  <span>{submitted ? "本次得分" : "完成进度"}</span>
+                <h2><Clock3 size={19} /> 作答进度</h2>
+                <div className="question-timer">
+                  <strong>{result ? `${Math.round(result.score_percent)}%` : `${progress}%`}</strong>
+                  <span>{submitted ? "本次得分" : "当前完成"}</span>
                 </div>
+                <div className="question-progress-row">
+                  <span>已答 {answeredCount} / {questions.length} 题</span>
+                  <b>{progress}%</b>
+                </div>
+                <div className="question-progress-bar"><i style={{ width: `${progress}%` }} /></div>
                 <p>正确 {result?.correct_count ?? workspace.progress.passed_count} / {result?.total_count ?? questions.length} 题</p>
                 {saveMessage ? <div className="question-save-message">{saveMessage}</div> : null}
+              </section>
+
+              <section className="question-nav-card">
+                <header>
+                  <ListChecks size={19} />
+                  <div>
+                    <h2>题目列表</h2>
+                    <p>{answeredCount}/{questions.length} 已作答</p>
+                  </div>
+                </header>
+                <div className="question-number-grid">
+                  {questions.map((question, index) => (
+                    <button
+                      className={`${activeIndex === index ? "active" : ""} ${questionState(question)}`}
+                      type="button"
+                      key={question.question_id}
+                      onClick={() => jumpToQuestion(index)}
+                      aria-label={`第 ${index + 1} 题`}
+                    >
+                      {index + 1}
+                    </button>
+                  ))}
+                </div>
+                <div className="question-legend">
+                  <span><i className="answered" /> 已答</span>
+                  <span><i className="empty" /> 未答</span>
+                  {submitted ? <><span><i className="correct" /> 正确</span><span><i className="wrong" /> 错误</span></> : null}
+                </div>
+              </section>
+
+              <section>
+                <h2><FileText size={19} /> 温馨提示</h2>
+                <ul className="question-side-tips">
+                  <li>请仔细阅读题目，确认后再提交答案。</li>
+                  <li>可通过题目列表快速跳转。</li>
+                  <li>交卷后将无法撤回，请确认所有题目已完成。</li>
+                </ul>
               </section>
 
               <section className="question-ai-panel">

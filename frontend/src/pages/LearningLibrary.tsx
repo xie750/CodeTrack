@@ -99,18 +99,27 @@ function initialFavoriteIds(tasks: StudentTaskCard[]) {
   return new Set([coding, quiz, ...fallback].filter(Boolean).slice(0, 2) as string[]);
 }
 
-export default function LearningLibrary() {
+type LearningLibraryProps = {
+  initialCourseId?: string;
+  scope?: "global" | "course";
+};
+
+export default function LearningLibrary({ initialCourseId = "", scope = "global" }: LearningLibraryProps) {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("全部收藏");
   const [query, setQuery] = useState("");
   const [context, setContext] = useState<LearningContext | null>(null);
-  const [selectedCourseId, setSelectedCourseId] = useState("");
+  const [selectedCourseId, setSelectedCourseId] = useState(initialCourseId);
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [tasks, setTasks] = useState<StudentTaskCard[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [recentlyChangedIds, setRecentlyChangedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelectedCourseId(initialCourseId);
+  }, [initialCourseId]);
 
   useEffect(() => {
     let alive = true;
@@ -123,9 +132,9 @@ export default function LearningLibrary() {
         if (!alive) return;
         setContext(data);
 
-        const courseId = data.courses[0]?.course_id;
+        const courseId = initialCourseId || data.courses[0]?.course_id;
         const [taskResult, profileResult] = await Promise.allSettled([
-          api.listStudentTasks(),
+          api.listStudentTasks(initialCourseId || undefined),
           courseId ? api.getStudentProfile(courseId) : Promise.resolve(null)
         ]);
         if (!alive) return;
@@ -154,7 +163,7 @@ export default function LearningLibrary() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [initialCourseId]);
 
   useEffect(() => {
     if (!selectedCourseId) return;
@@ -221,11 +230,14 @@ export default function LearningLibrary() {
   }
 
   function openTask(item: FavoriteItem) {
+    const state = scope === "course" && selectedCourseId
+      ? { fromCourseId: selectedCourseId, fromPath: `/courses/${selectedCourseId}/favorites` }
+      : undefined;
     if (item.workspaceType === "QUESTION_SET" || item.taskType === "QUIZ" || item.taskType === "EXAM") {
-      navigate(`/question-workspace/${item.assignmentId}`);
+      navigate(`/question-workspace/${item.assignmentId}`, state ? { state } : undefined);
       return;
     }
-    navigate(`/workspace/${item.taskId}`);
+    navigate(`/workspace/${item.taskId}`, state ? { state } : undefined);
   }
 
   return (
@@ -234,21 +246,27 @@ export default function LearningLibrary() {
         <header className="library-head">
           <div className="library-head-left">
             <h1>收藏夹</h1>
-            <div className="library-select library-course-select">
-              <select
-                value={selectedCourseId}
-                onChange={(event) => setSelectedCourseId(event.target.value)}
-                aria-label="按课程筛选收藏"
-              >
-                <option value="">全部课程</option>
-                {(context?.courses ?? []).map((course) => (
-                  <option key={course.course_id} value={course.course_id}>
-                    {course.course_name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={17} />
-            </div>
+            {scope === "course" ? (
+              <span className="library-course-pill">
+                {context?.courses.find((course) => course.course_id === selectedCourseId)?.course_name ?? "当前课程"}
+              </span>
+            ) : (
+              <div className="library-select library-course-select">
+                <select
+                  value={selectedCourseId}
+                  onChange={(event) => setSelectedCourseId(event.target.value)}
+                  aria-label="按课程筛选收藏"
+                >
+                  <option value="">全部课程</option>
+                  {(context?.courses ?? []).map((course) => (
+                    <option key={course.course_id} value={course.course_id}>
+                      {course.course_name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={17} />
+              </div>
+            )}
           </div>
           <label className="library-search">
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索已收藏任务" />
@@ -341,7 +359,7 @@ export default function LearningLibrary() {
               <Bookmark size={28} />
               <h2>当前没有收藏题目</h2>
               <p>收藏页只展示已经存在于教师下发任务里的题目。你可以在演示中点击“重新收藏”恢复刚取消的题目，或回到班级任务查看全部下发内容。</p>
-              <button type="button" onClick={() => navigate("/tasks")}>查看班级任务</button>
+              <button type="button" onClick={() => navigate(scope === "course" && selectedCourseId ? `/courses/${selectedCourseId}/tasks` : "/tasks")}>查看班级任务</button>
             </article>
           )}
         </section>
