@@ -158,9 +158,9 @@ function pageContextLabel(routeGroup: string) {
     "/tasks": "课程任务",
     "/workspace": "编码工作区",
     "/question-workspace": "题目工作区",
-    "/self-study": "自学",
+    "/self-study": "自主学习",
     "/ai-tutor": "AI 导师",
-    "/library": "我的资料库",
+    "/library": "资源中心",
     "/profile": "学习者画像"
   };
   return labels[routeGroup] ?? "当前页面";

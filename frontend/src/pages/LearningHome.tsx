@@ -98,6 +98,7 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
       icon: task.task_type === "CODING" ? <Code2 size={22} /> : <ClipboardList size={22} />,
       taskId: task.task_id,
       assignmentId: task.assignment_id,
+      courseId: task.course_id,
       workspaceType: task.workspace_type,
       taskType: task.task_type
     }));
@@ -138,8 +139,8 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
             <p>
               {isLoading
                 ? "正在读取你的课程任务和学习画像..."
-                : context && courseName
-                  ? `${context.student.class_name} · ${courseName} 的任务和画像数据已接入。`
+                  : context && courseName
+                  ? `${context.student.class_name} · ${courseName} 的课程任务和学习画像已接入。`
                   : loadMessage ?? "暂时没有读取到学习首页数据。"}
             </p>
             <button
@@ -149,11 +150,12 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
               onClick={() => (primaryTask ? onOpenWorkspace({
                 taskId: primaryTask.task_id,
                 assignmentId: primaryTask.assignment_id,
+                courseId: primaryTask.course_id,
                 workspaceType: primaryTask.workspace_type,
                 taskType: primaryTask.task_type
-              }) : onNavigate("/tasks"))}
+              }) : onNavigate("/courses"))}
             >
-              {primaryTask ? "继续学习" : "查看任务"}
+              {primaryTask ? "继续学习" : "查看我的课程"}
               <span>
                 <ArrowRight size={17} />
               </span>
@@ -165,7 +167,7 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
         <section className="home-card home-section tasks-section">
           <div className="home-card-header">
             <h2>今日任务</h2>
-            <button className="text-link" type="button" onClick={() => onNavigate("/tasks")}>
+            <button className="text-link" type="button" onClick={() => onNavigate("/courses")}>
               查看全部
               <ArrowRight size={14} />
             </button>
@@ -198,6 +200,7 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
                   onClick={() => onOpenWorkspace({
                     taskId: task.taskId,
                     assignmentId: task.assignmentId,
+                    courseId: task.courseId,
                     workspaceType: task.workspaceType,
                     taskType: task.taskType
                   })}
@@ -228,6 +231,7 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
                 <button className="outline-btn" type="button" onClick={() => (item.color === "blue" && primaryTask ? onOpenWorkspace({
                   taskId: primaryTask.task_id,
                   assignmentId: primaryTask.assignment_id,
+                  courseId: primaryTask.course_id,
                   workspaceType: primaryTask.workspace_type,
                   taskType: primaryTask.task_type
                 }) : onNavigate("/self-study"))}>
@@ -293,7 +297,7 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
           <img src={robotImg} alt="AI 助学机器人" />
           <strong>AI 助教小码</strong>
           <p>有问题随时问我，为你提供学习建议。</p>
-          <button className="primary-btn" type="button" onClick={() => onNavigate("/ai-tutor")}>去提问</button>
+          <button className="primary-btn" type="button" onClick={() => onNavigate("/self-study/ai")}>去提问</button>
         </section>
       </aside>
     </div>
