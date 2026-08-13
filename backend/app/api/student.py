@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -10,6 +12,7 @@ from backend.app.models import (
     AdministrativeClass,
     Course,
     StudentClassMembership,
+    StudentKnowledgeGraph,
     StudentTaskProgress,
     Task,
     TaskAssignment,
@@ -90,6 +93,43 @@ def require_active_class(db: Session, user: User) -> tuple[AdministrativeClass, 
     if administrative_class is None:
         raise ApiError(404, "CLASS_NOT_FOUND", "行政班不存在")
     return administrative_class, membership
+
+
+def safe_json_list(raw: str | None) -> list:
+    if not raw:
+        return []
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    return value if isinstance(value, list) else []
+
+
+def serialize_student_knowledge_graph(graph: StudentKnowledgeGraph, course: Course | None, teacher: User | None) -> dict:
+    nodes = safe_json_list(graph.nodes_json)
+    edges = safe_json_list(graph.edges_json)
+    return {
+        "id": graph.id,
+        "teaching_assignment_id": graph.teaching_assignment_id,
+        "course_id": graph.course_id,
+        "course_name": course.name if course else "",
+        "class_id": graph.class_id,
+        "teacher_id": graph.teacher_id,
+        "teacher_name": teacher.display_name if teacher else "",
+        "title": graph.title,
+        "description": graph.description,
+        "status": graph.status,
+        "target_classes": safe_json_list(graph.target_classes),
+        "source_files": safe_json_list(graph.source_files),
+        "source_summary": graph.source_summary,
+        "node_count": len(nodes),
+        "edge_count": len(edges),
+        "nodes": nodes,
+        "edges": edges,
+        "created_at": iso(graph.created_at),
+        "updated_at": iso(graph.updated_at),
+        "published_at": iso(graph.published_at),
+    }
 
 
 @router.get("/learning-context")
@@ -207,6 +247,40 @@ def list_student_tasks(
             }
         )
     return ok(data)
+
+
+@router.get("/courses/{course_id}/knowledge-graph")
+def get_course_knowledge_graph(
+    course_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    administrative_class, _ = require_active_class(db, user)
+    teaching = db.scalar(
+        select(TeachingAssignment).where(
+            TeachingAssignment.class_id == administrative_class.id,
+            TeachingAssignment.course_id == course_id,
+            TeachingAssignment.status == "ACTIVE",
+        )
+    )
+    if teaching is None:
+        raise ApiError(404, "COURSE_NOT_IN_STUDENT_CLASS", "当前学生未加入这门课程")
+
+    graph = db.scalar(
+        select(StudentKnowledgeGraph)
+        .where(
+            StudentKnowledgeGraph.teaching_assignment_id == teaching.id,
+            StudentKnowledgeGraph.class_id == administrative_class.id,
+            StudentKnowledgeGraph.course_id == course_id,
+            StudentKnowledgeGraph.status == "published",
+        )
+        .order_by(StudentKnowledgeGraph.updated_at.desc())
+    )
+    if graph is None:
+        raise ApiError(404, "KNOWLEDGE_GRAPH_NOT_FOUND", "当前课程暂无已发布知识图谱")
+
+    return ok(serialize_student_knowledge_graph(graph, db.get(Course, course_id), db.get(User, graph.teacher_id)))
 
 
 @router.get("/assignments/{assignment_id}/workspace")

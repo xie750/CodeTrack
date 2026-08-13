@@ -21,6 +21,7 @@ from backend.app.models import (
     QuestionOption,
     Recommendation,
     StudentClassMembership,
+    StudentKnowledgeGraph,
     StudentTaskProgress,
     Task,
     TaskAssignment,
@@ -164,10 +165,15 @@ def ensure_knowledge_source_columns(db: Session) -> None:
     db.commit()
 
 
+def ensure_student_knowledge_graph_table(db: Session) -> None:
+    StudentKnowledgeGraph.__table__.create(bind=db.bind, checkfirst=True)
+
+
 def seed_demo_data(db: Session) -> None:
     ensure_auth_columns(db)
     ensure_task_workspace_columns(db)
     ensure_knowledge_source_columns(db)
+    ensure_student_knowledge_graph_table(db)
     users = {
         "user_teacher_001": {
             "username": "teacher_wang",
@@ -1096,6 +1102,245 @@ def seed_demo_data(db: Session) -> None:
                 "created_by": "user_teacher_001",
             },
         )
+
+    graph_nodes_se1_ds = [
+        {
+            "id": "node-ds-linked",
+            "label": "链表边界处理",
+            "type": "知识点",
+            "description": "处理头节点、空链表、尾节点和非法位置。",
+            "difficulty": 3,
+            "x": 430,
+            "y": 270,
+            "color": "#2563eb",
+            "source": "ai",
+        },
+        {
+            "id": "node-ds-head",
+            "label": "头节点删除",
+            "type": "方法",
+            "description": "删除首节点时返回新的链表起点。",
+            "difficulty": 3,
+            "x": 430,
+            "y": 95,
+            "color": "#0f766e",
+            "source": "ai",
+        },
+        {
+            "id": "node-ds-pointer",
+            "label": "指针遍历",
+            "type": "概念",
+            "description": "维护前驱指针和当前指针，避免断链。",
+            "difficulty": 2,
+            "x": 660,
+            "y": 210,
+            "color": "#2563eb",
+            "source": "ai",
+        },
+        {
+            "id": "node-ds-guard",
+            "label": "非法位置保护",
+            "type": "能力",
+            "description": "识别空链表、负数位置和越界位置。",
+            "difficulty": 2,
+            "x": 610,
+            "y": 430,
+            "color": "#dc2626",
+            "source": "ai",
+        },
+        {
+            "id": "node-ds-test",
+            "label": "边界测试",
+            "type": "案例",
+            "description": "用最小样例覆盖头、尾、空链表和越界。",
+            "difficulty": 4,
+            "x": 250,
+            "y": 430,
+            "color": "#d97706",
+            "source": "ai",
+        },
+        {
+            "id": "node-ds-stack",
+            "label": "栈与队列",
+            "type": "知识点",
+            "description": "理解先进后出和先进先出，为下一章预习。",
+            "difficulty": 2,
+            "x": 200,
+            "y": 210,
+            "color": "#2563eb",
+            "source": "ai",
+        },
+    ]
+    graph_edges_se1_ds = [
+        {"id": "edge-ds-head-linked", "source": "node-ds-head", "target": "node-ds-linked", "type": "前驱", "label": "前驱"},
+        {"id": "edge-ds-pointer-linked", "source": "node-ds-pointer", "target": "node-ds-linked", "type": "前驱", "label": "前驱"},
+        {"id": "edge-ds-linked-guard", "source": "node-ds-linked", "target": "node-ds-guard", "type": "后继", "label": "后继"},
+        {"id": "edge-ds-linked-test", "source": "node-ds-linked", "target": "node-ds-test", "type": "后继", "label": "后继"},
+        {"id": "edge-ds-test-stack", "source": "node-ds-test", "target": "node-ds-stack", "type": "相关", "label": "相关"},
+    ]
+    graph_nodes_cs1_ds = [
+        {
+            "id": "node-cs-tree",
+            "label": "二叉树递归出口",
+            "type": "知识点",
+            "description": "识别空节点返回条件，避免递归无法终止。",
+            "difficulty": 4,
+            "x": 430,
+            "y": 270,
+            "color": "#2563eb",
+            "source": "ai",
+        },
+        {
+            "id": "node-cs-recursion",
+            "label": "递归调用栈",
+            "type": "概念",
+            "description": "用小树跟踪函数入栈和返回顺序。",
+            "difficulty": 3,
+            "x": 430,
+            "y": 95,
+            "color": "#2563eb",
+            "source": "ai",
+        },
+        {
+            "id": "node-cs-preorder",
+            "label": "前序遍历",
+            "type": "方法",
+            "description": "按根、左、右顺序访问节点。",
+            "difficulty": 3,
+            "x": 660,
+            "y": 250,
+            "color": "#0f766e",
+            "source": "ai",
+        },
+        {
+            "id": "node-cs-stack",
+            "label": "栈匹配边界",
+            "type": "能力",
+            "description": "处理空栈、右括号先出现和结束后剩余元素。",
+            "difficulty": 3,
+            "x": 275,
+            "y": 420,
+            "color": "#dc2626",
+            "source": "ai",
+        },
+    ]
+    graph_edges_cs1_ds = [
+        {"id": "edge-cs-rec-tree", "source": "node-cs-recursion", "target": "node-cs-tree", "type": "前驱", "label": "前驱"},
+        {"id": "edge-cs-tree-preorder", "source": "node-cs-tree", "target": "node-cs-preorder", "type": "后继", "label": "后继"},
+        {"id": "edge-cs-tree-stack", "source": "node-cs-tree", "target": "node-cs-stack", "type": "相关", "label": "相关"},
+    ]
+    graph_nodes_network = [
+        {
+            "id": "node-net-ip",
+            "label": "IP 地址结构",
+            "type": "概念",
+            "description": "区分网络位和主机位。",
+            "difficulty": 2,
+            "x": 430,
+            "y": 270,
+            "color": "#2563eb",
+            "source": "ai",
+        },
+        {
+            "id": "node-net-mask",
+            "label": "子网掩码",
+            "type": "知识点",
+            "description": "根据掩码长度推导地址范围。",
+            "difficulty": 3,
+            "x": 430,
+            "y": 95,
+            "color": "#2563eb",
+            "source": "ai",
+        },
+        {
+            "id": "node-net-host",
+            "label": "可用主机数",
+            "type": "公式",
+            "description": "用主机位数量计算常规子网容量。",
+            "difficulty": 3,
+            "x": 660,
+            "y": 270,
+            "color": "#7c3aed",
+            "source": "ai",
+        },
+        {
+            "id": "node-net-practice",
+            "label": "子网划分练习",
+            "type": "案例",
+            "description": "通过题目验证网络号、广播地址和主机范围。",
+            "difficulty": 4,
+            "x": 250,
+            "y": 420,
+            "color": "#d97706",
+            "source": "ai",
+        },
+    ]
+    graph_edges_network = [
+        {"id": "edge-net-ip-mask", "source": "node-net-ip", "target": "node-net-mask", "type": "前驱", "label": "前驱"},
+        {"id": "edge-net-mask-host", "source": "node-net-mask", "target": "node-net-host", "type": "后继", "label": "后继"},
+        {"id": "edge-net-host-practice", "source": "node-net-host", "target": "node-net-practice", "type": "后继", "label": "后继"},
+    ]
+    student_graphs = {
+        "kg_ta_se1_ds_001": {
+            "teaching_assignment_id": "ta_se1_ds_001",
+            "class_id": "class_se_001",
+            "course_id": "course_ds_001",
+            "teacher_id": "user_teacher_001",
+            "title": "数据结构与程序设计基础知识图谱",
+            "description": "软件工程 1 班当前围绕链表边界处理、测试验证和栈队列预习展开。",
+            "status": "published",
+            "target_classes": json.dumps(["软件工程 1 班"], ensure_ascii=False),
+            "source_files": json.dumps(
+                [
+                    {"filename": "第三章线性表讲义.md", "mime_type": "text/markdown", "size_bytes": 18432},
+                    {"filename": "链表删除边界用例.txt", "mime_type": "text/plain", "size_bytes": 8192},
+                ],
+                ensure_ascii=False,
+            ),
+            "source_summary": "本图谱来自第三章线性表资料和链表删除任务诊断，重点标出头节点删除、指针遍历和边界测试之间的依赖关系。",
+            "nodes_json": json.dumps(graph_nodes_se1_ds, ensure_ascii=False),
+            "edges_json": json.dumps(graph_edges_se1_ds, ensure_ascii=False),
+            "published_at": datetime(2026, 8, 1, 9, 30, tzinfo=timezone.utc),
+        },
+        "kg_ta_cs1_ds_001": {
+            "teaching_assignment_id": "ta_cs1_ds_001",
+            "class_id": "class_cs_001",
+            "course_id": "course_ds_001",
+            "teacher_id": "user_teacher_001",
+            "title": "数据结构递归与栈图谱",
+            "description": "计科 1 班当前更关注二叉树递归出口和栈匹配边界。",
+            "status": "published",
+            "target_classes": json.dumps(["计科 1 班"], ensure_ascii=False),
+            "source_files": json.dumps(
+                [{"filename": "树与栈专项复盘.md", "mime_type": "text/markdown", "size_bytes": 12320}],
+                ensure_ascii=False,
+            ),
+            "source_summary": "本图谱根据计科 1 班近期诊断结果调整，突出递归出口、前序遍历和栈匹配边界之间的关联。",
+            "nodes_json": json.dumps(graph_nodes_cs1_ds, ensure_ascii=False),
+            "edges_json": json.dumps(graph_edges_cs1_ds, ensure_ascii=False),
+            "published_at": datetime(2026, 8, 2, 10, 0, tzinfo=timezone.utc),
+        },
+        "kg_ta_se1_network_001": {
+            "teaching_assignment_id": "ta_se1_network_001",
+            "class_id": "class_se_001",
+            "course_id": "course_network_001",
+            "teacher_id": "user_teacher_002",
+            "title": "计算机网络子网划分知识图谱",
+            "description": "软件工程 1 班计算机网络课程的子网划分学习路径。",
+            "status": "published",
+            "target_classes": json.dumps(["软件工程 1 班"], ensure_ascii=False),
+            "source_files": json.dumps(
+                [{"filename": "IP地址与子网划分讲义.pdf", "mime_type": "application/pdf", "size_bytes": 245760}],
+                ensure_ascii=False,
+            ),
+            "source_summary": "本图谱来自 IP 地址与子网划分资料，帮助学生按 IP 地址结构、子网掩码、可用主机数的顺序复习。",
+            "nodes_json": json.dumps(graph_nodes_network, ensure_ascii=False),
+            "edges_json": json.dumps(graph_edges_network, ensure_ascii=False),
+            "published_at": datetime(2026, 8, 3, 9, 0, tzinfo=timezone.utc),
+        },
+    }
+    for graph_id, values in student_graphs.items():
+        upsert(db, StudentKnowledgeGraph, graph_id, values)
 
     profile_snapshots = {
         "profile_user_student_001_ds": {
