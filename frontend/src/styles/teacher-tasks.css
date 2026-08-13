@@ -1,0 +1,716 @@
+/* ==========================================================================
+   任务中心（开发方案 §八 8.1 任务列表）
+
+   复用 AI 审核那套外壳：.review-page / .review-head / .review-stats /
+   .review-filters / .review-list / .review-badge / .review-pagination，
+   只有任务行独有的四列结构（发布情况、完成率、行内操作）在这里新增。
+   任务行比审核行多一列，所以 .task-row 自己定义栅格，不改 .review-row。
+   ========================================================================== */
+
+/* 新建任务：主按钮外观，但接口未就绪时靠 title 说明，不做成能点出假成功的样子 */
+.task-primary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid #176cf5;
+  border-radius: 7px;
+  color: #ffffff;
+  background: linear-gradient(180deg, #2c83ff, #1165ed);
+  box-shadow: 0 8px 18px rgba(25, 103, 239, 0.18);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.task-page .teacher-subnav {
+  margin: -8px 0 0;
+}
+
+.task-row {
+  min-height: 92px;
+  padding: 15px 18px;
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) 186px 150px 178px;
+  align-items: center;
+  gap: 18px;
+  transition:
+    border-color 180ms var(--motion-soft),
+    transform 180ms var(--motion-soft),
+    box-shadow 180ms var(--motion-soft);
+}
+
+.task-row:hover {
+  border-color: #cfe0ff;
+  transform: translateY(-1px);
+  box-shadow: 0 12px 30px rgba(31, 59, 105, 0.09);
+}
+
+/* 已发布只做轻量标识，和审核页 .review-row.pending 一致的处理 */
+.task-row.published {
+  border-color: #cddfff;
+  background: linear-gradient(180deg, #f7fbff, #ffffff 58%);
+}
+
+.task-row-main {
+  min-width: 0;
+}
+
+.task-row-main h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #17243b;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.task-row-main h2 > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-row-main > p {
+  margin-top: 5px;
+  color: #657187;
+  font-size: 12.5px;
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.task-type-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: #45536b;
+  background: #f1f4f9;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.task-row-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 8px;
+}
+
+.task-row-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #7a8598;
+  font-size: 12px;
+}
+
+.task-row-meta svg {
+  color: #9aa6b8;
+}
+
+/* ---- 发布情况：一个任务可以按不同模式发给多个班级（§八 8.6） ---- */
+
+.task-pubs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.task-pub {
+  display: grid;
+  gap: 2px;
+  padding: 6px 9px;
+  border: 1px solid #e8edf5;
+  border-radius: 7px;
+  background: #fbfcfe;
+}
+
+.task-pub > b {
+  color: #253149;
+  font-size: 12px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-pub > i {
+  color: #1a5fd0;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.task-pub > u {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #7a8598;
+  font-size: 11px;
+  text-decoration: none;
+}
+
+.task-pub-empty {
+  color: #98a3b4;
+  font-size: 12px;
+}
+
+/* ---- 完成率：null（未发布）与 0%（发布了没人完成）必须看得出区别 ---- */
+
+.task-progress {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.task-progress > b {
+  color: #17243b;
+  font-size: 15px;
+}
+
+.task-progress i {
+  height: 6px;
+  border-radius: 999px;
+  background: #eaf0f9;
+  overflow: hidden;
+}
+
+.task-progress i > b {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: #20bd79;
+}
+
+.task-progress em {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #657187;
+  font-size: 11.5px;
+  font-style: normal;
+}
+
+.task-progress-none {
+  color: #98a3b4;
+}
+
+/* ---- 行内操作：只有查看监控是真接口，其余按 unavailable_actions 禁用 ---- */
+
+.task-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.task-actions > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  border: 1px solid #dce5f2;
+  border-radius: 7px;
+  color: #253149;
+  background: #ffffff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    border-color 180ms var(--motion-soft),
+    color 180ms var(--motion-soft),
+    background 180ms var(--motion-soft);
+}
+
+.task-actions > button:hover:not(:disabled) {
+  border-color: #b6d1ff;
+  color: #176cf5;
+  background: #f5f8ff;
+}
+
+.task-actions > button.primary {
+  border-color: #176cf5;
+  color: #ffffff;
+  background: linear-gradient(180deg, #2c83ff, #1165ed);
+  box-shadow: 0 8px 18px rgba(25, 103, 239, 0.18);
+}
+
+.task-actions > button:disabled {
+  color: #a8b2c2;
+  background: #f7f9fc;
+  cursor: not-allowed;
+}
+
+/* 五个禁用动作两列排布：三列会把「学生视角」压成两行，读起来像乱码 */
+.task-actions-secondary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.task-actions-secondary button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 27px;
+  padding: 0 6px;
+  border: 1px solid #e8edf5;
+  border-radius: 6px;
+  color: #a8b2c2;
+  background: #f7f9fc;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: not-allowed;
+}
+
+/* 奇数个按钮，最后一个占满整行，不留半个空格子 */
+.task-actions-secondary button:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+/* ---- 内容状态徽标：沿用 .review-badge 的形状，只补五个状态的配色 ---- */
+
+.review-badge.published {
+  color: #12885a;
+  background: #e6f8ef;
+}
+
+.review-badge.ready {
+  color: #1a5fd0;
+  background: #e8f1ff;
+}
+
+.review-badge.closed {
+  color: #a06414;
+  background: #fdf3e3;
+}
+
+.review-badge.draft,
+.review-badge.archived {
+  color: #5a6579;
+  background: #f1f4f9;
+}
+
+/* ---- 响应式 ---- */
+
+@media (max-width: 1240px) {
+  .task-row {
+    grid-template-columns: 88px minmax(0, 1fr) 168px 140px;
+  }
+
+  /* 窄屏先把操作列换到第二行整宽，宁可换行也不要把按钮压成两个字 */
+  .task-actions {
+    grid-column: 2 / -1;
+    grid-template-columns: 152px minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .task-actions-secondary {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .task-actions-secondary button:last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 980px) {
+  .task-page .review-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .task-row {
+    grid-template-columns: 88px minmax(0, 1fr);
+  }
+
+  .task-pubs,
+  .task-progress {
+    grid-column: 2;
+  }
+}
+
+@media (max-width: 720px) {
+  .task-page .review-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .task-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .task-actions-secondary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .task-actions-secondary button:last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+}
+
+/* ===== 任务监控：提交进度看板（开发方案 §九 9.1） =====
+   复用 .review-page / .class-card / .class-stat / .review-list 那套 token，
+   只补看板独有的六列概览、任务信息条和学生明细行。 */
+
+.monitor-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* 六张概览卡（§9.1 比 AI 审核队列多一张），窄屏按三列再两列退化 */
+.monitor-stats {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.monitor-stats .class-stat {
+  min-height: 126px;
+  padding: 20px 21px;
+}
+
+.monitor-stats .class-stat strong {
+  margin-top: 12px;
+  font-size: 27px;
+}
+
+/* 非数值（暂无数据 / 不适用）降一档，否则 27px 的中文会顶到卡片边缘 */
+.monitor-stats .class-stat strong.monitor-stat-text {
+  font-size: 19px;
+  line-height: 1.25;
+}
+
+/* 卡片即筛选入口，选中态复用 .review-stats 已有的 aria-pressed 规则 */
+.monitor-stat-button {
+  display: block;
+  width: 100%;
+}
+
+.monitor-task-field {
+  min-width: 280px;
+  flex: 1 1 280px;
+}
+
+/* ---------- 任务信息条 ---------- */
+
+.monitor-task-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 108px;
+  align-items: center;
+  gap: 22px;
+  padding: 20px 24px;
+}
+
+.monitor-task-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.monitor-task-title h2 {
+  margin: 0;
+  color: #17243b;
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.monitor-publish-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 6px;
+  color: #16a66d;
+  background: #e8faf2;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.monitor-publish-badge.paused,
+.monitor-publish-badge.scheduled {
+  color: #c07800;
+  background: #fff6e6;
+}
+
+.monitor-publish-badge.closed,
+.monitor-publish-badge.draft {
+  color: #657187;
+  background: #f1f4f9;
+}
+
+.monitor-task-meta {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  color: #657187;
+  font-size: 12px;
+}
+
+/* 成绩口径说明来自后端，必须显示：编程任务没有分数，教师需要知道为什么 */
+.monitor-task-note {
+  margin: 12px 0 0;
+  padding: 9px 12px;
+  border-left: 3px solid #cfe0ff;
+  border-radius: 0 6px 6px 0;
+  background: #f7fbff;
+  color: #4a5568;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.monitor-task-side {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.monitor-task-side em {
+  color: #657187;
+  font-size: 12px;
+  font-style: normal;
+}
+
+/* ---------- 学生明细行 ---------- */
+
+.monitor-list {
+  gap: 12px;
+}
+
+.monitor-row {
+  min-height: 84px;
+  padding: 15px 18px;
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) 118px 168px;
+  align-items: center;
+  gap: 18px;
+  transition:
+    border-color 180ms var(--motion-soft),
+    transform 180ms var(--motion-soft),
+    box-shadow 180ms var(--motion-soft);
+}
+
+.monitor-row:hover {
+  border-color: #cfe0ff;
+  transform: translateY(-1px);
+  box-shadow: 0 12px 30px rgba(31, 59, 105, 0.09);
+}
+
+/* 逾期只做左侧色条，不整行变红：一行可能同时是「已提交」和「逾期」 */
+.monitor-row.overdue {
+  border-left: 3px solid #ff941f;
+}
+
+.monitor-row-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.monitor-row-title strong {
+  color: #17243b;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.monitor-row-title small {
+  color: #98a2b4;
+  font-size: 12px;
+}
+
+.monitor-overdue-tag,
+.monitor-review-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.monitor-overdue-tag {
+  color: #c07800;
+  background: #fff6e6;
+}
+
+.monitor-review-tag {
+  color: #6b4ef0;
+  background: #f2ecff;
+}
+
+.monitor-row-meta {
+  margin-top: 7px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  color: #657187;
+  font-size: 12px;
+}
+
+.monitor-row-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.monitor-row-errors {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.monitor-row-errors em {
+  padding: 3px 8px;
+  border-radius: 5px;
+  color: #b4453f;
+  background: #fff0f0;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.monitor-row-score {
+  display: grid;
+  gap: 5px;
+  justify-items: center;
+  text-align: center;
+}
+
+.monitor-row-score strong {
+  color: #17243b;
+  font-size: 19px;
+}
+
+.monitor-row-score em {
+  color: #657187;
+  font-size: 11px;
+  font-style: normal;
+}
+
+.monitor-row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.monitor-row-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid #dce5f2;
+  border-radius: 7px;
+  color: #253149;
+  background: #ffffff;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.monitor-row-actions button.primary {
+  border-color: #176cf5;
+  color: #ffffff;
+  background: #176cf5;
+}
+
+.monitor-row-actions button:disabled {
+  color: #a8b2c2;
+  background: #f6f8fc;
+  cursor: not-allowed;
+}
+
+/* 状态徽标补足看板用到的色档，.class-badge 原来只有 red / green / purple */
+.class-badge.grey {
+  color: #657187;
+  background: #f1f4f9;
+}
+
+.class-badge.blue {
+  color: #176cf5;
+  background: #eaf2ff;
+}
+
+.class-badge.indigo {
+  color: #4e84ff;
+  background: #eef4ff;
+}
+
+.class-badge.orange {
+  color: #c07800;
+  background: #fff6e6;
+}
+
+/* ---------- 缺失能力说明 ---------- */
+
+.monitor-gaps {
+  padding: 18px 22px;
+}
+
+.monitor-gaps ul {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #657187;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+@media (max-width: 1280px) {
+  .monitor-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1080px) {
+  .monitor-row {
+    grid-template-columns: 88px minmax(0, 1fr);
+    row-gap: 12px;
+  }
+
+  .monitor-row-score,
+  .monitor-row-actions {
+    grid-column: 2;
+    justify-items: start;
+    justify-content: flex-start;
+    text-align: left;
+  }
+}
+
+@media (max-width: 760px) {
+  .monitor-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .monitor-task-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .monitor-task-side {
+    justify-items: start;
+  }
+}
+

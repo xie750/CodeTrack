@@ -1,0 +1,15 @@
+@import './question-workspace.css';
+@import './app-shell.css';
+@import './student-knowledge-base.css';
+@import './self-study.css';
+@import './legacy-components.css';
+@import './teacher-entry.css';
+@import './teacher-workbench.css';
+@import './course-tasks.css';
+@import './task-workspace.css';
+@import './teacher-review.css';
+@import './teacher-diagnosis.css';
+@import './teacher-tasks.css';
+@import './teacher-resources.css';
+@import './teacher-home-courses.css';
+@import './ai-companion.css';

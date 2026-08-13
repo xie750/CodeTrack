@@ -1,0 +1,784 @@
+/* ==========================================================================
+   资料中心（开发方案 §七）
+
+   与 AI 审核 / 学情诊断 / 教学改进 / 任务监控同一套做法：控件沿用学生端 token ——
+   卡片 1px #e3e9f2 + 10px 圆角 + 淡蓝投影、主色 #176cf5、正文 #111a30、
+   次要文字 #657187、8px 间距系统，不用 antd 默认外观。
+   复用 .class-card / .class-stat / .class-tabs / .class-empty / .review-head /
+   .review-stats / .review-filters / .review-select / .review-search /
+   .review-pagination / .review-message / .skeleton-block，
+   本模块独有的资料行、编辑面板和开关才在这里新增。
+
+   注意 .resource-page 下面那段排版 reset 是必须的，不是装饰：.class-card /
+   .class-stat 依赖的 h1/h2/p margin 归零和 h2 字号，原本只写在 .profile-page
+   作用域里（见「学习画像」一节），不重新声明的话所有面板标题都会捡回全局
+   margin 和字号。
+   ========================================================================== */
+
+.resource-page {
+  width: 100%;
+  padding: 36px 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  color: #111a30;
+}
+
+.resource-page h1,
+.resource-page h2,
+.resource-page h3,
+.resource-page p {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.resource-page h2 {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.resource-page h3 {
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #111a30;
+}
+
+/* ===== 教学上下文：课程选择器 ===== */
+
+.resource-context {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.resource-context label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: #657187;
+}
+
+.resource-context label > span {
+  font-weight: 600;
+}
+
+.resource-context-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #8a93a5;
+  padding-bottom: 8px;
+}
+
+.resource-context-note > svg {
+  flex: none;
+  color: #d98324;
+}
+
+/* 文件选择框藏起来，交互走「上传资料」按钮 */
+.resource-file-input {
+  display: none;
+}
+
+/* ===== 上传确认条 ===== */
+
+.resource-upload-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px auto;
+  align-items: end;
+  gap: 16px;
+  padding: 16px 18px;
+  border: 1px solid #cfe0fb;
+  border-radius: 10px;
+  background: #f5f9ff;
+}
+
+.resource-upload-bar strong {
+  font-size: 14px;
+  color: #111a30;
+  margin-right: 8px;
+}
+
+.resource-upload-bar em {
+  font-style: normal;
+  font-size: 12px;
+  color: #657187;
+}
+
+.resource-upload-bar p {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #657187;
+}
+
+.resource-upload-bar label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #657187;
+}
+
+.resource-upload-bar input {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid #d7dfec;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #111a30;
+  background: #fff;
+}
+
+.resource-upload-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.resource-upload-actions button,
+.resource-confirm-actions button,
+.resource-editor-actions button,
+.resource-share-row button,
+.resource-references button,
+.resource-row-actions button {
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid #d7dfec;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 13px;
+  color: #3c4658;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.resource-upload-actions button:hover:not(:disabled),
+.resource-confirm-actions button:hover:not(:disabled),
+.resource-editor-actions button:hover:not(:disabled),
+.resource-share-row button:hover:not(:disabled),
+.resource-references button:hover:not(:disabled),
+.resource-row-actions button:hover:not(:disabled) {
+  border-color: #176cf5;
+  color: #176cf5;
+}
+
+.resource-upload-actions button.primary,
+.resource-editor-actions button.primary,
+.resource-row-actions button.primary {
+  border-color: #176cf5;
+  background: #176cf5;
+  color: #fff;
+}
+
+.resource-upload-actions button.primary:hover:not(:disabled),
+.resource-editor-actions button.primary:hover:not(:disabled),
+.resource-row-actions button.primary:hover:not(:disabled) {
+  background: #0f5ad6;
+  color: #fff;
+}
+
+.resource-confirm-actions button.danger {
+  border-color: #e2574c;
+  background: #e2574c;
+  color: #fff;
+}
+
+.resource-confirm-actions button.danger:hover:not(:disabled) {
+  background: #c9453b;
+  color: #fff;
+}
+
+.resource-row-actions button:disabled,
+.resource-editor-actions button:disabled,
+.resource-upload-actions button:disabled,
+.resource-confirm-actions button:disabled,
+.resource-share-row button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ===== 资料行卡 ===== */
+
+.resource-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.resource-row {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr) 168px 128px;
+  align-items: start;
+  gap: 16px;
+  padding: 16px 18px;
+  min-height: 104px;
+}
+
+.resource-row.skeleton-block {
+  min-height: 104px;
+}
+
+.resource-row.muted {
+  background: #fafbfd;
+}
+
+.resource-row.muted .resource-row-main h2 span,
+.resource-row.muted .resource-row-main > p {
+  color: #8a93a5;
+}
+
+.resource-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.resource-badge.active {
+  background: #e8f7ee;
+  color: #1f8a4c;
+  border-color: #bfe6cd;
+}
+
+.resource-badge.disabled {
+  background: #f1f3f7;
+  color: #657187;
+  border-color: #dde2ea;
+}
+
+.resource-badge.pending {
+  background: #fff5e6;
+  color: #b3701a;
+  border-color: #f2ddba;
+}
+
+.resource-badge.failed {
+  background: #fdecea;
+  color: #c9453b;
+  border-color: #f5cdc8;
+}
+
+.resource-row-main {
+  min-width: 0;
+}
+
+.resource-row-main h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.resource-row-main h2 span {
+  color: #111a30;
+}
+
+.resource-row-main > p {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #657187;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.resource-tag {
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #eef4ff;
+  color: #176cf5;
+}
+
+.resource-tag.ghost {
+  background: #f1f3f7;
+  color: #657187;
+}
+
+.resource-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.resource-tags span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #f6f8fc;
+  color: #3c4658;
+  border: 1px solid #e8ecf3;
+}
+
+.resource-tags span.chapter {
+  background: #fff;
+  border-color: #cfe0fb;
+  color: #176cf5;
+  font-weight: 600;
+}
+
+.resource-tags span.ghost {
+  background: transparent;
+  border-style: dashed;
+  color: #8a93a5;
+}
+
+.resource-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #8a93a5;
+}
+
+.resource-row-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ===== 两个开关的状态灯 =====
+   「学生可见」和「AI 检索」是独立开关，行卡上必须能分别看到当前值，
+   否则教师无法判断停用后到底是哪一侧被切断了。 */
+
+.resource-flags {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.resource-flags span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #f1f3f7;
+  color: #8a93a5;
+  border: 1px solid #e4e8ef;
+  width: fit-content;
+}
+
+.resource-flags span.on {
+  background: #eef4ff;
+  color: #176cf5;
+  border-color: #cfe0fb;
+  font-weight: 600;
+}
+
+.resource-flags em {
+  font-style: normal;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #8a93a5;
+  margin-top: 2px;
+}
+
+.resource-row-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.resource-row-actions button {
+  justify-content: center;
+}
+
+.resource-row-actions button.ghost {
+  border-style: dashed;
+  color: #8a93a5;
+}
+
+.resource-row-actions button.ghost:hover:not(:disabled) {
+  border-color: #e2574c;
+  color: #e2574c;
+}
+
+/* ===== 删除二次确认（§14.5）===== */
+
+.resource-confirm {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(17, 26, 48, 0.32);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.resource-confirm-box {
+  width: min(440px, 100%);
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e3e9f2;
+  box-shadow: 0 18px 44px rgba(23, 108, 245, 0.16);
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.resource-confirm-box h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #111a30;
+}
+
+.resource-confirm-box p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #657187;
+}
+
+.resource-confirm-box p.warn {
+  color: #b3701a;
+  background: #fff5e6;
+  border: 1px solid #f2ddba;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.resource-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* ===== 右侧编辑面板（§7.2 B / C）=====
+   刻意用面板而不是 antd Modal：编辑资料时要同时看得到版本记录和引用明细，
+   弹窗那点高度放不下，而且遮住列表会让教师失去上下文。 */
+
+.resource-editor {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 55;
+  width: min(520px, 100%);
+  background: #fff;
+  border-left: 1px solid #e3e9f2;
+  box-shadow: -12px 0 32px rgba(23, 108, 245, 0.1);
+  padding: 20px 22px 28px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  color: #111a30;
+}
+
+.resource-editor > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  position: sticky;
+  top: -20px;
+  background: #fff;
+  padding: 12px 0;
+  margin: -12px 0 0;
+  border-bottom: 1px solid #eef1f6;
+  z-index: 1;
+}
+
+.resource-editor > header h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.resource-editor > header button {
+  width: 30px;
+  height: 30px;
+  border: 1px solid #e3e9f2;
+  border-radius: 8px;
+  background: #fff;
+  color: #657187;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.resource-editor > header button:hover {
+  border-color: #176cf5;
+  color: #176cf5;
+}
+
+.resource-editor-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.resource-editor-body label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.resource-editor-body label > span {
+  font-size: 12px;
+  font-weight: 600;
+  color: #657187;
+}
+
+.resource-editor-body label > em {
+  font-style: normal;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #8a93a5;
+}
+
+.resource-editor-body input,
+.resource-editor-body textarea {
+  width: 100%;
+  border: 1px solid #d7dfec;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #111a30;
+  background: #fff;
+  font-family: inherit;
+}
+
+.resource-editor-body input {
+  height: 34px;
+  padding: 0 10px;
+}
+
+.resource-editor-body textarea {
+  padding: 8px 10px;
+  line-height: 1.7;
+  resize: vertical;
+}
+
+.resource-editor-body input:focus-visible,
+.resource-editor-body textarea:focus-visible {
+  outline: none;
+  border-color: #176cf5;
+  box-shadow: 0 0 0 3px rgba(23, 108, 245, 0.12);
+}
+
+.resource-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+/* ===== 手写开关，不用 antd Switch ===== */
+
+.resource-switches {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid #e8ecf3;
+  border-radius: 10px;
+  background: #fafbfd;
+}
+
+.resource-switch {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.resource-switch button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  color: #111a30;
+}
+
+.resource-switch button i {
+  width: 18px;
+  height: 18px;
+  border: 1px solid #c9d3e2;
+  border-radius: 5px;
+  background: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  flex: none;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.resource-switch button[aria-checked="true"] i {
+  background: #176cf5;
+  border-color: #176cf5;
+}
+
+.resource-switch button b {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.resource-switch em {
+  font-style: normal;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #8a93a5;
+  padding-left: 26px;
+}
+
+.resource-switch.disabled button {
+  cursor: not-allowed;
+}
+
+.resource-switch.disabled button b {
+  color: #8a93a5;
+}
+
+.resource-editor-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+/* ===== 资料共享 / 引用次数 / 版本记录（§7.2 C）===== */
+
+.resource-share,
+.resource-references,
+.resource-revisions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid #eef1f6;
+}
+
+.resource-share-row {
+  display: flex;
+  gap: 8px;
+}
+
+.resource-share-row .review-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.resource-note {
+  font-size: 12px;
+  line-height: 1.7;
+  color: #8a93a5;
+}
+
+.resource-references ul,
+.resource-revisions ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.resource-references li,
+.resource-revisions li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid #e8ecf3;
+  border-radius: 8px;
+  background: #fafbfd;
+}
+
+.resource-references li strong,
+.resource-revisions li strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: #111a30;
+}
+
+.resource-references li span,
+.resource-revisions li span {
+  font-size: 12px;
+  color: #3c4658;
+}
+
+.resource-revisions li em {
+  font-style: normal;
+  font-size: 11px;
+  color: #8a93a5;
+}
+
+/* ---- 响应式 ---- */
+
+@media (max-width: 1180px) {
+  .resource-row {
+    grid-template-columns: 84px minmax(0, 1fr) 150px;
+  }
+
+  .resource-row-actions {
+    grid-column: 2 / -1;
+    flex-direction: row;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 900px) {
+  .resource-page {
+    padding: 24px 16px 24px;
+  }
+
+  .resource-upload-bar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .resource-row {
+    grid-template-columns: 84px minmax(0, 1fr);
+  }
+
+  .resource-flags {
+    grid-column: 2;
+  }
+
+  .resource-editor-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .resource-editor {
+    width: 100%;
+  }
+}
+

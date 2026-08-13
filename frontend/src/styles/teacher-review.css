@@ -1,0 +1,847 @@
+/* 教师端模块内二级导航（TeacherSubNav） */
+.teacher-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.teacher-subnav a {
+  padding: 7px 15px;
+  border: 1px solid #e3e9f2;
+  border-radius: 8px;
+  color: #40506a;
+  font-size: 14px;
+  text-decoration: none;
+  background: #ffffff;
+  transition:
+    background 180ms var(--motion-soft),
+    border-color 180ms var(--motion-soft),
+    color 180ms var(--motion-soft);
+}
+
+.teacher-subnav a:hover {
+  border-color: #c9dcff;
+  color: #176cf5;
+  background: #f5f8ff;
+}
+
+.teacher-subnav a.active {
+  border-color: #c9dcff;
+  color: #176cf5;
+  background: #edf4ff;
+  font-weight: 700;
+}
+
+/* ==========================================================================
+   AI 审核（开发方案 §十一）
+
+   刻意不用 antd 默认外观：控件沿用学生端那套 token —— 卡片 1px #e3e9f2 + 10px
+   圆角 + 淡蓝投影、主色 #176cf5、正文 #111a30、次要文字 #657187、8px 间距系统。
+   复用 .class-card / .class-badge / .class-stat / .class-tabs / .class-empty，
+   审核页独有的结构才在这里新增，避免同一套视觉写第二遍。
+   ========================================================================== */
+
+.review-page {
+  width: 100%;
+  padding: 36px 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  color: #111a30;
+}
+
+.review-page h1,
+.review-page h2,
+.review-page h3,
+.review-page p {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.review-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.review-head h1 {
+  font-size: 30px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.review-head-copy p {
+  max-width: 720px;
+  margin-top: 8px;
+  color: #657187;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.review-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 队列统计卡片：5 个而不是班级任务页的 4 个，所以单独一条栅格 */
+.review-stats {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+}
+
+/* 卡片可点击（§5.2 所有卡片点击后必须进入对应明细），但外观与 .class-stat 一致 */
+.review-stats button.class-stat {
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 180ms var(--motion-soft),
+    transform 180ms var(--motion-soft),
+    box-shadow 180ms var(--motion-soft);
+}
+
+.review-stats button.class-stat:hover {
+  border-color: #cfe0ff;
+  transform: translateY(-1px);
+  box-shadow: 0 12px 30px rgba(31, 59, 105, 0.09);
+}
+
+.review-stats button.class-stat[aria-pressed="true"] {
+  border-color: #a9c9ff;
+  background: linear-gradient(180deg, #f7fbff, #ffffff 58%);
+}
+
+.review-filters {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.review-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.review-select {
+  height: 42px;
+  min-width: 168px;
+  padding: 0 12px;
+  border: 1px solid #dce5f2;
+  border-radius: 7px;
+  color: #253149;
+  background: #ffffff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.review-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.review-search > svg {
+  position: absolute;
+  left: 11px;
+  color: #97a3b8;
+  pointer-events: none;
+}
+
+.review-search input {
+  height: 42px;
+  width: 216px;
+  padding: 0 12px 0 34px;
+  border: 1px solid #dce5f2;
+  border-radius: 7px;
+  color: #253149;
+  background: #ffffff;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.review-select:focus-visible,
+.review-search input:focus-visible {
+  border-color: #9dc2ff;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(23, 108, 245, 0.14);
+}
+
+/* 审核队列行：和班级任务的列表视图同一种密排行 */
+.review-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.review-row {
+  min-height: 84px;
+  padding: 15px 18px;
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) 132px 148px 104px;
+  align-items: center;
+  gap: 18px;
+  transition:
+    border-color 180ms var(--motion-soft),
+    transform 180ms var(--motion-soft),
+    box-shadow 180ms var(--motion-soft);
+}
+
+.review-row:hover {
+  border-color: #cfe0ff;
+  transform: translateY(-1px);
+  box-shadow: 0 12px 30px rgba(31, 59, 105, 0.09);
+}
+
+/* 待审核只做轻量标识，不用粗蓝框（那看着像被选中） */
+.review-row.pending {
+  border-color: #cddfff;
+  background: linear-gradient(180deg, #f7fbff, #ffffff 58%);
+}
+
+.review-row-main {
+  min-width: 0;
+}
+
+.review-row-main h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #17243b;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.review-row-main h2 span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-row-main > p {
+  margin-top: 6px;
+  color: #56647a;
+  font-size: 13px;
+  line-height: 1.55;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.review-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 8px;
+  color: #657187;
+  font-size: 12px;
+}
+
+.review-row-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* 入队原因标签，说明这条为什么需要人工看 */
+.review-reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.review-reasons span {
+  padding: 3px 9px;
+  border: 1px solid #f0dcc0;
+  border-radius: 999px;
+  color: #a06414;
+  background: #fdf6ec;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* 置信度：不只靠颜色表达，数字和文字同时给（§7 可访问性） */
+.review-confidence {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.review-confidence > b {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #17243b;
+  font-size: 15px;
+}
+
+.review-confidence i {
+  height: 6px;
+  border-radius: 999px;
+  background: #eaf0f9;
+  overflow: hidden;
+}
+
+.review-confidence i > b {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: #20bd79;
+}
+
+.review-confidence.low i > b {
+  background: #f2994a;
+}
+
+.review-confidence em {
+  color: #657187;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.review-row > button {
+  height: 40px;
+  border: 1px solid #dce5f2;
+  border-radius: 7px;
+  color: #253149;
+  background: #ffffff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    border-color 180ms var(--motion-soft),
+    color 180ms var(--motion-soft),
+    background 180ms var(--motion-soft);
+}
+
+.review-row > button:hover {
+  border-color: #b6d1ff;
+  color: #176cf5;
+  background: #f5f8ff;
+}
+
+.review-row > button.primary {
+  border-color: #176cf5;
+  color: #ffffff;
+  background: linear-gradient(180deg, #2c83ff, #1165ed);
+  box-shadow: 0 8px 18px rgba(25, 103, 239, 0.18);
+}
+
+.review-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 84px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.review-badge.pending {
+  color: #a06414;
+  background: #fdf3e3;
+}
+
+.review-badge.accepted {
+  color: #12885a;
+  background: #e6f8ef;
+}
+
+.review-badge.modified {
+  color: #1a5fd0;
+  background: #e8f1ff;
+}
+
+.review-badge.rejected {
+  color: #c0392b;
+  background: #fdecea;
+}
+
+.review-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: #657187;
+  font-size: 13px;
+}
+
+.review-pagination button {
+  height: 38px;
+  min-width: 92px;
+  border: 1px solid #dce5f2;
+  border-radius: 7px;
+  color: #253149;
+  background: #ffffff;
+  font-family: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.review-pagination button:disabled {
+  color: #a8b2c2;
+  cursor: not-allowed;
+}
+
+/* ===== 审核详情：三栏工作台 ===== */
+
+.review-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr) 332px;
+  align-items: start;
+  gap: 18px;
+}
+
+.review-column {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.review-panel {
+  padding: 18px 20px;
+}
+
+.review-panel > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.review-panel h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #17243b;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.review-panel-note {
+  color: #657187;
+  font-size: 12px;
+}
+
+/* 只读代码：等宽、带行号、可复制（§6.2 错误信息要可复制） */
+.review-code {
+  max-height: 380px;
+  overflow: auto;
+  margin: 0;
+  padding: 14px 0;
+  border: 1px solid #e6edf6;
+  border-radius: 8px;
+  background: #f8fbff;
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.review-code span {
+  display: flex;
+  gap: 14px;
+  padding: 0 16px;
+}
+
+.review-code em {
+  flex: 0 0 30px;
+  color: #a8b2c2;
+  font-style: normal;
+  text-align: right;
+  user-select: none;
+}
+
+.review-code code {
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #253149;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+.review-tests {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.review-test {
+  padding: 12px 14px;
+  border: 1px solid #e6edf6;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.review-test.failed {
+  border-color: #f5d5d0;
+  background: #fffafa;
+}
+
+.review-test-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: #17243b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.review-test-head .review-tag {
+  margin-left: auto;
+}
+
+.review-test dl {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  gap: 4px 12px;
+  margin: 10px 0 0;
+  color: #56647a;
+  font-size: 12px;
+}
+
+.review-test dt {
+  color: #657187;
+}
+
+.review-test dd {
+  margin: 0;
+  word-break: break-word;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+.review-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #eef3fb;
+  color: #56647a;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.review-tag.hidden-case {
+  background: #f1ecfd;
+  color: #6741c8;
+}
+
+.review-tag.pass {
+  background: #e6f8ef;
+  color: #12885a;
+}
+
+.review-tag.fail {
+  background: #fdecea;
+  color: #c0392b;
+}
+
+/* 原始 AI 诊断：轻微蓝紫标识 AI 内容，不做大面积渐变（§4.2） */
+.review-ai-original {
+  padding: 14px 16px;
+  border: 1px solid #dfe6fb;
+  border-radius: 8px;
+  background: #f7f9ff;
+  color: #253149;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.review-ai-locked {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  color: #657187;
+  font-size: 12px;
+}
+
+.review-meta-list {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 8px 12px;
+  margin: 14px 0 0;
+  font-size: 13px;
+}
+
+.review-meta-list dt {
+  color: #657187;
+}
+
+.review-meta-list dd {
+  margin: 0;
+  color: #253149;
+  word-break: break-word;
+}
+
+.review-source {
+  padding: 12px 14px;
+  border: 1px solid #e6edf6;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.review-source h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #17243b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.review-source p {
+  margin-top: 6px;
+  color: #56647a;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.review-source-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+/* 右栏：审核动作 */
+.review-actions {
+  position: sticky;
+  top: 18px;
+}
+
+.review-field {
+  margin-bottom: 14px;
+}
+
+.review-field label {
+  display: block;
+  margin-bottom: 6px;
+  color: #40506a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.review-field textarea {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid #dce5f2;
+  border-radius: 8px;
+  color: #253149;
+  background: #ffffff;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.7;
+  resize: vertical;
+}
+
+.review-field textarea:focus-visible {
+  border-color: #9dc2ff;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(23, 108, 245, 0.14);
+}
+
+.review-field-hint {
+  margin-top: 6px;
+  color: #657187;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.review-action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.review-action-buttons button {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid #dce5f2;
+  border-radius: 7px;
+  color: #253149;
+  background: #ffffff;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    border-color 180ms var(--motion-soft),
+    color 180ms var(--motion-soft),
+    background 180ms var(--motion-soft);
+}
+
+.review-action-buttons button:hover:not(:disabled) {
+  border-color: #b6d1ff;
+  color: #176cf5;
+  background: #f5f8ff;
+}
+
+.review-action-buttons button.primary {
+  border-color: #176cf5;
+  color: #ffffff;
+  background: linear-gradient(180deg, #2c83ff, #1165ed);
+  box-shadow: 0 8px 18px rgba(25, 103, 239, 0.18);
+}
+
+.review-action-buttons button.primary:hover:not(:disabled) {
+  color: #ffffff;
+  background: linear-gradient(180deg, #3d8dff, #1a6ff5);
+}
+
+.review-action-buttons button.danger {
+  border-color: #f0cdc8;
+  color: #c0392b;
+}
+
+.review-action-buttons button.danger:hover:not(:disabled) {
+  border-color: #e6b3ac;
+  color: #a5281c;
+  background: #fdf6f5;
+}
+
+.review-action-buttons button:disabled {
+  color: #a8b2c2;
+  background: #f6f8fc;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.review-history {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.review-history article {
+  padding: 12px 14px;
+  border: 1px solid #e6edf6;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.review-history header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 0;
+  color: #657187;
+  font-size: 12px;
+}
+
+.review-history p {
+  margin-top: 8px;
+  color: #253149;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.review-history .current {
+  border-color: #cddfff;
+  background: linear-gradient(180deg, #f7fbff, #ffffff 58%);
+}
+
+/* 状态反馈（§6.2）：加载 / 空 / 失败 / 保存结果都要有明确落点 */
+.review-message {
+  padding: 12px 16px;
+  border: 1px solid #f2e0c8;
+  border-radius: 8px;
+  color: #a06414;
+  background: #fdf8ef;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.review-message.error {
+  border-color: #f5d5d0;
+  color: #c0392b;
+  background: #fdf3f2;
+}
+
+.review-message.success {
+  border-color: #c9ecd9;
+  color: #12885a;
+  background: #f0fbf5;
+}
+
+.review-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid #dce5f2;
+  border-radius: 7px;
+  color: #40506a;
+  background: #ffffff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.review-back:hover {
+  border-color: #b6d1ff;
+  color: #176cf5;
+  background: #f5f8ff;
+}
+
+@media (max-width: 1280px) {
+  .review-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .review-detail-grid {
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+
+  .review-actions {
+    position: static;
+  }
+}
+
+@media (max-width: 900px) {
+  .review-page {
+    padding: 24px 16px 20px;
+  }
+
+  .review-head {
+    flex-direction: column;
+  }
+
+  .review-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .review-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .review-detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+

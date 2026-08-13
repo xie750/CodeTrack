@@ -1,0 +1,939 @@
+/* ==========================================================================
+   学情诊断（开发方案 §十）
+
+   与 AI 审核页同一套 token：卡片 1px #e3e9f2 + 10px 圆角、主色 #176cf5、
+   正文 #111a30、次要文字 #657187、8px 间距系统。
+   复用 .class-card / .class-stat / .class-tabs / .class-empty / .profile-card /
+   .profile-section-head / .profile-track / .profile-legend / .weak-row /
+   .advice-row / .record-row / .line-chart / .empty-panel，
+   本页独有的热力图、条形图和预警行才在这里新增。
+   ========================================================================== */
+
+.diagnosis-page {
+  width: 100%;
+  padding: 36px 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  color: #111a30;
+}
+
+.diagnosis-page h1,
+.diagnosis-page h2,
+.diagnosis-page h3,
+.diagnosis-page p {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+/* ===== 教学上下文筛选区 ===== */
+
+.diagnosis-context {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 18px 20px;
+  border: 1px solid #e3e9f2;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(31, 59, 105, 0.05);
+}
+
+.diagnosis-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.diagnosis-field > span {
+  color: #657187;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.diagnosis-field .review-select:disabled {
+  color: #97a3b8;
+  background: #f6f8fc;
+  cursor: not-allowed;
+}
+
+.diagnosis-context-note {
+  margin-left: auto;
+  padding-bottom: 10px;
+  color: #657187;
+  font-size: 12px;
+}
+
+.diagnosis-tabs {
+  align-self: flex-start;
+}
+
+.diagnosis-tabs button {
+  min-width: 116px;
+}
+
+.diagnosis-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.diagnosis-two-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.diagnosis-stats-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* 可点击的统计卡，外观与 .class-stat 一致，只多一个选中态 */
+.diagnosis-stat-button {
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 180ms var(--motion-soft),
+    transform 180ms var(--motion-soft),
+    box-shadow 180ms var(--motion-soft);
+}
+
+.diagnosis-stat-button:hover {
+  border-color: #cfe0ff;
+  transform: translateY(-1px);
+  box-shadow: 0 12px 30px rgba(31, 59, 105, 0.09);
+}
+
+.diagnosis-stat-button[aria-pressed="true"] {
+  border-color: #a9c9ff;
+  background: linear-gradient(180deg, #f7fbff, #ffffff 58%);
+}
+
+.diagnosis-chart {
+  padding: 20px 22px 22px;
+}
+
+.diagnosis-chart .profile-section-head {
+  margin-bottom: 14px;
+}
+
+.diagnosis-chart.skeleton-block {
+  min-height: 240px;
+}
+
+.diagnosis-head-note {
+  color: #8492a6;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* 数据充分性提示：区分「真实零值」和「无数据」（迁移执行清单 §11.7） */
+.diagnosis-sufficiency {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px;
+  border: 1px solid #ffe2b8;
+  border-radius: 8px;
+  color: #8a5a12;
+  background: #fff9ef;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.diagnosis-sufficiency > svg {
+  flex: none;
+  color: #ff941f;
+}
+
+.diagnosis-sufficiency.full {
+  border-color: #cdefdd;
+  color: #17795a;
+  background: #f1fcf6;
+}
+
+/* ===== 雷达图 ===== */
+
+.diagnosis-radar {
+  width: 100%;
+  max-width: 340px;
+}
+
+.diagnosis-radar text {
+  fill: #56647a;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.diagnosis-radar text.diagnosis-radar-value {
+  fill: #176cf5;
+  font-weight: 900;
+}
+
+/* ===== 知识点掌握热力图 ===== */
+
+.diagnosis-heatmap-scroll {
+  overflow-x: auto;
+}
+
+.diagnosis-heatmap {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 3px;
+  font-size: 12px;
+}
+
+.diagnosis-heatmap th,
+.diagnosis-heatmap td {
+  padding: 8px 10px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.diagnosis-heatmap thead th {
+  color: #56647a;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.diagnosis-heatmap tbody th,
+.diagnosis-heatmap tfoot th {
+  color: #253149;
+  font-weight: 800;
+  text-align: left;
+}
+
+/* 单元格同时给颜色和数值，不只靠颜色表达状态（§04 可访问性） */
+.diagnosis-cell {
+  min-width: 54px;
+  border-radius: 6px;
+  color: #17243b;
+  font-weight: 800;
+}
+
+.diagnosis-cell.excellent {
+  color: #10714f;
+  background: #cdf2e0;
+}
+
+.diagnosis-cell.good {
+  color: #14508f;
+  background: #d6e7ff;
+}
+
+.diagnosis-cell.fair {
+  color: #8a5a12;
+  background: #ffe8c8;
+}
+
+.diagnosis-cell.weak {
+  color: #a02730;
+  background: #ffd9dc;
+}
+
+.diagnosis-cell.empty {
+  color: #a3aebf;
+  background: #f2f5fa;
+}
+
+.diagnosis-cell.avg {
+  color: #253149;
+  background: #eef3fb;
+}
+
+.diagnosis-heatmap-legend {
+  margin-top: 14px;
+}
+
+.diagnosis-heatmap-legend i.band-excellent { background: #cdf2e0; border-color: #8fdcba; }
+.diagnosis-heatmap-legend i.band-good { background: #d6e7ff; border-color: #a9c9ff; }
+.diagnosis-heatmap-legend i.band-fair { background: #ffe8c8; border-color: #ffcd8a; }
+.diagnosis-heatmap-legend i.band-weak { background: #ffd9dc; border-color: #ffb0b6; }
+.diagnosis-heatmap-legend i.band-empty { background: #f2f5fa; border-color: #dbe3ee; }
+
+/* 学生姓名下钻按钮 */
+.diagnosis-link {
+  padding: 0;
+  border: 0;
+  color: #176cf5;
+  background: transparent;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.diagnosis-link:hover {
+  text-decoration: underline;
+}
+
+/* ===== 横向条形图：错误分布与提示等级分布 ===== */
+
+.diagnosis-error-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.diagnosis-bar-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 200px) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.diagnosis-bar-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #253149;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.diagnosis-severity {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: #d3323d;
+  background: #fff0f1;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.diagnosis-bar-track {
+  display: block;
+  height: 10px;
+  border-radius: 999px;
+  background: #eef3fb;
+  overflow: hidden;
+}
+
+.diagnosis-bar-track > b {
+  display: block;
+  height: 100%;
+  min-width: 3px;
+  border-radius: 999px;
+  background: #176cf5;
+  transition: width 260ms var(--motion-soft);
+}
+
+.diagnosis-bar-track > b.green { background: #20bd79; }
+.diagnosis-bar-track > b.blue { background: #4e84ff; }
+.diagnosis-bar-track > b.orange { background: #ff941f; }
+.diagnosis-bar-track > b.red { background: #ff5b63; }
+
+.diagnosis-bar-value {
+  color: #56647a;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+/* ===== 成绩趋势与任务历史 ===== */
+
+.diagnosis-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 3px;
+  background: #176cf5;
+}
+
+.diagnosis-swatch.green { background: #20bd79; }
+
+.diagnosis-trend-table {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.diagnosis-trend-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 11px 14px;
+  border: 1px solid #eaf0f8;
+  border-radius: 8px;
+  background: #fbfdff;
+  font-size: 12px;
+}
+
+.diagnosis-trend-row > strong {
+  min-width: 190px;
+  color: #17243b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.diagnosis-trend-row > span {
+  color: #657187;
+}
+
+.diagnosis-trend-row b {
+  color: #253149;
+  font-weight: 800;
+}
+
+.diagnosis-status {
+  padding: 2px 9px;
+  border-radius: 5px;
+  font-weight: 800;
+}
+
+.diagnosis-status.completed { color: #16a66d; background: #e8faf2; }
+.diagnosis-status.submitted { color: #14508f; background: #eaf2ff; }
+.diagnosis-status.needs_revision { color: #8a5a12; background: #fff5e6; }
+.diagnosis-status.in_progress { color: #4e5f7a; background: #eef3fb; }
+.diagnosis-status.not_started { color: #8492a6; background: #f2f5fa; }
+.diagnosis-status.overdue { color: #d3323d; background: #fff0f1; }
+
+/* ===== 个体诊断 ===== */
+
+.diagnosis-student-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.diagnosis-student-head h2 {
+  color: #17243b;
+  font-size: 21px;
+  font-weight: 900;
+}
+
+.diagnosis-student-head p {
+  margin-top: 6px;
+  color: #657187;
+  font-size: 13px;
+}
+
+.diagnosis-student-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.diagnosis-summary-text {
+  color: #253149 !important;
+  font-weight: 600 !important;
+  line-height: 1.65;
+}
+
+.diagnosis-weak-track {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+}
+
+.diagnosis-inline-tag {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 4px;
+  color: #4e5f7a;
+  background: #eef3fb;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.diagnosis-inline-tag.confirmed {
+  color: #16a66d;
+  background: #e8faf2;
+}
+
+/* ===== 预警中心 ===== */
+
+.diagnosis-alert-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.diagnosis-alert-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: flex-start;
+  gap: 18px;
+  padding: 18px 20px;
+}
+
+.diagnosis-alert-row.skeleton-block {
+  min-height: 128px;
+}
+
+.diagnosis-alert-row.high {
+  border-color: #ffd3d6;
+  background: linear-gradient(180deg, #fffafa, #ffffff 52%);
+}
+
+.diagnosis-level-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.diagnosis-level-badge.high { color: #d3323d; background: #fff0f1; }
+.diagnosis-level-badge.watch { color: #8a5a12; background: #fff5e6; }
+.diagnosis-level-badge.notice { color: #14508f; background: #eaf2ff; }
+
+.diagnosis-alert-main h2 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #17243b;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.diagnosis-rule-list {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.diagnosis-rule-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.diagnosis-rule-list strong {
+  flex: none;
+  min-width: 168px;
+  color: #253149;
+  font-weight: 800;
+}
+
+.diagnosis-rule-list span {
+  color: #657187;
+  line-height: 1.6;
+}
+
+.diagnosis-alert-meta {
+  margin-top: 10px;
+  color: #8492a6;
+  font-size: 12px;
+}
+
+.diagnosis-alert-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.diagnosis-alert-actions .review-back {
+  justify-content: center;
+  width: 118px;
+}
+
+@media (max-width: 1180px) {
+  .diagnosis-two-col {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .diagnosis-stats-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .diagnosis-page {
+    padding: 24px 16px 20px;
+  }
+
+  .diagnosis-context-note {
+    margin-left: 0;
+  }
+
+  .diagnosis-alert-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .diagnosis-alert-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .diagnosis-bar-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+}
+
+/* ==========================================================================
+   教学改进（开发方案 §十二）
+
+   与 AI 审核 / 学情诊断同一套做法：控件沿用学生端 token —— 卡片 1px #e3e9f2 +
+   圆角 + 淡蓝投影、主色 #176cf5、正文 #111a30、次要文字 #657187，不用 antd 外观。
+   复用 .profile-card / .profile-pad / .goal-table / .weak-row / .advice-row /
+   .class-stat / .class-tabs / .class-empty / .class-badge，本模块独有的结构才在这里新增。
+
+   注意 .improve-page 下面那段排版 reset 是必须的，不是装饰：.profile-card /
+   .goal-table / .weak-row 依赖的 h1/h2/p margin 归零和 h2 字号，原本只写在
+   .profile-page 作用域里（见「学习画像」一节），不重新声明的话所有面板标题都会
+   捡回全局 margin 和字号。
+   ========================================================================== */
+
+.improve-page {
+  width: 100%;
+  padding: 36px 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  color: #111a30;
+}
+
+.improve-page h1,
+.improve-page h2,
+.improve-page h3,
+.improve-page p {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.improve-page h2 {
+  font-size: 20px;
+  font-weight: 800;
+}
+
+/* flex gap 已经负责区块间距，所以可以原样复用 .profile-*-grid，
+   不必再动「学习画像」那组 `+` 相邻选择器 */
+.improve-page .class-empty {
+  margin-top: 0;
+}
+
+/* 学情摘要是 4 张卡，.review-stats 是 5 列，这里覆盖成 4 列 */
+.improve-stats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.improve-page .class-stat strong {
+  font-size: 26px;
+}
+
+.improve-page .class-stat em {
+  display: block;
+  margin-top: 6px;
+  color: #7d8797;
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.5;
+}
+
+/* ---- 数据说明 / 边界提示 ---- */
+
+.improve-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.improve-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #dbe6f5;
+  border-radius: 8px;
+  color: #56647a;
+  background: #f8fbff;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.improve-note svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: #176cf5;
+}
+
+.improve-note.warn {
+  border-color: #f6cf9a;
+  color: #8a5a12;
+  background: #fff8ec;
+}
+
+.improve-note.warn svg {
+  color: #d98b12;
+}
+
+.improve-page .advice-list .improve-note {
+  margin-bottom: 12px;
+}
+
+/* ---- 教学建议行 ---- */
+
+/* .advice-row 原本的动作列只有 82px，放得下一个按钮；§12.1 有四个，
+   所以这里加宽。必须限定在 .improve-advice-list 下，否则会改到学生画像页 */
+.improve-advice-list .advice-row {
+  grid-template-columns: 42px minmax(0, 1fr) 224px;
+  align-items: start;
+  padding: 14px 0;
+}
+
+.improve-advice-list .advice-row > span {
+  margin-top: 2px;
+}
+
+.improve-advice-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.improve-advice-title strong {
+  color: #202c42;
+  font-size: 14px;
+}
+
+.improve-advice-list .advice-row p {
+  margin-top: 6px;
+  line-height: 1.65;
+}
+
+.improve-evidence {
+  margin-top: 6px;
+  color: #7d8797;
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.improve-advice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.improve-advice-actions button {
+  min-width: 0;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid #cddcf3;
+  border-radius: 7px;
+  color: #56647a;
+  background: #ffffff;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    border-color 180ms var(--motion-soft),
+    color 180ms var(--motion-soft);
+}
+
+.improve-advice-actions button.primary {
+  border-color: #2674ef;
+  color: #1767e6;
+}
+
+.improve-advice-actions button.primary:hover {
+  background: #f1f6ff;
+}
+
+/* 不可用动作：禁用态要看得出是「不能点」，而不是「样式没写好」 */
+.improve-advice-actions button:disabled {
+  border-style: dashed;
+  color: #9aa6b8;
+  background: #f7f9fc;
+  cursor: not-allowed;
+}
+
+/* 理由文字给读屏用，视觉上由 title 承担 */
+.improve-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---- 两个排行榜 ---- */
+
+/* 排行行末尾的数值列：知识点是掌握度，错误是次数 */
+.improve-count {
+  justify-self: end;
+  color: #17243b;
+  font-size: 17px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.improve-bar-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.improve-bar-cell p {
+  color: #6b778d;
+  font-size: 12px;
+}
+
+/* ---- 班级对比 ---- */
+
+.improve-compare {
+  padding: 20px 22px 18px;
+}
+
+.improve-compare-list {
+  display: flex;
+  flex-direction: column;
+  margin-top: 16px;
+}
+
+.improve-compare-row {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr) 92px;
+  align-items: center;
+  gap: 14px;
+  min-height: 62px;
+  border-bottom: 1px solid #edf1f6;
+}
+
+.improve-compare-row:last-child {
+  border-bottom: 0;
+}
+
+.improve-compare-row > strong {
+  color: #202c42;
+  font-size: 13px;
+}
+
+.improve-compare-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.improve-compare-bars span {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr) 62px;
+  align-items: center;
+  gap: 10px;
+}
+
+.improve-compare-bars b {
+  color: #7d8797;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.improve-compare-bars em {
+  color: #17243b;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+  text-align: right;
+}
+
+.improve-compare .improve-note {
+  margin-top: 14px;
+}
+
+/* ---- 骨架子页的控件清单 ---- */
+
+/* 控件名比 .goal-table 默认的 98px 长得多（如「AI 教学效果总结」），
+   不加宽会换行并顶到说明文字上 */
+.improve-control-table {
+  grid-template-columns: 168px minmax(0, 1fr);
+}
+
+.improve-control-table > span {
+  padding-right: 14px;
+  line-height: 1.5;
+}
+
+.improve-control-table strong {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.improve-control-flag {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 5px;
+  color: #7d8797;
+  background: #f1f4f9;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+/* ---- 响应式 ----
+   .profile-*-grid 与学生端「学习画像」页共用，所以这里的收敛规则一律带
+   .improve-page 前缀，避免顺手改掉一个已完成的学生页面。 */
+
+@media (max-width: 1180px) {
+  .improve-page .profile-top-grid,
+  .improve-page .profile-mid-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .improve-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .improve-advice-list .advice-row {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .improve-advice-actions {
+    grid-column: 2;
+    justify-content: flex-start;
+    margin-top: 10px;
+  }
+}
+
+@media (max-width: 900px) {
+  .improve-page {
+    padding: 20px 14px 88px;
+    gap: 18px;
+  }
+
+  .improve-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .improve-compare-row {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    padding: 14px 0;
+  }
+
+  .improve-count {
+    justify-self: start;
+  }
+}
+
