@@ -108,6 +108,53 @@ export type StudentProfile = {
   }>;
 };
 
+export type StudentKnowledgeGraphNode = {
+  id: string;
+  label: string;
+  type: "知识点" | "概念" | "方法" | "公式" | "案例" | "能力" | string;
+  description: string;
+  difficulty: number;
+  x: number;
+  y: number;
+  color: string;
+  source: "ai" | "custom" | string;
+};
+
+export type StudentKnowledgeGraphEdge = {
+  id: string;
+  source: string;
+  target: string;
+  type: "前驱" | "后继" | "相关" | string;
+  label: string;
+};
+
+export type StudentKnowledgeGraph = {
+  id: string;
+  teaching_assignment_id: string;
+  course_id: string;
+  course_name: string;
+  class_id: string;
+  teacher_id: string;
+  teacher_name: string;
+  title: string;
+  description: string;
+  status: "published" | string;
+  target_classes: string[];
+  source_files: Array<{
+    filename: string;
+    mime_type: string;
+    size_bytes: number;
+  }>;
+  source_summary: string;
+  node_count: number;
+  edge_count: number;
+  nodes: StudentKnowledgeGraphNode[];
+  edges: StudentKnowledgeGraphEdge[];
+  created_at: string | null;
+  updated_at: string | null;
+  published_at: string | null;
+};
+
 export type TaskDetail = {
   task_id: string;
   course_id: string;
@@ -405,6 +452,10 @@ function studentProfileUrl(courseId?: string) {
   return `/api/v1/student/profile${courseId ? `?course_id=${encodeURIComponent(courseId)}` : ""}`;
 }
 
+function studentKnowledgeGraphUrl(courseId: string) {
+  return `/api/v1/student/courses/${encodeURIComponent(courseId)}/knowledge-graph`;
+}
+
 function getCacheKey(url: string) {
   return `${getAccessToken() ?? "anonymous"}:${url}`;
 }
@@ -496,6 +547,8 @@ export const api = {
     cachedGet<StudentTaskCard[]>(studentTasksUrl(courseId)),
   getStudentProfile: (courseId?: string) =>
     cachedGet<StudentProfile>(studentProfileUrl(courseId)),
+  getStudentKnowledgeGraph: (courseId: string) =>
+    cachedGet<StudentKnowledgeGraph>(studentKnowledgeGraphUrl(courseId)),
   submitCode: async (taskId: string, language: string, sourceCode: string) => {
     const result = await request<SubmitResponse>(`/api/v1/tasks/${taskId}/submissions`, {
       method: "POST",
@@ -557,5 +610,6 @@ export const apiCache = {
   clear: clearApiCache,
   peekLearningContext: () => peekCachedGet<LearningContext>("/api/v1/student/learning-context"),
   peekStudentTasks: (courseId?: string) => peekCachedGet<StudentTaskCard[]>(studentTasksUrl(courseId)),
-  peekStudentProfile: (courseId?: string) => peekCachedGet<StudentProfile>(studentProfileUrl(courseId))
+  peekStudentProfile: (courseId?: string) => peekCachedGet<StudentProfile>(studentProfileUrl(courseId)),
+  peekStudentKnowledgeGraph: (courseId: string) => peekCachedGet<StudentKnowledgeGraph>(studentKnowledgeGraphUrl(courseId))
 };

@@ -19,3 +19,5 @@ Error: connect ECONNREFUSED 127.0.0.1:8000
 [2m20:44:44[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/v1/auth/login[39m
 Error: connect ECONNREFUSED 127.0.0.1:8000
     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+[2m12:13:07[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to load url /src/pages/StudentKnowledgeMap.tsx (resolved id: D:/shy/CodeTrack/frontend/src/pages/StudentKnowledgeMap.tsx) in D:/shy/CodeTrack/frontend/src/pages/SelfStudyHub.tsx. Does the file exist?
+[2m12:13:07[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to load url /src/pages/StudentKnowledgeMap.tsx (resolved id: D:/shy/CodeTrack/frontend/src/pages/StudentKnowledgeMap.tsx) in D:/shy/CodeTrack/frontend/src/pages/SelfStudyHub.tsx. Does the file exist?

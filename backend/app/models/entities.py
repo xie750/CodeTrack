@@ -349,6 +349,41 @@ class CourseKnowledgePoint(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
+class StudentKnowledgeGraph(Base):
+    """教师发布给某个教学安排的课程知识图谱，学生端只读。
+
+    同一门课程在不同班级可以有不同图谱，所以唯一边界放在 teaching_assignment_id。
+    """
+
+    __tablename__ = "student_knowledge_graphs"
+    __table_args__ = (
+        UniqueConstraint("teaching_assignment_id", name="uq_student_knowledge_graph_teaching_assignment"),
+        Index("ix_student_knowledge_graph_scope", "class_id", "course_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    teaching_assignment_id: Mapped[str] = mapped_column(ForeignKey("teaching_assignments.id"), nullable=False)
+    class_id: Mapped[str] = mapped_column(ForeignKey("classes.id"), nullable=False)
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id"), nullable=False)
+    teacher_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="published")
+    target_classes: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    source_files: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    source_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    nodes_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    edges_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    teaching_assignment: Mapped[TeachingAssignment] = relationship()
+    administrative_class: Mapped[AdministrativeClass] = relationship()
+    course: Mapped[Course] = relationship()
+    teacher: Mapped[User] = relationship()
+
+
 class Submission(Base):
     __tablename__ = "submissions"
     __table_args__ = (UniqueConstraint("student_id", "task_id", name="uq_submission_student_task"),)
