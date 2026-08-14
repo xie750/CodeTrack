@@ -1,6 +1,7 @@
 import { type ReactNode } from "react";
-import { NavLink, Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, Bot, BookOpen, ChartNoAxesColumnIncreasing, Database, FolderOpen, Network, Route as RouteIcon } from "lucide-react";
+import StudentRouteBreadcrumb from "../components/StudentRouteBreadcrumb";
 import SelfStudy from "./SelfStudy";
 import LearningProfile from "./LearningProfile";
 import AiTutor from "./AiTutor";
@@ -40,6 +41,9 @@ export default function SelfStudyHub() {
 
 function SelfStudyShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const activePath = location.pathname.replace(/^\/self-study\/?/, "");
+  const activeTab = selfStudyTabs.find((item) => item.path === activePath) ?? selfStudyTabs[0];
 
   return (
     <div className="student-work-window self-study-window">
@@ -64,7 +68,16 @@ function SelfStudyShell({ children }: { children: ReactNode }) {
           ))}
         </nav>
       </aside>
-      <main className="student-window-content">{children}</main>
+      <main className="student-window-content">
+        <StudentRouteBreadcrumb
+          items={[
+            { label: "学习入口", to: "/" },
+            { label: "自主学习", to: "/self-study" },
+            { label: activeTab.label }
+          ]}
+        />
+        {children}
+      </main>
     </div>
   );
 }

@@ -189,3 +189,65 @@ button:disabled {
   margin: 0 auto;
 }
 
+.student-route-breadcrumb {
+  width: min(100%, var(--student-window-content-max, var(--app-page-content-max)));
+  max-width: var(--student-window-content-max, var(--app-page-content-max));
+  margin: 0 auto 10px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  overflow-x: auto;
+  color: #657187;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.4;
+  scrollbar-width: none;
+}
+
+.student-route-breadcrumb::-webkit-scrollbar {
+  display: none;
+}
+
+.student-route-crumb {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.student-route-slash {
+  color: #a5b0c0;
+  font-weight: 900;
+}
+
+.student-route-crumb:first-child .student-route-slash {
+  color: #7d8ca2;
+}
+
+.student-route-crumb a,
+.student-route-crumb span[aria-current="page"] {
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  text-decoration: none;
+}
+
+.student-route-crumb a {
+  color: #52627a;
+  transition: color 160ms var(--motion-soft), background 160ms var(--motion-soft);
+}
+
+.student-route-crumb a:hover,
+.student-route-crumb a:focus-visible {
+  color: #176cf5;
+  background: #eef6ff;
+  outline: none;
+}
+
+.student-route-crumb span[aria-current="page"] {
+  color: #17243b;
+  font-weight: 950;
+}
+

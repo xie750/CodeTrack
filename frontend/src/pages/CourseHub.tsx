@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
-import { NavLink, Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowRight,
@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { api, apiCache, LearningContext, StudentProfile, StudentTaskCard } from "../api";
 import type { TaskOpenTarget } from "../App";
+import StudentRouteBreadcrumb from "../components/StudentRouteBreadcrumb";
 import CourseTasks from "./CourseTasks";
 import LearningProfile from "./LearningProfile";
 import LearningLibrary from "./LearningLibrary";
@@ -113,8 +114,12 @@ export default function CourseHub({ onOpenWorkspace }: CourseHubProps) {
 
 function CourseHubShell({ courseId, children }: { courseId: string; children: ReactNode }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [context, setContext] = useState<LearningContext | null>(apiCache.peekLearningContext());
   const course = context?.courses.find((item) => item.course_id === courseId);
+  const basePath = coursePath(courseId);
+  const relativePath = location.pathname === basePath ? "" : location.pathname.slice(`${basePath}/`.length);
+  const activeTab = courseTabs.find((item) => item.path === relativePath) ?? courseTabs[0];
 
   useEffect(() => {
     let alive = true;
@@ -149,7 +154,17 @@ function CourseHubShell({ courseId, children }: { courseId: string; children: Re
           ))}
         </nav>
       </aside>
-      <main className="student-window-content">{children}</main>
+      <main className="student-window-content">
+        <StudentRouteBreadcrumb
+          items={[
+            { label: "学习入口", to: "/" },
+            { label: "我的课程", to: "/" },
+            { label: course?.course_name ?? "课程工作台", to: coursePath(courseId) },
+            { label: activeTab.label }
+          ]}
+        />
+        {children}
+      </main>
     </div>
   );
 }
@@ -239,7 +254,6 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
     <div className="course-workbench-page course-dashboard-page">
       <header className="course-dashboard-hero">
         <div>
-          <span className="course-dashboard-breadcrumb">我的课程 / {course?.course_name ?? "课程"} / 课程工作台</span>
           <h1>课程工作台</h1>
           <p>查看本课程的学习概览与任务动态</p>
         </div>

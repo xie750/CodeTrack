@@ -26,6 +26,7 @@ import {
   Zap
 } from "lucide-react";
 import { api, LearningContext, TaskDetail, VersionResult, Diagnosis, Hint } from "../api";
+import StudentRouteBreadcrumb from "../components/StudentRouteBreadcrumb";
 import avatarImg from "../assets/ui-home/avatar.png";
 
 type PageProps = {
@@ -578,6 +579,15 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
           <>
             <section className="program-head">
               <div>
+                <StudentRouteBreadcrumb
+                  className="program-route-breadcrumb"
+                  items={[
+                    { label: "学习入口", to: "/" },
+                    { label: "我的课程", to: "/" },
+                    { label: task.course_id ? "课程任务" : "课程任务", to: task.course_id ? `/courses/${encodeURIComponent(task.course_id)}/tasks` : undefined },
+                    { label: task.title }
+                  ]}
+                />
                 <button className="program-back" type="button" onClick={onBack}><ArrowLeft size={16} /> 返回班级任务</button>
                 <div className="program-title-line">
                   <h1>编程任务：{task.title}</h1>
