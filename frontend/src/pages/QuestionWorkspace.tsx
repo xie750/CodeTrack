@@ -17,6 +17,7 @@ import {
   XCircle
 } from "lucide-react";
 import { api, QuestionItem, QuestionWorkspace as QuestionWorkspaceData, SubmitQuestionResult } from "../api";
+import StudentRouteBreadcrumb from "../components/StudentRouteBreadcrumb";
 import avatarImg from "../assets/ui-home/avatar.png";
 
 type PageProps = {
@@ -252,6 +253,16 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
         <main className="question-page">
           <section className="question-head">
             <div>
+              <StudentRouteBreadcrumb
+                className="question-route-breadcrumb"
+                items={[
+                  { label: "学习入口", to: "/" },
+                  { label: "我的课程", to: "/" },
+                  { label: workspace.task.course_name, to: `/courses/${encodeURIComponent(workspace.task.course_id)}` },
+                  { label: "课程任务", to: `/courses/${encodeURIComponent(workspace.task.course_id)}/tasks` },
+                  { label: workspace.task.title }
+                ]}
+              />
               <button className="program-back" type="button" onClick={onBack}><ArrowLeft size={16} /> 返回班级任务</button>
               <div className="question-title-line">
                 <h1>{workspace.task.title}</h1>
