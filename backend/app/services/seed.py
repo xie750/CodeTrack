@@ -211,8 +211,8 @@ def seed_demo_data(db: Session) -> None:
         Course,
         "course_ds_001",
         {
-            "name": "数据结构与程序设计基础",
-            "description": "面向链表、栈队列、树和程序设计基础的助学课程",
+            "name": "数据结构",
+            "description": "人工智能专业基础支撑课程，面向链表、栈队列、树和算法结构能力。",
             "term": "2026-demo",
             "status": "ACTIVE",
             "owner_teacher_id": "user_teacher_001",
@@ -223,8 +223,8 @@ def seed_demo_data(db: Session) -> None:
         Course,
         "course_network_001",
         {
-            "name": "计算机网络",
-            "description": "面向网络分层、IP 地址与子网划分的基础课程",
+            "name": "Python 程序设计",
+            "description": "人工智能专业基础支撑课程，面向 Python 语法、数据处理和实验编程。",
             "term": "2026-demo",
             "status": "ACTIVE",
             "owner_teacher_id": "user_teacher_002",
@@ -235,8 +235,20 @@ def seed_demo_data(db: Session) -> None:
         Course,
         "course_arch_001",
         {
-            "name": "计算机组成原理",
-            "description": "面向计算机系统结构和组成原理的基础课程",
+            "name": "机器学习",
+            "description": "人工智能专业核心课程，面向监督学习、模型评估、过拟合与正则化。",
+            "term": "2026-demo",
+            "status": "ACTIVE",
+            "owner_teacher_id": "user_teacher_001",
+        },
+    )
+    upsert(
+        db,
+        Course,
+        "course_scope_probe_001",
+        {
+            "name": "权限校验探针课程",
+            "description": "仅用于验证无教学安排课程不可访问，不在学生端展示。",
             "term": "2026-demo",
             "status": "ACTIVE",
             "owner_teacher_id": "user_teacher_001",
@@ -265,15 +277,15 @@ def seed_demo_data(db: Session) -> None:
 
     classes = {
         "class_se_001": {
-            "name": "软件工程 1 班",
+            "name": "人工智能 1 班",
             "grade": "2026",
-            "major_name": "软件工程",
+            "major_name": "人工智能",
             "status": "ACTIVE",
         },
         "class_cs_001": {
-            "name": "计科 1 班",
+            "name": "人工智能 2 班",
             "grade": "2026",
-            "major_name": "计算机科学与技术",
+            "major_name": "人工智能",
             "status": "ACTIVE",
         },
     }
@@ -305,6 +317,13 @@ def seed_demo_data(db: Session) -> None:
             "class_id": "class_se_001",
             "course_id": "course_network_001",
             "teacher_id": "user_teacher_002",
+            "term": "2026-demo",
+            "status": "ACTIVE",
+        },
+        "ta_se1_ml_001": {
+            "class_id": "class_se_001",
+            "course_id": "course_arch_001",
+            "teacher_id": "user_teacher_001",
             "term": "2026-demo",
             "status": "ACTIVE",
         },
@@ -344,9 +363,19 @@ def seed_demo_data(db: Session) -> None:
         Capability,
         "cap_subnet_host_count",
         {
-            "code": "SUBNET_HOST_COUNT",
-            "name": "子网可用主机数计算",
-            "description": "能够根据子网掩码位数推导地址规模，并计算常规子网中的可用主机数。",
+            "code": "PYTHON_LIST_DICT_LOOKUP",
+            "name": "Python 列表与字典查找",
+            "description": "能够使用 Python 遍历列表并用字典记录已访问元素，完成目标值查找。",
+        },
+    )
+    upsert(
+        db,
+        Capability,
+        "cap_ml_model_evaluation",
+        {
+            "code": "ML_MODEL_EVALUATION",
+            "name": "模型评估与过拟合判断",
+            "description": "能够区分训练集、验证集和测试集，并解释过拟合与正则化的基本作用。",
         },
     )
 
@@ -398,16 +427,35 @@ def seed_demo_data(db: Session) -> None:
         "task_subnet_mask_001",
         {
             "course_id": "course_network_001",
-            "title": "IP 地址与子网划分练习",
-            "description": "根据给定 IP 和掩码完成子网划分与可用主机数计算。",
+            "title": "Python 列表与字典查找练习",
+            "description": "使用 Python 遍历列表并借助字典完成目标值查找。",
             "workspace_type": "CODING",
             "language": "PYTHON",
-            "interface_spec": "int analyzeSubnet(string ip, string mask);",
+            "interface_spec": "twoSum(nums, target) -> indices",
             "learning_objectives": json.dumps(
-                ["理解 IP 地址结构", "掌握子网掩码计算", "识别网络号与主机号"],
+                ["掌握 Python 函数定义", "遍历列表", "使用字典记录已访问元素", "区分元素值和下标"],
                 ensure_ascii=False,
             ),
-            "capability_ids": json.dumps([], ensure_ascii=False),
+            "capability_ids": json.dumps(["cap_array_hash_lookup"], ensure_ascii=False),
+            "status": "OPEN",
+        },
+    )
+    upsert(
+        db,
+        Task,
+        "task_ml_overfitting_quiz_001",
+        {
+            "course_id": "course_arch_001",
+            "title": "过拟合与正则化概念测验",
+            "description": "围绕机器学习中的训练集、验证集、测试集、过拟合和正则化完成概念辨析。",
+            "workspace_type": "QUESTION_SET",
+            "language": "PYTHON",
+            "interface_spec": "Concept quiz: overfitting, regularization, dataset split",
+            "learning_objectives": json.dumps(
+                ["区分训练集、验证集和测试集", "解释过拟合现象", "理解正则化的基本作用"],
+                ensure_ascii=False,
+            ),
+            "capability_ids": json.dumps(["cap_ml_model_evaluation"], ensure_ascii=False),
             "status": "OPEN",
         },
     )
@@ -552,6 +600,21 @@ def seed_demo_data(db: Session) -> None:
             "allow_hint_level_3": True,
             "published_at": datetime(2026, 7, 22, 8, 0, tzinfo=timezone.utc),
             "deadline": datetime(2026, 8, 8, 23, 59, tzinfo=timezone.utc),
+        },
+    )
+    upsert(
+        db,
+        TaskAssignment,
+        "assign_se1_ml_overfitting_001",
+        {
+            "task_id": "task_ml_overfitting_quiz_001",
+            "teaching_assignment_id": "ta_se1_ml_001",
+            "published_by": "user_teacher_001",
+            "publish_status": "PUBLISHED",
+            "assignment_mode": "QUIZ",
+            "allow_hint_level_3": False,
+            "published_at": datetime(2026, 7, 23, 8, 0, tzinfo=timezone.utc),
+            "deadline": datetime(2026, 8, 9, 23, 59, tzinfo=timezone.utc),
         },
     )
     upsert(
@@ -711,42 +774,42 @@ def seed_demo_data(db: Session) -> None:
                 "sort_order": order,
             },
         )
-    subnet_cases = [
+    python_lookup_cases = [
         (
-            "tc_subnet_24",
-            "公开样例：/24 子网",
+            "tc_python_lookup_basic",
+            "公开样例：基础补数",
             "PUBLIC",
-            {"stdin": "192.168.1.10 255.255.255.0\n"},
-            "254",
-            "254",
+            {"nums": [2, 7, 11, 15], "target": 9},
+            [0, 1],
+            "[0,1]",
             None,
-            "SUBNET_24_HOST_COUNT",
+            "PYTHON_LOOKUP_BASIC_COMPLEMENT",
             1,
         ),
         (
-            "tc_subnet_30",
-            "公开样例：/30 点到点子网",
+            "tc_python_lookup_reuse_guard",
+            "公开样例：不能复用同一元素",
             "PUBLIC",
-            {"stdin": "10.0.0.1 255.255.255.252\n"},
-            "2",
-            "2",
+            {"nums": [3, 2, 4], "target": 6},
+            [1, 2],
+            "[1,2]",
             None,
-            "SUBNET_30_HOST_COUNT",
+            "PYTHON_LOOKUP_REUSE_GUARD",
             2,
         ),
         (
-            "tc_subnet_16",
-            "隐藏样例：/16 大子网",
+            "tc_python_lookup_duplicate",
+            "隐藏样例：重复元素",
             "HIDDEN",
-            {"stdin": "172.16.5.9 255.255.0.0\n"},
-            "65534",
-            "大子网可用主机数应正确",
-            "大子网可用主机数未通过",
-            "SUBNET_16_HOST_COUNT",
+            {"nums": [3, 3], "target": 6},
+            [0, 1],
+            "重复元素场景应正确",
+            "重复元素场景未通过",
+            "PYTHON_LOOKUP_DUPLICATE_VALUES",
             3,
         ),
     ]
-    for case_id, name, visibility, input_data, expected, summary, hidden_summary, tag, order in subnet_cases:
+    for case_id, name, visibility, input_data, expected, summary, hidden_summary, tag, order in python_lookup_cases:
         upsert(
             db,
             TestCase,
@@ -760,7 +823,7 @@ def seed_demo_data(db: Session) -> None:
                 "expected_output_summary": summary,
                 "hidden_failure_summary": hidden_summary,
                 "error_tag": tag,
-                "capability_id": "cap_subnet_host_count",
+                "capability_id": "cap_array_hash_lookup",
                 "required": True,
                 "sort_order": order,
             },
@@ -888,6 +951,54 @@ def seed_demo_data(db: Session) -> None:
                 ],
             },
         ],
+        "task_ml_overfitting_quiz_001": [
+            {
+                "id": "q_ml_overfit_001",
+                "question_type": "SINGLE_CHOICE",
+                "stem": "如果模型在训练集上表现很好，但在测试集上表现明显变差，最可能的问题是什么？",
+                "analysis": "训练集效果好但测试集泛化差，通常说明模型记住了训练数据中的噪声或偶然模式，属于过拟合风险。",
+                "knowledge_points": ["过拟合", "模型评估"],
+                "difficulty": "BASIC",
+                "score": 10,
+                "error_type": "OVERFITTING_REASONING_WEAK",
+                "options": [
+                    ("A", "过拟合", True),
+                    ("B", "欠拟合", False),
+                    ("C", "数据已完全清洗干净", False),
+                    ("D", "测试集不再需要", False),
+                ],
+            },
+            {
+                "id": "q_ml_overfit_002",
+                "question_type": "MULTIPLE_CHOICE",
+                "stem": "下面哪些做法通常有助于缓解过拟合？",
+                "analysis": "正则化、交叉验证、增加有效数据和降低模型复杂度都可能缓解过拟合；直接把测试集用于调参会污染评估。",
+                "knowledge_points": ["正则化", "交叉验证", "模型复杂度"],
+                "difficulty": "MEDIUM",
+                "score": 15,
+                "error_type": "REGULARIZATION_PURPOSE_CONFUSION",
+                "options": [
+                    ("A", "加入正则化项", True),
+                    ("B", "使用交叉验证辅助选择模型", True),
+                    ("C", "适当降低模型复杂度", True),
+                    ("D", "反复用测试集调参直到分数最高", False),
+                ],
+            },
+            {
+                "id": "q_ml_overfit_003",
+                "question_type": "TRUE_FALSE",
+                "stem": "验证集可以用于模型选择和调参，测试集应尽量保留到最终评估阶段。",
+                "analysis": "验证集用于开发过程中的模型选择，测试集用于估计最终泛化表现，二者职责不同。",
+                "knowledge_points": ["训练集", "验证集", "测试集"],
+                "difficulty": "BASIC",
+                "score": 10,
+                "error_type": "TRAIN_VALID_TEST_CONFUSION",
+                "options": [
+                    ("A", "正确", True),
+                    ("B", "错误", False),
+                ],
+            },
+        ],
     }
     for task_id, questions in question_sets.items():
         for index, question in enumerate(questions, start=1):
@@ -966,6 +1077,30 @@ def seed_demo_data(db: Session) -> None:
             "passed_count": 0,
             "total_required_count": 3,
             "highest_hint_level": 0,
+            "score": None,
+        },
+    )
+    upsert_one(
+        db,
+        StudentTaskProgress,
+        {"assignment_id": "assign_se1_network_subnet_001", "student_id": "user_student_001"},
+        {
+            "status": "NOT_STARTED",
+            "passed_count": 0,
+            "total_required_count": 3,
+            "highest_hint_level": 0,
+            "score": None,
+        },
+    )
+    upsert_one(
+        db,
+        StudentTaskProgress,
+        {"assignment_id": "assign_se1_ml_overfitting_001", "student_id": "user_student_001"},
+        {
+            "status": "IN_PROGRESS",
+            "passed_count": 1,
+            "total_required_count": 3,
+            "highest_hint_level": 1,
             "score": None,
         },
     )
@@ -1231,10 +1366,10 @@ def seed_demo_data(db: Session) -> None:
     ]
     graph_nodes_network = [
         {
-            "id": "node-net-ip",
-            "label": "IP 地址结构",
+            "id": "node-py-function",
+            "label": "Python 函数",
             "type": "概念",
-            "description": "区分网络位和主机位。",
+            "description": "用函数封装可复用的数据处理逻辑。",
             "difficulty": 2,
             "x": 430,
             "y": 270,
@@ -1242,10 +1377,10 @@ def seed_demo_data(db: Session) -> None:
             "source": "ai",
         },
         {
-            "id": "node-net-mask",
-            "label": "子网掩码",
+            "id": "node-py-list",
+            "label": "列表遍历",
             "type": "知识点",
-            "description": "根据掩码长度推导地址范围。",
+            "description": "按顺序访问样本并累计统计量。",
             "difficulty": 3,
             "x": 430,
             "y": 95,
@@ -1253,10 +1388,10 @@ def seed_demo_data(db: Session) -> None:
             "source": "ai",
         },
         {
-            "id": "node-net-host",
-            "label": "可用主机数",
-            "type": "公式",
-            "description": "用主机位数量计算常规子网容量。",
+            "id": "node-py-stats",
+            "label": "字典查找",
+            "type": "方法",
+            "description": "记录已访问元素并查找互补值。",
             "difficulty": 3,
             "x": 660,
             "y": 270,
@@ -1264,10 +1399,10 @@ def seed_demo_data(db: Session) -> None:
             "source": "ai",
         },
         {
-            "id": "node-net-practice",
-            "label": "子网划分练习",
+            "id": "node-py-empty",
+            "label": "重复元素处理",
             "type": "案例",
-            "description": "通过题目验证网络号、广播地址和主机范围。",
+            "description": "区分元素值相同与下标不能复用。",
             "difficulty": 4,
             "x": 250,
             "y": 420,
@@ -1276,9 +1411,60 @@ def seed_demo_data(db: Session) -> None:
         },
     ]
     graph_edges_network = [
-        {"id": "edge-net-ip-mask", "source": "node-net-ip", "target": "node-net-mask", "type": "前驱", "label": "前驱"},
-        {"id": "edge-net-mask-host", "source": "node-net-mask", "target": "node-net-host", "type": "后继", "label": "后继"},
-        {"id": "edge-net-host-practice", "source": "node-net-host", "target": "node-net-practice", "type": "后继", "label": "后继"},
+        {"id": "edge-py-list-function", "source": "node-py-list", "target": "node-py-function", "type": "前驱", "label": "前驱"},
+        {"id": "edge-py-function-stats", "source": "node-py-function", "target": "node-py-stats", "type": "后继", "label": "后继"},
+        {"id": "edge-py-stats-empty", "source": "node-py-stats", "target": "node-py-empty", "type": "后继", "label": "后继"},
+    ]
+    graph_nodes_ml = [
+        {
+            "id": "node-ml-split",
+            "label": "数据集划分",
+            "type": "概念",
+            "description": "区分训练集、验证集和测试集的用途。",
+            "difficulty": 3,
+            "x": 420,
+            "y": 110,
+            "color": "#2563eb",
+            "source": "ai",
+        },
+        {
+            "id": "node-ml-overfit",
+            "label": "过拟合",
+            "type": "知识点",
+            "description": "训练表现好但泛化表现差的典型风险。",
+            "difficulty": 4,
+            "x": 430,
+            "y": 285,
+            "color": "#dc2626",
+            "source": "ai",
+        },
+        {
+            "id": "node-ml-regularization",
+            "label": "正则化",
+            "type": "方法",
+            "description": "通过约束模型复杂度降低过拟合风险。",
+            "difficulty": 4,
+            "x": 660,
+            "y": 300,
+            "color": "#0f766e",
+            "source": "ai",
+        },
+        {
+            "id": "node-ml-evaluation",
+            "label": "模型评估",
+            "type": "能力",
+            "description": "用合适的数据划分和指标判断泛化能力。",
+            "difficulty": 3,
+            "x": 245,
+            "y": 360,
+            "color": "#7c3aed",
+            "source": "ai",
+        },
+    ]
+    graph_edges_ml = [
+        {"id": "edge-ml-split-eval", "source": "node-ml-split", "target": "node-ml-evaluation", "type": "前驱", "label": "前驱"},
+        {"id": "edge-ml-eval-overfit", "source": "node-ml-evaluation", "target": "node-ml-overfit", "type": "后继", "label": "后继"},
+        {"id": "edge-ml-overfit-regularization", "source": "node-ml-overfit", "target": "node-ml-regularization", "type": "后继", "label": "后继"},
     ]
     student_graphs = {
         "kg_ta_se1_ds_001": {
@@ -1286,10 +1472,10 @@ def seed_demo_data(db: Session) -> None:
             "class_id": "class_se_001",
             "course_id": "course_ds_001",
             "teacher_id": "user_teacher_001",
-            "title": "数据结构与程序设计基础知识图谱",
-            "description": "软件工程 1 班当前围绕链表边界处理、测试验证和栈队列预习展开。",
+            "title": "数据结构知识图谱",
+            "description": "人工智能 1 班当前围绕链表边界处理、测试验证和栈队列预习展开。",
             "status": "published",
-            "target_classes": json.dumps(["软件工程 1 班"], ensure_ascii=False),
+            "target_classes": json.dumps(["人工智能 1 班"], ensure_ascii=False),
             "source_files": json.dumps(
                 [
                     {"filename": "第三章线性表讲义.md", "mime_type": "text/markdown", "size_bytes": 18432},
@@ -1308,14 +1494,14 @@ def seed_demo_data(db: Session) -> None:
             "course_id": "course_ds_001",
             "teacher_id": "user_teacher_001",
             "title": "数据结构递归与栈图谱",
-            "description": "计科 1 班当前更关注二叉树递归出口和栈匹配边界。",
+            "description": "人工智能 2 班当前更关注二叉树递归出口和栈匹配边界。",
             "status": "published",
-            "target_classes": json.dumps(["计科 1 班"], ensure_ascii=False),
+            "target_classes": json.dumps(["人工智能 2 班"], ensure_ascii=False),
             "source_files": json.dumps(
                 [{"filename": "树与栈专项复盘.md", "mime_type": "text/markdown", "size_bytes": 12320}],
                 ensure_ascii=False,
             ),
-            "source_summary": "本图谱根据计科 1 班近期诊断结果调整，突出递归出口、前序遍历和栈匹配边界之间的关联。",
+            "source_summary": "本图谱根据人工智能 2 班近期诊断结果调整，突出递归出口、前序遍历和栈匹配边界之间的关联。",
             "nodes_json": json.dumps(graph_nodes_cs1_ds, ensure_ascii=False),
             "edges_json": json.dumps(graph_edges_cs1_ds, ensure_ascii=False),
             "published_at": datetime(2026, 8, 2, 10, 0, tzinfo=timezone.utc),
@@ -1325,18 +1511,36 @@ def seed_demo_data(db: Session) -> None:
             "class_id": "class_se_001",
             "course_id": "course_network_001",
             "teacher_id": "user_teacher_002",
-            "title": "计算机网络子网划分知识图谱",
-            "description": "软件工程 1 班计算机网络课程的子网划分学习路径。",
+            "title": "Python 程序设计数据处理知识图谱",
+            "description": "人工智能 1 班 Python 程序设计课程的列表与字典查找学习路径。",
             "status": "published",
-            "target_classes": json.dumps(["软件工程 1 班"], ensure_ascii=False),
+            "target_classes": json.dumps(["人工智能 1 班"], ensure_ascii=False),
             "source_files": json.dumps(
-                [{"filename": "IP地址与子网划分讲义.pdf", "mime_type": "application/pdf", "size_bytes": 245760}],
+                [{"filename": "Python列表与字典查找讲义.pdf", "mime_type": "application/pdf", "size_bytes": 245760}],
                 ensure_ascii=False,
             ),
-            "source_summary": "本图谱来自 IP 地址与子网划分资料，帮助学生按 IP 地址结构、子网掩码、可用主机数的顺序复习。",
+            "source_summary": "本图谱来自 Python 列表与字典查找资料，帮助学生按函数封装、列表遍历、字典查找和重复元素处理的顺序复习。",
             "nodes_json": json.dumps(graph_nodes_network, ensure_ascii=False),
             "edges_json": json.dumps(graph_edges_network, ensure_ascii=False),
             "published_at": datetime(2026, 8, 3, 9, 0, tzinfo=timezone.utc),
+        },
+        "kg_ta_se1_ml_001": {
+            "teaching_assignment_id": "ta_se1_ml_001",
+            "class_id": "class_se_001",
+            "course_id": "course_arch_001",
+            "teacher_id": "user_teacher_001",
+            "title": "机器学习模型评估知识图谱",
+            "description": "人工智能 1 班机器学习课程的过拟合、正则化和数据集划分学习路径。",
+            "status": "published",
+            "target_classes": json.dumps(["人工智能 1 班"], ensure_ascii=False),
+            "source_files": json.dumps(
+                [{"filename": "机器学习模型评估讲义.md", "mime_type": "text/markdown", "size_bytes": 16384}],
+                ensure_ascii=False,
+            ),
+            "source_summary": "本图谱来自机器学习模型评估资料，帮助学生先区分数据集用途，再理解过拟合和正则化之间的关系。",
+            "nodes_json": json.dumps(graph_nodes_ml, ensure_ascii=False),
+            "edges_json": json.dumps(graph_edges_ml, ensure_ascii=False),
+            "published_at": datetime(2026, 8, 3, 10, 0, tzinfo=timezone.utc),
         },
     }
     for graph_id, values in student_graphs.items():
@@ -1359,13 +1563,25 @@ def seed_demo_data(db: Session) -> None:
             "student_id": "user_student_001",
             "course_id": "course_network_001",
             "class_id": "class_se_001",
-            "summary_text": "计算机网络数据较少，子网划分需要通过后续练习继续确认。",
-            "overall_progress": 34,
+            "summary_text": "Python 程序设计数据较少，列表遍历和字典查找需要通过后续练习继续确认。",
+            "overall_progress": 48,
             "hint_dependency_level": "LOW",
             "compile_error_rate": 0,
-            "logic_error_rate": 0.15,
-            "recent_task_completion": 0.25,
-            "recommendation_text": "建议完成一次 IP 地址与子网划分入门练习。",
+            "logic_error_rate": 0.22,
+            "recent_task_completion": 0.35,
+            "recommendation_text": "建议完成一次 Python 列表与字典查找练习，并重点检查不能复用同一元素的分支。",
+        },
+        "profile_user_student_001_ml": {
+            "student_id": "user_student_001",
+            "course_id": "course_arch_001",
+            "class_id": "class_se_001",
+            "summary_text": "机器学习中的过拟合与正则化仍是当前主要薄弱点，建议先复盘数据集划分和模型评估。",
+            "overall_progress": 58,
+            "hint_dependency_level": "MEDIUM",
+            "compile_error_rate": 0,
+            "logic_error_rate": 0.36,
+            "recent_task_completion": 0.5,
+            "recommendation_text": "先完成过拟合与正则化概念测验，再生成一份模型评估复习笔记。",
         },
         "profile_user_student_002_ds": {
             "student_id": "user_student_002",
@@ -1403,12 +1619,30 @@ def seed_demo_data(db: Session) -> None:
             },
         ),
         (
-            {"student_id": "user_student_001", "course_id": "course_network_001", "knowledge_point": "子网划分"},
+            {"student_id": "user_student_001", "course_id": "course_network_001", "knowledge_point": "Python 列表与字典查找"},
             {
-                "mastery_score": 46,
+                "mastery_score": 54,
                 "state": "WEAK",
                 "evidence_count": 1,
-                "last_evidence": "自学记录显示仍需练习掩码换算",
+                "last_evidence": "自学记录显示仍需练习字典记录和重复元素分支",
+            },
+        ),
+        (
+            {"student_id": "user_student_001", "course_id": "course_arch_001", "knowledge_point": "过拟合与正则化"},
+            {
+                "mastery_score": 52,
+                "state": "WEAK",
+                "evidence_count": 2,
+                "last_evidence": "机器学习概念测验中正则化作用解释不完整",
+            },
+        ),
+        (
+            {"student_id": "user_student_001", "course_id": "course_arch_001", "knowledge_point": "数据集划分"},
+            {
+                "mastery_score": 60,
+                "state": "STABLE",
+                "evidence_count": 2,
+                "last_evidence": "能够基本区分训练集、验证集和测试集用途",
             },
         ),
         (
@@ -1459,6 +1693,33 @@ def seed_demo_data(db: Session) -> None:
                 "count": 2,
                 "severity": "MEDIUM",
                 "related_knowledge_points": json.dumps(["链表边界处理"], ensure_ascii=False),
+            },
+        ),
+        (
+            {"student_id": "user_student_001", "course_id": "course_network_001", "error_type": "PYTHON_REUSE_GUARD_MISSING"},
+            {
+                "label": "复用同一元素判断不足",
+                "count": 2,
+                "severity": "MEDIUM",
+                "related_knowledge_points": json.dumps(["Python 列表与字典查找", "下标判断"], ensure_ascii=False),
+            },
+        ),
+        (
+            {"student_id": "user_student_001", "course_id": "course_arch_001", "error_type": "TRAIN_VALID_TEST_CONFUSION"},
+            {
+                "label": "训练集、验证集、测试集混淆",
+                "count": 3,
+                "severity": "HIGH",
+                "related_knowledge_points": json.dumps(["数据集划分", "模型评估"], ensure_ascii=False),
+            },
+        ),
+        (
+            {"student_id": "user_student_001", "course_id": "course_arch_001", "error_type": "REGULARIZATION_PURPOSE_CONFUSION"},
+            {
+                "label": "正则化作用理解不清",
+                "count": 2,
+                "severity": "MEDIUM",
+                "related_knowledge_points": json.dumps(["过拟合与正则化"], ensure_ascii=False),
             },
         ),
         (
@@ -1531,6 +1792,40 @@ def seed_demo_data(db: Session) -> None:
             "related_task_id": "task_linked_list_delete_001",
             "related_knowledge_points": json.dumps(["栈与队列", "边界处理"], ensure_ascii=False),
             "suggested_action": "GENERATE_EXERCISE",
+            "status": "ACTIVE",
+        },
+    )
+    upsert(
+        db,
+        Recommendation,
+        "rec_user_student_001_ml_overfitting",
+        {
+            "student_id": "user_student_001",
+            "course_id": "course_arch_001",
+            "recommendation_type": "REVIEW",
+            "title": "完成过拟合与正则化专项复盘",
+            "reason": "最近回答暴露训练集、验证集、测试集用途混淆，正则化作用解释不完整。",
+            "priority": 10,
+            "related_task_id": "task_ml_overfitting_quiz_001",
+            "related_knowledge_points": json.dumps(["过拟合与正则化", "模型评估"], ensure_ascii=False),
+            "suggested_action": "OPEN_SELF_STUDY",
+            "status": "ACTIVE",
+        },
+    )
+    upsert(
+        db,
+        Recommendation,
+        "rec_user_student_001_python_stats",
+        {
+            "student_id": "user_student_001",
+            "course_id": "course_network_001",
+            "recommendation_type": "TASK",
+            "title": "完成 Python 列表与字典查找练习",
+            "reason": "字典记录和不能复用同一元素的分支还不稳定，建议先做一组小样本查找。",
+            "priority": 8,
+            "related_task_id": "task_subnet_mask_001",
+            "related_knowledge_points": json.dumps(["Python 列表与字典查找", "下标判断"], ensure_ascii=False),
+            "suggested_action": "OPEN_TASK",
             "status": "ACTIVE",
         },
     )

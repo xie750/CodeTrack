@@ -36,7 +36,7 @@ def test_student_course_knowledge_graph_rejects_unjoined_course():
     with TestClient(app) as client:
         response = client.get(
             "/api/v1/student/courses/course_arch_001/knowledge-graph",
-            headers={"X-Demo-User-Id": "user_student_001"},
+            headers={"X-Demo-User-Id": "user_student_002"},
         )
 
     assert response.status_code == 404

@@ -113,8 +113,8 @@ public:
 
 LINKED_LIST_DELETE_SPEC = ProgrammingSpec(
     runner_profile="linked_list_delete_transform_v1",
-    supported_languages=["PYTHON", "JAVA"],
-    default_language="PYTHON",
+    supported_languages=["CPP"],
+    default_language="CPP",
     function_signature="deleteAt(values, position) -> values",
     editable_region="SOLUTION_ONLY",
     language_templates={
@@ -140,7 +140,7 @@ LINKED_LIST_DELETE_SPEC = ProgrammingSpec(
         "Return an empty list or array for an empty input.",
         "Return the original values for an invalid position.",
         "When deleting the head node, return the values starting from the new head.",
-        "Python and Java are enabled first; C++ pointer-based judging will be adapted later.",
+        "C++ pointer-based judging is enabled for the current data-structure task.",
     ],
 )
 

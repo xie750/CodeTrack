@@ -339,10 +339,10 @@ def test_teacher_cannot_read_another_teachers_student(client):
 
 
 def test_course_without_teaching_assignment_is_forbidden(client):
-    """course_arch_001 上 teacher_001 只是课程成员，没有教学安排 —— 学情范围按教学安排算。"""
+    """course_scope_probe_001 上 teacher_001 只是课程成员，没有教学安排 —— 学情范围按教学安排算。"""
     response = client.get(
         "/api/v1/teacher/analytics/class",
-        params={"course_id": "course_arch_001"},
+        params={"course_id": "course_scope_probe_001"},
         headers=TEACHER,
     )
     assert response.status_code == 403

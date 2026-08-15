@@ -73,10 +73,10 @@ def _cleanup_task(task_id: str | None) -> None:
 def test_list_only_covers_courses_the_teacher_actually_teaches():
     with TestClient(app) as c:
         data = _tasks(c, TEACHER)
-        # teacher_001 只带数据结构课，网络课的任务不能出现
-        assert data["scope"]["course_ids"] == [DS_COURSE]
-        assert all(item["course_id"] == DS_COURSE for item in data["items"])
-        assert {item["course_id"] for item in data["course_options"]} == {DS_COURSE}
+        # teacher_001 负责数据结构和机器学习，不能看到其他教师的 Python 程序设计任务
+        assert set(data["scope"]["course_ids"]) == {DS_COURSE, "course_arch_001"}
+        assert {item["course_id"] for item in data["items"]} <= {DS_COURSE, "course_arch_001"}
+        assert {item["course_id"] for item in data["course_options"]} == {DS_COURSE, "course_arch_001"}
 
 
 def test_other_teacher_sees_a_different_course():
@@ -219,7 +219,7 @@ def test_content_status_and_publish_status_are_separate_fields():
 def test_publications_list_every_class_the_task_went_to():
     with TestClient(app) as c:
         row = _row(_tasks(c, TEACHER), CODING_TASK)
-        # 链表删除任务同时发给了软工班和计科班
+        # 链表删除任务同时发给了人工智能 1 班和人工智能 2 班
         assert {item["class_id"] for item in row["publications"]} == {SE_CLASS, CS_CLASS}
         assert all(item["class_name"] for item in row["publications"])
 
@@ -238,7 +238,7 @@ def test_class_filter_narrows_publications_and_roster():
 def test_class_scope_changes_status_and_says_so():
     with TestClient(app) as c:
         data = _tasks(c, TEACHER, course_id=DS_COURSE, class_id=CS_CLASS)
-        # 只发给软工班的任务，在计科班视角下确实还没下发，会显示成可发布。
+        # 只发给人工智能 1 班的任务，在人工智能 2 班视角下确实还没下发，会显示成可发布。
         # 这种口径切换必须在 status_derivation 里说清楚，否则教师会以为状态自相矛盾。
         assert "按班级口径" in data["status_derivation"]
         quiz = _row(data, QUESTION_TASK)

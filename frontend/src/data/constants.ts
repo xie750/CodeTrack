@@ -62,13 +62,13 @@ export const terminalStatuses = new Set([
 
 export const profileSummary = {
   studentName: "王同学",
-  courseName: "数据结构与程序设计基础",
+  courseName: "机器学习",
   progress: 62,
-  strongPoints: ["指针遍历", "中间节点删除"],
-  weakPoints: ["链表边界处理", "递归出口", "隐藏用例意识"],
-  frequentErrors: ["头节点返回值遗漏", "空指针保护不足", "只验证普通用例"],
+  strongPoints: ["数据集划分", "基础 Python 实验"],
+  weakPoints: ["过拟合与正则化", "链表边界处理", "隐藏用例意识"],
+  frequentErrors: ["训练集、验证集、测试集混淆", "头节点返回值遗漏", "只验证普通用例"],
   hintDependency: "中等",
-  recommendation: "先修正单链表删除头节点，再用一组边界测试复盘。"
+  recommendation: "先复盘过拟合与正则化，再用 Python 和数据结构任务补足实验能力。"
 };
 
 export const knowledgeSources = [
@@ -102,7 +102,7 @@ export const demoTasks: DemoTask[] = [
   {
     task_id: "task_linked_list_delete_001",
     title: "单链表指定位置节点删除",
-    course_name: "数据结构与程序设计基础",
+    course_name: "数据结构",
     status: "OPEN",
     progress_status: "IN_PROGRESS",
     deadline: "2026-07-24 23:59",
@@ -114,7 +114,7 @@ export const demoTasks: DemoTask[] = [
   {
     task_id: "demo_stack_match_001",
     title: "栈实现括号匹配",
-    course_name: "数据结构与程序设计基础",
+    course_name: "数据结构",
     status: "OPEN",
     progress_status: "NOT_STARTED",
     deadline: "2026-07-27 23:59",
@@ -124,15 +124,15 @@ export const demoTasks: DemoTask[] = [
     real: false
   },
   {
-    task_id: "demo_binary_tree_preorder_001",
-    title: "二叉树前序遍历",
-    course_name: "数据结构与程序设计基础",
+    task_id: "demo_ml_overfitting_001",
+    title: "过拟合与正则化概念测验",
+    course_name: "机器学习",
     status: "OPEN",
     progress_status: "REVIEW_REQUIRED",
     deadline: "2026-07-30 23:59",
     difficulty: "中等",
-    knowledge_points: ["二叉树", "递归"],
-    latest_summary: "演示任务：用于画像和自主学习推荐。",
+    knowledge_points: ["过拟合", "正则化", "模型评估"],
+    latest_summary: "演示任务：用于人工智能专业画像和自主学习推荐。",
     real: false
   }
 ];
@@ -175,13 +175,13 @@ export const artifacts: Artifact[] = [
     note: "后续补一道括号匹配练习。"
   },
   {
-    id: "artifact_ppt_tree",
+    id: "artifact_ppt_ml",
     type: "PPT 大纲",
-    title: "二叉树前序遍历讲解大纲",
-    knowledgePoints: ["二叉树", "递归"],
+    title: "过拟合与正则化讲解大纲",
+    knowledgePoints: ["机器学习", "过拟合", "正则化"],
     source: "自主学习生成",
-    content: "1. 递归出口；2. 根左右访问顺序；3. 手动画调用栈；4. 空节点样例。",
-    citations: ["kb_tree_traversal_recursive"],
+    content: "1. 泛化误差；2. 过拟合现象；3. 正则化直觉；4. 训练集、验证集、测试集划分。",
+    citations: ["kb_ml_overfitting_regularization"],
     aiGenerated: true,
     createdAt: "2026-07-22",
     note: "第一版只保存大纲，不导出 PPT 文件。"
@@ -189,6 +189,22 @@ export const artifacts: Artifact[] = [
 ];
 
 export const selfStudyOutputs: Record<string, Record<string, string>> = {
+  机器学习: {
+    概念讲解: "机器学习的核心是让模型从数据中学习规律，并在未见过的数据上保持较好的泛化能力。过拟合表示模型过度记住训练数据，正则化可以约束模型复杂度。",
+    练习题: "给出一个训练准确率 98%、测试准确率 70% 的场景，判断是否可能过拟合，并写出两种缓解方法。",
+    复习笔记: "训练集用于拟合参数，验证集用于模型选择和调参，测试集用于最终评估；正则化通过惩罚复杂模型降低过拟合风险。",
+    知识卡片: "卡片正面：为什么不能反复用测试集调参？反面：会让测试集信息泄露到模型选择过程，评估不再可靠。",
+    思维导图: "机器学习 -> 数据集划分 -> 模型训练 -> 模型评估 -> 过拟合 -> 正则化。",
+    "PPT 大纲": "第 1 页数据集划分，第 2 页过拟合现象，第 3 页正则化直觉，第 4 页常见缓解方法。"
+  },
+  Python程序设计: {
+    概念讲解: "Python 程序设计在人工智能专业中主要承担实验编程、数据处理和模型调用基础。写统计函数时要先明确输入、输出和异常分支。",
+    练习题: "实现 stats(values)，返回 count、max、average，并说明空列表时为什么不能直接除以长度。",
+    复习笔记: "列表遍历负责取样本，条件分支负责处理空列表，字典适合组织多个统计结果。",
+    知识卡片: "卡片正面：空列表求平均值为什么危险？反面：长度为 0 会导致除零，需要单独返回 None 或约定值。",
+    思维导图: "Python 数据处理 -> 函数 -> 列表遍历 -> 条件分支 -> 统计结果。",
+    "PPT 大纲": "第 1 页函数接口，第 2 页列表遍历，第 3 页统计值计算，第 4 页空列表边界。"
+  },
   链表: {
     概念讲解: "链表的关键不是连续存储，而是每个节点通过 next 指向后继。删除节点时要先找到位置，再处理头节点、尾节点和非法位置。",
     练习题: "写出 3 个测试：删除头节点、删除尾节点、删除越界位置，并说明每个测试要验证什么。",
