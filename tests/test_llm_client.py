@@ -165,6 +165,29 @@ async def test_chat_json_maps_invalid_json_content(monkeypatch):
         )
 
 
+async def test_chat_text_stream_yields_delta_content(monkeypatch):
+    async def fake_stream(url, *, json, headers=None, timeout=llm_client.DEFAULT_TIMEOUT):
+        assert url == "https://api.test/v1/chat/completions"
+        assert json["stream"] is True
+        assert headers == {"Authorization": "Bearer sk-test"}
+        yield {"choices": [{"delta": {"content": "第一段"}}]}
+        yield {"choices": [{"delta": {"content": "第二段"}}]}
+        yield {"choices": [{"delta": {}}]}
+
+    monkeypatch.setattr(llm_client, "_stream_json_lines", fake_stream)
+
+    chunks = []
+    async for chunk in llm_client.chat_text_stream(
+        [{"role": "user", "content": "hi"}],
+        model="test-model",
+        api_key="sk-test",
+        base_url="https://api.test/v1",
+    ):
+        chunks.append(chunk)
+
+    assert chunks == ["第一段", "第二段"]
+
+
 async def test_request_json_unwraps_data_envelope(monkeypatch):
     async def fake_post(url, *, json, headers=None, timeout=20.0):
         return {"data": {"diagnosis_type": "BOUNDARY_CASE_MISSING"}}

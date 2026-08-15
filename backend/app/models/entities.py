@@ -745,6 +745,50 @@ class AgentStep(Base):
     run: Mapped[AgentRun] = relationship(back_populates="steps")
 
 
+class AiTutorSession(Base):
+    __tablename__ = "ai_tutor_sessions"
+    __table_args__ = (
+        Index("ix_ai_tutor_sessions_student_updated", "student_id", "updated_at"),
+        Index("ix_ai_tutor_sessions_student_course", "student_id", "course_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    student_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    course_id: Mapped[str | None] = mapped_column(ForeignKey("courses.id"))
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="ACTIVE")
+    message_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    messages: Mapped[list["AiTutorMessage"]] = relationship(
+        back_populates="session",
+        order_by="AiTutorMessage.created_at",
+    )
+
+
+class AiTutorMessage(Base):
+    __tablename__ = "ai_tutor_messages"
+    __table_args__ = (
+        Index("ix_ai_tutor_messages_session_created", "session_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    session_id: Mapped[str] = mapped_column(ForeignKey("ai_tutor_sessions.id"), nullable=False)
+    student_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    course_id: Mapped[str | None] = mapped_column(ForeignKey("courses.id"))
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="SUCCEEDED")
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    run_id: Mapped[str | None] = mapped_column(ForeignKey("agent_runs.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    session: Mapped[AiTutorSession] = relationship(back_populates="messages")
+
+
 class IdempotencyRecord(Base):
     __tablename__ = "idempotency_records"
     __table_args__ = (
