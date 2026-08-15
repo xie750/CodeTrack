@@ -204,7 +204,7 @@ def test_class_compare_returns_both_sides_and_null_propagating_deltas():
         compare = data["compare"]
         assert compare is not None
         assert compare["class_ids"] == [CS_CLASS]
-        # 计科 1 班没有已评分进度，所以差值必须是 None 而不是把对面当 0 分
+        # 人工智能 2 班没有已评分进度，所以差值必须是 None 而不是把对面当 0 分
         assert compare["summary"]["avg_score"] is None
         assert compare["deltas"]["avg_score"] is None
         assert compare["deltas"]["avg_mastery"] is not None

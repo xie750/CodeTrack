@@ -150,12 +150,12 @@ def test_course_classes_returns_one_row_per_teaching_assignment(client):
     assert response.status_code == 200, response.text
     data = response.json()["data"]
 
-    # 种子里 user_teacher_001 有 ta_se1_ds_001 和 ta_cs1_ds_001 两个安排、同一门课
-    assert len(data["items"]) == 2
-    assert {item["class_name"] for item in data["items"]} == {"软件工程 1 班", "计科 1 班"}
-    assert data["stats"]["course_count"] == 1
+    # 种子里 user_teacher_001 覆盖人工智能 1 班的机器学习/数据结构，以及人工智能 2 班的数据结构
+    assert len(data["items"]) == 3
+    assert {item["class_name"] for item in data["items"]} == {"人工智能 1 班", "人工智能 2 班"}
+    assert data["stats"]["course_count"] == 2
     assert data["stats"]["class_count"] == 2
-    assert response.json()["meta"]["total"] == 2
+    assert response.json()["meta"]["total"] == 3
     for item in data["items"]:
         assert item["teaching_assignment_id"]
         assert item["student_count"] >= 0
@@ -166,17 +166,17 @@ def test_course_class_filters_narrow_items_but_not_stats(client):
     baseline = client.get("/api/v1/teacher/course-classes", headers=TEACHER).json()["data"]
 
     filtered = client.get(
-        "/api/v1/teacher/course-classes", headers=TEACHER, params={"keyword": "计科"}
+        "/api/v1/teacher/course-classes", headers=TEACHER, params={"keyword": "人工智能 2"}
     ).json()["data"]
     assert len(filtered["items"]) == 1
-    assert filtered["items"][0]["class_name"] == "计科 1 班"
+    assert filtered["items"][0]["class_name"] == "人工智能 2 班"
     assert filtered["stats"] == baseline["stats"]
     assert filtered["filters"] == baseline["filters"]
 
     by_term = client.get(
         "/api/v1/teacher/course-classes", headers=TEACHER, params={"term": "2026-demo"}
     ).json()["data"]
-    assert len(by_term["items"]) == 2
+    assert len(by_term["items"]) == 3
     assert client.get(
         "/api/v1/teacher/course-classes", headers=TEACHER, params={"term": "不存在的学期"}
     ).json()["data"]["items"] == []

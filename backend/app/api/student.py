@@ -71,8 +71,10 @@ class StudentAiChatSessionRequest(BaseModel):
 
 
 def task_knowledge_points(task: Task) -> list[str]:
-    if "子网" in task.title or task.course_id == "course_network_001":
-        return ["计算机网络", "子网划分", "IP 地址"]
+    if task.course_id == "course_arch_001":
+        return ["机器学习", "过拟合", "模型评估"]
+    if task.course_id == "course_network_001":
+        return ["Python", "列表遍历", "字典查找"]
     if "二叉树" in task.title:
         return ["二叉树", "递归", "遍历"]
     if "栈" in task.title:
@@ -81,7 +83,7 @@ def task_knowledge_points(task: Task) -> list[str]:
 
 
 def task_difficulty(task: Task) -> str:
-    if "二叉树" in task.title or "子网" in task.title:
+    if "二叉树" in task.title or "过拟合" in task.title or "正则化" in task.title:
         return "MEDIUM"
     if "阶段测验" in task.title or "综合" in task.title:
         return "MEDIUM"
@@ -105,7 +107,9 @@ def latest_task_summary(task: Task, progress: StudentTaskProgress | None) -> str
     if progress.status == "COMPLETED":
         return "已完成，学习总结和画像已同步更新。"
     if task.course_id == "course_network_001":
-        return "最近练习显示子网掩码换算还需要继续巩固。"
+        return "最近练习显示 Python 列表遍历和字典查找分支还需要继续巩固。"
+    if task.course_id == "course_arch_001":
+        return "最近测验显示过拟合、正则化和数据集划分概念还需要继续巩固。"
     if progress.highest_hint_level >= 2:
         return "最近一次修正已经通过部分用例，建议继续核查边界条件。"
     return "最近一次提交未通过头节点删除用例。"

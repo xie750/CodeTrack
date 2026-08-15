@@ -143,15 +143,15 @@ def test_task_detail_returns_teacher_configured_cases_with_hidden_masks():
         assert by_id["tc_delete_tail"]["expected_output_summary"] == "边界位置删除结果应正确"
 
 
-def test_subnet_programming_task_has_seeded_teacher_cases():
+def test_python_programming_task_has_seeded_teacher_cases():
     with client() as c:
         response = c.get("/api/v1/tasks/task_subnet_mask_001")
         assert response.status_code == 200
         data = response.json()["data"]
 
-        assert data["interface_spec"]["runner_profile"] == "stdio_cpp_v1"
+        assert data["interface_spec"]["runner_profile"] == "leetcode_two_sum_v1"
         assert len(data["test_cases"]) == 3
-        assert data["test_cases"][0]["input_summary"] == {"stdin": "192.168.1.10 255.255.255.0\n"}
+        assert data["test_cases"][0]["input_summary"] == {"nums": [2, 7, 11, 15], "target": 9}
         assert data["test_cases"][2]["visibility"] == "HIDDEN"
         assert data["test_cases"][2]["input_summary"] is None
 
@@ -791,7 +791,7 @@ def test_login_returns_jwt_and_student_context_uses_token_identity():
 
         context = c.get("/api/v1/student/learning-context", headers=headers)
         assert context.status_code == 200
-        assert context.json()["data"]["student"]["class_name"] == "计科 1 班"
+        assert context.json()["data"]["student"]["class_name"] == "人工智能 2 班"
 
 
 def test_student_token_cannot_access_teacher_api():

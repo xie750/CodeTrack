@@ -161,7 +161,7 @@ export default function AiTutor() {
 
   const activePoint = weakestPoint?.knowledge_point ?? "边界测试";
   const courseId = profile?.course.id ?? context?.courses[0]?.course_id;
-  const courseName = profile?.course.name ?? context?.courses[0]?.course_name ?? "数据结构与程序设计基础";
+  const courseName = profile?.course.name ?? context?.courses[0]?.course_name ?? "机器学习";
   const frequentError = profile?.frequent_errors[0]?.label ?? "只验证普通用例";
 
   const filteredSessions = useMemo(() => {

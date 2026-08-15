@@ -2,25 +2,25 @@
 
 ## 1. 设计结论
 
-第二阶段数据模型围绕“学生端助学闭环”设计，不把教师端后台做成完整教务系统。
+第二阶段数据模型围绕“人工智能专业学生助学闭环”设计，不把系统做成泛化教务平台，也不把课程误当成学科边界。
 
 核心口径：
 
-- 学生通常固定归属一个行政班，例如“软件工程 1 班”。
-- 行政班下面会开设多门课程，例如“数据结构”“计算机网络”“计算机组成原理”。
-- 不同课程可以由不同老师负责。
-- 一个老师可以教授多个行政班的同一门课程。
+- 当前垂直方向是人工智能专业，对应赛题中的“面向一类学科建设的学科垂直大模型与创新应用开发”。
+- 课程是人工智能专业下的学习场景，首版固定三门：机器学习、Python 程序设计、数据结构。
+- 机器学习是人工智能专业核心课程，Python 程序设计和数据结构是支撑该专业学习的基础课程。
+- 学生通常固定归属一个行政班，例如“人工智能 1 班”。
+- 行政班下面开设多门课程，不同课程可以由不同老师负责。
 - 老师下发任务时，目标不是单纯“班级”，而是“某个行政班的某门课程”。
-- 学生端不重点切换班级，而是基于自己的行政班切换课程任务。
-- 学习画像按 `student_id + course_id` 聚合，首页可以展示总摘要，详情按课程切换。
+- 学习画像按 `student_id + course_id` 聚合，首页可以展示跨课程摘要，详情按课程切换。
 - 教师端只查看自己负责的 `班级 + 课程` 范围内的画像聚合，不直接展示学生全部课程画像。
 
 推荐关系：
 
 ```text
 学生
--> 所属行政班
--> 行政班开设多门课程
+-> 所属行政班（人工智能 1 班）
+-> 行政班开设三门课程（机器学习 / Python 程序设计 / 数据结构）
 -> 每门课程存在教学安排
 -> 教师基于教学安排下发任务
 -> 学生完成任务并产生提交、诊断、提示、资料和画像事件
@@ -32,19 +32,20 @@
 
 行政班表示学校真实班级，例如：
 
-- 软件工程 1 班；
-- 软件工程 2 班；
-- 计科 1 班。
+- 人工智能 1 班；
+- 人工智能 2 班。
 
 行政班不是课程班，也不是老师个人创建的班级。
 
 ### 2.2 课程
 
-课程表示学科或科目，例如：
+首版课程固定为：
 
-- 数据结构与程序设计基础；
-- 计算机网络；
-- 计算机组成原理。
+- 机器学习：人工智能专业核心课程，体现学科垂直模型的专业能力。
+- Python 程序设计：面向人工智能专业的数据处理、实验编程和模型调用基础。
+- 数据结构：面向人工智能专业的基础算法与结构能力。
+
+课程不是产品垂直边界。产品垂直边界是“人工智能专业”。
 
 ### 2.3 教学安排
 
@@ -53,23 +54,27 @@
 示例：
 
 ```text
-王老师 -> 软件工程 1 班 -> 数据结构
-李老师 -> 软件工程 1 班 -> 计算机网络
-王老师 -> 计科 1 班 -> 数据结构
+王老师 -> 人工智能 1 班 -> 数据结构
+李老师 -> 人工智能 1 班 -> Python 程序设计
+王老师 -> 人工智能 1 班 -> 机器学习
+王老师 -> 人工智能 2 班 -> 数据结构
 ```
 
 任务下发、学生任务列表、教师端画像聚合，都应该围绕教学安排过滤。
 
 ### 2.4 任务本体与任务下发
 
-任务本体表示任务内容，例如“单链表指定位置节点删除”。
+任务本体表示任务内容，例如“单链表指定位置节点删除”或“NumPy 数组统计练习”。
 
 任务下发表示这份任务被发布给哪个教学安排，例如：
 
 ```text
 单链表指定位置节点删除
--> 发布给 软件工程 1 班 的 数据结构
--> 发布给 计科 1 班 的 数据结构
+-> 发布给 人工智能 1 班 的 数据结构
+-> 发布给 人工智能 2 班 的 数据结构
+
+NumPy 数组统计练习
+-> 发布给 人工智能 1 班 的 Python 程序设计
 ```
 
 因此 `tasks` 和 `task_assignments` 必须分开。
@@ -117,8 +122,6 @@ learner_events
 
 ### 4.1 users
 
-用户表，保留学生和教师。
-
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | id | String(64) | 用户 ID |
@@ -127,7 +130,14 @@ learner_events
 | status | String(20) | `ACTIVE` / `DISABLED` |
 | created_at | DateTime | 创建时间 |
 
-当前项目已有该表，可继续复用。
+第一版可 seed：
+
+```text
+user_teacher_001: 王老师，负责数据结构和机器学习
+user_teacher_002: 李老师，负责 Python 程序设计
+user_student_001: 王同学，人工智能 1 班
+user_student_002: 刘同学，人工智能 2 班
+```
 
 ### 4.2 classes
 
@@ -136,41 +146,22 @@ learner_events
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | id | String(64) | 班级 ID |
-| name | String(100) | 班级名称，例如“软件工程 1 班” |
+| name | String(100) | 班级名称，例如“人工智能 1 班” |
 | grade | String(20) | 年级，例如 `2026` |
-| major_name | String(100) | 专业名称，例如“软件工程” |
+| major_name | String(100) | 专业名称，例如“人工智能” |
 | status | String(20) | `ACTIVE` / `ARCHIVED` |
 | created_at | DateTime | 创建时间 |
 
 第一版可 seed：
 
 ```text
-class_se_001: 软件工程 1 班
-class_se_002: 软件工程 2 班
-class_cs_001: 计科 1 班
+class_se_001: 人工智能 1 班
+class_cs_001: 人工智能 2 班
 ```
 
-### 4.3 student_class_memberships
+当前 ID 可继续沿用历史命名，避免一次性迁移接口和测试；展示名称必须使用人工智能专业口径。
 
-学生行政班归属表。
-
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| id | Integer | 自增主键 |
-| class_id | String(64) | 行政班 ID |
-| student_id | String(64) | 学生 ID |
-| status | String(20) | `ACTIVE` / `TRANSFERRED` |
-| joined_at | DateTime | 加入时间 |
-
-约束：
-
-```text
-同一学生第一版只允许一个 ACTIVE 行政班。
-```
-
-这符合当前产品口径，也让学生端不需要设计复杂班级切换。
-
-### 4.4 courses
+### 4.3 courses
 
 课程表。
 
@@ -182,9 +173,21 @@ class_cs_001: 计科 1 班
 | term | String(40) | 学期，例如 `2026-demo` |
 | status | String(20) | `ACTIVE` / `ARCHIVED` |
 
-当前项目已有 `courses.owner_teacher_id`。后续若采用教学安排表，课程本身可以不强绑定单一老师。
+首版三门课：
 
-### 4.5 teaching_assignments
+```text
+course_arch_001: 机器学习
+course_network_001: Python 程序设计
+course_ds_001: 数据结构
+```
+
+说明：
+
+- `course_arch_001`、`course_network_001` 是历史 ID，可以暂时保留。
+- 前端和接口展示时使用课程名称，不向学生暴露历史 ID 语义。
+- 机器学习用于体现人工智能专业核心课程；Python 和数据结构用于支撑专业学习链路。
+
+### 4.4 teaching_assignments
 
 教学安排表，表示“老师教某个班的某门课”。
 
@@ -207,12 +210,13 @@ class_id + course_id + teacher_id + term
 示例数据：
 
 ```text
-ta_se1_ds: 软件工程 1 班 + 数据结构 + 王老师
-ta_se1_net: 软件工程 1 班 + 计算机网络 + 李老师
-ta_cs1_ds: 计科 1 班 + 数据结构 + 王老师
+ta_se1_ds_001: 人工智能 1 班 + 数据结构 + 王老师
+ta_se1_network_001: 人工智能 1 班 + Python 程序设计 + 李老师
+ta_se1_ml_001: 人工智能 1 班 + 机器学习 + 王老师
+ta_cs1_ds_001: 人工智能 2 班 + 数据结构 + 王老师
 ```
 
-### 4.6 tasks
+### 4.5 tasks
 
 任务本体表。
 
@@ -222,19 +226,32 @@ ta_cs1_ds: 计科 1 班 + 数据结构 + 王老师
 | course_id | String(64) | 课程 ID |
 | title | String(160) | 任务标题 |
 | description | Text | 任务说明 |
-| task_type | String(30) | `CODING` / `QUIZ` / `PRACTICE` |
-| language | String(20) | `CPP` 等 |
-| difficulty | String(30) | `BASIC` / `MEDIUM` / `HARD` |
+| workspace_type | String(30) | `CODING` / `QUESTION_SET` |
+| language | String(20) | `PYTHON` / `CPP` 等 |
 | interface_spec | Text | 编程接口说明 |
 | learning_objectives | Text | JSON 字符串 |
-| knowledge_points | Text | JSON 字符串 |
-| status | String(20) | `DRAFT` / `ACTIVE` / `ARCHIVED` |
-| created_by | String(64) | 创建教师 ID |
-| created_at | DateTime | 创建时间 |
+| capability_ids | Text | JSON 字符串 |
+| status | String(20) | `OPEN` / `ARCHIVED` |
 
-当前项目已有 `tasks`，可以在后续迁移中逐步补充 `task_type`、`difficulty`、`knowledge_points`、`created_by`。
+首版任务建议：
 
-### 4.7 task_assignments
+```text
+数据结构：
+  单链表指定位置节点删除
+  两数之和
+  链表边界处理巩固练习
+  链表删除阶段测验
+  栈与队列预习任务
+
+Python 程序设计：
+  Python 列表与字典查找练习
+
+机器学习：
+  过拟合与正则化概念测验
+  训练集、验证集、测试集划分练习
+```
+
+### 4.6 task_assignments
 
 任务下发表。
 
@@ -245,50 +262,12 @@ ta_cs1_ds: 计科 1 班 + 数据结构 + 王老师
 | teaching_assignment_id | String(64) | 教学安排 ID |
 | published_by | String(64) | 发布教师 ID |
 | publish_status | String(20) | `DRAFT` / `PUBLISHED` / `CLOSED` |
-| assignment_mode | String(20) | `PRACTICE` / `EXAM` |
+| assignment_mode | String(20) | `PRACTICE` / `QUIZ` / `EXAM` |
 | allow_hint_level_3 | Boolean | 是否允许三级提示 |
 | published_at | DateTime | 发布时间 |
 | deadline | DateTime | 截止时间 |
 
 任务列表应从这张表出发，而不是只查 `tasks`。
-
-### 4.8 student_task_progress
-
-学生任务进度表。
-
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| id | Integer | 自增主键 |
-| assignment_id | String(64) | 任务下发 ID |
-| student_id | String(64) | 学生 ID |
-| status | String(30) | 学生进度状态 |
-| latest_submission_id | String(64) | 最近提交 ID |
-| latest_version_id | String(64) | 最近版本 ID |
-| passed_count | Integer | 通过测试数 |
-| total_required_count | Integer | 必要测试数 |
-| highest_hint_level | Integer | 最高已查看提示层级 |
-| score | Float | 分数，可为空 |
-| started_at | DateTime | 开始时间 |
-| last_submitted_at | DateTime | 最近提交时间 |
-| completed_at | DateTime | 完成时间 |
-| updated_at | DateTime | 更新时间 |
-
-状态枚举：
-
-```text
-NOT_STARTED
-IN_PROGRESS
-SUBMITTED
-NEEDS_REVISION
-COMPLETED
-EXPIRED
-```
-
-唯一约束建议：
-
-```text
-assignment_id + student_id
-```
 
 ## 5. 学习画像设计
 
@@ -370,10 +349,12 @@ student_id + course_id
 | last_evidence | Text | 最近依据 |
 | updated_at | DateTime | 更新时间 |
 
-唯一约束建议：
+示例知识点：
 
 ```text
-student_id + course_id + knowledge_point
+机器学习：监督学习、模型评估、过拟合、正则化、数据集划分
+Python 程序设计：函数、列表字典、NumPy 数组、Pandas 数据处理
+数据结构：链表、栈与队列、二叉树、递归
 ```
 
 ### 5.4 learner_error_stats
@@ -391,6 +372,16 @@ student_id + course_id + knowledge_point
 | severity | String(20) | `LOW` / `MEDIUM` / `HIGH` |
 | related_knowledge_points | Text | JSON 字符串 |
 | updated_at | DateTime | 更新时间 |
+
+示例错因：
+
+```text
+OVERFITTING_REASONING_WEAK: 过拟合原因解释不清
+TRAIN_VALID_TEST_CONFUSION: 训练集、验证集、测试集混淆
+PYTHON_INDEX_SHAPE_ERROR: Python 索引或数组形状理解错误
+HEAD_NODE_RETURN_MISSING: 头节点返回值遗漏
+BOUNDARY_CASE_MISSING: 边界用例覆盖不足
+```
 
 ### 5.5 recommendations
 
@@ -418,7 +409,9 @@ student_id + course_id + knowledge_point
 原因：
 
 - 不同课程的能力表现不能混在一起。
-- 数据结构老师只需要看数据结构画像，不应该看到学生的计算机网络画像。
+- 机器学习老师需要看模型概念、实验方法和专业能力画像。
+- Python 老师需要看编程基础、数据处理和实验代码画像。
+- 数据结构老师需要看算法结构、边界处理和代码实现画像。
 - 教师端需要可行动的班级课程摘要，而不是铺满每个学生所有细节。
 
 教师端查询边界：
@@ -430,39 +423,28 @@ teacher_id
 -> learner_profile_snapshots / learner_knowledge_states / learner_error_stats
 ```
 
-教师端默认展示聚合：
-
-```text
-班级课程总览
--> 任务完成率
--> 薄弱知识点 Top 5
--> 高频错因 Top 5
--> 风险学生 Top 10
--> 可展开查看单个学生课程画像
-```
-
 建议接口返回：
 
 ```json
 {
   "class_id": "class_se_001",
-  "class_name": "软件工程 1 班",
-  "course_id": "course_ds_001",
-  "course_name": "数据结构与程序设计基础",
+  "class_name": "人工智能 1 班",
+  "course_id": "course_arch_001",
+  "course_name": "机器学习",
   "teacher_name": "王老师",
   "student_count": 42,
   "task_completion_rate": 0.76,
   "weak_points": [
     {
-      "name": "链表边界处理",
+      "name": "过拟合与正则化",
       "affected_students": 18,
       "avg_mastery_score": 54
     }
   ],
   "frequent_errors": [
     {
-      "error_type": "HEAD_NODE_RETURN_MISSING",
-      "label": "头节点返回值遗漏",
+      "error_type": "TRAIN_VALID_TEST_CONFUSION",
+      "label": "训练集、验证集、测试集混淆",
       "count": 21
     }
   ],
@@ -470,7 +452,7 @@ teacher_id
     {
       "student_id": "user_student_001",
       "student_name": "王同学",
-      "reason": "连续 2 次任务未通过，提示依赖中等偏高"
+      "reason": "连续 2 次机器学习概念题未通过，提示依赖中等偏高"
     }
   ]
 }
@@ -492,22 +474,29 @@ GET /api/v1/student/learning-context
     "id": "user_student_001",
     "name": "王同学",
     "class_id": "class_se_001",
-    "class_name": "软件工程 1 班"
+    "class_name": "人工智能 1 班"
   },
   "courses": [
     {
-      "course_id": "course_ds_001",
-      "course_name": "数据结构与程序设计基础",
+      "course_id": "course_arch_001",
+      "course_name": "机器学习",
       "teacher_name": "王老师",
-      "task_count": 3,
-      "unfinished_count": 2
+      "task_count": 2,
+      "unfinished_count": 1
     },
     {
       "course_id": "course_network_001",
-      "course_name": "计算机网络",
+      "course_name": "Python 程序设计",
       "teacher_name": "李老师",
       "task_count": 1,
-      "unfinished_count": 0
+      "unfinished_count": 1
+    },
+    {
+      "course_id": "course_ds_001",
+      "course_name": "数据结构",
+      "teacher_name": "王老师",
+      "task_count": 5,
+      "unfinished_count": 3
     }
   ]
 }
@@ -524,12 +513,12 @@ GET /api/v1/student/tasks?course_id=course_ds_001
 ```json
 [
   {
-    "assignment_id": "assign_ds_linked_list_001",
+    "assignment_id": "assign_se1_ds_linked_list_001",
     "task_id": "task_linked_list_delete_001",
     "course_id": "course_ds_001",
-    "course_name": "数据结构与程序设计基础",
+    "course_name": "数据结构",
     "class_id": "class_se_001",
-    "class_name": "软件工程 1 班",
+    "class_name": "人工智能 1 班",
     "teacher_name": "王老师",
     "title": "单链表指定位置节点删除",
     "task_type": "CODING",
@@ -548,7 +537,7 @@ GET /api/v1/student/tasks?course_id=course_ds_001
 ### 7.3 获取学生课程画像
 
 ```http
-GET /api/v1/student/profile?course_id=course_ds_001
+GET /api/v1/student/profile?course_id=course_arch_001
 ```
 
 返回：
@@ -558,41 +547,41 @@ GET /api/v1/student/profile?course_id=course_ds_001
   "student": {
     "id": "user_student_001",
     "name": "王同学",
-    "class_name": "软件工程 1 班"
+    "class_name": "人工智能 1 班"
   },
   "course": {
-    "id": "course_ds_001",
-    "name": "数据结构与程序设计基础",
+    "id": "course_arch_001",
+    "name": "机器学习",
     "teacher_name": "王老师"
   },
   "overview": {
-    "overall_progress": 62,
+    "overall_progress": 58,
     "hint_dependency_level": "MEDIUM",
-    "compile_error_rate": 0.18,
-    "logic_error_rate": 0.42,
-    "recent_task_completion": 0.67,
-    "summary": "链表边界处理仍是当前主要薄弱点，建议先完成边界专项练习。"
+    "compile_error_rate": 0,
+    "logic_error_rate": 0.36,
+    "recent_task_completion": 0.5,
+    "summary": "过拟合与正则化仍是当前主要薄弱点，建议先完成模型评估专项复盘。"
   },
   "knowledge_states": [
     {
-      "knowledge_point": "链表边界处理",
+      "knowledge_point": "过拟合与正则化",
       "mastery_score": 52,
       "state": "WEAK",
-      "last_evidence": "单链表删除任务中头节点用例失败"
+      "last_evidence": "机器学习概念测验中正则化作用解释不完整"
     }
   ],
   "frequent_errors": [
     {
-      "error_type": "HEAD_NODE_RETURN_MISSING",
-      "label": "头节点返回值遗漏",
+      "error_type": "TRAIN_VALID_TEST_CONFUSION",
+      "label": "训练集、验证集、测试集混淆",
       "count": 3,
       "severity": "HIGH"
     }
   ],
   "recommendations": [
     {
-      "title": "完成链表边界专项复盘",
-      "reason": "最近 2 次提交均暴露头节点处理问题",
+      "title": "完成过拟合与正则化专项复盘",
+      "reason": "最近 2 次回答均暴露模型评估概念混淆",
       "suggested_action": "OPEN_SELF_STUDY"
     }
   ]
@@ -641,40 +630,44 @@ learner_error_stats.student_id + course_id
 
 ```text
 用户：
-  王老师：数据结构教师
-  李老师：计算机网络教师
-  王同学：学生
+  王老师：数据结构教师、机器学习教师
+  李老师：Python 程序设计教师
+  王同学：人工智能 1 班学生
+  刘同学：人工智能 2 班学生
 
 行政班：
-  软件工程 1 班
-  计科 1 班
+  人工智能 1 班
+  人工智能 2 班
 
 课程：
-  数据结构与程序设计基础
-  计算机网络
-  计算机组成原理
+  机器学习
+  Python 程序设计
+  数据结构
 
 教学安排：
-  王老师 -> 软件工程 1 班 -> 数据结构
-  李老师 -> 软件工程 1 班 -> 计算机网络
-  王老师 -> 计科 1 班 -> 数据结构
+  王老师 -> 人工智能 1 班 -> 机器学习
+  李老师 -> 人工智能 1 班 -> Python 程序设计
+  王老师 -> 人工智能 1 班 -> 数据结构
+  王老师 -> 人工智能 2 班 -> 数据结构
 
 任务：
+  机器学习：过拟合与正则化概念测验
+  机器学习：训练集、验证集、测试集划分练习
+  Python 程序设计：Python 列表与字典查找练习
   数据结构：单链表指定位置节点删除
-  数据结构：栈实现括号匹配
-  数据结构：二叉树前序遍历
-  计算机网络：IP 地址与子网划分练习
+  数据结构：栈与队列预习任务
 
 学生画像：
+  王同学 + 机器学习：过拟合与正则化薄弱
+  王同学 + Python 程序设计：列表遍历和字典查找待巩固
   王同学 + 数据结构：链表边界处理薄弱
-  王同学 + 计算机网络：子网划分待巩固
 ```
 
 学生端展示：
 
 ```text
-当前班级：软件工程 1 班
-课程筛选：全部 / 数据结构 / 计算机网络 / 计算机组成原理
+当前班级：人工智能 1 班
+课程筛选：全部 / 机器学习 / Python 程序设计 / 数据结构
 任务列表随课程变化
 画像详情随课程变化
 ```
@@ -683,22 +676,23 @@ learner_error_stats.student_id + course_id
 
 ```text
 王老师只能看到：
-  软件工程 1 班的数据结构画像
-  计科 1 班的数据结构画像
+  人工智能 1 班的机器学习画像
+  人工智能 1 班的数据结构画像
+  人工智能 2 班的数据结构画像
 
 李老师只能看到：
-  软件工程 1 班的计算机网络画像
+  人工智能 1 班的 Python 程序设计画像
 ```
 
 ## 10. 前端展示口径
 
 ### 10.1 班级任务页
 
-页面标题可保留“班级任务”，但筛选控件建议改为：
+页面标题可保留“课程任务”，筛选控件建议为：
 
 ```text
-当前班级：软件工程 1 班
-课程选择：全部课程 / 数据结构 / 计算机网络 / 计算机组成原理
+当前班级：人工智能 1 班
+课程选择：全部课程 / 机器学习 / Python 程序设计 / 数据结构
 ```
 
 不要让学生主动切换到其他行政班。
@@ -724,9 +718,9 @@ learner_error_stats.student_id + course_id
 
 ```text
 全部摘要
+机器学习画像
+Python 程序设计画像
 数据结构画像
-计算机网络画像
-计算机组成原理画像
 ```
 
 页面模块：
@@ -754,13 +748,15 @@ learner_error_stats.student_id + course_id
 - 教师端完整建班和排课后台；
 - 全校级画像统计；
 - PostgreSQL JSON 字段和物化视图；
-- 定时画像聚合任务。
+- 定时画像聚合任务；
+- 更多人工智能专业课程，例如深度学习、自然语言处理、计算机视觉。
 
 当前第一版先保证：
 
 ```text
+人工智能专业口径清楚
 行政班归属清楚
-课程筛选清楚
+三门课程筛选清楚
 教师教学安排清楚
 任务下发目标清楚
 学生任务进度清楚
