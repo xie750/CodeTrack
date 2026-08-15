@@ -1,6 +1,6 @@
 import { type ReactNode } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, Bot, BookOpen, ChartNoAxesColumnIncreasing, Database, FolderOpen, Network, Route as RouteIcon } from "lucide-react";
+import { ArrowLeft, Bot, BookOpen, ChartNoAxesColumnIncreasing, Database, Flame, FolderOpen, Network, Route as RouteIcon } from "lucide-react";
 import StudentRouteBreadcrumb from "../components/StudentRouteBreadcrumb";
 import SelfStudy from "./SelfStudy";
 import LearningProfile from "./LearningProfile";
@@ -15,7 +15,7 @@ const selfStudyTabs = [
   { path: "knowledge-base", label: "知识库", icon: <Database size={18} /> },
   { path: "library", label: "资源中心", icon: <FolderOpen size={18} /> },
   { path: "knowledge-map", label: "知识图谱", icon: <Network size={18} /> },
-  { path: "ai", label: "AI 助手", icon: <Bot size={18} /> }
+  { path: "ai", label: "AI 助学", icon: <Bot size={18} /> }
 ];
 
 function selfStudyPath(path = "") {
@@ -67,15 +67,24 @@ function SelfStudyShell({ children }: { children: ReactNode }) {
             </NavLink>
           ))}
         </nav>
+        <div className="student-window-streak">
+          <span><Flame size={17} /></span>
+          <div>
+            <strong>连续学习 7 天</strong>
+            <small>很棒哦，保持学习节奏！</small>
+          </div>
+        </div>
       </aside>
       <main className="student-window-content">
-        <StudentRouteBreadcrumb
-          items={[
-            { label: "学习入口", to: "/" },
-            { label: "自主学习", to: "/self-study" },
-            { label: activeTab.label }
-          ]}
-        />
+        {activePath ? (
+          <StudentRouteBreadcrumb
+            items={[
+              { label: "学习入口", to: "/" },
+              { label: "自主学习", to: "/self-study" },
+              { label: activeTab.label }
+            ]}
+          />
+        ) : null}
         {children}
       </main>
     </div>

@@ -1,0 +1,2 @@
+INFO:     127.0.0.1:54186 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54187 - "POST /api/v1/student/ai-chat HTTP/1.1" 200 OK

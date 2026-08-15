@@ -155,6 +155,28 @@ export type StudentKnowledgeGraph = {
   published_at: string | null;
 };
 
+export type StudentAiChatCitation = {
+  source_id: string;
+  title: string;
+  summary: string;
+  source_type: string;
+  version: string;
+  authority_level: string;
+};
+
+export type StudentAiChatResponse = {
+  answer: string;
+  confidence: number;
+  citations: StudentAiChatCitation[];
+  suggested_actions: string[];
+  profile_used: boolean;
+  source_used: boolean;
+  safety_note: string;
+  model_provider: string;
+  model_name: string;
+  run_id: string;
+};
+
 export type TaskDetail = {
   task_id: string;
   course_id: string;
@@ -549,6 +571,12 @@ export const api = {
     cachedGet<StudentProfile>(studentProfileUrl(courseId)),
   getStudentKnowledgeGraph: (courseId: string) =>
     cachedGet<StudentKnowledgeGraph>(studentKnowledgeGraphUrl(courseId)),
+  sendStudentAiChat: (message: string, courseId?: string, history?: Array<{ role: "student" | "assistant"; content: string }>) =>
+    request<StudentAiChatResponse>("/api/v1/student/ai-chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, course_id: courseId, history: history ?? [] })
+    }),
   submitCode: async (taskId: string, language: string, sourceCode: string) => {
     const result = await request<SubmitResponse>(`/api/v1/tasks/${taskId}/submissions`, {
       method: "POST",

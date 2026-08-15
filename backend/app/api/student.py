@@ -1,7 +1,7 @@
 import json
 
 from fastapi import APIRouter, Depends, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -21,6 +21,7 @@ from backend.app.models import (
 )
 from backend.app.services.learner_profile import serialize_learner_profile
 from backend.app.services.submissions import iso
+from backend.app.services.ai_tutor import generate_student_ai_reply
 from backend.app.services.question_workflow import (
     question_workspace_payload,
     save_question_draft,
@@ -37,6 +38,17 @@ class QuestionAnswerPayload(BaseModel):
 
 class SaveQuestionAnswersRequest(BaseModel):
     answers: list[QuestionAnswerPayload]
+
+
+class AiChatHistoryItem(BaseModel):
+    role: str
+    content: str
+
+
+class StudentAiChatRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=2000)
+    course_id: str | None = None
+    history: list[AiChatHistoryItem] = Field(default_factory=list, max_length=12)
 
 
 def task_knowledge_points(task: Task) -> list[str]:
@@ -93,6 +105,26 @@ def require_active_class(db: Session, user: User) -> tuple[AdministrativeClass, 
     if administrative_class is None:
         raise ApiError(404, "CLASS_NOT_FOUND", "行政班不存在")
     return administrative_class, membership
+
+
+def resolve_student_course(
+    db: Session,
+    administrative_class: AdministrativeClass,
+    course_id: str | None,
+) -> Course:
+    query = select(TeachingAssignment).where(
+        TeachingAssignment.class_id == administrative_class.id,
+        TeachingAssignment.status == "ACTIVE",
+    )
+    if course_id:
+        query = query.where(TeachingAssignment.course_id == course_id)
+    teaching = db.scalar(query.order_by(TeachingAssignment.course_id.asc()))
+    if teaching is None:
+        raise ApiError(404, "COURSE_NOT_IN_STUDENT_CLASS", "当前学生未加入这门课程")
+    course = db.get(Course, teaching.course_id)
+    if course is None:
+        raise ApiError(404, "COURSE_NOT_FOUND", "课程不存在")
+    return course
 
 
 def safe_json_list(raw: str | None) -> list:
@@ -187,6 +219,26 @@ def learning_context(db: Session = Depends(get_db), user: User = Depends(current
             "courses": courses,
         }
     )
+
+
+@router.post("/ai-chat")
+async def student_ai_chat(
+    payload: StudentAiChatRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    administrative_class, _ = require_active_class(db, user)
+    course = resolve_student_course(db, administrative_class, payload.course_id)
+    result = await generate_student_ai_reply(
+        db,
+        user=user,
+        class_id=administrative_class.id,
+        course=course,
+        message=payload.message.strip(),
+        history=[item.model_dump() for item in payload.history],
+    )
+    return ok(result)
 
 
 @router.get("/tasks")
