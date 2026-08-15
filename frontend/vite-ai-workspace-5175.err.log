@@ -1,0 +1,2 @@
+[2m23:50:43[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31merror while updating dependencies:
+Error: EPERM: operation not permitted, rename 'D:\Office_File\other\CodeTrack\frontend\node_modules\.vite\deps' -> 'D:\Office_File\other\CodeTrack\frontend\node_modules\.vite\deps_temp_d65a7197'[39m

@@ -1,0 +1,4 @@
+[2m23:53:26[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/v1/auth/login[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1611:16)
+[31mError: ENOTEMPTY: directory not empty, rmdir 'D:\Office_File\other\CodeTrack\frontend\node_modules\.vite\deps'[39m
