@@ -78,6 +78,33 @@ async def _post_json(
         return response.json()
 
 
+async def _stream_json_lines(
+    url: str,
+    *,
+    json: dict[str, Any],
+    headers: dict[str, str] | None = None,
+    timeout: float = DEFAULT_TIMEOUT,
+):
+    """OpenAI-compatible SSE stream出口。测试可 patch 这个函数。"""
+    async with httpx.AsyncClient(trust_env=False) as client:
+        async with client.stream("POST", url, json=json, headers=headers, timeout=timeout) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if not line.startswith("data:"):
+                    continue
+                data = line[len("data:"):].strip()
+                if not data or data == "[DONE]":
+                    continue
+                yield json_module_loads(data)
+
+
+def json_module_loads(data: str) -> dict[str, Any]:
+    value = json.loads(data)
+    if not isinstance(value, dict):
+        raise ValueError("stream data is not a JSON object")
+    return value
+
+
 def openai_usage(body: dict[str, Any]) -> tuple[int | None, int | None]:
     usage = body.get("usage") or {}
     if not isinstance(usage, dict):
@@ -221,6 +248,55 @@ async def chat_json(
         model_provider=model_provider,
         model_name=model,
     )
+
+
+async def chat_text_stream(
+    messages: list[dict[str, Any]],
+    *,
+    model: str,
+    api_key: str | None = None,
+    base_url: str = "https://api.openai.com/v1",
+    timeout: float = DEFAULT_TIMEOUT,
+    temperature: float = 0.2,
+):
+    """OpenAI 兼容的原生文本流式输出。逐段 yield `delta.content`。"""
+    if not api_key:
+        raise LLMNotConfigured("未配置模型 API Key")
+    body: dict[str, Any] = {
+        "model": model,
+        "temperature": temperature,
+        "stream": True,
+        "messages": messages,
+    }
+    headers = {"Authorization": f"Bearer {api_key}"}
+    try:
+        async for chunk in _stream_json_lines(
+            f"{base_url.rstrip('/')}/chat/completions",
+            json=body,
+            headers=headers,
+            timeout=timeout,
+        ):
+            choices = chunk.get("choices")
+            if not isinstance(choices, list) or not choices:
+                continue
+            delta = choices[0].get("delta") if isinstance(choices[0], dict) else None
+            if not isinstance(delta, dict):
+                continue
+            content = delta.get("content")
+            if isinstance(content, str) and content:
+                yield content
+    except httpx.TimeoutException as exc:
+        raise LLMTimeout("模型流式请求超时", detail=str(exc)) from exc
+    except httpx.HTTPStatusError as exc:
+        raise LLMHTTPError(
+            "模型流式返回非 2xx",
+            status_code=exc.response.status_code,
+            detail=str(exc),
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise LLMHTTPError("模型流式请求传输失败", detail=str(exc)) from exc
+    except ValueError as exc:
+        raise LLMInvalidJSON("模型流式响应不是合法 JSON", detail=str(exc)) from exc
 
 
 async def request_json(

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Drawer } from "antd";
 import {
-  Bot,
   Check,
+  FileQuestion,
   FileText,
   History,
   Link2,
@@ -10,22 +10,28 @@ import {
   MoreHorizontal,
   Paperclip,
   PenLine,
+  Podcast,
+  Presentation,
   Search,
   SendHorizontal,
   ThumbsDown,
   ThumbsUp,
+  Trash2,
+  Waypoints,
   X
 } from "lucide-react";
-import { api, LearningContext, StudentAiChatCitation, StudentProfile } from "../api";
+import {
+  api,
+  LearningContext,
+  StudentAiChatCitation,
+  StudentAiChatMessage,
+  StudentAiChatResponse,
+  StudentAiChatSession,
+  StudentProfile
+} from "../api";
+import robotImg from "../assets/ui-home/ai-tutor-bot.png";
 
-type HistoryItem = {
-  id: string;
-  title: string;
-  summary: string;
-  time: string;
-  group: "今天" | "昨天" | "更早";
-  active?: boolean;
-};
+type HistoryGroup = "今天" | "昨天" | "更早";
 
 type AiChatTurn = {
   id: string;
@@ -43,49 +49,40 @@ type AiChatTurn = {
   modelName?: string;
 };
 
-const historyItems: HistoryItem[] = [
-  {
-    id: "h1",
-    title: "边界测试在黑盒测试中的应用",
-    summary: "为什么边界测试容易漏掉，需结合等价类一起分析。",
-    time: "10:32",
-    group: "今天",
-    active: true
-  },
-  {
-    id: "h2",
-    title: "引用来源的查找方法",
-    summary: "如何在课程资料中查到对应的引用来源。",
-    time: "09:48",
-    group: "今天"
-  },
-  {
-    id: "h3",
-    title: "如何设计边界测试用例",
-    summary: "给我一个函数的边界测试用例设计思路。",
-    time: "09:15",
-    group: "今天"
-  },
-  {
-    id: "h4",
-    title: "等价类划分示例",
-    summary: "给我几个等价类划分的例子。",
-    time: "21:04",
-    group: "昨天"
-  },
-  {
-    id: "h5",
-    title: "条件覆盖与判定覆盖的区别",
-    summary: "条件覆盖和判定覆盖有什么区别？",
-    time: "18:37",
-    group: "昨天"
-  }
+const fallbackSuggestedActions = ["继续解释", "生成练习", "保存为笔记", "只给一级提示"];
+const resourceOutputActions = [
+  { label: "PPT", icon: <Presentation size={15} /> },
+  { label: "思维导图", icon: <Waypoints size={15} /> },
+  { label: "文档", icon: <FileText size={15} /> },
+  { label: "练习题", icon: <FileQuestion size={15} /> },
+  { label: "播客", icon: <Podcast size={15} /> }
 ];
-
-const suggestedPrompts = ["继续解释", "生成练习", "保存为笔记", "只给一级提示"];
+const openingPrompts = [
+  "栈和队列的区别与场景",
+  "链表反转的代码思路",
+  "二叉树遍历方式对比",
+  "动态规划的核心思想"
+];
 
 function nowLabel() {
   return new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+}
+
+function timeLabel(value?: string | null) {
+  if (!value) return nowLabel();
+  return new Date(value).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+}
+
+function groupByDay(value?: string | null): HistoryGroup {
+  if (!value) return "更早";
+  const date = new Date(value);
+  const today = new Date();
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const diffDays = Math.round((startOfToday - startOfDate) / 86400000);
+  if (diffDays <= 0) return "今天";
+  if (diffDays === 1) return "昨天";
+  return "更早";
 }
 
 function splitAnswer(content: string) {
@@ -106,15 +103,56 @@ function errorMessage(error: unknown) {
   return message;
 }
 
+function responseToTurn(id: string, result: StudentAiChatResponse): AiChatTurn {
+  return {
+    id,
+    role: "assistant",
+    content: result.answer,
+    time: nowLabel(),
+    confidence: result.confidence,
+    citations: result.citations,
+    suggestedActions: result.suggested_actions,
+    profileUsed: result.profile_used,
+    sourceUsed: result.source_used,
+    safetyNote: result.safety_note,
+    modelName: result.model_name
+  };
+}
+
+function messageToTurn(message: StudentAiChatMessage): AiChatTurn {
+  const metadata = message.metadata ?? {};
+  return {
+    id: message.id,
+    role: message.role === "student" ? "student" : "assistant",
+    content: message.content,
+    time: timeLabel(message.created_at),
+    error: message.status === "FAILED",
+    confidence: typeof metadata.confidence === "number" ? metadata.confidence : undefined,
+    citations: Array.isArray(metadata.citations) ? metadata.citations : [],
+    suggestedActions: Array.isArray(metadata.suggested_actions) ? metadata.suggested_actions : undefined,
+    profileUsed: typeof metadata.profile_used === "boolean" ? metadata.profile_used : undefined,
+    sourceUsed: typeof metadata.source_used === "boolean" ? metadata.source_used : undefined,
+    safetyNote: typeof metadata.safety_note === "string" ? metadata.safety_note : undefined,
+    modelName: typeof metadata.model_name === "string" ? metadata.model_name : undefined
+  };
+}
+
 export default function AiTutor() {
   const [context, setContext] = useState<LearningContext | null>(null);
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [loadingContext, setLoadingContext] = useState(true);
+  const [loadingSession, setLoadingSession] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [historyQuery, setHistoryQuery] = useState("");
   const [sending, setSending] = useState(false);
+  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
+  const [creatingSession, setCreatingSession] = useState(false);
+  const [sessions, setSessions] = useState<StudentAiChatSession[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [turns, setTurns] = useState<AiChatTurn[]>([]);
+  const hydratedRef = useRef(false);
   const threadRef = useRef<HTMLDivElement | null>(null);
 
   const weakestPoint = useMemo(() => {
@@ -126,20 +164,12 @@ export default function AiTutor() {
   const courseName = profile?.course.name ?? context?.courses[0]?.course_name ?? "数据结构与程序设计基础";
   const frequentError = profile?.frequent_errors[0]?.label ?? "只验证普通用例";
 
-  const [turns, setTurns] = useState<AiChatTurn[]>(() => [
-    {
-      id: "welcome",
-      role: "assistant",
-      content: "你好，我是 AI 助学导师。你可以直接问知识点、错题原因、练习生成或学习计划，我会尽量结合你的课程资料和学习画像回答。",
-      time: nowLabel(),
-      confidence: 0.86,
-      citations: [],
-      suggestedActions: suggestedPrompts,
-      profileUsed: false,
-      sourceUsed: false,
-      modelName: "ready"
-    }
-  ]);
+  const filteredSessions = useMemo(() => {
+    const keyword = historyQuery.trim().toLowerCase();
+    return sessions.filter((session) => (
+      !keyword || session.title.toLowerCase().includes(keyword) || session.summary.toLowerCase().includes(keyword)
+    ));
+  }, [historyQuery, sessions]);
 
   useEffect(() => {
     let alive = true;
@@ -176,10 +206,75 @@ export default function AiTutor() {
     thread.scrollTop = thread.scrollHeight;
   }, [turns]);
 
-  const filteredHistory = historyItems.filter((item) => {
-    const keyword = historyQuery.trim().toLowerCase();
-    return !keyword || item.title.toLowerCase().includes(keyword) || item.summary.toLowerCase().includes(keyword);
-  });
+  useEffect(() => {
+    if (!courseId || hydratedRef.current) return;
+    hydratedRef.current = true;
+    refreshSessions(courseId).then((items) => {
+      if (items[0]) {
+        loadSession(items[0].id);
+      }
+    }).catch(() => {
+      setError("历史会话加载失败，当前可以先发起新的 AI 助学对话。");
+    });
+  }, [courseId]);
+
+  async function refreshSessions(targetCourseId = courseId) {
+    const items = await api.listStudentAiChatSessions(targetCourseId);
+    setSessions(items);
+    return items;
+  }
+
+  async function loadSession(sessionId: string) {
+    setLoadingSession(true);
+    try {
+      const detail = await api.getStudentAiChatSession(sessionId);
+      setCurrentSessionId(detail.session.id);
+      setTurns(detail.messages.length ? detail.messages.map(messageToTurn) : []);
+      setHistoryOpen(false);
+      await refreshSessions(detail.session.course_id ?? courseId);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setLoadingSession(false);
+    }
+  }
+
+  async function startNewSession() {
+    if (creatingSession) return;
+    setCreatingSession(true);
+    setError(null);
+    setCurrentSessionId(null);
+    setTurns([]);
+    setDraft("");
+    try {
+      const session = await api.createStudentAiChatSession(courseId, "新的 AI 助学会话");
+      setCurrentSessionId(session.id);
+      setSessions((current) => [session, ...current.filter((item) => item.id !== session.id)]);
+      setHistoryOpen(false);
+    } catch (err) {
+      setHistoryOpen(false);
+      setError(errorMessage(err));
+    } finally {
+      setCreatingSession(false);
+    }
+  }
+
+  async function deleteSession(sessionId: string) {
+    if (deletingSessionId) return;
+    setDeletingSessionId(sessionId);
+    try {
+      await api.deleteStudentAiChatSession(sessionId);
+      setSessions((current) => current.filter((item) => item.id !== sessionId));
+      if (currentSessionId === sessionId) {
+        setCurrentSessionId(null);
+        setTurns([]);
+      }
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setDeletingSessionId(null);
+    }
+  }
 
   async function sendMessage(messageOverride?: string) {
     const message = (messageOverride ?? draft).trim();
@@ -194,11 +289,11 @@ export default function AiTutor() {
     const pendingTurn: AiChatTurn = {
       id: pendingId,
       role: "assistant",
-      content: "AI 助学导师正在结合课程资料和学习画像思考...",
+      content: "",
       time: nowLabel(),
       loading: true
     };
-    const history = turns
+    const localHistory = turns
       .filter((turn) => !turn.loading && !turn.error)
       .slice(-6)
       .map((turn) => ({ role: turn.role, content: turn.content }));
@@ -207,24 +302,55 @@ export default function AiTutor() {
     setSending(true);
     setTurns((current) => [...current, userTurn, pendingTurn]);
     try {
-      const result = await api.sendStudentAiChat(message, courseId, history);
-      setTurns((current) => current.map((turn) => (
-        turn.id === pendingId
-          ? {
-              id: pendingId,
-              role: "assistant",
-              content: result.answer,
-              time: nowLabel(),
-              confidence: result.confidence,
-              citations: result.citations,
-              suggestedActions: result.suggested_actions,
-              profileUsed: result.profile_used,
-              sourceUsed: result.source_used,
-              safetyNote: result.safety_note,
-              modelName: result.model_name
+      await api.streamStudentAiChat(
+        {
+          message,
+          courseId,
+          sessionId: currentSessionId,
+          history: localHistory
+        },
+        (streamEvent) => {
+          if (streamEvent.event === "session") {
+            setCurrentSessionId(streamEvent.data.session.id);
+            setSessions((current) => {
+              const withoutCurrent = current.filter((item) => item.id !== streamEvent.data.session.id);
+              return [streamEvent.data.session, ...withoutCurrent];
+            });
+          }
+          if (streamEvent.event === "delta") {
+            setTurns((current) => current.map((turn) => (
+              turn.id === pendingId
+                ? { ...turn, content: `${turn.content}${streamEvent.data.content}`, loading: true }
+                : turn
+            )));
+          }
+          if (streamEvent.event === "final") {
+            setTurns((current) => current.map((turn) => (
+              turn.id === pendingId ? responseToTurn(pendingId, streamEvent.data) : turn
+            )));
+            if (streamEvent.data.session) {
+              setSessions((current) => {
+                const withoutCurrent = current.filter((item) => item.id !== streamEvent.data.session?.id);
+                return [streamEvent.data.session as StudentAiChatSession, ...withoutCurrent];
+              });
             }
-          : turn
-      )));
+          }
+          if (streamEvent.event === "error") {
+            setTurns((current) => current.map((turn) => (
+              turn.id === pendingId
+                ? {
+                    ...turn,
+                    content: errorMessage(new Error(`${streamEvent.data.code}: ${streamEvent.data.message}`)),
+                    loading: false,
+                    error: true,
+                    suggestedActions: ["检查配置", "稍后重试"]
+                  }
+                : turn
+            )));
+          }
+        }
+      );
+      await refreshSessions();
     } catch (err) {
       setTurns((current) => current.map((turn) => (
         turn.id === pendingId
@@ -244,11 +370,15 @@ export default function AiTutor() {
   }
 
   return (
-    <div className="ai-workspace-page">
+    <div className={`ai-workspace-page${turns.length ? " ai-has-chat" : " ai-empty-chat"}`}>
       <header className="ai-workspace-header">
-        <div>
-          <span>AI 助学 / 自主学习导师</span>
-          <h1>和 AI 助学导师持续追问、生成资料、沉淀学习证据</h1>
+        <div className="ai-workspace-title">
+          <img src={robotImg} alt="" />
+          <div>
+            <span>AI 助学 / 自主学习导师</span>
+            <h1>和 AI 助学导师持续追问、生成资料、沉淀学习证据</h1>
+            <p>专注数据结构与程序设计 · 构建扎实的知识与能力</p>
+          </div>
         </div>
         <button type="button" className="ai-history-entry" onClick={() => setHistoryOpen(true)}>
           <History size={17} />
@@ -260,6 +390,25 @@ export default function AiTutor() {
 
       <main className="ai-learning-workspace" aria-label="AI Learning Workspace">
         <div className="ai-thread" ref={threadRef}>
+          {loadingSession ? <div className="ai-chat-loading">正在恢复历史会话...</div> : null}
+          {!loadingSession && !turns.length ? (
+            <section className="ai-empty-state" aria-label="AI 助学初始页">
+              <div className="ai-empty-visual">
+                <span />
+                <img src={robotImg} alt="" />
+              </div>
+              <h2>你的 AI 学习伙伴，随时为你助力</h2>
+              <p>提出问题，获取思路，生成资料，深入探索知识</p>
+              <div className="ai-empty-prompts">
+                {openingPrompts.map((prompt) => (
+                  <button type="button" key={prompt} onClick={() => sendMessage(prompt)} disabled={sending || loadingContext}>
+                    {prompt.includes("代码") ? <FileText size={17} /> : prompt.includes("总结") ? <PenLine size={17} /> : <Search size={17} />}
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null}
           {turns.map((turn) => (
             turn.role === "student" ? (
               <article className="ai-turn ai-turn-user" key={turn.id}>
@@ -271,15 +420,15 @@ export default function AiTutor() {
             ) : (
               <article className="ai-turn ai-turn-assistant" key={turn.id}>
                 <div className="ai-assistant-avatar" aria-hidden="true">
-                  <Bot size={20} />
+                  <img src={robotImg} alt="" />
                 </div>
                 <div className={`ai-answer-flow${turn.error ? " ai-answer-flow-error" : ""}`}>
                   <header>
                     <strong>AI 助学导师</strong>
-                    <span><Check size={14} /> {turn.loading ? "思考中" : turn.error ? "需要处理" : "思考完成"}</span>
+                    <span><Check size={14} /> {turn.loading ? (turn.content ? "回答中" : "思考中") : turn.error ? "需要处理" : "思考完成"}</span>
                   </header>
 
-                  {turn.loading ? (
+                  {turn.loading && !turn.content ? (
                     <div className="ai-answer-loading">
                       <i />
                       <i />
@@ -292,9 +441,10 @@ export default function AiTutor() {
                         {splitAnswer(turn.content).map((paragraph, index) => (
                           <p key={`${turn.id}_p_${index}`}>{paragraph}</p>
                         ))}
+                        {turn.loading ? <span className="ai-stream-caret" /> : null}
                       </section>
 
-                      {!turn.error ? (
+                      {!turn.error && !turn.loading ? (
                         <section>
                           <h2>回答依据</h2>
                           <div className="ai-answer-meta">
@@ -306,14 +456,14 @@ export default function AiTutor() {
                         </section>
                       ) : null}
 
-                      {turn.safetyNote ? (
+                      {turn.safetyNote && !turn.loading ? (
                         <section>
                           <h2>使用提醒</h2>
                           <p>{turn.safetyNote}</p>
                         </section>
                       ) : null}
 
-                      {turn.citations?.length ? (
+                      {turn.citations?.length && !turn.loading ? (
                         <section>
                           <h2>引用来源</h2>
                           {turn.citations.map((source) => (
@@ -325,16 +475,18 @@ export default function AiTutor() {
                         </section>
                       ) : null}
 
-                      <footer className="ai-answer-actions">
-                        {(turn.suggestedActions?.length ? turn.suggestedActions : suggestedPrompts).map((action) => (
-                          <button type="button" key={action} onClick={() => setDraft(action)}>
-                            {action.includes("保存") ? <PenLine size={15} /> : action.includes("练习") ? <FileText size={15} /> : <MessageSquarePlus size={15} />}
-                            {action}
-                          </button>
-                        ))}
-                        <button type="button" aria-label="回答有帮助"><ThumbsUp size={16} /></button>
-                        <button type="button" aria-label="回答需要改进"><ThumbsDown size={16} /></button>
-                      </footer>
+                      {!turn.loading ? (
+                        <footer className="ai-answer-actions">
+                          {(turn.suggestedActions?.length ? turn.suggestedActions : fallbackSuggestedActions).map((action) => (
+                            <button type="button" key={action} onClick={() => setDraft(action)}>
+                              {action.includes("保存") ? <PenLine size={15} /> : action.includes("练习") ? <FileText size={15} /> : <MessageSquarePlus size={15} />}
+                              {action}
+                            </button>
+                          ))}
+                          <button type="button" aria-label="回答有帮助"><ThumbsUp size={16} /></button>
+                          <button type="button" aria-label="回答需要改进"><ThumbsDown size={16} /></button>
+                        </footer>
+                      ) : null}
                     </>
                   )}
                 </div>
@@ -345,9 +497,10 @@ export default function AiTutor() {
 
         <footer className="ai-sticky-composer" aria-label="AI 输入区">
           <div className="ai-prompt-row">
-            {suggestedPrompts.map((prompt) => (
-              <button type="button" key={prompt} onClick={() => sendMessage(prompt)} disabled={sending || loadingContext}>
-                {prompt}
+            {resourceOutputActions.map((action) => (
+              <button type="button" className="ai-resource-action" key={action.label} aria-disabled="true" title="资源生成入口待接入">
+                {action.icon}
+                {action.label}
               </button>
             ))}
           </div>
@@ -363,12 +516,12 @@ export default function AiTutor() {
               }}
               placeholder={`有问题，尽管问 AI 助学导师。当前课程：${courseName}；薄弱点：${activePoint}；常见错因：${frequentError}`}
               rows={2}
-              disabled={sending}
+              disabled={sending || loadingSession}
             />
             <div className="ai-composer-actions">
               <button type="button" aria-label="添加附件" disabled={sending}><Paperclip size={18} /></button>
               <button type="button" aria-label="更多能力" disabled={sending}><MoreHorizontal size={18} /></button>
-              <button type="button" className="ai-send" disabled={!draft.trim() || sending || loadingContext} aria-label="发送" onClick={() => sendMessage()}>
+              <button type="button" className="ai-send" disabled={!draft.trim() || sending || loadingContext || loadingSession} aria-label="发送" onClick={() => sendMessage()}>
                 <SendHorizontal size={19} />
               </button>
             </div>
@@ -397,29 +550,48 @@ export default function AiTutor() {
             <Search size={16} />
             <input value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} placeholder="搜索历史会话" />
           </label>
-          <button type="button" className="ai-new-session">
+          <button type="button" className="ai-new-session" onClick={startNewSession} disabled={creatingSession}>
             <MessageSquarePlus size={16} />
             新建会话
           </button>
 
           {(["今天", "昨天", "更早"] as const).map((group) => {
-            const items = filteredHistory.filter((item) => item.group === group);
+            const items = filteredSessions.filter((item) => groupByDay(item.last_message_at ?? item.updated_at) === group);
             if (!items.length) return null;
             return (
               <section className="ai-session-group" key={group}>
                 <h3>{group}</h3>
                 {items.map((item) => (
-                  <button type="button" className={item.active ? "active" : ""} key={item.id}>
-                    <span>
-                      <strong>{item.title}</strong>
-                      <time>{item.time}</time>
-                    </span>
-                    <small>{item.summary}</small>
-                  </button>
+                  <div className={`ai-session-row${item.id === currentSessionId ? " active" : ""}`} key={item.id}>
+                    <button
+                      type="button"
+                      className="ai-session-select"
+                      onClick={() => loadSession(item.id)}
+                    >
+                      <span className="ai-session-top">
+                        <i className="ai-session-item-icon" aria-hidden="true">
+                          <History size={13} />
+                        </i>
+                        <strong>{item.title}</strong>
+                        <time>{timeLabel(item.last_message_at ?? item.updated_at)}</time>
+                      </span>
+                      <small>{item.summary || "暂无摘要"}</small>
+                    </button>
+                    <button
+                      type="button"
+                      className="ai-session-delete"
+                      aria-label="删除历史会话"
+                      disabled={deletingSessionId === item.id}
+                      onClick={() => deleteSession(item.id)}
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
                 ))}
               </section>
             );
           })}
+          {!filteredSessions.length ? <p className="ai-session-empty">还没有历史会话，发送第一条问题后会自动保存。</p> : null}
         </div>
       </Drawer>
     </div>

@@ -1,16 +1,18 @@
 import json
 from typing import Any
+from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.ai.errors import LLMError
-from backend.app.ai.llm_client import chat_json, request_json
+from backend.app.ai.llm_client import chat_json, chat_text_stream, request_json
 from backend.app.ai.run_recorder import finish_run, new_run_id, record_step, start_run
 from backend.app.ai.schemas import AgentRunContext
 from backend.app.core.api_response import ApiError
 from backend.app.core.config import get_settings
-from backend.app.models import Course, KnowledgeSource, User
+from backend.app.models import AiTutorMessage, AiTutorSession, Course, KnowledgeSource, User
+from backend.app.models.entities import utc_now
 from backend.app.services.learner_profile import serialize_learner_profile
 
 
@@ -36,6 +38,33 @@ def _trim(text: str | None, limit: int) -> str:
     if len(value) <= limit:
         return value
     return f"{value[:limit]}..."
+
+
+def _json_dumps(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def _json_loads(raw: str | None) -> dict[str, Any]:
+    if not raw:
+        return {}
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _iso(value) -> str | None:
+    return value.isoformat() if value else None
+
+
+def _new_id(prefix: str) -> str:
+    return f"{prefix}_{uuid4().hex[:12]}"
+
+
+def _session_title(message: str) -> str:
+    title = _trim(message.replace("\n", " "), 36)
+    return title or "新的 AI 助学会话"
 
 
 def _citation(source: KnowledgeSource) -> dict[str, Any]:
@@ -86,6 +115,200 @@ def _history_payload(history: list[dict[str, str]] | None) -> list[dict[str, str
 
 def _default_actions() -> list[str]:
     return ["继续追问", "生成练习", "保存为笔记", "只给一级提示"]
+
+
+def serialize_ai_tutor_message(message: AiTutorMessage) -> dict[str, Any]:
+    return {
+        "id": message.id,
+        "session_id": message.session_id,
+        "role": message.role,
+        "content": message.content,
+        "status": message.status,
+        "metadata": _json_loads(message.metadata_json),
+        "run_id": message.run_id,
+        "created_at": _iso(message.created_at),
+    }
+
+
+def serialize_ai_tutor_session(session: AiTutorSession) -> dict[str, Any]:
+    return {
+        "id": session.id,
+        "student_id": session.student_id,
+        "course_id": session.course_id,
+        "title": session.title,
+        "summary": session.summary,
+        "status": session.status,
+        "message_count": session.message_count,
+        "created_at": _iso(session.created_at),
+        "updated_at": _iso(session.updated_at),
+        "last_message_at": _iso(session.last_message_at),
+    }
+
+
+def list_ai_tutor_sessions(
+    db: Session,
+    *,
+    student_id: str,
+    course_id: str | None = None,
+    query: str | None = None,
+    limit: int = 50,
+) -> list[AiTutorSession]:
+    statement = select(AiTutorSession).where(
+        AiTutorSession.student_id == student_id,
+        AiTutorSession.status == "ACTIVE",
+    )
+    if course_id:
+        statement = statement.where(AiTutorSession.course_id == course_id)
+    sessions = list(
+        db.scalars(
+            statement.order_by(AiTutorSession.updated_at.desc(), AiTutorSession.created_at.desc()).limit(limit)
+        ).all()
+    )
+    keyword = (query or "").strip().lower()
+    if not keyword:
+        return sessions
+    return [
+        session
+        for session in sessions
+        if keyword in session.title.lower() or keyword in session.summary.lower()
+    ]
+
+
+def get_ai_tutor_session(db: Session, *, student_id: str, session_id: str) -> AiTutorSession:
+    session = db.get(AiTutorSession, session_id)
+    if session is None or session.student_id != student_id or session.status != "ACTIVE":
+        raise ApiError(404, "AI_CHAT_SESSION_NOT_FOUND", "AI 助学会话不存在或已不可用。")
+    return session
+
+
+def delete_ai_tutor_session(db: Session, *, student_id: str, session_id: str) -> AiTutorSession:
+    session = get_ai_tutor_session(db, student_id=student_id, session_id=session_id)
+    session.status = "DELETED"
+    session.updated_at = utc_now()
+    db.flush()
+    return session
+
+
+def create_ai_tutor_session(
+    db: Session,
+    *,
+    student_id: str,
+    course_id: str | None,
+    first_message: str,
+) -> AiTutorSession:
+    now = utc_now()
+    session = AiTutorSession(
+        id=_new_id("ait"),
+        student_id=student_id,
+        course_id=course_id,
+        title=_session_title(first_message),
+        summary=_trim(first_message, 100),
+        status="ACTIVE",
+        message_count=0,
+        created_at=now,
+        updated_at=now,
+        last_message_at=None,
+    )
+    db.add(session)
+    db.flush()
+    return session
+
+
+def ensure_ai_tutor_session(
+    db: Session,
+    *,
+    student_id: str,
+    course_id: str | None,
+    session_id: str | None,
+    first_message: str,
+) -> AiTutorSession:
+    if not session_id:
+        return create_ai_tutor_session(
+            db,
+            student_id=student_id,
+            course_id=course_id,
+            first_message=first_message,
+        )
+    session = get_ai_tutor_session(db, student_id=student_id, session_id=session_id)
+    if course_id and session.course_id and session.course_id != course_id:
+        raise ApiError(409, "AI_CHAT_SESSION_COURSE_MISMATCH", "这个历史会话不属于当前课程。")
+    if course_id and not session.course_id:
+        session.course_id = course_id
+    return session
+
+
+def append_ai_tutor_message(
+    db: Session,
+    *,
+    session: AiTutorSession,
+    student_id: str,
+    course_id: str | None,
+    role: str,
+    content: str,
+    status: str = "SUCCEEDED",
+    metadata: dict[str, Any] | None = None,
+    run_id: str | None = None,
+) -> AiTutorMessage:
+    now = utc_now()
+    message = AiTutorMessage(
+        id=_new_id("aim"),
+        session_id=session.id,
+        student_id=student_id,
+        course_id=course_id,
+        role=role,
+        content=content,
+        status=status,
+        metadata_json=_json_dumps(metadata or {}),
+        run_id=run_id,
+        created_at=now,
+    )
+    db.add(message)
+    session.message_count = (session.message_count or 0) + 1
+    session.last_message_at = now
+    session.updated_at = now
+    if role == "student":
+        session.summary = _trim(content, 100)
+        if session.message_count <= 1:
+            session.title = _session_title(content)
+    elif role == "assistant" and not session.summary:
+        session.summary = _trim(content, 100)
+    db.flush()
+    return message
+
+
+def list_ai_tutor_messages(db: Session, *, session: AiTutorSession) -> list[AiTutorMessage]:
+    return list(
+        db.scalars(
+            select(AiTutorMessage)
+            .where(AiTutorMessage.session_id == session.id)
+            .order_by(AiTutorMessage.created_at.asc())
+        ).all()
+    )
+
+
+def ai_tutor_history_payload(
+    db: Session,
+    *,
+    session: AiTutorSession,
+    limit: int = MAX_HISTORY_ITEMS,
+) -> list[dict[str, str]]:
+    messages = list(
+        db.scalars(
+            select(AiTutorMessage)
+            .where(
+                AiTutorMessage.session_id == session.id,
+                AiTutorMessage.status == "SUCCEEDED",
+                AiTutorMessage.role.in_(["student", "assistant"]),
+            )
+            .order_by(AiTutorMessage.created_at.desc())
+            .limit(limit)
+        ).all()
+    )
+    return [
+        {"role": message.role, "content": message.content}
+        for message in reversed(messages)
+        if message.content.strip()
+    ]
 
 
 def validate_ai_tutor_output(
@@ -141,6 +364,16 @@ def build_ai_tutor_system_prompt() -> str:
     )
 
 
+def build_ai_tutor_stream_system_prompt() -> str:
+    return (
+        "你是 CodeTrack 的 AI 助学导师，面向计算机基础课程学生。"
+        "你必须使用中文回答，回答要清晰、克制、适合学习场景。"
+        "优先结合输入中的学生画像、课程和知识源；不要编造资料、教材、论文或链接。"
+        "如果问题像考核/作业求完整答案，只给思路、分层提示和可执行下一步，不直接给完整答案。"
+        "直接输出回答正文，不要输出 JSON，不要输出 Markdown 表格。"
+    )
+
+
 def build_ai_tutor_payload(
     *,
     user: User,
@@ -174,6 +407,47 @@ def build_ai_tutor_payload(
             "safety_note": "string, empty when no special risk",
         },
     }
+
+
+def build_ai_tutor_stream_messages(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {"role": "system", "content": build_ai_tutor_stream_system_prompt()},
+        {
+            "role": "user",
+            "content": (
+                "请根据下面 JSON 上下文回答学生问题。直接输出回答正文，回答会被实时展示给学生。\n\n"
+                + json.dumps(payload, ensure_ascii=False)
+            ),
+        },
+    ]
+
+
+def build_ai_tutor_metadata_messages(payload: dict[str, Any], answer: str) -> list[dict[str, Any]]:
+    metadata_payload = {
+        **payload,
+        "generated_answer": answer,
+        "metadata_schema": {
+            "confidence": "float in [0,1]",
+            "knowledge_source_ids": "array selected from knowledge_sources.source_id",
+            "suggested_actions": "array of 2-4 short Chinese action labels",
+            "profile_used": "boolean",
+            "source_used": "boolean",
+            "safety_note": "string, empty when no special risk",
+        },
+    }
+    return [
+        {
+            "role": "system",
+            "content": (
+                "你是 CodeTrack 的回答元数据审查器。只基于输入的上下文和 generated_answer 输出 JSON，"
+                "不要改写 answer，不要编造 source_id。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": "请为 generated_answer 生成 metadata_schema 描述的 JSON。\n\n" + json.dumps(metadata_payload, ensure_ascii=False),
+        },
+    ]
 
 
 async def generate_student_ai_reply(
@@ -327,3 +601,179 @@ async def generate_student_ai_reply(
     )
     db.commit()
     return result
+
+
+async def stream_student_ai_reply(
+    db: Session,
+    *,
+    user: User,
+    class_id: str,
+    course: Course,
+    message: str,
+    history: list[dict[str, str]] | None = None,
+):
+    get_settings.cache_clear()
+    settings = get_settings()
+    use_gateway = bool(settings.model_gateway_url)
+    missing: list[str] = []
+    if not use_gateway:
+        if not settings.model_api_key:
+            missing.append("CODETRACK_MODEL_API_KEY")
+        if not settings.model_name:
+            missing.append("CODETRACK_MODEL_NAME")
+    if missing:
+        raise ApiError(
+            503,
+            "AI_MODEL_NOT_CONFIGURED",
+            "AI 模型配置还不完整，暂时不能发起对话。",
+            details={"missing": missing, "optional": ["CODETRACK_MODEL_API_BASE_URL"]},
+        )
+
+    if use_gateway:
+        result = await generate_student_ai_reply(
+            db,
+            user=user,
+            class_id=class_id,
+            course=course,
+            message=message,
+            history=history,
+        )
+        yield {"type": "delta", "content": result["answer"]}
+        yield {"type": "final", "data": result}
+        return
+
+    sources = _load_sources(db, course.id)
+    allowed_sources = {source.id: source for source in sources}
+    profile = serialize_learner_profile(db, student_id=user.id, course_id=course.id, class_id=class_id)
+    fallback_model_name = settings.model_name or "configured-model"
+    default_provider = "OPENAI_COMPATIBLE"
+    payload = build_ai_tutor_payload(
+        user=user,
+        course=course,
+        message=message,
+        profile=profile,
+        sources=sources,
+        history=history,
+    )
+
+    run = start_run(
+        db,
+        AgentRunContext(
+            run_id=new_run_id(),
+            workflow_type=WORKFLOW_TYPE,
+            student_id=user.id,
+            course_id=course.id,
+        ),
+        input_payload={
+            "course_id": course.id,
+            "message": _trim(message, 300),
+            "knowledge_source_ids": [source.id for source in sources],
+            "profile_available": profile is not None,
+            "stream": True,
+        },
+        model_provider=default_provider,
+        model_name=fallback_model_name,
+        prompt_version=PROMPT_VERSION,
+    )
+
+    answer_parts: list[str] = []
+    try:
+        async for chunk in chat_text_stream(
+            build_ai_tutor_stream_messages(payload),
+            model=fallback_model_name,
+            api_key=settings.model_api_key,
+            base_url=settings.model_api_base_url,
+            timeout=45,
+            temperature=0.2,
+        ):
+            answer_parts.append(chunk)
+            yield {"type": "delta", "content": chunk}
+
+        answer = "".join(answer_parts).strip()
+        if not answer:
+            raise ValueError("empty streamed answer")
+
+        def metadata_validator(raw: dict[str, Any]) -> dict[str, Any]:
+            return validate_ai_tutor_output(
+                {**raw, "answer": answer},
+                allowed_sources=allowed_sources,
+                default_provider=default_provider,
+                fallback_model_name=fallback_model_name,
+            )
+
+        metadata_result = await chat_json(
+            build_ai_tutor_metadata_messages(payload, answer),
+            model=fallback_model_name,
+            api_key=settings.model_api_key,
+            base_url=settings.model_api_base_url,
+            validator=metadata_validator,
+            timeout=30,
+            retries=1,
+            temperature=0.1,
+            prompt_version=PROMPT_VERSION,
+            model_provider=default_provider,
+        )
+    except LLMError as exc:
+        finish_run(
+            db,
+            run,
+            status="FAILED",
+            error_code=exc.code,
+            error_message=exc.detail or str(exc),
+            attempts=getattr(exc, "attempts", 1),
+        )
+        db.commit()
+        raise ApiError(
+            502,
+            "AI_MODEL_REQUEST_FAILED",
+            "AI 模型请求失败，请稍后再试。",
+            details={"llm_error_code": exc.code, "agent_run_id": run.id},
+        ) from exc
+    except ValueError as exc:
+        finish_run(
+            db,
+            run,
+            status="FAILED",
+            error_code="LLM_STREAM_EMPTY",
+            error_message=str(exc),
+            attempts=1,
+        )
+        db.commit()
+        raise ApiError(
+            502,
+            "AI_MODEL_REQUEST_FAILED",
+            "AI 模型请求失败，请稍后再试。",
+            details={"llm_error_code": "LLM_STREAM_EMPTY", "agent_run_id": run.id},
+        ) from exc
+
+    result: dict[str, Any] = metadata_result.data
+    result["run_id"] = run.id
+    finish_run(
+        db,
+        run,
+        status="SUCCEEDED",
+        output={
+            "confidence": result["confidence"],
+            "source_used": result["source_used"],
+            "citation_count": len(result["citations"]),
+            "stream": True,
+        },
+        attempts=1,
+        model_provider=result["model_provider"],
+        model_name=result["model_name"],
+        token_prompt=metadata_result.token_prompt,
+        token_completion=metadata_result.token_completion,
+    )
+    record_step(
+        db,
+        run,
+        step_name="student_ai_stream_reply",
+        step_order=1,
+        status="SUCCEEDED",
+        input_summary={"message": _trim(message, 120), "course_id": course.id},
+        output_summary={"confidence": result["confidence"], "actions": result["suggested_actions"]},
+        started_at=metadata_result.started_at,
+        finished_at=metadata_result.finished_at,
+    )
+    db.commit()
+    yield {"type": "final", "data": result}

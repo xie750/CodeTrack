@@ -1,12 +1,13 @@
 import json
 
 from fastapi import APIRouter, Depends, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.app.core.api_response import ApiError, ok
-from backend.app.core.database import get_db
+from backend.app.core.database import SessionLocal, get_db
 from backend.app.core.security import current_user, require_role
 from backend.app.models import (
     AdministrativeClass,
@@ -21,7 +22,19 @@ from backend.app.models import (
 )
 from backend.app.services.learner_profile import serialize_learner_profile
 from backend.app.services.submissions import iso
-from backend.app.services.ai_tutor import generate_student_ai_reply
+from backend.app.services.ai_tutor import (
+    ai_tutor_history_payload,
+    append_ai_tutor_message,
+    delete_ai_tutor_session,
+    ensure_ai_tutor_session,
+    generate_student_ai_reply,
+    get_ai_tutor_session,
+    list_ai_tutor_messages,
+    list_ai_tutor_sessions,
+    serialize_ai_tutor_message,
+    serialize_ai_tutor_session,
+    stream_student_ai_reply,
+)
 from backend.app.services.question_workflow import (
     question_workspace_payload,
     save_question_draft,
@@ -48,7 +61,13 @@ class AiChatHistoryItem(BaseModel):
 class StudentAiChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
     course_id: str | None = None
+    session_id: str | None = None
     history: list[AiChatHistoryItem] = Field(default_factory=list, max_length=12)
+
+
+class StudentAiChatSessionRequest(BaseModel):
+    course_id: str | None = None
+    first_message: str = Field(default="新的 AI 助学会话", max_length=2000)
 
 
 def task_knowledge_points(task: Task) -> list[str]:
@@ -125,6 +144,19 @@ def resolve_student_course(
     if course is None:
         raise ApiError(404, "COURSE_NOT_FOUND", "课程不存在")
     return course
+
+
+def sse_event(event: str, data: dict) -> bytes:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n".encode("utf-8")
+
+
+def ai_error_payload(exc: ApiError) -> dict:
+    detail = exc.detail if isinstance(exc.detail, dict) else {}
+    return {
+        "code": detail.get("code", "AI_CHAT_FAILED"),
+        "message": detail.get("message", "AI 助学导师暂时不可用，请稍后再试。"),
+        "details": detail.get("details", {}),
+    }
 
 
 def safe_json_list(raw: str | None) -> list:
@@ -230,15 +262,229 @@ async def student_ai_chat(
     require_role(user, "STUDENT")
     administrative_class, _ = require_active_class(db, user)
     course = resolve_student_course(db, administrative_class, payload.course_id)
+    session = ensure_ai_tutor_session(
+        db,
+        student_id=user.id,
+        course_id=course.id,
+        session_id=payload.session_id,
+        first_message=payload.message.strip(),
+    )
+    history = ai_tutor_history_payload(db, session=session)
+    user_message = append_ai_tutor_message(
+        db,
+        session=session,
+        student_id=user.id,
+        course_id=course.id,
+        role="student",
+        content=payload.message.strip(),
+    )
+    db.commit()
     result = await generate_student_ai_reply(
         db,
         user=user,
         class_id=administrative_class.id,
         course=course,
         message=payload.message.strip(),
-        history=[item.model_dump() for item in payload.history],
+        history=history or [item.model_dump() for item in payload.history],
     )
+    assistant_message = append_ai_tutor_message(
+        db,
+        session=session,
+        student_id=user.id,
+        course_id=course.id,
+        role="assistant",
+        content=result["answer"],
+        metadata={
+            "confidence": result["confidence"],
+            "citations": result["citations"],
+            "suggested_actions": result["suggested_actions"],
+            "profile_used": result["profile_used"],
+            "source_used": result["source_used"],
+            "safety_note": result["safety_note"],
+            "model_provider": result["model_provider"],
+            "model_name": result["model_name"],
+        },
+        run_id=result["run_id"],
+    )
+    db.commit()
+    result["session"] = serialize_ai_tutor_session(session)
+    result["user_message_id"] = user_message.id
+    result["assistant_message_id"] = assistant_message.id
     return ok(result)
+
+
+@router.get("/ai-chat/sessions")
+def student_ai_chat_sessions(
+    course_id: str | None = None,
+    q: str | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    sessions = list_ai_tutor_sessions(db, student_id=user.id, course_id=course_id, query=q)
+    return ok([serialize_ai_tutor_session(session) for session in sessions])
+
+
+@router.post("/ai-chat/sessions")
+def student_ai_chat_create_session(
+    payload: StudentAiChatSessionRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    administrative_class, _ = require_active_class(db, user)
+    course = resolve_student_course(db, administrative_class, payload.course_id)
+    session = ensure_ai_tutor_session(
+        db,
+        student_id=user.id,
+        course_id=course.id,
+        session_id=None,
+        first_message=payload.first_message,
+    )
+    db.commit()
+    return ok(serialize_ai_tutor_session(session))
+
+
+@router.get("/ai-chat/sessions/{session_id}")
+def student_ai_chat_session_detail(
+    session_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    session = get_ai_tutor_session(db, student_id=user.id, session_id=session_id)
+    messages = list_ai_tutor_messages(db, session=session)
+    return ok(
+        {
+            "session": serialize_ai_tutor_session(session),
+            "messages": [serialize_ai_tutor_message(message) for message in messages],
+        }
+    )
+
+
+@router.delete("/ai-chat/sessions/{session_id}")
+def student_ai_chat_delete_session(
+    session_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    delete_ai_tutor_session(db, student_id=user.id, session_id=session_id)
+    db.commit()
+    return ok({"deleted": True, "session_id": session_id})
+
+
+@router.post("/ai-chat/stream")
+async def student_ai_chat_stream(
+    payload: StudentAiChatRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    administrative_class, _ = require_active_class(db, user)
+    course = resolve_student_course(db, administrative_class, payload.course_id)
+    session = ensure_ai_tutor_session(
+        db,
+        student_id=user.id,
+        course_id=course.id,
+        session_id=payload.session_id,
+        first_message=payload.message.strip(),
+    )
+    history = ai_tutor_history_payload(db, session=session)
+    user_message = append_ai_tutor_message(
+        db,
+        session=session,
+        student_id=user.id,
+        course_id=course.id,
+        role="student",
+        content=payload.message.strip(),
+    )
+    db.commit()
+    session_payload = serialize_ai_tutor_session(session)
+    user_message_payload = serialize_ai_tutor_message(user_message)
+    student_id = user.id
+    class_id = administrative_class.id
+    course_id = course.id
+    session_id = session.id
+    message_text = payload.message.strip()
+
+    async def stream():
+        yield sse_event(
+            "session",
+            {
+                "session": session_payload,
+                "user_message": user_message_payload,
+            },
+        )
+        yield sse_event("assistant_start", {"session_id": session_id})
+        stream_db = SessionLocal()
+        try:
+            stream_session = get_ai_tutor_session(stream_db, student_id=student_id, session_id=session_id)
+            stream_user = stream_db.get(User, student_id)
+            stream_course = stream_db.get(Course, course_id)
+            if stream_user is None or stream_course is None:
+                raise ApiError(404, "AI_CHAT_CONTEXT_NOT_FOUND", "AI 助学上下文不存在。")
+            result = None
+            async for reply_event in stream_student_ai_reply(
+                stream_db,
+                user=stream_user,
+                class_id=class_id,
+                course=stream_course,
+                message=message_text,
+                history=history or [item.model_dump() for item in payload.history],
+            ):
+                if reply_event["type"] == "delta":
+                    yield sse_event("delta", {"content": reply_event["content"]})
+                elif reply_event["type"] == "final":
+                    result = reply_event["data"]
+            if result is None:
+                raise ApiError(502, "AI_MODEL_REQUEST_FAILED", "AI 模型请求失败，请稍后再试。")
+            assistant_message = append_ai_tutor_message(
+                stream_db,
+                session=stream_session,
+                student_id=student_id,
+                course_id=course_id,
+                role="assistant",
+                content=result["answer"],
+                metadata={
+                    "confidence": result["confidence"],
+                    "citations": result["citations"],
+                    "suggested_actions": result["suggested_actions"],
+                    "profile_used": result["profile_used"],
+                    "source_used": result["source_used"],
+                    "safety_note": result["safety_note"],
+                    "model_provider": result["model_provider"],
+                    "model_name": result["model_name"],
+                },
+                run_id=result["run_id"],
+            )
+            stream_db.commit()
+            result["session"] = serialize_ai_tutor_session(stream_session)
+            result["assistant_message_id"] = assistant_message.id
+            yield sse_event("final", result)
+        except ApiError as exc:
+            stream_db.rollback()
+            error = ai_error_payload(exc)
+            try:
+                stream_session = get_ai_tutor_session(stream_db, student_id=student_id, session_id=session_id)
+                append_ai_tutor_message(
+                    stream_db,
+                    session=stream_session,
+                    student_id=student_id,
+                    course_id=course_id,
+                    role="assistant",
+                    content=error["message"],
+                    status="FAILED",
+                    metadata={"error": error},
+                )
+                stream_db.commit()
+            except Exception:
+                stream_db.rollback()
+            yield sse_event("error", error)
+        finally:
+            stream_db.close()
+
+    return StreamingResponse(stream(), media_type="text/event-stream")
 
 
 @router.get("/tasks")

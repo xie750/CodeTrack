@@ -175,7 +175,46 @@ export type StudentAiChatResponse = {
   model_provider: string;
   model_name: string;
   run_id: string;
+  session?: StudentAiChatSession;
+  user_message_id?: string;
+  assistant_message_id?: string;
 };
+
+export type StudentAiChatSession = {
+  id: string;
+  student_id: string;
+  course_id: string | null;
+  title: string;
+  summary: string;
+  status: string;
+  message_count: number;
+  created_at: string | null;
+  updated_at: string | null;
+  last_message_at: string | null;
+};
+
+export type StudentAiChatMessage = {
+  id: string;
+  session_id: string;
+  role: "student" | "assistant" | string;
+  content: string;
+  status: string;
+  metadata: Partial<StudentAiChatResponse> & { error?: { code: string; message: string; details: Record<string, unknown> } };
+  run_id: string | null;
+  created_at: string | null;
+};
+
+export type StudentAiChatSessionDetail = {
+  session: StudentAiChatSession;
+  messages: StudentAiChatMessage[];
+};
+
+export type StudentAiChatStreamEvent =
+  | { event: "session"; data: { session: StudentAiChatSession; user_message: StudentAiChatMessage } }
+  | { event: "assistant_start"; data: { session_id: string } }
+  | { event: "delta"; data: { content: string } }
+  | { event: "final"; data: StudentAiChatResponse }
+  | { event: "error"; data: { code: string; message: string; details: Record<string, unknown> } };
 
 export type TaskDetail = {
   task_id: string;
@@ -546,6 +585,63 @@ async function cachedGet<T>(url: string, maxAgeMs = GET_CACHE_TTL_MS): Promise<T
   return promise;
 }
 
+function parseSseFrame(frame: string): StudentAiChatStreamEvent | null {
+  const lines = frame.split(/\r?\n/);
+  const eventLine = lines.find((line) => line.startsWith("event:"));
+  const dataLines = lines.filter((line) => line.startsWith("data:"));
+  const event = eventLine?.slice("event:".length).trim();
+  const dataText = dataLines.map((line) => line.slice("data:".length).trimStart()).join("\n");
+  if (!event || !dataText) return null;
+  return { event, data: JSON.parse(dataText) } as StudentAiChatStreamEvent;
+}
+
+async function streamStudentAiChat(
+  payload: {
+    message: string;
+    courseId?: string;
+    sessionId?: string | null;
+    history?: Array<{ role: "student" | "assistant"; content: string }>;
+  },
+  onEvent: (event: StudentAiChatStreamEvent) => void
+) {
+  const response = await fetch("/api/v1/student/ai-chat/stream", {
+    method: "POST",
+    headers: {
+      ...authHeaders(),
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      message: payload.message,
+      course_id: payload.courseId,
+      session_id: payload.sessionId,
+      history: payload.history ?? []
+    })
+  });
+
+  if (!response.ok || !response.body) {
+    const body = await response.json().catch(() => null) as ApiErrorBody | null;
+    const message = body && "error" in body ? `${body.error.code}: ${body.error.message}` : response.statusText;
+    throw new Error(message);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+    const frames = buffer.split(/\n\n/);
+    buffer = frames.pop() ?? "";
+    for (const frame of frames) {
+      const parsed = parseSseFrame(frame.trim());
+      if (parsed) onEvent(parsed);
+    }
+    if (done) break;
+  }
+  const tail = parseSseFrame(buffer.trim());
+  if (tail) onEvent(tail);
+}
+
 export const api = {
   login: (username: string, password: string) =>
     request<{
@@ -577,6 +673,27 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message, course_id: courseId, history: history ?? [] })
     }),
+  streamStudentAiChat,
+  listStudentAiChatSessions: (courseId?: string, query?: string) => {
+    const params = new URLSearchParams();
+    if (courseId) params.set("course_id", courseId);
+    if (query) params.set("q", query);
+    const suffix = params.toString() ? `?${params.toString()}` : "";
+    return request<StudentAiChatSession[]>(`/api/v1/student/ai-chat/sessions${suffix}`);
+  },
+  createStudentAiChatSession: (courseId?: string, firstMessage = "新的 AI 助学会话") =>
+    request<StudentAiChatSession>("/api/v1/student/ai-chat/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ course_id: courseId, first_message: firstMessage })
+    }),
+  getStudentAiChatSession: (sessionId: string) =>
+    request<StudentAiChatSessionDetail>(`/api/v1/student/ai-chat/sessions/${encodeURIComponent(sessionId)}`),
+  deleteStudentAiChatSession: (sessionId: string) =>
+    request<{ deleted: boolean; session_id: string }>(
+      `/api/v1/student/ai-chat/sessions/${encodeURIComponent(sessionId)}`,
+      { method: "DELETE" }
+    ),
   submitCode: async (taskId: string, language: string, sourceCode: string) => {
     const result = await request<SubmitResponse>(`/api/v1/tasks/${taskId}/submissions`, {
       method: "POST",
