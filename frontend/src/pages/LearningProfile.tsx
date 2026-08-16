@@ -358,7 +358,6 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
       <div className="profile-page global-profile-page">
         <section className="profile-hero course-profile-hero global-profile-hero">
           <div>
-            <span className="student-eyebrow">自主学习空间 / 全局个人画像</span>
             <h1>{context.student.name}的个人学习画像</h1>
             <p>{globalSummary(profile)}</p>
           </div>
@@ -584,7 +583,6 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
     <div className="profile-page">
       <section className="profile-hero course-profile-hero">
         <div>
-          <span className="student-eyebrow">课程学习画像 / {currentCourse?.course_name ?? profile.course.name}</span>
           <h1>{currentCourse?.course_name ?? profile.course.name}画像</h1>
           <p>{overview.summary}</p>
         </div>

@@ -28,6 +28,43 @@ class Settings(BaseSettings):
     resource_storage_dir: str = Field(default="./var/resources")
     # 单个上传资料的大小上限，超过直接拒绝而不是写坏磁盘
     resource_max_upload_mb: int = Field(default=20)
+    api_prefix: str = Field(default="/api/v1")
+
+    redis_url: str = Field(default="redis://localhost:6379/0")
+    s3_endpoint: str = Field(default="http://localhost:9000")
+    s3_access_key: str = Field(default="minioadmin")
+    s3_secret_key: str = Field(default="minioadmin")
+    s3_bucket: str = Field(default="codetrack-knowledge")
+    s3_secure: bool = Field(default=False)
+    rag_storage_backend: str = Field(default="local")
+    rag_local_storage_dir: str = Field(default="./var/rag-objects")
+
+    max_upload_mb: int = Field(default=100)
+
+    embedding_provider: str = Field(default="bge_m3")
+    embedding_model: str = Field(default="BAAI/bge-m3")
+    embedding_dim: int = Field(default=1024)
+    embedding_batch_size: int = Field(default=16)
+
+    rerank_provider: str = Field(default="bge")
+    rerank_model: str = Field(default="BAAI/bge-reranker-v2-m3")
+
+    parent_target_chars: int = Field(default=1800)
+    parent_max_chars: int = Field(default=2600)
+    child_target_chars: int = Field(default=450)
+    child_max_chars: int = Field(default=650)
+    child_overlap_chars: int = Field(default=50)
+
+    dense_top_k: int = Field(default=20)
+    lexical_top_k: int = Field(default=20)
+    rerank_candidates: int = Field(default=30)
+    rerank_top_n: int = Field(default=6)
+    min_rerank_score: float | None = Field(default=0.15)
+    rrf_k: int = Field(default=60)
+    max_context_tokens: int = Field(default=6000)
+    max_parent_chunks: int = Field(default=6)
+    rag_auto_process_uploads: bool = Field(default=False)
+    rag_celery_task_always_eager: bool = Field(default=False)
 
 
 @lru_cache

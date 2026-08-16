@@ -155,6 +155,72 @@ export type StudentKnowledgeGraph = {
   published_at: string | null;
 };
 
+export type RagKnowledgeBaseListItem = {
+  id: string;
+  name: string;
+  description: string | null;
+  status: string;
+  embedding_model: string;
+  document_count: number;
+  chunk_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type RagFileProfile = {
+  file_type: string;
+  source_family: string;
+  mime_type: string | null;
+  extension: string;
+  size_bytes: number;
+  parser_hint: string;
+};
+
+export type RagContentProfile = {
+  content_profile: string;
+  cleaning_strategy: string;
+  chunking_strategy: string;
+  signals: Record<string, unknown>;
+};
+
+export type RagKnowledgeDocument = {
+  id: string;
+  name: string;
+  title: string;
+  filename: string;
+  mime_type: string | null;
+  extension: string | null;
+  size_bytes: number;
+  status: string;
+  progress: number;
+  stage: string;
+  chunk_count: number;
+  active_version_id: string | null;
+  file_profile: RagFileProfile | Record<string, never>;
+  content_profile: RagContentProfile | Record<string, never>;
+  cleaning_strategy: string | null;
+  chunking_strategy: string | null;
+  error: null | { code: string; message: string; stage: string | null };
+  created_at: string;
+  updated_at: string;
+};
+
+export type RagKnowledgeChunk = {
+  chunk_id: string;
+  document_id: string;
+  chunk_index: number;
+  content_preview: string;
+  content: string;
+  heading_path: string[];
+  page_start: number | null;
+  page_end: number | null;
+  slide_start: number | null;
+  slide_end: number | null;
+  char_count: number;
+  token_count: number | null;
+  metadata: Record<string, unknown>;
+};
+
 export type StudentAiChatCitation = {
   source_id: string;
   title: string;
@@ -550,7 +616,21 @@ export async function request<T>(url: string, options: RequestInit = {}): Promis
     ...options,
     headers
   });
-  const body = (await response.json()) as ApiResponse<T> | ApiErrorBody;
+  const text = await response.text();
+  let body: ApiResponse<T> | ApiErrorBody | null = null;
+  if (text) {
+    try {
+      body = JSON.parse(text) as ApiResponse<T> | ApiErrorBody;
+    } catch {
+      body = null;
+    }
+  }
+  if (!body) {
+    if (!response.ok) {
+      throw new Error(`${response.status} ${response.statusText}: ${text || "响应不是 JSON"}`);
+    }
+    throw new Error("服务端响应不是 JSON");
+  }
   if (!response.ok || "error" in body) {
     const message = "error" in body ? `${body.error.code}: ${body.error.message}` : response.statusText;
     throw new Error(message);
@@ -667,6 +747,65 @@ export const api = {
     cachedGet<StudentProfile>(studentProfileUrl(courseId)),
   getStudentKnowledgeGraph: (courseId: string) =>
     cachedGet<StudentKnowledgeGraph>(studentKnowledgeGraphUrl(courseId)),
+  listRagKnowledgeBases: () =>
+    request<{ items: RagKnowledgeBaseListItem[] }>("/api/v1/knowledge-bases"),
+  createRagKnowledgeBase: (name: string, description = "") =>
+    request<{ id: string; name: string; status: string }>("/api/v1/knowledge-bases", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, description })
+    }),
+  listRagDocuments: (kbId: string) =>
+    request<{ items: RagKnowledgeDocument[] }>(`/api/v1/knowledge-bases/${encodeURIComponent(kbId)}/documents`),
+  uploadRagDocument: (kbId: string, file: File) => {
+    const data = new FormData();
+    data.append("file", file);
+    return request<{ document_id: string; version_id: string; status: string; progress: number; file_profile: RagFileProfile | Record<string, never> }>(
+      `/api/v1/knowledge-bases/${encodeURIComponent(kbId)}/documents?auto_process=false`,
+      { method: "POST", body: data }
+    );
+  },
+  createRagTextDocument: (kbId: string, title: string, content: string) =>
+    request<{ document_id: string; version_id: string; status: string; progress: number; file_profile: RagFileProfile | Record<string, never> }>(
+      `/api/v1/knowledge-bases/${encodeURIComponent(kbId)}/documents/from-text?auto_process=false`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, content })
+      }
+    ),
+  processRagDocument: (documentId: string) =>
+    request<{
+      document_id: string;
+      version_id: string;
+      status: string;
+      progress: number;
+      content_profile: RagContentProfile | Record<string, never>;
+      cleaning_strategy: string | null;
+      chunking_strategy: string | null;
+    }>(
+      `/api/v1/documents/${encodeURIComponent(documentId)}/process`,
+      { method: "POST" }
+    ),
+  getRagDocument: (documentId: string) =>
+    request<{
+      id: string;
+      name: string;
+      status: string;
+      progress: number;
+      stage: string;
+      active_version_id: string | null;
+      file_profile: RagFileProfile | Record<string, never>;
+      content_profile: RagContentProfile | Record<string, never>;
+      cleaning_strategy: string | null;
+      chunking_strategy: string | null;
+      stats: { elements: number; parents: number; children: number; embedded_children: number };
+      error: null | { code: string; message: string; stage: string | null };
+    }>(`/api/v1/documents/${encodeURIComponent(documentId)}`),
+  listRagChunks: (documentId: string) =>
+    request<{ items: RagKnowledgeChunk[] }>(`/api/v1/documents/${encodeURIComponent(documentId)}/chunks`),
+  deleteRagDocument: (documentId: string) =>
+    request<{ deleted: boolean }>(`/api/v1/documents/${encodeURIComponent(documentId)}`, { method: "DELETE" }),
   sendStudentAiChat: (message: string, courseId?: string, history?: Array<{ role: "student" | "assistant"; content: string }>) =>
     request<StudentAiChatResponse>("/api/v1/student/ai-chat", {
       method: "POST",

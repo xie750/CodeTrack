@@ -169,11 +169,33 @@ def ensure_student_knowledge_graph_table(db: Session) -> None:
     StudentKnowledgeGraph.__table__.create(bind=db.bind, checkfirst=True)
 
 
+def ensure_rag_profile_columns(db: Session) -> None:
+    """补齐 RAG 文档策略字段，兜住本地开发库未跑 Alembic 的情况。"""
+    inspector = inspect(db.bind)
+    table_names = set(inspector.get_table_names())
+    if "documents" in table_names:
+        document_columns = {column["name"] for column in inspector.get_columns("documents")}
+        if "file_profile" not in document_columns:
+            db.execute(text("ALTER TABLE documents ADD COLUMN file_profile TEXT NOT NULL DEFAULT '{}'"))
+    if "document_versions" in table_names:
+        version_columns = {column["name"] for column in inspector.get_columns("document_versions")}
+        additions = [
+            ("content_profile", "TEXT NOT NULL DEFAULT '{}'"),
+            ("cleaning_strategy", "VARCHAR(64) NOT NULL DEFAULT 'generic_clean'"),
+            ("chunking_strategy", "VARCHAR(64) NOT NULL DEFAULT 'section_recursive'"),
+        ]
+        for name, ddl in additions:
+            if name not in version_columns:
+                db.execute(text(f"ALTER TABLE document_versions ADD COLUMN {name} {ddl}"))
+    db.commit()
+
+
 def seed_demo_data(db: Session) -> None:
     ensure_auth_columns(db)
     ensure_task_workspace_columns(db)
     ensure_knowledge_source_columns(db)
     ensure_student_knowledge_graph_table(db)
+    ensure_rag_profile_columns(db)
     users = {
         "user_teacher_001": {
             "username": "teacher_wang",

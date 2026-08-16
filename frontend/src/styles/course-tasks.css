@@ -35,19 +35,8 @@
   gap: 18px;
 }
 
-.course-task-breadcrumb {
-  color: #516179;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.course-task-breadcrumb span {
-  margin: 0 7px;
-  color: #a0adc0;
-}
-
 .course-task-hero h1 {
-  margin-top: 12px;
+  margin-top: 0;
   color: #0f1b31;
   font-size: 28px;
   line-height: 1.15;

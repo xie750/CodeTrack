@@ -427,6 +427,55 @@ content_hash
 }
 ```
 
+### 7.2.1 资料识别与策略路由
+
+知识库处理不能只按一种固定规则切分。上传资料后应先做轻量文件识别，解析后再做内容画像识别，并据此选择清洗和切分策略。
+
+推荐链路：
+
+```text
+上传
+-> 基础文件识别
+-> 等待学生确认 / 处理入库
+-> 解析
+-> 内容画像识别
+-> 分类清洗
+-> 分类切分
+-> 向量化
+-> 索引和召回
+```
+
+上传后的基础识别只判断文件容器和处理提示：
+
+```text
+markdown / plain_text / pdf / docx / pptx / unknown
+```
+
+解析后的内容画像才决定清洗和切分方式：
+
+```text
+sectioned_note  -> 标题型讲义、结构化笔记
+plain_note      -> 普通纯文本笔记
+code_exercise   -> 编程题、题解、算法笔记
+table_heavy     -> 表格密集资料
+slide_deck      -> PPT 课件
+page_document   -> PDF 页式资料
+mixed           -> 混合资料，按主要结构和元素类型兜底
+```
+
+首版策略保持轻量：
+
+```text
+section_recursive -> 标题 / 小节优先，过长再递归切
+plain_recursive   -> 空行、换行、标点、空格递归切
+code_aware        -> 保留代码块、题面、输入输出样例
+table_aware       -> 表格尽量独立 chunk
+slide_page        -> 以 slide 为 parent，再页内切
+page_recursive    -> 以 page 为 parent，再页内切
+```
+
+识别结果应写入文档版本和 chunk metadata，便于前端展示、处理排查和后续策略迭代。
+
 ### 7.3 文本清洗
 
 清洗规则：

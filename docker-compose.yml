@@ -60,7 +60,7 @@ services:
 
   backend:
     build:
-      context: ..
+      context: .
       dockerfile: backend/Dockerfile
     environment:
       CODETRACK_DATABASE_URL: postgresql+psycopg2://codetrack:codetrack@postgres:5432/codetrack
@@ -77,13 +77,9 @@ services:
       CODETRACK_RERANK_PROVIDER: bge
       CODETRACK_RERANK_MODEL: BAAI/bge-reranker-v2-m3
       CODETRACK_DEMO_USER_ID: user_student_001
-      CODETRACK_SANDBOX_TIMEOUT_SECONDS: "3"
+      CODETRACK_AUTH_SECRET_KEY: codetrack-demo-secret-change-me
       CODETRACK_SANDBOX_SERVICE_URL: http://sandbox:8011
       CODETRACK_PISTON_BASE_URL: http://piston:2000
-      CODETRACK_MODEL_GATEWAY_URL: ""
-      CODETRACK_MODEL_API_KEY: ""
-      CODETRACK_MODEL_API_BASE_URL: https://api.openai.com/v1
-      CODETRACK_MODEL_NAME: ""
     depends_on:
       postgres:
         condition: service_healthy
@@ -102,7 +98,7 @@ services:
 
   worker:
     build:
-      context: ..
+      context: .
       dockerfile: backend/Dockerfile
     command: celery -A backend.app.workers.celery_app.celery_app worker --loglevel=INFO
     environment:
@@ -133,7 +129,7 @@ services:
   sandbox:
     image: codetrack-sandbox-runner:0.1
     build:
-      context: ..
+      context: .
       dockerfile: sandbox/Dockerfile
     environment:
       CODETRACK_SANDBOX_EXECUTION_MODE: docker
@@ -163,19 +159,6 @@ services:
     networks:
       - app_net
 
-  frontend:
-    image: node:20-alpine
-    working_dir: /app/frontend
-    volumes:
-      - ..:/app
-    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
-    ports:
-      - "5173:5173"
-    depends_on:
-      - backend
-    networks:
-      - app_net
-
 volumes:
   codetrack_pg:
   codetrack_minio:
@@ -183,4 +166,3 @@ volumes:
 
 networks:
   app_net:
-    internal: true

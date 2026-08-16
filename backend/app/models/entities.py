@@ -1,7 +1,9 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.types import UserDefinedType
 
 
 def utc_now() -> datetime:
@@ -10,6 +12,42 @@ def utc_now() -> datetime:
 
 class Base(DeclarativeBase):
     pass
+
+
+class Vector1024(UserDefinedType):
+    """pgvector column in PostgreSQL, plain text in SQLite tests."""
+
+    cache_ok = True
+
+    def get_col_spec(self, **_: object) -> str:
+        return "VECTOR(1024)"
+
+
+@compiles(Vector1024, "sqlite")
+def _compile_vector_sqlite(_: Vector1024, __, **___: object) -> str:
+    return "TEXT"
+
+
+@compiles(Vector1024, "postgresql")
+def _compile_vector_postgresql(_: Vector1024, __, **___: object) -> str:
+    return "VECTOR(1024)"
+
+
+class TsVector(UserDefinedType):
+    cache_ok = True
+
+    def get_col_spec(self, **_: object) -> str:
+        return "TSVECTOR"
+
+
+@compiles(TsVector, "sqlite")
+def _compile_tsvector_sqlite(_: TsVector, __, **___: object) -> str:
+    return "TEXT"
+
+
+@compiles(TsVector, "postgresql")
+def _compile_tsvector_postgresql(_: TsVector, __, **___: object) -> str:
+    return "TSVECTOR"
 
 
 class User(Base):
@@ -286,6 +324,174 @@ class KnowledgeSourceRevision(Base):
     editor_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
     change_note: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class RagKnowledgeBase(Base):
+    __tablename__ = "knowledge_bases"
+    __table_args__ = (
+        Index("ix_knowledge_bases_owner", "owner_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    embedding_provider: Mapped[str] = mapped_column(String(64), nullable=False, default="bge-m3")
+    embedding_model: Mapped[str] = mapped_column(String(255), nullable=False, default="BAAI/bge-m3")
+    embedding_dim: Mapped[int] = mapped_column(Integer, nullable=False, default=1024)
+    chunk_mode: Mapped[str] = mapped_column(String(32), nullable=False, default="parent_child")
+    retrieval_config: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    owner: Mapped[User] = relationship()
+
+
+class RagDocument(Base):
+    __tablename__ = "documents"
+    __table_args__ = (
+        UniqueConstraint("knowledge_base_id", "sha256", name="uq_documents_kb_sha256"),
+        Index("idx_documents_kb_status", "knowledge_base_id", "status"),
+        Index("ix_documents_owner", "owner_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    knowledge_base_id: Mapped[str] = mapped_column(ForeignKey("knowledge_bases.id"), nullable=False)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(512), nullable=False)
+    mime_type: Mapped[str | None] = mapped_column(String(128))
+    extension: Mapped[str | None] = mapped_column(String(32))
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    object_key: Mapped[str] = mapped_column(Text, nullable=False)
+    file_profile: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    active_version_id: Mapped[str | None] = mapped_column(String(64))
+    progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    failed_stage: Mapped[str | None] = mapped_column(String(32))
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    error_message: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    knowledge_base: Mapped[RagKnowledgeBase] = relationship()
+    owner: Mapped[User] = relationship()
+
+
+class RagDocumentVersion(Base):
+    __tablename__ = "document_versions"
+    __table_args__ = (
+        UniqueConstraint("document_id", "version_no", name="uq_document_version_no"),
+        Index("ix_document_versions_document", "document_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    document_id: Mapped[str] = mapped_column(ForeignKey("documents.id"), nullable=False)
+    version_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    object_key: Mapped[str] = mapped_column(Text, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    parser_name: Mapped[str | None] = mapped_column(String(64))
+    parser_version: Mapped[str | None] = mapped_column(String(64))
+    chunk_config: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    content_profile: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    cleaning_strategy: Mapped[str] = mapped_column(String(64), nullable=False, default="generic_clean")
+    chunking_strategy: Mapped[str] = mapped_column(String(64), nullable=False, default="section_recursive")
+    embedding_model: Mapped[str] = mapped_column(String(255), nullable=False)
+    embedding_dim: Mapped[int] = mapped_column(Integer, nullable=False, default=1024)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    document: Mapped[RagDocument] = relationship()
+
+
+class RagDocumentElement(Base):
+    __tablename__ = "document_elements"
+    __table_args__ = (
+        UniqueConstraint("document_version_id", "seq_no", name="uq_document_element_version_seq"),
+        Index("ix_document_elements_version", "document_version_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    document_version_id: Mapped[str] = mapped_column(ForeignKey("document_versions.id"), nullable=False)
+    seq_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    element_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    page_no: Mapped[int | None] = mapped_column(Integer)
+    slide_no: Mapped[int | None] = mapped_column(Integer)
+    heading_level: Mapped[int | None] = mapped_column(Integer)
+    heading_path: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    metadata_json: Mapped[str] = mapped_column("metadata", Text, nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    version: Mapped[RagDocumentVersion] = relationship()
+
+
+class RagChunk(Base):
+    __tablename__ = "chunks"
+    __table_args__ = (
+        Index("idx_chunks_kb", "knowledge_base_id"),
+        Index("idx_chunks_document", "document_id"),
+        Index("idx_chunks_version", "document_version_id"),
+        Index("ix_chunks_parent", "parent_chunk_id"),
+        UniqueConstraint("document_version_id", "chunk_type", "chunk_index", name="uq_chunks_version_type_index"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    knowledge_base_id: Mapped[str] = mapped_column(ForeignKey("knowledge_bases.id"), nullable=False)
+    document_id: Mapped[str] = mapped_column(ForeignKey("documents.id"), nullable=False)
+    document_version_id: Mapped[str] = mapped_column(ForeignKey("document_versions.id"), nullable=False)
+    parent_chunk_id: Mapped[str | None] = mapped_column(String(64))
+    chunk_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    heading: Mapped[str | None] = mapped_column(Text)
+    heading_path: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    page_start: Mapped[int | None] = mapped_column(Integer)
+    page_end: Mapped[int | None] = mapped_column(Integer)
+    slide_start: Mapped[int | None] = mapped_column(Integer)
+    slide_end: Mapped[int | None] = mapped_column(Integer)
+    content_type: Mapped[str] = mapped_column(String(32), nullable=False, default="text")
+    char_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    token_count: Mapped[int | None] = mapped_column(Integer)
+    embedding: Mapped[str | None] = mapped_column(Vector1024)
+    search_vector: Mapped[str | None] = mapped_column(TsVector)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    metadata_json: Mapped[str] = mapped_column("metadata", Text, nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    document: Mapped[RagDocument] = relationship()
+    version: Mapped[RagDocumentVersion] = relationship()
+    knowledge_base: Mapped[RagKnowledgeBase] = relationship()
+
+
+class RagIngestJob(Base):
+    __tablename__ = "ingest_jobs"
+    __table_args__ = (
+        Index("ix_ingest_jobs_document", "document_id"),
+        Index("ix_ingest_jobs_version", "document_version_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    document_id: Mapped[str] = mapped_column(ForeignKey("documents.id"), nullable=False)
+    document_version_id: Mapped[str] = mapped_column(ForeignKey("document_versions.id"), nullable=False)
+    celery_task_id: Mapped[str | None] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    current_stage: Mapped[str] = mapped_column(String(32), nullable=False)
+    progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_payload: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    document: Mapped[RagDocument] = relationship()
+    version: Mapped[RagDocumentVersion] = relationship()
 
 
 class CourseChapter(Base):
