@@ -30,7 +30,7 @@ def create_ready_kb_with_document(c: TestClient):
     assert status.status_code == 200, status.text
     assert status.json()["data"]["status"] == "ready"
     assert status.json()["data"]["content_profile"]["content_profile"] == "sectioned_note"
-    assert status.json()["data"]["chunking_strategy"] == "section_recursive"
+    assert status.json()["data"]["chunking_strategy"] == "markdown_section"
     return kb_id, document_id
 
 
@@ -150,3 +150,58 @@ def test_document_can_be_uploaded_then_confirmed_for_processing():
         assert chunks.status_code == 200, chunks.text
         assert chunks.json()["data"]["items"]
         assert chunks.json()["data"]["items"][0]["metadata"]["chunking_strategy"] == "plain_recursive"
+
+
+def test_deleted_document_can_be_uploaded_again_with_same_hash():
+    with client() as c:
+        kb = c.post("/api/v1/knowledge-bases", json={"name": "Delete Reupload KB", "description": "test"})
+        assert kb.status_code == 200, kb.text
+        kb_id = kb.json()["data"]["id"]
+
+        fixture = Path("tests/fixtures/simple.md")
+        with fixture.open("rb") as file:
+            first = c.post(
+                f"/api/v1/knowledge-bases/{kb_id}/documents?auto_process=false",
+                files={"file": ("simple.md", file, "text/markdown")},
+            )
+        assert first.status_code == 202, first.text
+        first_id = first.json()["data"]["document_id"]
+
+        duplicate_before_delete = c.post(
+            f"/api/v1/knowledge-bases/{kb_id}/documents?auto_process=false",
+            files={"file": ("simple.md", fixture.read_bytes(), "text/markdown")},
+        )
+        assert duplicate_before_delete.status_code == 409
+
+        deleted = c.delete(f"/api/v1/documents/{first_id}")
+        assert deleted.status_code == 200, deleted.text
+
+        with fixture.open("rb") as file:
+            second = c.post(
+                f"/api/v1/knowledge-bases/{kb_id}/documents?auto_process=false",
+                files={"file": ("simple.md", file, "text/markdown")},
+            )
+        assert second.status_code == 202, second.text
+        assert second.json()["data"]["document_id"] != first_id
+
+
+def test_same_markdown_has_stable_chunks_across_knowledge_bases():
+    with client() as c:
+        first_kb, first_doc = create_ready_kb_with_document(c)
+        second_kb, second_doc = create_ready_kb_with_document(c)
+        assert first_kb != second_kb
+
+        first_chunks = c.get(f"/api/v1/documents/{first_doc}/chunks")
+        second_chunks = c.get(f"/api/v1/documents/{second_doc}/chunks")
+        assert first_chunks.status_code == 200, first_chunks.text
+        assert second_chunks.status_code == 200, second_chunks.text
+
+        first_signature = [
+            (item["content"], item["heading_path"], item["metadata"]["split_reason"])
+            for item in first_chunks.json()["data"]["items"]
+        ]
+        second_signature = [
+            (item["content"], item["heading_path"], item["metadata"]["split_reason"])
+            for item in second_chunks.json()["data"]["items"]
+        ]
+        assert first_signature == second_signature

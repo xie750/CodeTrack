@@ -127,6 +127,7 @@ def upload_document(
         )
         if existing:
             raise ApiError(409, "DUPLICATE_DOCUMENT", "该知识库中已存在相同文件", {"existing_document_id": existing.id})
+    _purge_deleted_duplicates(db, kb.id, digest)
 
     document_id = new_id("doc")
     object_key = _object_key(kb.id, document_id, digest, filename)
@@ -188,6 +189,24 @@ def upload_document(
     db.refresh(version)
     db.refresh(job)
     return document, version, job
+
+
+def _purge_deleted_duplicates(db: Session, kb_id: str, sha256: str) -> None:
+    deleted_documents = list(
+        db.scalars(
+            select(RagDocument).where(
+                RagDocument.knowledge_base_id == kb_id,
+                RagDocument.sha256 == sha256,
+                RagDocument.deleted_at.is_not(None),
+            )
+        )
+    )
+    if not deleted_documents:
+        return
+    storage = get_object_storage()
+    for document in deleted_documents:
+        _delete_document_records(db, document, storage=storage, delete_object=True)
+    db.commit()
 
 
 def create_text_document(
@@ -495,6 +514,9 @@ def _chunk_record(
                 "content_profile": json_loads(version.content_profile, {}),
                 "cleaning_strategy": version.cleaning_strategy,
                 "chunking_strategy": version.chunking_strategy,
+                "split_reason": getattr(chunk, "split_reason", None),
+                "source_element_start": getattr(chunk, "source_element_start", None),
+                "source_element_end": getattr(chunk, "source_element_end", None),
                 "permission_scope": "owner",
             }
         ),
@@ -621,11 +643,22 @@ def delete_document(db: Session, user: User, document_id: str) -> None:
     if document is None or document.deleted_at is not None:
         raise ApiError(404, "DOCUMENT_NOT_FOUND", "文档不存在")
     ensure_kb_owner(db, document.knowledge_base_id, user)
-    document.status = "DELETED"
-    document.deleted_at = utc_now()
-    document.progress = 100
-    db.execute(
-        text("UPDATE chunks SET enabled = :enabled WHERE document_id = :document_id"),
-        {"enabled": False, "document_id": document.id},
-    )
+    _delete_document_records(db, document, storage=get_object_storage(), delete_object=True)
     db.commit()
+
+
+def _delete_document_records(db: Session, document: RagDocument, *, storage: Any | None = None, delete_object: bool = False) -> None:
+    version_ids = list(
+        db.scalars(select(RagDocumentVersion.id).where(RagDocumentVersion.document_id == document.id))
+    )
+    if version_ids:
+        db.execute(delete(RagDocumentElement).where(RagDocumentElement.document_version_id.in_(version_ids)))
+        db.execute(delete(RagChunk).where(RagChunk.document_version_id.in_(version_ids)))
+        db.execute(delete(RagIngestJob).where(RagIngestJob.document_version_id.in_(version_ids)))
+        db.execute(delete(RagDocumentVersion).where(RagDocumentVersion.id.in_(version_ids)))
+    if delete_object and storage is not None:
+        try:
+            storage.delete(document.object_key)
+        except Exception:
+            pass
+    db.delete(document)

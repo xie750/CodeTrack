@@ -652,6 +652,91 @@
   background: #fff7e8;
 }
 
+.kb-confirm-shell {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: var(--app-viewport-width, 100vw);
+  height: var(--app-viewport-height, 100dvh);
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  box-sizing: border-box;
+  transform: scale(var(--app-visual-scale, 1));
+  transform-origin: top left;
+}
+
+.kb-confirm-mask {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(15, 23, 42, 0.34);
+  cursor: default;
+}
+
+.kb-confirm-panel {
+  position: relative;
+  width: min(420px, 100%);
+  padding: 22px;
+  border: 1px solid #f0d0d0;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22);
+}
+
+.kb-confirm-icon {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: #b42318;
+  background: #fff1f1;
+}
+
+.kb-confirm-panel h2 {
+  margin: 16px 0 0;
+  color: #172033;
+  font-size: 18px;
+  line-height: 1.35;
+  font-weight: 900;
+}
+
+.kb-confirm-panel p {
+  margin: 8px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.65;
+  font-weight: 800;
+}
+
+.kb-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.kb-confirm-actions button {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid #d5e3f6;
+  border-radius: 8px;
+  color: #334155;
+  background: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.kb-confirm-actions button.danger {
+  border-color: #b42318;
+  color: #fff;
+  background: #b42318;
+}
+
 @media (max-width: 980px) {
   .kb-design-layout {
     grid-template-columns: minmax(0, 1fr);

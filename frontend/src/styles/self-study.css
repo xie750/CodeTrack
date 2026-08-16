@@ -2573,6 +2573,13 @@
   color: #176cf5;
 }
 
+.ai-citation-line span {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
 .ai-answer-actions {
   margin-top: 22px;
   padding-top: 14px;

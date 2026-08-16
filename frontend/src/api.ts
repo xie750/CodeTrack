@@ -228,6 +228,9 @@ export type StudentAiChatCitation = {
   source_type: string;
   version: string;
   authority_level: string;
+  document_id?: string;
+  chunk_id?: string;
+  quote?: string;
 };
 
 export type StudentAiChatResponse = {
