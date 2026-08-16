@@ -119,6 +119,17 @@ function responseToTurn(id: string, result: StudentAiChatResponse): AiChatTurn {
   };
 }
 
+function confidenceBadge(turn: AiChatTurn) {
+  if (!turn.sourceUsed) return "通用回答";
+  return `置信度 ${Math.round((turn.confidence ?? 0.7) * 100)}%`;
+}
+
+function compactCitationText(source: StudentAiChatCitation) {
+  const rawText = (source.quote || source.summary || "").replace(/\s+/g, " ").trim();
+  const briefText = rawText.length > 88 ? `${rawText.slice(0, 88)}...` : rawText;
+  return briefText ? `${source.title}：${briefText}` : source.title;
+}
+
 function messageToTurn(message: StudentAiChatMessage): AiChatTurn {
   const metadata = message.metadata ?? {};
   return {
@@ -448,9 +459,9 @@ export default function AiTutor() {
                         <section>
                           <h2>回答依据</h2>
                           <div className="ai-answer-meta">
-                            <span>置信度 {Math.round((turn.confidence ?? 0.7) * 100)}%</span>
+                            <span>{confidenceBadge(turn)}</span>
                             <span>{turn.profileUsed ? "已结合学习画像" : "未使用学习画像"}</span>
-                            <span>{turn.sourceUsed ? "已引用课程资料" : "未引用课程资料"}</span>
+                            <span>{turn.sourceUsed ? "已引用资料" : "未引用资料"}</span>
                             {turn.modelName ? <span>模型 {turn.modelName}</span> : null}
                           </div>
                         </section>
@@ -469,7 +480,7 @@ export default function AiTutor() {
                           {turn.citations.map((source) => (
                             <div className="ai-citation-line" key={source.source_id}>
                               <Link2 size={15} />
-                              <span>{source.title}：{source.summary}</span>
+                              <span title={source.quote || source.summary || source.title}>{compactCitationText(source)}</span>
                             </div>
                           ))}
                         </section>

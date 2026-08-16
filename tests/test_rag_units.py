@@ -80,6 +80,98 @@ def test_markdown_parser_and_profile_detect_table_strategy():
     assert profile.chunking_strategy == "table_aware"
 
 
+def test_markdown_section_chunking_uses_heading_sections_before_length():
+    content = """# 第一章
+
+第一章第一段。
+
+## 小节 A
+
+A 小节内容。
+
+## 小节 B
+
+B 小节内容。
+""".encode("utf-8")
+
+    result = parse_document("section-note.md", content)
+    profile = detect_content_profile("section-note.md", result.elements)
+    groups = build_parent_child_chunks(result.elements, profile)
+    children = [child for _, child_group in groups for child in child_group]
+
+    assert profile.chunking_strategy == "markdown_section"
+    assert [child.split_reason for child in children] == ["markdown_heading_section", "markdown_heading_section", "markdown_heading_section"]
+    assert children[1].heading_path == ["第一章", "小节 A"]
+    assert "小节 B" not in children[1].content
+
+
+def test_markdown_outline_bold_numbered_headings_are_section_boundaries():
+    content = """CodeTrack RAG 知识库后端实现规格
+
+1. **上传接口与知识处理必须解耦**
+上传 API 只负责校验、保存原文和创建任务。
+
+2. **解析优先于切分**
+Markdown 文件应先识别大纲标题。
+""".encode("utf-8")
+
+    result = parse_document("rag-spec.md", content)
+    profile = detect_content_profile("rag-spec.md", result.elements)
+    groups = build_parent_child_chunks(result.elements, profile)
+    children = [child for _, child_group in groups for child in child_group]
+
+    assert profile.chunking_strategy == "markdown_section"
+    assert any(element.heading_path == ["上传接口与知识处理必须解耦"] for element in result.elements)
+    assert any(element.heading_path == ["解析优先于切分"] for element in result.elements)
+    assert not any("上传接口与知识处理必须解耦" in child.content and "解析优先于切分" in child.content for child in children)
+
+
+def test_plain_text_numbered_outline_keeps_title_with_description():
+    content = """9. 鲁班七号
+
+常见定位：射手，适合持续输出。
+
+10. 马可波罗
+
+常见定位：射手，马可波罗擅长移动中输出，具备较好的机动性和持续消耗能力。
+""".encode("utf-8")
+
+    result = parse_document("heroes.txt", content)
+    profile = detect_content_profile("heroes.txt", result.elements)
+    groups = build_parent_child_chunks(result.elements, profile)
+    children = [child for _, child_group in groups for child in child_group]
+
+    assert any(element.element_type == "heading" and element.text == "马可波罗" for element in result.elements)
+    assert any("马可波罗" in child.content and "常见定位" in child.content for child in children)
+
+
+def test_markdown_attribute_headings_stay_inside_current_outline_section():
+    content = """# 王者荣耀英雄简介
+
+## 1. 亚瑟
+
+### 常见定位：战士 / 坦克
+
+亚瑟是非常经典的近战战士，操作直观，兼具一定坦度、追击和沉默能力。
+
+## 2. 妲己
+
+### 常见定位：法师
+
+妲己是一名爆发法师。
+""".encode("utf-8")
+
+    result = parse_document("heroes.md", content)
+    profile = detect_content_profile("heroes.md", result.elements)
+    groups = build_parent_child_chunks(result.elements, profile)
+    children = [child for _, child_group in groups for child in child_group]
+
+    assert profile.chunking_strategy == "markdown_section"
+    assert not any(element.element_type == "heading" and element.text.startswith("常见定位") for element in result.elements)
+    assert any("1. 亚瑟" in child.content and "常见定位" in child.content and "近战战士" in child.content for child in children)
+    assert not any("1. 亚瑟" in child.content and "2. 妲己" in child.content for child in children)
+
+
 def test_rrf_fusion_merges_dense_and_lexical_ranks():
     dense = [
         RetrievedChunk("c1", "p1", "d1", "a.md", [], None, None, None, None, "alpha", dense_rank=1),

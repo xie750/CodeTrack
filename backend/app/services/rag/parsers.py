@@ -116,6 +116,9 @@ def parse_text_document(filename: str, content: bytes) -> ParseResult:
                 flush_flow()
                 level = len(match.group(1))
                 title = normalize_text(match.group(2))
+                if _looks_like_attribute_heading(title):
+                    paragraph_blocks.append(title)
+                    continue
                 heading_path = heading_path[: level - 1] + [title]
                 elements.append(
                     ParsedElement(
@@ -126,6 +129,25 @@ def parse_text_document(filename: str, content: bytes) -> ParseResult:
                     )
                 )
                 continue
+        outline_heading = _match_markdown_outline_heading(stripped)
+        if outline_heading:
+            flush_flow()
+            level, title = outline_heading
+            if _looks_like_attribute_heading(title):
+                paragraph_blocks.append(title)
+                continue
+            heading_path = heading_path[: level - 1] + [title]
+            elements.append(
+                ParsedElement(
+                    "heading",
+                    title,
+                    heading_level=level,
+                    heading_path=list(heading_path),
+                    metadata={"format": "text_outline" if not is_markdown else "markdown_outline"},
+                )
+            )
+            continue
+        if is_markdown:
             if _is_markdown_table_line(stripped):
                 flush_paragraph()
                 flush_list()
@@ -160,6 +182,59 @@ def _is_markdown_table_line(line: str) -> bool:
     if len(cells) < 2:
         return False
     return any(cells) or bool(re.match(r"^[:\-\s|]+$", line))
+
+
+def _match_markdown_outline_heading(line: str) -> tuple[int, str] | None:
+    if not line:
+        return None
+    patterns = [
+        r"^(?P<num>\d+(?:\.\d+)*[.、)]?)\s+\*\*(?P<title>[^*]{2,80})\*\*\s*$",
+        r"^\*\*(?P<title>[^*]{2,80})[:：]?\*\*\s*$",
+        r"^(?P<num>\d+(?:\.\d+)*[.、)]?)\s+(?P<title>[^。！？!?；;：:]{2,60})[:：]?\s*$",
+    ]
+    for pattern in patterns:
+        match = re.match(pattern, line)
+        if not match:
+            continue
+        title = normalize_text(match.group("title"))
+        if not title or _looks_like_list_body(title):
+            return None
+        number = match.groupdict().get("num") or ""
+        normalized_number = re.sub(r"[.、)]$", "", number)
+        level = min(3, normalized_number.count(".") + 1) if normalized_number else 2
+        return level, title
+    return None
+
+
+def _looks_like_list_body(text: str) -> bool:
+    lowered = text.lower()
+    if len(text) > 60:
+        return True
+    if any(mark in lowered for mark in ["http://", "https://", "return ", "def ", "#include"]):
+        return True
+    return False
+
+
+def _looks_like_attribute_heading(text: str) -> bool:
+    normalized = normalize_text(text).strip(" #>*-　")
+    normalized = re.sub(r"^\*\*(.+?)\*\*", r"\1", normalized).strip()
+    labels = [
+        "常见定位",
+        "定位",
+        "角色定位",
+        "英雄定位",
+        "技能特点",
+        "玩法特点",
+        "打法特点",
+        "适合位置",
+        "核心特点",
+        "特点",
+        "简介",
+        "说明",
+        "备注",
+        "注",
+    ]
+    return any(normalized.startswith(label) for label in labels)
 
 
 def parse_pdf_document(content: bytes) -> ParseResult:

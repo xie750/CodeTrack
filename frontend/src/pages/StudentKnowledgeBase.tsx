@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -198,6 +199,7 @@ export default function StudentKnowledgeBase() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
+  const [pendingDeleteDocumentId, setPendingDeleteDocumentId] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function loadKnowledgeBases(preferredId?: string) {
@@ -268,12 +270,32 @@ export default function StudentKnowledgeBase() {
   const documents = activeBase ? documentsByBase[activeBase.id] ?? [] : [];
   const activeDocument = documents.find((item) => item.id === activeDocumentId) ?? documents[0];
   const activeDocumentChunks = activeDocument ? chunksByDocument[activeDocument.id] ?? [] : [];
+  const pendingDeleteDocument = documents.find((item) => item.id === pendingDeleteDocumentId);
 
   const visibleKnowledgeBases = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     if (!normalized) return knowledgeBases;
     return knowledgeBases.filter((item) => item.title.toLowerCase().includes(normalized));
   }, [knowledgeBases, query]);
+
+  const deleteConfirmDialog = pendingDeleteDocument ? (
+    <div className="kb-confirm-shell" role="dialog" aria-modal="true" aria-label="确认删除资料">
+      <button className="kb-confirm-mask" type="button" aria-label="取消删除" onClick={() => setPendingDeleteDocumentId("")} />
+      <section className="kb-confirm-panel">
+        <span className="kb-confirm-icon">
+          <Trash2 size={20} />
+        </span>
+        <h2>删除这份资料？</h2>
+        <p>
+          {pendingDeleteDocument.filename} 将从当前知识库移除；如果已经处理入库，相关切片和检索索引也会失效。
+        </p>
+        <div className="kb-confirm-actions">
+          <button type="button" onClick={() => setPendingDeleteDocumentId("")}>取消</button>
+          <button type="button" className="danger" onClick={confirmDeleteDocument}>确认删除</button>
+        </div>
+      </section>
+    </div>
+  ) : null;
 
   async function selectBase(id: string) {
     setActiveBaseId(id);
@@ -347,18 +369,33 @@ export default function StudentKnowledgeBase() {
     setMessage(null);
     try {
       await api.processRagDocument(documentId);
+      setChunksByDocument((current) => {
+        const next = { ...current };
+        delete next[documentId];
+        return next;
+      });
       await loadDocuments(activeBase.id);
+      if (drawerOpen && activeDocumentId === documentId) {
+        const result = await api.listRagChunks(documentId);
+        setChunksByDocument((current) => ({ ...current, [documentId]: result.items }));
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "处理入库失败，请确认 worker / Docker 服务是否已启动");
       await loadDocuments(activeBase.id).catch(() => undefined);
     }
   }
 
-  async function deleteDocument(documentId: string) {
+  function requestDeleteDocument(documentId: string) {
+    setPendingDeleteDocumentId(documentId);
+  }
+
+  async function confirmDeleteDocument() {
+    const documentId = pendingDeleteDocumentId;
     if (!activeBase) return;
     setMessage(null);
     try {
       await api.deleteRagDocument(documentId);
+      setPendingDeleteDocumentId("");
       setChunksByDocument((current) => {
         const next = { ...current };
         delete next[documentId];
@@ -471,10 +508,16 @@ export default function StudentKnowledgeBase() {
                     </span>
                     <span className="kb-doc-row-actions">
                       {doc.status === "READY" ? (
-                        <button type="button" onClick={() => openChunkDrawer(doc.id)}>
-                          <FileText size={15} />
-                          查看切片
-                        </button>
+                        <>
+                          <button type="button" onClick={() => openChunkDrawer(doc.id)}>
+                            <FileText size={15} />
+                            查看切片
+                          </button>
+                          <button type="button" onClick={() => processDocument(doc.id)}>
+                            <RefreshCw size={15} />
+                            重新切分
+                          </button>
+                        </>
                       ) : doc.status === "FAILED" || doc.status === "QUEUE_FAILED" ? (
                         <button type="button" onClick={() => processDocument(doc.id)}>
                           <RefreshCw size={15} />
@@ -486,7 +529,7 @@ export default function StudentKnowledgeBase() {
                           {processing ? "处理中" : "处理入库"}
                         </button>
                       )}
-                      <button type="button" className="danger" onClick={() => deleteDocument(doc.id)} disabled={processing}>
+                      <button type="button" className="danger" onClick={() => requestDeleteDocument(doc.id)} disabled={processing}>
                         <Trash2 size={15} />
                         删除
                       </button>
@@ -568,6 +611,8 @@ export default function StudentKnowledgeBase() {
           </aside>
         </div>
       ) : null}
+
+      {deleteConfirmDialog ? createPortal(deleteConfirmDialog, document.body) : null}
     </div>
   );
 }

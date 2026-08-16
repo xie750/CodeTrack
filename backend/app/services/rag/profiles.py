@@ -118,8 +118,11 @@ def detect_content_profile(filename: str, elements: list[ParsedElement]) -> Cont
         return ContentProfile("page_document", "pdf_page_clean", "page_recursive", signals)
     if table_count and not code_count and (table_count >= 2 or table_ratio >= 0.2):
         return ContentProfile("table_heavy", "table_preserve", "table_aware", signals)
+    if extension in {".md", ".markdown"} and heading_count >= 2:
+        return ContentProfile("sectioned_note", "structure_preserve", "markdown_section", signals)
     if code_count or code_ratio >= 0.15 or code_term_hits >= 3 or question_like:
         return ContentProfile("code_exercise", "code_preserve", "code_aware", signals)
     if heading_count >= 2 or heading_density >= 0.18:
-        return ContentProfile("sectioned_note", "structure_preserve", "section_recursive", signals)
+        strategy = "markdown_section" if extension in {".md", ".markdown"} else "section_recursive"
+        return ContentProfile("sectioned_note", "structure_preserve", strategy, signals)
     return ContentProfile("plain_note", "plain_text_clean", "plain_recursive", signals)

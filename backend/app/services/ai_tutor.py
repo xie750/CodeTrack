@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Any
 from uuid import uuid4
 
@@ -11,9 +12,11 @@ from backend.app.ai.run_recorder import finish_run, new_run_id, record_step, sta
 from backend.app.ai.schemas import AgentRunContext
 from backend.app.core.api_response import ApiError
 from backend.app.core.config import get_settings
-from backend.app.models import AiTutorMessage, AiTutorSession, Course, KnowledgeSource, User
+from backend.app.models import AiTutorMessage, AiTutorSession, Course, KnowledgeSource, RagChunk, RagDocument, RagKnowledgeBase, User
 from backend.app.models.entities import utc_now
 from backend.app.services.learner_profile import serialize_learner_profile
+from backend.app.services.rag.retrieval import parent_contexts, retrieve_chunks
+from backend.app.services.rag.utils import json_loads
 
 
 WORKFLOW_TYPE = "student_ai_tutor_chat"
@@ -21,6 +24,73 @@ PROMPT_VERSION = "student_ai_tutor_v0.1"
 MAX_HISTORY_ITEMS = 6
 MAX_SOURCE_COUNT = 6
 MAX_SOURCE_CONTENT_CHARS = 1200
+MAX_PERSONAL_KB_COUNT = 4
+MAX_PERSONAL_CONTEXT_CHARS = 1600
+MIN_PERSONAL_RELEVANCE = 0.28
+MIN_COURSE_RELEVANCE = 0.28
+GENERAL_ANSWER_CONFIDENCE = 0.42
+PERSONAL_SOURCE_CONFIDENCE_FLOOR = 0.86
+COURSE_SOURCE_CONFIDENCE_FLOOR = 0.72
+LOW_VALUE_QUERY_TERMS = {
+    "的",
+    "了",
+    "是",
+    "吗",
+    "呢",
+    "啊",
+    "吧",
+    "和",
+    "与",
+    "或",
+    "在",
+    "对",
+    "有",
+    "个",
+    "这",
+    "那",
+    "你",
+    "我",
+    "他",
+    "她",
+    "它",
+    "就",
+    "都",
+    "而",
+    "及",
+    "中",
+    "为",
+    "把",
+    "被",
+    "从",
+    "到",
+    "上",
+    "下",
+    "一",
+    "不",
+    "么",
+    "什么",
+    "如何",
+    "为什么",
+    "怎么",
+}
+LOW_VALUE_QUERY_PHRASES = [
+    "帮我",
+    "请你",
+    "请",
+    "介绍一下",
+    "介绍",
+    "说一下",
+    "说说",
+    "讲一下",
+    "讲讲",
+    "告诉我",
+    "是什么",
+    "怎么样",
+    "怎么做",
+    "为什么",
+    "如何",
+    "一下",
+]
 
 
 def _safe_json_list(raw: str | None) -> list[str]:
@@ -38,6 +108,102 @@ def _trim(text: str | None, limit: int) -> str:
     if len(value) <= limit:
         return value
     return f"{value[:limit]}..."
+
+
+def _compact_text(text: str) -> str:
+    return re.sub(r"\s+", "", re.sub(r"[^\w\u4e00-\u9fff]+", "", text.lower()))
+
+
+def _strip_low_value_phrases(text: str) -> str:
+    value = text
+    changed = True
+    while changed:
+        changed = False
+        for phrase in LOW_VALUE_QUERY_PHRASES:
+            if phrase and phrase in value:
+                value = value.replace(phrase, "")
+                changed = True
+    return value
+
+
+def _meaningful_terms(text: str) -> list[str]:
+    terms: list[str] = []
+    seen: set[str] = set()
+    for term in re.findall(r"[A-Za-z0-9_]{2,}", text.lower()):
+        value = term.strip().lower()
+        if not value or value in LOW_VALUE_QUERY_TERMS or value in seen:
+            continue
+        seen.add(value)
+        terms.append(value)
+
+    for sequence in re.findall(r"[\u4e00-\u9fff]{2,}", text):
+        cleaned = _strip_low_value_phrases(sequence)
+        cleaned = "".join(char for char in cleaned if char not in LOW_VALUE_QUERY_TERMS)
+        if len(cleaned) >= 2 and cleaned not in seen:
+            seen.add(cleaned)
+            terms.append(cleaned)
+        for index in range(max(0, len(cleaned) - 1)):
+            gram = cleaned[index : index + 2]
+            if len(gram) == 2 and gram not in LOW_VALUE_QUERY_TERMS and gram not in seen:
+                seen.add(gram)
+                terms.append(gram)
+    return terms
+
+
+def _personal_relevance_score(query: str, content: str, rerank_score: float | None) -> float:
+    compact_query = _compact_text(query)
+    compact_content = _compact_text(content)
+    if compact_query and compact_content and (compact_query in compact_content or compact_content in compact_query):
+        return 1.0
+
+    terms = _meaningful_terms(query)
+    if not terms:
+        return 0.0
+    hit_count = sum(1 for term in terms if term in compact_content)
+    overlap_score = hit_count / max(len(terms), 1)
+    if hit_count == 0:
+        return 0.0
+    if hit_count < 2 and overlap_score < 0.6:
+        overlap_score = 0.0
+
+    bounded_rerank = rerank_score if rerank_score is not None and 0 <= rerank_score <= 1 else 0.0
+    return max(overlap_score, min(bounded_rerank, overlap_score))
+
+
+def _lexical_relevance_score(query: str, content: str) -> float:
+    compact_content = _compact_text(content)
+    terms = _meaningful_terms(query)
+    if not terms:
+        return 0.0
+    hit_count = sum(1 for term in terms if term in compact_content)
+    if hit_count == 0:
+        return 0.0
+    return hit_count / max(len(terms), 1)
+
+
+def _personal_search_query(query: str) -> str:
+    terms = _meaningful_terms(query)
+    if not terms:
+        return query
+    longest_terms = [term for term in terms if len(term) >= 3]
+    return " ".join(longest_terms[:4] or terms[:4])
+
+
+def _looks_like_entity_profile_source(search_query: str, content: str) -> bool:
+    compact_query = _compact_text(search_query)
+    compact_content = _compact_text(content)
+    if not compact_query or compact_query not in compact_content[:80]:
+        return False
+    return any(label in content[:160] for label in ["常见定位", "定位", "角色定位", "英雄定位"])
+
+
+def _prioritize_personal_sources(search_query: str, sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    entity_sources = [
+        source for source in sources if _looks_like_entity_profile_source(search_query, str(source.get("content", "")))
+    ]
+    if entity_sources:
+        return entity_sources[:MAX_SOURCE_COUNT]
+    return sources[:MAX_SOURCE_COUNT]
 
 
 def _json_dumps(value: Any) -> str:
@@ -78,6 +244,20 @@ def _citation(source: KnowledgeSource) -> dict[str, Any]:
     }
 
 
+def _personal_kb_citation(source: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "source_id": source["source_id"],
+        "title": source["title"],
+        "summary": source["summary"],
+        "source_type": "STUDENT_KNOWLEDGE_BASE",
+        "version": source.get("version", "personal"),
+        "authority_level": "PERSONAL",
+        "document_id": source.get("document_id"),
+        "chunk_id": source.get("chunk_id"),
+        "quote": source.get("content", ""),
+    }
+
+
 def _source_payload(source: KnowledgeSource) -> dict[str, Any]:
     return {
         **_citation(source),
@@ -101,6 +281,159 @@ def _load_sources(db: Session, course_id: str) -> list[KnowledgeSource]:
             .limit(MAX_SOURCE_COUNT)
         ).all()
     )
+
+
+def _filter_relevant_course_sources(sources: list[KnowledgeSource], query: str) -> list[KnowledgeSource]:
+    scored: list[tuple[float, KnowledgeSource]] = []
+    for source in sources:
+        content = "\n".join(
+            [
+                source.title or "",
+                source.summary or "",
+                source.content or "",
+                " ".join(_safe_json_list(source.knowledge_points)),
+            ]
+        )
+        score = _lexical_relevance_score(query, content)
+        if score >= MIN_COURSE_RELEVANCE:
+            scored.append((score, source))
+    scored.sort(key=lambda item: item[0], reverse=True)
+    return [source for _, source in scored[:MAX_SOURCE_COUNT]]
+
+
+def _expanded_parent_content(db: Session, parent: RagChunk) -> str:
+    content = parent.content.strip()
+    has_structured_body = "\n\n" in content
+    if len(content) >= 80 or (has_structured_body and len(content) >= 30):
+        return content
+    siblings = list(
+        db.scalars(
+            select(RagChunk)
+            .where(
+                RagChunk.document_version_id == parent.document_version_id,
+                RagChunk.chunk_type == "parent",
+                RagChunk.enabled.is_(True),
+                RagChunk.chunk_index > parent.chunk_index,
+            )
+            .order_by(RagChunk.chunk_index.asc())
+            .limit(2)
+        ).all()
+    )
+    pieces = [content]
+    for sibling in siblings:
+        sibling_text = sibling.content.strip()
+        if sibling_text:
+            pieces.append(sibling_text)
+        if len("\n\n".join(pieces)) >= 260:
+            break
+    return "\n\n".join(pieces)
+
+
+def _personal_source_payload(
+    kb: RagKnowledgeBase,
+    child: Any,
+    parent: RagChunk,
+    content: str,
+    relevance_score: float,
+) -> dict[str, Any]:
+    heading_path = json_loads(parent.heading_path, [])
+    quote = _trim(getattr(child, "content", "") or content, 360)
+    child_id = getattr(child, "child_chunk_id", None) or getattr(child, "id", "")
+    document_id = getattr(child, "document_id", parent.document_id)
+    file_name = getattr(child, "file_name", None)
+    if not file_name:
+        document = parent.document
+        file_name = document.name if document else "个人知识库资料"
+    source_id = f"personal:{child_id}"
+    return {
+        "source_id": source_id,
+        "knowledge_base_id": kb.id,
+        "knowledge_base_name": kb.name,
+        "document_id": document_id,
+        "document_name": file_name,
+        "chunk_id": child_id,
+        "parent_chunk_id": parent.id,
+        "title": f"我的知识库 / {file_name}",
+        "summary": quote,
+        "heading_path": heading_path,
+        "content": _trim(content, MAX_PERSONAL_CONTEXT_CHARS),
+        "relevance_score": round(relevance_score, 4),
+        "retrieval_score": getattr(child, "rerank_score", None),
+        "version": "personal",
+    }
+
+
+def _direct_personal_sources(db: Session, kb: RagKnowledgeBase, query: str) -> list[dict[str, Any]]:
+    terms = _meaningful_terms(query)
+    if not terms:
+        return []
+    rows = list(
+        db.execute(
+            select(RagChunk, RagDocument)
+            .join(RagDocument, RagDocument.id == RagChunk.document_id)
+            .where(
+                RagChunk.knowledge_base_id == kb.id,
+                RagChunk.chunk_type == "child",
+                RagChunk.enabled.is_(True),
+                RagDocument.status == "READY",
+                RagDocument.deleted_at.is_(None),
+                RagChunk.document_version_id == RagDocument.active_version_id,
+            )
+            .order_by(RagChunk.chunk_index.asc())
+        ).all()
+    )
+    scored: list[tuple[float, RagChunk, RagChunk]] = []
+    for child, _document in rows:
+        parent = db.get(RagChunk, child.parent_chunk_id) if child.parent_chunk_id else None
+        if not parent or not parent.enabled:
+            continue
+        content = _expanded_parent_content(db, parent)
+        score = _personal_relevance_score(query, f"{child.content}\n\n{content}", None)
+        if score >= MIN_PERSONAL_RELEVANCE:
+            scored.append((score, child, parent))
+    scored.sort(key=lambda item: (-item[0], item[1].chunk_index))
+    return [
+        _personal_source_payload(kb, child, parent, _expanded_parent_content(db, parent), score)
+        for score, child, parent in scored[:MAX_SOURCE_COUNT]
+    ]
+
+
+def _load_personal_knowledge_sources(db: Session, user: User, query: str) -> list[dict[str, Any]]:
+    kbs = list(
+        db.scalars(
+            select(RagKnowledgeBase)
+            .where(
+                RagKnowledgeBase.owner_id == user.id,
+                RagKnowledgeBase.status != "deleted",
+            )
+            .order_by(RagKnowledgeBase.updated_at.desc())
+            .limit(MAX_PERSONAL_KB_COUNT)
+        )
+    )
+    sources: list[dict[str, Any]] = []
+    seen_chunks: set[str] = set()
+    seen_parents: set[str] = set()
+    search_query = _personal_search_query(query)
+    for kb in kbs:
+        for child, parent in parent_contexts(db, retrieve_chunks(db, kb.id, search_query, rerank_top_n=6)):
+            content = _expanded_parent_content(db, parent)
+            relevance_score = _personal_relevance_score(search_query, f"{child.content}\n\n{content}", child.rerank_score)
+            if relevance_score < MIN_PERSONAL_RELEVANCE:
+                continue
+            if child.child_chunk_id in seen_chunks or parent.id in seen_parents:
+                continue
+            seen_chunks.add(child.child_chunk_id)
+            seen_parents.add(parent.id)
+            sources.append(_personal_source_payload(kb, child, parent, content, relevance_score))
+        for source in _direct_personal_sources(db, kb, search_query):
+            chunk_id = str(source.get("chunk_id", ""))
+            parent_id = str(source.get("parent_chunk_id", ""))
+            if chunk_id in seen_chunks or parent_id in seen_parents:
+                continue
+            seen_chunks.add(chunk_id)
+            seen_parents.add(parent_id)
+            sources.append(source)
+    return _prioritize_personal_sources(search_query, sources)
 
 
 def _history_payload(history: list[dict[str, str]] | None) -> list[dict[str, str]]:
@@ -311,10 +644,50 @@ def ai_tutor_history_payload(
     ]
 
 
+def _bounded_confidence(value: Any) -> float:
+    try:
+        confidence = float(value)
+    except (TypeError, ValueError):
+        return 0.7
+    if confidence < 0 or confidence > 1:
+        raise ValueError("confidence out of range")
+    return confidence
+
+
+def _computed_confidence(
+    *,
+    model_confidence: float,
+    source_ids: list[str],
+    personal_source_ids: list[str],
+    personal_sources: dict[str, dict[str, Any]],
+) -> float:
+    if personal_source_ids:
+        relevance_scores = [
+            float(personal_sources[source_id].get("relevance_score", 0.75))
+            for source_id in personal_source_ids
+            if source_id in personal_sources
+        ]
+        top_relevance = max(relevance_scores or [0.75])
+        candidate_count = max(1, min(len(personal_sources), 3))
+        citation_ratio = min(1.0, len(personal_source_ids) / candidate_count)
+        confidence = PERSONAL_SOURCE_CONFIDENCE_FLOOR + 0.06 * citation_ratio + 0.04 * min(top_relevance, 1.0)
+        return round(min(confidence, 0.96), 2)
+
+    if source_ids:
+        candidate_count = max(1, min(MAX_SOURCE_COUNT, 3))
+        citation_ratio = min(1.0, len(source_ids) / candidate_count)
+        confidence = COURSE_SOURCE_CONFIDENCE_FLOOR + 0.12 * citation_ratio
+        return round(min(confidence, 0.86), 2)
+
+    # 通用模型回答可以继续给学生看，但没有资料引用时不能展示高置信背书。
+    return round(min(model_confidence, GENERAL_ANSWER_CONFIDENCE), 2)
+
+
 def validate_ai_tutor_output(
     raw: dict[str, Any],
     *,
     allowed_sources: dict[str, KnowledgeSource],
+    allowed_personal_sources: dict[str, dict[str, Any]] | None = None,
     default_provider: str,
     fallback_model_name: str,
 ) -> dict[str, Any]:
@@ -322,9 +695,7 @@ def validate_ai_tutor_output(
     if not answer:
         raise ValueError("missing answer")
 
-    confidence = float(raw.get("confidence", 0.7))
-    if confidence < 0 or confidence > 1:
-        raise ValueError("confidence out of range")
+    model_confidence = _bounded_confidence(raw.get("confidence", 0.7))
 
     raw_source_ids = raw.get("knowledge_source_ids", [])
     if raw_source_ids is None:
@@ -336,17 +707,36 @@ def validate_ai_tutor_output(
     if invalid_ids:
         raise ValueError(f"invalid source reference: {', '.join(invalid_ids)}")
 
+    raw_personal_source_ids = raw.get("personal_knowledge_source_ids", [])
+    if raw_personal_source_ids is None:
+        raw_personal_source_ids = []
+    if not isinstance(raw_personal_source_ids, list):
+        raise ValueError("personal_knowledge_source_ids must be a list")
+    personal_sources = allowed_personal_sources or {}
+    personal_source_ids = [str(item) for item in raw_personal_source_ids]
+    invalid_personal_ids = [item for item in personal_source_ids if item not in personal_sources]
+    if invalid_personal_ids:
+        raise ValueError(f"invalid personal source reference: {', '.join(invalid_personal_ids)}")
+
     raw_actions = raw.get("suggested_actions", _default_actions())
     actions = [str(item).strip() for item in raw_actions] if isinstance(raw_actions, list) else []
     actions = [item for item in actions if item][:4] or _default_actions()
+    citations = [_citation(allowed_sources[source_id]) for source_id in source_ids]
+    citations.extend(_personal_kb_citation(personal_sources[source_id]) for source_id in personal_source_ids)
+    confidence = _computed_confidence(
+        model_confidence=model_confidence,
+        source_ids=source_ids,
+        personal_source_ids=personal_source_ids,
+        personal_sources=personal_sources,
+    )
 
     return {
         "answer": answer,
         "confidence": confidence,
-        "citations": [_citation(allowed_sources[source_id]) for source_id in source_ids],
+        "citations": citations,
         "suggested_actions": actions,
         "profile_used": bool(raw.get("profile_used", True)),
-        "source_used": bool(source_ids),
+        "source_used": bool(source_ids or personal_source_ids),
         "safety_note": str(raw.get("safety_note", "")).strip(),
         "model_provider": str(raw.get("model_provider", default_provider)),
         "model_name": str(raw.get("model_name", fallback_model_name)),
@@ -357,7 +747,10 @@ def build_ai_tutor_system_prompt() -> str:
     return (
         "你是 CodeTrack 的 AI 助学导师，面向计算机基础课程学生。"
         "你必须使用中文回答，回答要清晰、克制、适合学习场景。"
-        "优先结合输入中的学生画像、课程和知识源。涉及课程知识时只能引用给定 knowledge_sources 里的 source_id，"
+        "检索策略是：先看 personal_knowledge_sources；如果它不为空，必须优先依据个人知识库回答，并引用 personal source_id。"
+        "只有学生问题与课程资料直接相关时，才引用给定 knowledge_sources 里的 source_id。"
+        "如果个人知识库为空且问题明显不是课程问题，就按通用模型能力直接回答，不要硬套课程画像或课程资料。"
+        "confidence 字段可以给估计值，但最终置信度由后端按引用情况重算。"
         "不要编造资料、教材、论文或链接。"
         "如果问题像考核/作业求完整答案，只给思路、分层提示和可执行下一步，不直接给完整答案。"
         "只输出 JSON 对象，不要 Markdown。"
@@ -368,7 +761,9 @@ def build_ai_tutor_stream_system_prompt() -> str:
     return (
         "你是 CodeTrack 的 AI 助学导师，面向计算机基础课程学生。"
         "你必须使用中文回答，回答要清晰、克制、适合学习场景。"
-        "优先结合输入中的学生画像、课程和知识源；不要编造资料、教材、论文或链接。"
+        "检索策略是：先看 personal_knowledge_sources；如果它不为空，必须优先依据个人知识库回答，不要用课程画像覆盖。"
+        "如果个人知识库为空且问题明显不是课程问题，就按通用模型能力直接回答，不要硬套课程画像或课程资料。"
+        "不要编造资料、教材、论文或链接。"
         "如果问题像考核/作业求完整答案，只给思路、分层提示和可执行下一步，不直接给完整答案。"
         "直接输出回答正文，不要输出 JSON，不要输出 Markdown 表格。"
     )
@@ -382,6 +777,7 @@ def build_ai_tutor_payload(
     profile: dict[str, Any] | None,
     sources: list[KnowledgeSource],
     history: list[dict[str, str]] | None,
+    personal_sources: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     return {
         "prompt_version": PROMPT_VERSION,
@@ -397,10 +793,17 @@ def build_ai_tutor_payload(
         "history": _history_payload(history),
         "learner_profile": profile,
         "knowledge_sources": [_source_payload(source) for source in sources],
+        "personal_knowledge_sources": personal_sources or [],
+        "retrieval_policy": {
+            "priority": "personal_knowledge_base_first",
+            "personal_hit": bool(personal_sources),
+            "fallback": "general_model_answer_without_high_confidence_when_no_source_is_cited",
+        },
         "output_schema": {
             "answer": "string, Chinese learning answer",
-            "confidence": "float in [0,1]",
+            "confidence": "float in [0,1], backend will recalculate from citations",
             "knowledge_source_ids": "array selected from knowledge_sources.source_id",
+            "personal_knowledge_source_ids": "array selected from personal_knowledge_sources.source_id",
             "suggested_actions": "array of 2-4 short Chinese action labels",
             "profile_used": "boolean",
             "source_used": "boolean",
@@ -427,8 +830,9 @@ def build_ai_tutor_metadata_messages(payload: dict[str, Any], answer: str) -> li
         **payload,
         "generated_answer": answer,
         "metadata_schema": {
-            "confidence": "float in [0,1]",
+            "confidence": "float in [0,1], backend will recalculate from citations",
             "knowledge_source_ids": "array selected from knowledge_sources.source_id",
+            "personal_knowledge_source_ids": "array selected from personal_knowledge_sources.source_id",
             "suggested_actions": "array of 2-4 short Chinese action labels",
             "profile_used": "boolean",
             "source_used": "boolean",
@@ -479,8 +883,10 @@ async def generate_student_ai_reply(
             },
         )
 
-    sources = _load_sources(db, course.id)
+    sources = _filter_relevant_course_sources(_load_sources(db, course.id), message)
     allowed_sources = {source.id: source for source in sources}
+    personal_sources = _load_personal_knowledge_sources(db, user, message)
+    allowed_personal_sources = {source["source_id"]: source for source in personal_sources}
     profile = serialize_learner_profile(db, student_id=user.id, course_id=course.id, class_id=class_id)
     fallback_model_name = settings.model_name or "configured-model"
     default_provider = "MODEL_GATEWAY" if use_gateway else "OPENAI_COMPATIBLE"
@@ -491,6 +897,7 @@ async def generate_student_ai_reply(
         profile=profile,
         sources=sources,
         history=history,
+        personal_sources=personal_sources,
     )
 
     context = AgentRunContext(
@@ -506,6 +913,7 @@ async def generate_student_ai_reply(
             "course_id": course.id,
             "message": _trim(message, 300),
             "knowledge_source_ids": [source.id for source in sources],
+            "personal_knowledge_source_ids": [source["source_id"] for source in personal_sources],
             "profile_available": profile is not None,
         },
         model_provider=default_provider,
@@ -517,6 +925,7 @@ async def generate_student_ai_reply(
         return validate_ai_tutor_output(
             raw,
             allowed_sources=allowed_sources,
+            allowed_personal_sources=allowed_personal_sources,
             default_provider=default_provider,
             fallback_model_name=fallback_model_name,
         )
@@ -642,8 +1051,10 @@ async def stream_student_ai_reply(
         yield {"type": "final", "data": result}
         return
 
-    sources = _load_sources(db, course.id)
+    sources = _filter_relevant_course_sources(_load_sources(db, course.id), message)
     allowed_sources = {source.id: source for source in sources}
+    personal_sources = _load_personal_knowledge_sources(db, user, message)
+    allowed_personal_sources = {source["source_id"]: source for source in personal_sources}
     profile = serialize_learner_profile(db, student_id=user.id, course_id=course.id, class_id=class_id)
     fallback_model_name = settings.model_name or "configured-model"
     default_provider = "OPENAI_COMPATIBLE"
@@ -654,6 +1065,7 @@ async def stream_student_ai_reply(
         profile=profile,
         sources=sources,
         history=history,
+        personal_sources=personal_sources,
     )
 
     run = start_run(
@@ -668,6 +1080,7 @@ async def stream_student_ai_reply(
             "course_id": course.id,
             "message": _trim(message, 300),
             "knowledge_source_ids": [source.id for source in sources],
+            "personal_knowledge_source_ids": [source["source_id"] for source in personal_sources],
             "profile_available": profile is not None,
             "stream": True,
         },
@@ -697,6 +1110,7 @@ async def stream_student_ai_reply(
             return validate_ai_tutor_output(
                 {**raw, "answer": answer},
                 allowed_sources=allowed_sources,
+                allowed_personal_sources=allowed_personal_sources,
                 default_provider=default_provider,
                 fallback_model_name=fallback_model_name,
             )
