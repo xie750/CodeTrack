@@ -334,7 +334,6 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
     <div className="student-map-page student-graph-page">
       <header className="student-map-head student-graph-head">
         <div>
-          <span className="student-eyebrow">我的课程 / {displayCourseName}</span>
           <h1>{title}</h1>
           <p>
             {graph

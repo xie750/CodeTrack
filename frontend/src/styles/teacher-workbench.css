@@ -2724,28 +2724,6 @@
   margin-bottom: 24px;
 }
 
-.student-resource-header nav {
-  margin-bottom: 18px;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  color: #193d8f;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.student-resource-header nav i {
-  width: 4px;
-  height: 4px;
-  border-radius: 999px;
-  background: #b8c6dd;
-}
-
-.student-resource-header nav strong {
-  color: #1d2941;
-}
-
 .student-resource-header h1 {
   margin-bottom: 10px;
   color: #071326;
@@ -3247,11 +3225,6 @@
     padding: 18px 14px 88px;
   }
 
-  .student-resource-header nav {
-    gap: 7px;
-    font-size: 12px;
-  }
-
   .student-resource-header h1 {
     font-size: 26px;
   }
@@ -3663,11 +3636,6 @@
 
 .course-profile-hero {
   min-height: 154px;
-}
-
-.course-profile-hero .student-eyebrow {
-  display: inline-flex;
-  margin-bottom: 10px;
 }
 
 .course-profile-hero h1 {

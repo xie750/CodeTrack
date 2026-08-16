@@ -9,3 +9,19 @@ Port 5175 is in use, trying another one...
 
   [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5176[22m/[39m
   [32m➜[39m  [1mNetwork[22m: [36mhttp://10.27.51.210:[1m5176[22m/[39m
+[2m00:32:42[22m [36m[1m[vite][22m[39m [32mvite.config.ts changed, restarting server...[39m
+[2m00:32:42[22m [36m[1m[vite][22m[39m [32mvite.config.ts changed, restarting server...[39m
+[2m00:32:42[22m [36m[1m[vite][22m[39m [32mvite.config.ts changed, restarting server...[39m
+[2m00:32:43[22m [36m[1m[vite][22m[39m server restarted.
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5176[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://10.27.43.1:[1m5176[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://172.25.0.1:[1m5176[22m/[39m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5176[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://10.27.43.1:[1m5176[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://172.25.0.1:[1m5176[22m/[39m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5176[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://10.27.43.1:[1m5176[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://172.25.0.1:[1m5176[22m/[39m

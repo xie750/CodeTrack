@@ -179,15 +179,6 @@ export default function StudentResourceCenter() {
   return (
     <div className="student-resource-page">
       <header className="student-resource-header">
-        <nav aria-label="当前位置">
-          <span>我的课程</span>
-          <i />
-          <span>Python程序设计</span>
-          <i />
-          <span>自主学习</span>
-          <i />
-          <strong>资源中心</strong>
-        </nav>
         <h1>资源中心</h1>
         <p>搜索和发现优质学习资源，助力高效学习</p>
       </header>

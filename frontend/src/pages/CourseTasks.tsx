@@ -325,9 +325,6 @@ export default function CourseTasks({ onOpenWorkspace, courseId, embedded = fals
     <div className={`class-task-page course-task-workspace${embedded ? " embedded" : ""}`}>
       <section className="course-task-hero">
         <div>
-          <p className="course-task-breadcrumb">
-            我的课程 <span>/</span> {currentCourse?.course_name ?? selectedTab} <span>/</span> 课程任务
-          </p>
           <h1>课程任务</h1>
           <p>查看本课程的全部任务与提交进度</p>
         </div>

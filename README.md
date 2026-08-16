@@ -50,6 +50,67 @@ npm run dev
 
 如需 PostgreSQL，复制 `.env.example` 为 `.env`，修改 `CODETRACK_DATABASE_URL` 即可。
 
+## RAG 知识库后端验收
+
+RAG 知识库后端使用 PostgreSQL + pgvector、Redis/Celery、MinIO、Parent-Child Chunk、Hybrid Retrieval 与可验证 citation。仓库根目录提供 `docker-compose.yml`，可按规格第 36 节直接启动：
+
+```bash
+docker compose up -d
+alembic upgrade head
+```
+
+创建知识库：
+
+```bash
+curl -X POST http://localhost:8000/api/v1/knowledge-bases \
+  -H "Content-Type: application/json" \
+  -H "X-Demo-User-Id: user_student_001" \
+  -d "{\"name\":\"RAG Test KB\",\"description\":\"test\"}"
+```
+
+上传文件会保存原文件、创建 Document/Version/Job、投递 Celery，API 返回 `202`，不会同步等待解析和 Embedding：
+
+```bash
+curl -X POST \
+  -H "X-Demo-User-Id: user_student_001" \
+  -F "file=@./tests/fixtures/simple.md" \
+  http://localhost:8000/api/v1/knowledge-bases/<KB_ID>/documents
+```
+
+查询状态、检索测试和 RAG：
+
+```bash
+curl -H "X-Demo-User-Id: user_student_001" \
+  http://localhost:8000/api/v1/documents/<DOCUMENT_ID>
+
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -H "X-Demo-User-Id: user_student_001" \
+  -d "{\"query\":\"文档中的核心概念是什么？\",\"debug\":true}" \
+  http://localhost:8000/api/v1/knowledge-bases/<KB_ID>/retrieve
+
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -H "X-Demo-User-Id: user_student_001" \
+  -d "{\"query\":\"文档中的核心概念是什么？\",\"stream\":false}" \
+  http://localhost:8000/api/v1/knowledge-bases/<KB_ID>/rag/query
+```
+
+数据库验收 SQL：
+
+```sql
+SELECT status, active_version_id FROM documents;
+SELECT chunk_type, count(*) FROM chunks GROUP BY chunk_type;
+SELECT vector_dims(embedding) FROM chunks WHERE embedding IS NOT NULL LIMIT 1;
+```
+
+自动化测试：
+
+```bash
+python -m pytest tests/test_rag_knowledge_base.py -q
+python -m pytest
+```
+
 ## 测试
 
 ```bash

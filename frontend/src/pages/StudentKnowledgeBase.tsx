@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -16,185 +16,41 @@ import {
   UploadCloud,
   X
 } from "lucide-react";
+import { api, type RagKnowledgeBaseListItem, type RagKnowledgeChunk, type RagKnowledgeDocument } from "../api";
 
 type KnowledgeBaseStatus = "READY" | "PARTIAL_READY" | "PROCESSING" | "FAILED" | "DRAFT";
-type DocumentStatus = "UPLOADED" | "PARSING" | "CLEANING" | "CHUNKING" | "INDEXING" | "READY" | "FAILED";
+type DocumentStatus =
+  | "UPLOADED"
+  | "QUEUED"
+  | "PARSING"
+  | "NORMALIZING"
+  | "CHUNKING"
+  | "EMBEDDING"
+  | "INDEXING"
+  | "READY"
+  | "FAILED"
+  | "QUEUE_FAILED";
 
-type KnowledgeChunk = {
-  id: string;
-  documentId: string;
-  index: number;
-  title: string;
-  preview: string;
-  words: number;
-};
-
-type KnowledgeDocument = {
+type KnowledgeDocumentView = {
   id: string;
   title: string;
   filename: string;
   fileType: string;
   size: string;
   status: DocumentStatus;
+  progress: number;
   chunkCount: number;
   uploadedAt: string;
   errorMessage?: string;
 };
 
-type StudentKnowledgeBaseItem = {
+type KnowledgeBaseView = {
   id: string;
   title: string;
   status: KnowledgeBaseStatus;
   documentCount: number;
   chunkCount: number;
 };
-
-const initialKnowledgeBases: StudentKnowledgeBaseItem[] = [
-  {
-    id: "skb_linked_list_review",
-    title: "链表复习资料库",
-    status: "READY",
-    documentCount: 3,
-    chunkCount: 28
-  },
-  {
-    id: "skb_exam_notes",
-    title: "期末自整理资料",
-    status: "PROCESSING",
-    documentCount: 4,
-    chunkCount: 15
-  },
-  {
-    id: "skb_algorithm_notes",
-    title: "算法学习资料",
-    status: "READY",
-    documentCount: 2,
-    chunkCount: 9
-  }
-];
-
-const initialDocuments: Record<string, KnowledgeDocument[]> = {
-  skb_linked_list_review: [
-    {
-      id: "doc_head_node",
-      title: "头节点删除错题整理",
-      filename: "linked-list-head-delete.md",
-      fileType: "MD",
-      size: "18 KB",
-      status: "READY",
-      chunkCount: 9,
-      uploadedAt: "今天 14:12"
-    },
-    {
-      id: "doc_pointer_walk",
-      title: "指针遍历笔记",
-      filename: "pointer-walk.txt",
-      fileType: "TXT",
-      size: "9 KB",
-      status: "READY",
-      chunkCount: 6,
-      uploadedAt: "今天 13:48"
-    },
-    {
-      id: "doc_pdf_failed",
-      title: "链表错题整理",
-      filename: "linked-list-review.pdf",
-      fileType: "PDF",
-      size: "1.8 MB",
-      status: "FAILED",
-      chunkCount: 7,
-      uploadedAt: "昨天 20:15",
-      errorMessage: "PDF 当前无法提取有效文本，可重新上传文本版资料。"
-    }
-  ],
-  skb_exam_notes: [
-    {
-      id: "doc_data_structure",
-      title: "数据结构期末复习",
-      filename: "数据结构期末复习.md",
-      fileType: "MD",
-      size: "26 KB",
-      status: "READY",
-      chunkCount: 5,
-      uploadedAt: "昨天 21:08"
-    },
-    {
-      id: "doc_pasted_text",
-      title: "pasted-text",
-      filename: "pasted-text.txt",
-      fileType: "TXT",
-      size: "240 字",
-      status: "READY",
-      chunkCount: 2,
-      uploadedAt: "昨天 20:46"
-    },
-    {
-      id: "doc_exam_notes",
-      title: "exam-notes",
-      filename: "exam-notes.md",
-      fileType: "MD",
-      size: "18 KB",
-      status: "UPLOADED",
-      chunkCount: 0,
-      uploadedAt: "昨天 19:30"
-    }
-  ],
-  skb_algorithm_notes: [
-    {
-      id: "doc_sorting",
-      title: "排序算法对照",
-      filename: "sorting-notes.md",
-      fileType: "MD",
-      size: "14 KB",
-      status: "READY",
-      chunkCount: 4,
-      uploadedAt: "周一 10:18"
-    }
-  ]
-};
-
-const initialChunks: KnowledgeChunk[] = [
-  {
-    id: "chunk_data_001",
-    documentId: "doc_data_structure",
-    index: 1,
-    title: "切片 01",
-    preview: "线性表是具有相同特性的数据元素的一个有限序列。其逻辑结构有两种基本形式：线性结构和非线性结构。线性表是最基本的线性结构。",
-    words: 112
-  },
-  {
-    id: "chunk_data_002",
-    documentId: "doc_data_structure",
-    index: 2,
-    title: "切片 02",
-    preview: "链表是一种典型的线性表的存储结构。链表中的节点由数据域和指针域组成，指针指向下一个节点的存储地址。",
-    words: 98
-  },
-  {
-    id: "chunk_data_003",
-    documentId: "doc_data_structure",
-    index: 3,
-    title: "切片 03",
-    preview: "单链表的基本操作包括：1. 初始化 2. 插入 3. 删除 4. 查找 5. 遍历。这些操作是链表应用的基础。",
-    words: 105
-  },
-  {
-    id: "chunk_head_001",
-    documentId: "doc_head_node",
-    index: 1,
-    title: "切片 01",
-    preview: "删除头节点时，函数返回值必须指向新的头节点。如果仍返回原 head，调用方会继续持有已经被删除的节点。",
-    words: 91
-  },
-  {
-    id: "chunk_head_002",
-    documentId: "doc_head_node",
-    index: 2,
-    title: "切片 02",
-    preview: "空链表需要先判断 head == nullptr；单节点链表删除后应返回 nullptr，并避免继续访问 next。",
-    words: 84
-  }
-];
 
 function statusText(status: KnowledgeBaseStatus | DocumentStatus) {
   const map: Record<string, string> = {
@@ -204,63 +60,61 @@ function statusText(status: KnowledgeBaseStatus | DocumentStatus) {
     FAILED: "处理失败",
     DRAFT: "草稿",
     UPLOADED: "待处理",
+    QUEUED: "排队中",
     PARSING: "解析中",
-    CLEANING: "清洗中",
+    NORMALIZING: "清洗中",
     CHUNKING: "切片中",
-    INDEXING: "索引中"
+    EMBEDDING: "向量化",
+    INDEXING: "索引中",
+    QUEUE_FAILED: "投递失败"
   };
   return map[status] ?? status;
 }
 
 function statusTone(status: KnowledgeBaseStatus | DocumentStatus) {
   if (status === "READY") return "ready";
-  if (status === "FAILED") return "failed";
-  if (status === "DRAFT") return "draft";
+  if (status === "FAILED" || status === "QUEUE_FAILED") return "failed";
+  if (status === "DRAFT" || status === "UPLOADED") return "draft";
   return "processing";
 }
 
-const processingStatuses = new Set<DocumentStatus>(["PARSING", "CLEANING", "CHUNKING", "INDEXING"]);
+const processingStatuses = new Set<DocumentStatus>(["QUEUED", "PARSING", "NORMALIZING", "CHUNKING", "EMBEDDING", "INDEXING"]);
 
 function isProcessing(status: DocumentStatus) {
   return processingStatuses.has(status);
 }
 
-function deriveBaseStatus(documents: KnowledgeDocument[]): KnowledgeBaseStatus {
+function deriveBaseStatus(documents: KnowledgeDocumentView[]): KnowledgeBaseStatus {
   if (!documents.length) return "DRAFT";
   if (documents.some((doc) => isProcessing(doc.status))) return "PROCESSING";
   const readyCount = documents.filter((doc) => doc.status === "READY").length;
   if (readyCount === documents.length) return "READY";
   if (readyCount > 0) return "PARTIAL_READY";
-  if (documents.some((doc) => doc.status === "FAILED")) return "FAILED";
+  if (documents.some((doc) => doc.status === "FAILED" || doc.status === "QUEUE_FAILED")) return "FAILED";
   return "DRAFT";
 }
 
-function documentProgress(status: DocumentStatus) {
+function documentProgress(doc: KnowledgeDocumentView) {
   const progressMap: Record<DocumentStatus, number> = {
     UPLOADED: 8,
+    QUEUED: 12,
     PARSING: 22,
-    CLEANING: 42,
+    NORMALIZING: 42,
     CHUNKING: 64,
-    INDEXING: 86,
+    EMBEDDING: 78,
+    INDEXING: 88,
     READY: 100,
-    FAILED: 100
+    FAILED: 100,
+    QUEUE_FAILED: 100
   };
-  return progressMap[status];
+  return doc.progress || progressMap[doc.status];
 }
 
-function workflowText(doc: KnowledgeDocument) {
+function workflowText(doc: KnowledgeDocumentView) {
   if (doc.status === "UPLOADED") return "已上传，待确认后处理入库";
   if (doc.status === "READY") return `${doc.chunkCount} 个切片已入库`;
-  if (doc.status === "FAILED") return "处理失败，可删除或重新处理";
+  if (doc.status === "FAILED" || doc.status === "QUEUE_FAILED") return doc.errorMessage || "处理失败，可删除或重新处理";
   return `${statusText(doc.status)}，正在生成可引用知识切片`;
-}
-
-function nowLabel() {
-  return new Intl.DateTimeFormat("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false
-  }).format(new Date());
 }
 
 function fileIconClass(fileType: string) {
@@ -278,184 +132,242 @@ function formatFileSize(bytes: number) {
 
 function fileTypeFromName(filename: string) {
   const ext = filename.split(".").pop()?.toUpperCase();
-  if (ext === "PDF" || ext === "DOCX" || ext === "TXT" || ext === "MD") return ext;
+  if (ext === "PDF" || ext === "DOCX" || ext === "TXT" || ext === "MD" || ext === "PPTX") return ext;
   return "TXT";
 }
 
+function normalizeDocumentStatus(status: string): DocumentStatus {
+  const value = status.toUpperCase();
+  if (value === "CLEANING") return "NORMALIZING";
+  if (value === "DELETED") return "FAILED";
+  if (
+    value === "UPLOADED" ||
+    value === "QUEUED" ||
+    value === "PARSING" ||
+    value === "NORMALIZING" ||
+    value === "CHUNKING" ||
+    value === "EMBEDDING" ||
+    value === "INDEXING" ||
+    value === "READY" ||
+    value === "FAILED" ||
+    value === "QUEUE_FAILED"
+  ) {
+    return value;
+  }
+  return "FAILED";
+}
+
+function mapBase(item: RagKnowledgeBaseListItem): KnowledgeBaseView {
+  return {
+    id: item.id,
+    title: item.name,
+    status: item.status === "active" ? "DRAFT" : "FAILED",
+    documentCount: item.document_count,
+    chunkCount: item.chunk_count
+  };
+}
+
+function mapDocument(item: RagKnowledgeDocument): KnowledgeDocumentView {
+  return {
+    id: item.id,
+    title: item.title || item.filename,
+    filename: item.filename,
+    fileType: fileTypeFromName(item.filename),
+    size: formatFileSize(item.size_bytes),
+    status: normalizeDocumentStatus(item.status),
+    progress: item.progress,
+    chunkCount: item.chunk_count,
+    uploadedAt: new Intl.DateTimeFormat("zh-CN", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false
+    }).format(new Date(item.created_at)),
+    errorMessage: item.error?.message
+  };
+}
+
 export default function StudentKnowledgeBase() {
-  const [knowledgeBases, setKnowledgeBases] = useState(initialKnowledgeBases);
-  const [documentsByBase, setDocumentsByBase] = useState(initialDocuments);
-  const [chunks, setChunks] = useState(initialChunks);
-  const [activeBaseId, setActiveBaseId] = useState("skb_exam_notes");
-  const [activeDocumentId, setActiveDocumentId] = useState("doc_data_structure");
+  const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBaseView[]>([]);
+  const [documentsByBase, setDocumentsByBase] = useState<Record<string, KnowledgeDocumentView[]>>({});
+  const [chunksByDocument, setChunksByDocument] = useState<Record<string, RagKnowledgeChunk[]>>({});
+  const [activeBaseId, setActiveBaseId] = useState("");
+  const [activeDocumentId, setActiveDocumentId] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const knowledgeBaseViews = useMemo(() => knowledgeBases.map((item) => {
-    const documents = documentsByBase[item.id] ?? [];
-    return {
-      ...item,
-      status: deriveBaseStatus(documents),
-      documentCount: documents.length,
-      chunkCount: documents.reduce((sum, doc) => sum + (doc.status === "READY" ? doc.chunkCount : 0), 0)
-    };
-  }), [documentsByBase, knowledgeBases]);
+  async function loadKnowledgeBases(preferredId?: string) {
+    const result = await api.listRagKnowledgeBases();
+    const views = result.items.map(mapBase);
+    setKnowledgeBases(views);
+    const nextActive = preferredId || activeBaseId || views[0]?.id || "";
+    setActiveBaseId(nextActive);
+    if (nextActive) await loadDocuments(nextActive);
+    return nextActive;
+  }
 
-  const activeBase = knowledgeBaseViews.find((item) => item.id === activeBaseId) ?? knowledgeBaseViews[0];
-  const documents = documentsByBase[activeBase.id] ?? [];
+  async function loadDocuments(kbId: string) {
+    const result = await api.listRagDocuments(kbId);
+    const docs = result.items.map(mapDocument);
+    setDocumentsByBase((current) => ({ ...current, [kbId]: docs }));
+    setKnowledgeBases((current) => current.map((item) => item.id === kbId ? {
+      ...item,
+      status: deriveBaseStatus(docs),
+      documentCount: docs.length,
+      chunkCount: docs.reduce((sum, doc) => sum + (doc.status === "READY" ? doc.chunkCount : 0), 0)
+    } : item));
+    setActiveDocumentId((current) => docs.some((doc) => doc.id === current) ? current : docs[0]?.id ?? "");
+    return docs;
+  }
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setMessage(null);
+    api.listRagKnowledgeBases()
+      .then(async (result) => {
+        if (!alive) return;
+        if (!result.items.length) {
+          const created = await api.createRagKnowledgeBase("期末自整理资料", "上传后确认处理入库的个人知识库");
+          if (!alive) return;
+          await loadKnowledgeBases(created.id);
+          return;
+        }
+        const views = result.items.map(mapBase);
+        setKnowledgeBases(views);
+        const firstId = views[0]?.id ?? "";
+        setActiveBaseId(firstId);
+        if (firstId) await loadDocuments(firstId);
+      })
+      .catch((error) => {
+        if (alive) setMessage(error instanceof Error ? error.message : "知识库加载失败");
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!activeBaseId) return undefined;
+    const docs = documentsByBase[activeBaseId] ?? [];
+    if (!docs.some((doc) => isProcessing(doc.status))) return undefined;
+    const timer = window.setInterval(() => {
+      loadDocuments(activeBaseId).catch((error) => setMessage(error instanceof Error ? error.message : "文档状态刷新失败"));
+    }, 1500);
+    return () => window.clearInterval(timer);
+  }, [activeBaseId, documentsByBase]);
+
+  const activeBase = knowledgeBases.find((item) => item.id === activeBaseId) ?? knowledgeBases[0];
+  const documents = activeBase ? documentsByBase[activeBase.id] ?? [] : [];
   const activeDocument = documents.find((item) => item.id === activeDocumentId) ?? documents[0];
-  const activeDocumentChunks = chunks.filter((chunk) => chunk.documentId === activeDocument?.id);
+  const activeDocumentChunks = activeDocument ? chunksByDocument[activeDocument.id] ?? [] : [];
 
   const visibleKnowledgeBases = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    if (!normalized) return knowledgeBaseViews;
-    return knowledgeBaseViews.filter((item) => item.title.toLowerCase().includes(normalized));
-  }, [knowledgeBaseViews, query]);
+    if (!normalized) return knowledgeBases;
+    return knowledgeBases.filter((item) => item.title.toLowerCase().includes(normalized));
+  }, [knowledgeBases, query]);
 
-  function selectBase(id: string) {
+  async function selectBase(id: string) {
     setActiveBaseId(id);
-    const firstDocument = documentsByBase[id]?.[0];
-    setActiveDocumentId(firstDocument?.id ?? "");
     setDrawerOpen(false);
+    setMessage(null);
+    try {
+      await loadDocuments(id);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "文档列表加载失败");
+    }
   }
 
-  function openChunkDrawer(documentId: string) {
+  async function openChunkDrawer(documentId: string) {
     setActiveDocumentId(documentId);
     setDrawerOpen(true);
+    try {
+      const result = await api.listRagChunks(documentId);
+      setChunksByDocument((current) => ({ ...current, [documentId]: result.items }));
+    } catch (error) {
+      setChunksByDocument((current) => ({ ...current, [documentId]: [] }));
+      setMessage(error instanceof Error ? error.message : "切片加载失败");
+    }
   }
 
-  function createKnowledgeBase() {
-    const id = `skb_${Date.now()}`;
-    const item: StudentKnowledgeBaseItem = {
-      id,
-      title: "新建知识库",
-      status: "DRAFT",
-      documentCount: 0,
-      chunkCount: 0
-    };
-    setKnowledgeBases((current) => [item, ...current]);
-    setDocumentsByBase((current) => ({ ...current, [id]: [] }));
-    setActiveBaseId(id);
-    setActiveDocumentId("");
-    setDrawerOpen(false);
-  }
-
-  function stageDocument(document: KnowledgeDocument) {
-    setDocumentsByBase((current) => ({
-      ...current,
-      [activeBase.id]: [document, ...(current[activeBase.id] ?? [])]
-    }));
-    setActiveDocumentId(document.id);
-    setDrawerOpen(false);
-  }
-
-  function stagePastedText() {
-    const documentId = `doc_${Date.now()}`;
-    stageDocument({
-      id: documentId,
-      title: "粘贴文本资料",
-      filename: "pasted-text.txt",
-      fileType: "TXT",
-      size: "240 字",
-      status: "UPLOADED",
-      chunkCount: 0,
-      uploadedAt: `今天 ${nowLabel()}`
-    });
-  }
-
-  function handleFileSelected(files: FileList | null) {
-    const file = files?.[0];
-    if (!file) return;
-    const documentId = `doc_${Date.now()}`;
-    const fileType = fileTypeFromName(file.name);
-    stageDocument({
-      id: documentId,
-      title: file.name.replace(/\.[^.]+$/, "") || "新上传资料",
-      filename: file.name,
-      fileType,
-      size: formatFileSize(file.size),
-      status: "UPLOADED",
-      chunkCount: 0,
-      uploadedAt: `今天 ${nowLabel()}`
-    });
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  }
-
-  function processDocument(documentId: string) {
-    const target = (documentsByBase[activeBase.id] ?? []).find((doc) => doc.id === documentId);
-    if (!target || isProcessing(target.status)) return;
-
-    setActiveDocumentId(documentId);
-    setDocumentsByBase((current) => ({
-      ...current,
-      [activeBase.id]: (current[activeBase.id] ?? []).map((doc) => doc.id === documentId ? { ...doc, status: "PARSING", errorMessage: undefined, chunkCount: 0 } : doc)
-    }));
-    setChunks((current) => current.filter((chunk) => chunk.documentId !== documentId));
-
-    const timeline: Array<[number, DocumentStatus]> = [
-      [520, "CLEANING"],
-      [1040, "CHUNKING"],
-      [1560, "INDEXING"]
-    ];
-    timeline.forEach(([delay, status]) => {
-      window.setTimeout(() => {
-        setDocumentsByBase((current) => ({
-          ...current,
-          [activeBase.id]: (current[activeBase.id] ?? []).map((doc) => doc.id === documentId ? { ...doc, status } : doc)
-        }));
-      }, delay);
-    });
-
-    window.setTimeout(() => {
-      if (target.fileType === "PDF" || target.fileType === "DOCX") {
-        setDocumentsByBase((current) => ({
-          ...current,
-          [activeBase.id]: (current[activeBase.id] ?? []).map((doc) => doc.id === documentId ? {
-            ...doc,
-            status: "FAILED",
-            errorMessage: "当前解析器还不能稳定提取该格式文本，请删除后上传 TXT 或 MD 版本，或后续接入文档解析服务后重试。"
-          } : doc)
-        }));
-        return;
-      }
-
-      const generatedChunks: KnowledgeChunk[] = [
-        {
-          id: `${documentId}_chunk_001`,
-          documentId,
-          index: 1,
-          title: "切片 01",
-          preview: `系统已从《${target.title}》中提取出一段可检索内容，后续 AI 回答会把它作为我的知识库引用来源。`,
-          words: 86
-        },
-        {
-          id: `${documentId}_chunk_002`,
-          documentId,
-          index: 2,
-          title: "切片 02",
-          preview: "切片会保留文档、标题、序号和标签，便于检索命中后展示可信来源。",
-          words: 72
-        }
-      ];
-      setDocumentsByBase((current) => ({
-        ...current,
-        [activeBase.id]: (current[activeBase.id] ?? []).map((doc) => doc.id === documentId ? { ...doc, status: "READY", chunkCount: generatedChunks.length } : doc)
-      }));
-      setChunks((current) => [...generatedChunks, ...current]);
-    }, 2140);
-  }
-
-  function deleteDocument(documentId: string) {
-    const nextDocuments = documents.filter((doc) => doc.id !== documentId);
-    setDocumentsByBase((current) => ({
-      ...current,
-      [activeBase.id]: nextDocuments
-    }));
-    setChunks((current) => current.filter((chunk) => chunk.documentId !== documentId));
-    if (activeDocumentId === documentId) {
-      setActiveDocumentId(nextDocuments[0]?.id ?? "");
+  async function createKnowledgeBase() {
+    const name = window.prompt("知识库名称", "新建知识库")?.trim();
+    if (!name) return;
+    setMessage(null);
+    try {
+      const created = await api.createRagKnowledgeBase(name, "");
+      await loadKnowledgeBases(created.id);
       setDrawerOpen(false);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "知识库创建失败");
+    }
+  }
+
+  async function stagePastedText() {
+    if (!activeBase) return;
+    const title = window.prompt("资料标题", "pasted-text")?.trim();
+    if (!title) return;
+    const content = window.prompt("粘贴文本内容", "文档中的核心概念是什么？")?.trim();
+    if (!content) return;
+    setMessage(null);
+    try {
+      const created = await api.createRagTextDocument(activeBase.id, title, content);
+      await loadDocuments(activeBase.id);
+      setActiveDocumentId(created.document_id);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "粘贴文本保存失败");
+    }
+  }
+
+  async function handleFileSelected(files: FileList | null) {
+    const file = files?.[0];
+    if (!file || !activeBase) return;
+    setMessage(null);
+    try {
+      const created = await api.uploadRagDocument(activeBase.id, file);
+      await loadDocuments(activeBase.id);
+      setActiveDocumentId(created.document_id);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "文件上传失败");
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  async function processDocument(documentId: string) {
+    if (!activeBase) return;
+    setMessage(null);
+    try {
+      await api.processRagDocument(documentId);
+      await loadDocuments(activeBase.id);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "处理入库失败，请确认 worker / Docker 服务是否已启动");
+      await loadDocuments(activeBase.id).catch(() => undefined);
+    }
+  }
+
+  async function deleteDocument(documentId: string) {
+    if (!activeBase) return;
+    setMessage(null);
+    try {
+      await api.deleteRagDocument(documentId);
+      setChunksByDocument((current) => {
+        const next = { ...current };
+        delete next[documentId];
+        return next;
+      });
+      await loadDocuments(activeBase.id);
+      if (activeDocumentId === documentId) setDrawerOpen(false);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "删除失败");
     }
   }
 
@@ -472,6 +384,8 @@ export default function StudentKnowledgeBase() {
         </button>
       </header>
 
+      {message ? <p className="student-data-message">{message}</p> : null}
+
       <section className="kb-design-layout">
         <aside className="kb-design-sidebar">
           <h2>我的知识库</h2>
@@ -484,7 +398,7 @@ export default function StudentKnowledgeBase() {
               <button
                 key={item.id}
                 type="button"
-                className={item.id === activeBase.id ? "active" : ""}
+                className={item.id === activeBase?.id ? "active" : ""}
                 onClick={() => selectBase(item.id)}
               >
                 <Folder size={28} />
@@ -501,8 +415,8 @@ export default function StudentKnowledgeBase() {
           <section className="kb-design-card kb-design-current">
             <div className="kb-design-current-head">
               <div>
-                <h2>{activeBase.title}</h2>
-                <p>{activeBase.documentCount}个文件 · {activeBase.chunkCount}个切片</p>
+                <h2>{activeBase?.title ?? "知识库"}</h2>
+                <p>{loading ? "正在加载..." : `${activeBase?.documentCount ?? 0}个文件 · ${activeBase?.chunkCount ?? 0}个切片`}</p>
               </div>
               <button type="button" aria-label="更多操作">
                 <MoreHorizontal size={20} />
@@ -514,11 +428,11 @@ export default function StudentKnowledgeBase() {
               <strong>上传学习资料</strong>
               <p>先上传为待处理文件，确认无误后再处理入库<br />当前优先处理 TXT / MD</p>
               <div className="kb-upload-actions">
-                <button type="button" onClick={() => fileInputRef.current?.click()}>
+                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={!activeBase}>
                   <FileUp size={16} />
                   选择文件
                 </button>
-                <button type="button" onClick={stagePastedText}>
+                <button type="button" onClick={stagePastedText} disabled={!activeBase}>
                   <Clipboard size={16} />
                   粘贴文本
                 </button>
@@ -526,7 +440,7 @@ export default function StudentKnowledgeBase() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".md,.txt,.pdf,.docx"
+                accept=".md,.txt,.pdf,.docx,.pptx"
                 onChange={(event) => handleFileSelected(event.currentTarget.files)}
                 hidden
               />
@@ -540,48 +454,46 @@ export default function StudentKnowledgeBase() {
               {documents.map((doc) => {
                 const processing = isProcessing(doc.status);
                 return (
-                <article
-                  key={doc.id}
-                  className={doc.id === activeDocumentId ? "active" : ""}
-                >
-                  <button className="kb-doc-open" type="button" onClick={() => openChunkDrawer(doc.id)}>
-                    <span className={`kb-design-file ${fileIconClass(doc.fileType)}`}>
-                      <FileText size={20} />
-                    </span>
-                    <span className="kb-doc-copy">
-                      <strong>{doc.title}</strong>
-                      <small>{doc.filename} · {doc.fileType} · {doc.size}</small>
-                    </span>
-                  </button>
-                  <span className={`kb-status-pill ${statusTone(doc.status)}`}>{statusText(doc.status)}</span>
-                  <span className="kb-doc-workflow">
-                    <i><b style={{ width: `${documentProgress(doc.status)}%` }} /></i>
-                    <small>{workflowText(doc)}</small>
-                  </span>
-                  <span className="kb-doc-row-actions">
-                    {doc.status === "READY" ? (
-                      <button type="button" onClick={() => openChunkDrawer(doc.id)}>
-                        <FileText size={15} />
-                        查看切片
-                      </button>
-                    ) : doc.status === "FAILED" ? (
-                      <button type="button" onClick={() => processDocument(doc.id)}>
-                        <RefreshCw size={15} />
-                        重新处理
-                      </button>
-                    ) : (
-                      <button type="button" className="primary" onClick={() => processDocument(doc.id)} disabled={processing}>
-                        <PlayCircle size={15} />
-                        {processing ? "处理中" : "处理入库"}
-                      </button>
-                    )}
-                    <button type="button" className="danger" onClick={() => deleteDocument(doc.id)} disabled={processing}>
-                      <Trash2 size={15} />
-                      删除
+                  <article key={doc.id} className={doc.id === activeDocumentId ? "active" : ""}>
+                    <button className="kb-doc-open" type="button" onClick={() => openChunkDrawer(doc.id)}>
+                      <span className={`kb-design-file ${fileIconClass(doc.fileType)}`}>
+                        <FileText size={20} />
+                      </span>
+                      <span className="kb-doc-copy">
+                        <strong>{doc.title}</strong>
+                        <small>{doc.filename} · {doc.fileType} · {doc.size}</small>
+                      </span>
                     </button>
-                  </span>
-                </article>
-              );})}
+                    <span className={`kb-status-pill ${statusTone(doc.status)}`}>{statusText(doc.status)}</span>
+                    <span className="kb-doc-workflow">
+                      <i><b style={{ width: `${documentProgress(doc)}%` }} /></i>
+                      <small>{workflowText(doc)}</small>
+                    </span>
+                    <span className="kb-doc-row-actions">
+                      {doc.status === "READY" ? (
+                        <button type="button" onClick={() => openChunkDrawer(doc.id)}>
+                          <FileText size={15} />
+                          查看切片
+                        </button>
+                      ) : doc.status === "FAILED" || doc.status === "QUEUE_FAILED" ? (
+                        <button type="button" onClick={() => processDocument(doc.id)}>
+                          <RefreshCw size={15} />
+                          重新处理
+                        </button>
+                      ) : (
+                        <button type="button" className="primary" onClick={() => processDocument(doc.id)} disabled={processing}>
+                          <PlayCircle size={15} />
+                          {processing ? "处理中" : "处理入库"}
+                        </button>
+                      )}
+                      <button type="button" className="danger" onClick={() => deleteDocument(doc.id)} disabled={processing}>
+                        <Trash2 size={15} />
+                        删除
+                      </button>
+                    </span>
+                  </article>
+                );
+              })}
               {!documents.length ? (
                 <div className="kb-design-empty">
                   <FileUp size={28} />
@@ -619,20 +531,20 @@ export default function StudentKnowledgeBase() {
 
             <div className="kb-preview-list">
               {activeDocumentChunks.length ? activeDocumentChunks.map((chunk) => (
-                <article key={chunk.id}>
-                  <span>{chunk.title}</span>
-                  <p>{chunk.preview}</p>
-                  <small>约 {chunk.words} 字</small>
+                <article key={chunk.chunk_id}>
+                  <span>切片 {String(chunk.chunk_index + 1).padStart(2, "0")}</span>
+                  <p>{chunk.content_preview}</p>
+                  <small>约 {chunk.char_count} 字</small>
                 </article>
               )) : (
                 <article>
                   <span>暂无切片</span>
-                  <p>文档处理完成后会在这里展示切片内容。</p>
+                  <p>文档处理完成后会在这里展示数据库中的真实切片内容。</p>
                 </article>
               )}
             </div>
 
-            {activeDocument.status === "FAILED" ? (
+            {activeDocument.status === "FAILED" || activeDocument.status === "QUEUE_FAILED" ? (
               <section className="kb-preview-warning">
                 <AlertTriangle size={18} />
                 <p>{activeDocument.errorMessage}</p>
