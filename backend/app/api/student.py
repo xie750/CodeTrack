@@ -42,9 +42,11 @@ from backend.app.services.question_workflow import (
     submit_question_answers,
 )
 from backend.app.services.student_resources import (
+    generate_learning_resource,
     generate_ppt_resource,
     get_generated_resource,
     list_saved_generated_resources,
+    resource_media_type,
     save_generated_resource,
 )
 
@@ -79,6 +81,13 @@ class StudentAiChatSessionRequest(BaseModel):
 
 class StudentPptGenerateRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
+    course_id: str | None = None
+    session_id: str | None = None
+
+
+class StudentResourceGenerateRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=2000)
+    resource_type: str = Field(min_length=1, max_length=40)
     course_id: str | None = None
     session_id: str | None = None
 
@@ -456,6 +465,73 @@ async def student_generate_ppt_resource(
     )
 
 
+@router.post("/resources/generate")
+async def student_generate_resource(
+    payload: StudentResourceGenerateRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    administrative_class, _ = require_active_class(db, user)
+    course = resolve_student_course(db, administrative_class, payload.course_id)
+    resource_type = payload.resource_type.strip().upper()
+    session = ensure_ai_tutor_session(
+        db,
+        student_id=user.id,
+        course_id=course.id,
+        session_id=payload.session_id,
+        first_message=payload.message.strip(),
+    )
+    user_message = append_ai_tutor_message(
+        db,
+        session=session,
+        student_id=user.id,
+        course_id=course.id,
+        role="student",
+        content=payload.message.strip(),
+        metadata={"intent": "RESOURCE_GENERATION", "resource_type": resource_type},
+    )
+    resource = await generate_learning_resource(
+        db,
+        user=user,
+        class_id=administrative_class.id,
+        course=course,
+        message=payload.message.strip(),
+        resource_type=resource_type,
+        session_id=session.id,
+    )
+    assistant_message = append_ai_tutor_message(
+        db,
+        session=session,
+        student_id=user.id,
+        course_id=course.id,
+        role="assistant",
+        content=f"已生成资源：{resource['title']}",
+        metadata={
+            "intent": "RESOURCE_GENERATION",
+            "resource": resource,
+            "confidence": resource["confidence"],
+            "citations": resource["citations"],
+            "suggested_actions": ["加入资源中心", "打开预览"],
+            "profile_used": True,
+            "source_used": bool(resource["citations"]),
+            "safety_note": "AI 生成资源已基于课程资料进行引用校验，建议结合课堂讲义复核关键概念。",
+            "model_provider": "WORKFLOW",
+            "model_name": "LangGraph + resource renderer",
+        },
+        run_id=resource.get("run_id"),
+    )
+    db.commit()
+    return ok(
+        {
+            "resource": resource,
+            "session": serialize_ai_tutor_session(session),
+            "user_message_id": user_message.id,
+            "assistant_message_id": assistant_message.id,
+        }
+    )
+
+
 @router.post("/resources/{resource_id}/save")
 def student_save_generated_resource(
     resource_id: str,
@@ -496,7 +572,7 @@ def student_download_generated_resource(
     return FileResponse(
         resource.file_path,
         filename=filename,
-        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        media_type=resource_media_type(resource),
     )
 
 
