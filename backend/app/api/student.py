@@ -1,6 +1,7 @@
 import json
 
 from fastapi import APIRouter, Depends, status
+from fastapi.responses import FileResponse
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
@@ -40,6 +41,12 @@ from backend.app.services.question_workflow import (
     save_question_draft,
     submit_question_answers,
 )
+from backend.app.services.student_resources import (
+    generate_ppt_resource,
+    get_generated_resource,
+    list_saved_generated_resources,
+    save_generated_resource,
+)
 
 router = APIRouter(prefix="/api/v1/student", tags=["student"])
 
@@ -68,6 +75,12 @@ class StudentAiChatRequest(BaseModel):
 class StudentAiChatSessionRequest(BaseModel):
     course_id: str | None = None
     first_message: str = Field(default="新的 AI 助学会话", max_length=2000)
+
+
+class StudentPptGenerateRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=2000)
+    course_id: str | None = None
+    session_id: str | None = None
 
 
 def task_knowledge_points(task: Task) -> list[str]:
@@ -376,6 +389,115 @@ def student_ai_chat_delete_session(
     delete_ai_tutor_session(db, student_id=user.id, session_id=session_id)
     db.commit()
     return ok({"deleted": True, "session_id": session_id})
+
+
+@router.post("/resources/ppt/generate")
+async def student_generate_ppt_resource(
+    payload: StudentPptGenerateRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    administrative_class, _ = require_active_class(db, user)
+    course = resolve_student_course(db, administrative_class, payload.course_id)
+    session = ensure_ai_tutor_session(
+        db,
+        student_id=user.id,
+        course_id=course.id,
+        session_id=payload.session_id,
+        first_message=payload.message.strip(),
+    )
+    user_message = append_ai_tutor_message(
+        db,
+        session=session,
+        student_id=user.id,
+        course_id=course.id,
+        role="student",
+        content=payload.message.strip(),
+        metadata={"intent": "PPT_GENERATION", "resource_type": "PPT"},
+    )
+    resource = await generate_ppt_resource(
+        db,
+        user=user,
+        class_id=administrative_class.id,
+        course=course,
+        message=payload.message.strip(),
+        session_id=session.id,
+    )
+    assistant_message = append_ai_tutor_message(
+        db,
+        session=session,
+        student_id=user.id,
+        course_id=course.id,
+        role="assistant",
+        content=f"已生成资源：{resource['title']}",
+        metadata={
+            "intent": "PPT_GENERATION",
+            "resource": resource,
+            "confidence": resource["confidence"],
+            "citations": resource["citations"],
+            "suggested_actions": ["加入资源中心", "打开预览"],
+            "profile_used": True,
+            "source_used": bool(resource["citations"]),
+            "safety_note": "AI 生成资源已基于课程资料进行引用校验，建议结合课堂讲义复核关键概念。",
+            "model_provider": "WORKFLOW",
+            "model_name": "LangGraph + python-pptx",
+        },
+        run_id=resource.get("run_id"),
+    )
+    db.commit()
+    return ok(
+        {
+            "resource": resource,
+            "session": serialize_ai_tutor_session(session),
+            "user_message_id": user_message.id,
+            "assistant_message_id": assistant_message.id,
+        }
+    )
+
+
+@router.post("/resources/{resource_id}/save")
+def student_save_generated_resource(
+    resource_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    administrative_class, _ = require_active_class(db, user)
+    resource = save_generated_resource(db, user=user, class_id=administrative_class.id, resource_id=resource_id)
+    db.commit()
+    return ok(resource)
+
+
+@router.get("/resources/generated")
+def student_generated_resources(
+    course_id: str | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    resources = list_saved_generated_resources(db, student_id=user.id, course_id=course_id)
+    return ok({"items": resources})
+
+
+@router.get("/resources/{resource_id}/download")
+def student_download_generated_resource(
+    resource_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    resource = get_generated_resource(db, student_id=user.id, resource_id=resource_id)
+    if not resource.saved_to_resource_center:
+        raise ApiError(409, "RESOURCE_NOT_SAVED", "请先将资源加入资源中心，再从资源中心导出。")
+    if not resource.file_path:
+        raise ApiError(404, "RESOURCE_FILE_NOT_READY", "资源文件暂不可导出。")
+    filename = f"{resource.title}.{resource.file_format.lower()}"
+    return FileResponse(
+        resource.file_path,
+        filename=filename,
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    )
 
 
 @router.post("/ai-chat/stream")

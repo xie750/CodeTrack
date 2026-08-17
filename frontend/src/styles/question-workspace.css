@@ -1051,6 +1051,11 @@
   padding: 0;
   overflow: hidden;
   background: #f4f7fb;
+  transition: grid-template-columns 190ms var(--motion-soft);
+}
+
+.student-work-window.sidebar-collapsed {
+  --student-window-sidebar-width: 74px;
 }
 
 .student-window-sidebar {
@@ -1069,12 +1074,15 @@
   border-right: 1px solid #e5ebf3;
   background: rgba(255, 255, 255, 0.94);
   box-shadow: none;
+  transition: padding 190ms var(--motion-soft), background 190ms var(--motion-soft);
 }
 
 .student-window-back {
   min-height: 34px;
+  padding: 0 10px;
   display: inline-flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 8px;
   border: 0;
   border-radius: 8px;
@@ -1087,6 +1095,11 @@
 .student-window-back:hover {
   color: #176cf5;
   background: #eef6ff;
+}
+
+.student-window-back svg,
+.student-window-nav a svg {
+  flex: 0 0 auto;
 }
 
 .student-window-title {
@@ -1144,6 +1157,93 @@
 
 .student-window-nav a.active {
   box-shadow: inset 3px 0 0 #176cf5;
+}
+
+.student-window-rail-toggle {
+  position: absolute;
+  top: 50%;
+  right: -16px;
+  width: 28px;
+  height: 96px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  border: 1px solid #dce5f1;
+  border-radius: 8px;
+  color: #5d6b82;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 12px 24px rgba(30, 44, 66, 0.10);
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition: border-color 170ms var(--motion-soft), color 170ms var(--motion-soft), box-shadow 170ms var(--motion-soft), background 170ms var(--motion-soft);
+}
+
+.student-window-rail-toggle:hover,
+.student-window-rail-toggle:focus-visible {
+  border-color: #aecaef;
+  color: #176cf5;
+  background: #f8fbff;
+  box-shadow: 0 16px 30px rgba(30, 91, 168, 0.14);
+  outline: none;
+}
+
+.student-window-grip {
+  display: grid;
+  gap: 4px;
+}
+
+.student-window-grip i {
+  width: 9px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.5;
+}
+
+.student-work-window.sidebar-collapsed .student-window-sidebar {
+  padding-inline: 12px;
+  overflow: visible;
+}
+
+.student-work-window.sidebar-collapsed .student-window-back,
+.student-work-window.sidebar-collapsed .student-window-nav a {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.student-work-window.sidebar-collapsed .student-window-back {
+  width: 42px;
+}
+
+.student-work-window.sidebar-collapsed .student-window-title {
+  justify-content: center;
+  padding-block: 10px;
+}
+
+.student-work-window.sidebar-collapsed .student-window-back span,
+.student-work-window.sidebar-collapsed .student-window-title div,
+.student-work-window.sidebar-collapsed .student-window-nav a span,
+.student-work-window.sidebar-collapsed .student-window-streak div {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.student-work-window.sidebar-collapsed .student-window-nav a {
+  min-height: 42px;
+}
+
+.student-work-window.sidebar-collapsed .student-window-nav a.active {
+  box-shadow: inset 0 -3px 0 #176cf5;
+}
+
+.student-work-window.sidebar-collapsed .student-window-streak {
+  justify-content: center;
+  padding-inline: 0;
 }
 
 .student-window-content > .page-grid,
@@ -2414,6 +2514,54 @@
     padding: 14px 16px;
     border-right: 0;
     border-bottom: 1px solid #e5ebf3;
+  }
+
+  .student-window-rail-toggle {
+    display: none;
+  }
+
+  .student-work-window.sidebar-collapsed .student-window-sidebar {
+    padding: 14px 16px;
+    overflow: auto;
+  }
+
+  .student-work-window.sidebar-collapsed .student-window-back,
+  .student-work-window.sidebar-collapsed .student-window-nav a {
+    justify-content: flex-start;
+    padding-inline: 9px;
+  }
+
+  .student-work-window.sidebar-collapsed .student-window-back {
+    width: auto;
+  }
+
+  .student-work-window.sidebar-collapsed .student-window-title {
+    justify-content: flex-start;
+  }
+
+  .student-work-window.sidebar-collapsed .student-window-back span,
+  .student-work-window.sidebar-collapsed .student-window-title div,
+  .student-work-window.sidebar-collapsed .student-window-nav a span,
+  .student-work-window.sidebar-collapsed .student-window-streak div {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+  }
+
+  .student-work-window.sidebar-collapsed .student-window-nav a {
+    min-height: 36px;
+  }
+
+  .student-work-window.sidebar-collapsed .student-window-nav a.active {
+    box-shadow: inset 3px 0 0 #176cf5;
+  }
+
+  .student-work-window.sidebar-collapsed .student-window-streak {
+    justify-content: flex-start;
+    padding-inline: 10px 12px;
   }
 
   .student-window-nav {

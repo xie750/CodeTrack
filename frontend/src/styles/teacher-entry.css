@@ -487,6 +487,376 @@
   font-weight: 620;
 }
 
+/* ==========================================================================
+   学生端入口页：A/B 背景视觉对比
+   ========================================================================== */
+
+.student-entry-page {
+  isolation: isolate;
+  color: var(--student-entry-text);
+  background: var(--student-entry-bg);
+  transition: background 260ms var(--motion-soft), color 260ms var(--motion-soft);
+}
+
+.student-entry-page::before,
+.student-entry-page::after {
+  display: none;
+}
+
+.student-entry-page[data-entry-theme="starmap"] {
+  --student-entry-text: #eaf3ff;
+  --student-entry-muted: #9fb1c8;
+  --student-entry-panel: rgba(10, 24, 52, 0.72);
+  --student-entry-panel-strong: rgba(13, 31, 66, 0.86);
+  --student-entry-border: rgba(118, 184, 255, 0.22);
+  --student-entry-accent: #4ecaff;
+  --student-entry-accent-2: #55e0b4;
+  --student-entry-button-text: #041428;
+  --student-entry-bg:
+    linear-gradient(180deg, rgba(6, 14, 33, 0.98) 0%, rgba(8, 22, 48, 0.96) 48%, rgba(4, 11, 26, 1) 100%),
+    linear-gradient(128deg, rgba(38, 112, 214, 0.18) 0%, transparent 42%, rgba(33, 210, 176, 0.1) 78%);
+}
+
+.student-entry-page[data-entry-theme="cloud"] {
+  --student-entry-text: #142033;
+  --student-entry-muted: #5e6c82;
+  --student-entry-panel: rgba(255, 255, 255, 0.74);
+  --student-entry-panel-strong: rgba(255, 255, 255, 0.9);
+  --student-entry-border: rgba(147, 170, 207, 0.4);
+  --student-entry-accent: #176cf5;
+  --student-entry-accent-2: #16b6a0;
+  --student-entry-button-text: #ffffff;
+  --student-entry-bg:
+    linear-gradient(180deg, #f7fbff 0%, #edf6ff 45%, #f7fbff 100%),
+    linear-gradient(126deg, rgba(23, 108, 245, 0.11) 0%, rgba(22, 182, 160, 0.08) 46%, rgba(255, 255, 255, 0) 78%);
+}
+
+.student-entry-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.student-entry-backdrop::before,
+.student-entry-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transition: opacity 260ms var(--motion-soft);
+}
+
+.student-entry-page[data-entry-theme="starmap"] .student-entry-backdrop::before {
+  opacity: 0.72;
+  background:
+    repeating-linear-gradient(90deg, rgba(100, 170, 255, 0.08) 0 1px, transparent 1px 78px),
+    repeating-linear-gradient(0deg, rgba(100, 170, 255, 0.06) 0 1px, transparent 1px 78px);
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.86), transparent 78%);
+}
+
+.student-entry-page[data-entry-theme="starmap"] .student-entry-backdrop::after {
+  opacity: 0.9;
+  background:
+    linear-gradient(116deg, transparent 0 18%, rgba(69, 187, 255, 0.13) 18.2%, transparent 18.8% 42%, rgba(85, 224, 180, 0.1) 42.2%, transparent 42.9% 100%),
+    repeating-radial-gradient(circle at 48% 34%, rgba(255, 255, 255, 0.42) 0 1px, transparent 1px 36px);
+}
+
+.student-entry-page[data-entry-theme="cloud"] .student-entry-backdrop::before {
+  opacity: 0.86;
+  background:
+    repeating-linear-gradient(90deg, rgba(23, 108, 245, 0.08) 0 1px, transparent 1px 88px),
+    repeating-linear-gradient(0deg, rgba(31, 176, 164, 0.06) 0 1px, transparent 1px 88px);
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.88), transparent 82%);
+}
+
+.student-entry-page[data-entry-theme="cloud"] .student-entry-backdrop::after {
+  opacity: 0.72;
+  background:
+    linear-gradient(112deg, transparent 0 14%, rgba(23, 108, 245, 0.1) 14.1%, transparent 14.7% 52%, rgba(22, 182, 160, 0.09) 52.1%, transparent 52.7% 100%),
+    repeating-radial-gradient(circle at 42% 31%, rgba(23, 108, 245, 0.18) 0 1px, transparent 1px 42px);
+}
+
+.student-entry-grid {
+  position: absolute;
+  inset: 8% -4% auto;
+  height: 58%;
+  opacity: 0.55;
+  background:
+    linear-gradient(90deg, transparent 0 13%, currentColor 13.1% 13.2%, transparent 13.3% 38%, currentColor 38.1% 38.2%, transparent 38.3% 71%, currentColor 71.1% 71.2%, transparent 71.3%),
+    linear-gradient(0deg, transparent 0 28%, currentColor 28.1% 28.2%, transparent 28.3% 66%, currentColor 66.1% 66.2%, transparent 66.3%);
+  color: rgba(78, 202, 255, 0.23);
+  transform: perspective(760px) rotateX(58deg) translateY(-10%);
+  animation: student-entry-grid-drift 14s ease-in-out infinite alternate;
+}
+
+.student-entry-page[data-entry-theme="cloud"] .student-entry-grid {
+  color: rgba(23, 108, 245, 0.18);
+}
+
+.student-entry-stream {
+  position: absolute;
+  left: -12%;
+  right: -12%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--student-entry-accent), var(--student-entry-accent-2), transparent);
+  opacity: 0.46;
+  transform-origin: center;
+  animation: student-entry-stream-flow 8.5s linear infinite;
+}
+
+.student-entry-stream.stream-a {
+  top: 26%;
+  transform: rotate(-11deg);
+}
+
+.student-entry-stream.stream-b {
+  top: 63%;
+  opacity: 0.28;
+  transform: rotate(8deg);
+  animation-duration: 11s;
+  animation-delay: -2.6s;
+}
+
+.student-entry-particle {
+  position: absolute;
+  left: var(--particle-x);
+  top: var(--particle-y);
+  width: var(--particle-size);
+  height: var(--particle-size);
+  border-radius: 50%;
+  background: var(--student-entry-accent);
+  box-shadow: 0 0 12px currentColor;
+  color: var(--student-entry-accent);
+  opacity: 0.5;
+  animation: student-entry-particle-float var(--particle-duration) ease-in-out infinite;
+  animation-delay: var(--particle-delay);
+}
+
+.student-entry-page[data-entry-theme="cloud"] .student-entry-particle {
+  opacity: 0.32;
+  box-shadow: 0 0 9px rgba(23, 108, 245, 0.26);
+}
+
+.student-entry-page .teacher-entry-topbar {
+  align-items: center;
+}
+
+.student-entry-page .teacher-entry-brand,
+.student-entry-page .teacher-entry-status,
+.student-entry-theme-toggle,
+.student-entry-page .teacher-entry-userline .account-trigger {
+  border-color: var(--student-entry-border);
+  background: var(--student-entry-panel);
+  backdrop-filter: blur(18px);
+}
+
+.student-entry-page[data-entry-theme="starmap"] .teacher-entry-brand,
+.student-entry-page[data-entry-theme="starmap"] .teacher-entry-status,
+.student-entry-page[data-entry-theme="starmap"] .student-entry-theme-toggle,
+.student-entry-page[data-entry-theme="starmap"] .teacher-entry-userline .account-trigger {
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.student-entry-page .teacher-entry-brand strong,
+.student-entry-page .teacher-entry-userline .top-user,
+.student-entry-page .teacher-entry-userline .account-trigger-copy strong,
+.student-entry-page .teacher-entry-userline .account-chevron {
+  color: var(--student-entry-text);
+}
+
+.student-entry-page .teacher-entry-userline .account-trigger-copy small,
+.student-entry-page .teacher-entry-status,
+.student-entry-page .teacher-entry-hero > p,
+.student-entry-page .teacher-entry-footer {
+  color: var(--student-entry-muted);
+}
+
+.student-entry-page .teacher-entry-logo,
+.student-entry-page .teacher-entry-userline .account-avatar,
+.student-entry-page .visual-profile,
+.student-entry-page .visual-dot {
+  background: linear-gradient(135deg, var(--student-entry-accent) 0%, var(--student-entry-accent-2) 100%);
+}
+
+.student-entry-page .teacher-entry-status i {
+  background: var(--student-entry-accent-2);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--student-entry-accent-2) 18%, transparent), 0 0 18px var(--student-entry-accent-2);
+}
+
+.student-entry-theme-toggle {
+  min-height: 42px;
+  padding: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: 1px solid var(--student-entry-border);
+  border-radius: 999px;
+}
+
+.student-entry-theme-toggle button {
+  min-width: 56px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--student-entry-muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 900;
+  transition: color 160ms var(--motion-soft), background 160ms var(--motion-soft), box-shadow 160ms var(--motion-soft);
+}
+
+.student-entry-theme-toggle button.active {
+  color: var(--student-entry-button-text);
+  background: linear-gradient(135deg, var(--student-entry-accent), var(--student-entry-accent-2));
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--student-entry-accent) 24%, transparent);
+}
+
+.student-entry-page[data-entry-theme="starmap"] .teacher-entry-orbit {
+  color: var(--student-entry-accent);
+  filter: drop-shadow(0 20px 28px rgba(78, 202, 255, 0.28));
+}
+
+.student-entry-page[data-entry-theme="cloud"] .teacher-entry-orbit {
+  color: var(--student-entry-accent);
+  filter: drop-shadow(0 20px 28px rgba(23, 108, 245, 0.2));
+}
+
+.student-entry-page .teacher-entry-orbit::before {
+  background: radial-gradient(ellipse, color-mix(in srgb, var(--student-entry-accent) 30%, transparent) 0, transparent 72%);
+}
+
+.student-entry-page .teacher-entry-hero h1 {
+  color: var(--student-entry-text);
+  text-shadow: 0 18px 44px color-mix(in srgb, var(--student-entry-accent) 20%, transparent);
+}
+
+.student-entry-page .teacher-entry-card {
+  border-color: var(--student-entry-border);
+  background: var(--student-entry-panel);
+  box-shadow: 0 24px 64px color-mix(in srgb, var(--student-entry-accent) 12%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.student-entry-page .teacher-entry-card::before {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--student-entry-accent) 14%, transparent), transparent 42%),
+    linear-gradient(0deg, transparent, color-mix(in srgb, var(--student-entry-accent-2) 10%, transparent));
+}
+
+.student-entry-page .teacher-entry-card:hover {
+  border-color: color-mix(in srgb, var(--student-entry-accent) 56%, var(--student-entry-border));
+  background: var(--student-entry-panel-strong);
+  box-shadow: 0 30px 76px color-mix(in srgb, var(--student-entry-accent) 18%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.student-entry-page .teacher-card-visual::before {
+  background: radial-gradient(ellipse, color-mix(in srgb, var(--student-entry-accent) 20%, transparent), transparent 72%);
+}
+
+.student-entry-page .visual-window {
+  border-color: color-mix(in srgb, var(--student-entry-accent) 22%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--student-entry-panel-strong) 82%, #ffffff) 0%, var(--student-entry-panel-strong) 100%);
+  box-shadow: 0 24px 36px color-mix(in srgb, var(--student-entry-accent) 13%, transparent);
+}
+
+.student-entry-page .visual-window i,
+.student-entry-page .visual-window i:nth-child(2),
+.student-entry-page .visual-window i:nth-child(3) {
+  background: var(--student-entry-accent);
+}
+
+.student-entry-page .visual-window b {
+  background: conic-gradient(var(--student-entry-accent) 0 78deg, color-mix(in srgb, var(--student-entry-accent) 18%, transparent) 78deg 360deg);
+}
+
+.student-entry-page .visual-window em {
+  background:
+    linear-gradient(color-mix(in srgb, var(--student-entry-accent) 22%, #cbd8bc), color-mix(in srgb, var(--student-entry-accent) 22%, #cbd8bc)) 0 0 / 42px 6px no-repeat,
+    linear-gradient(color-mix(in srgb, var(--student-entry-accent-2) 16%, #dce8d4), color-mix(in srgb, var(--student-entry-accent-2) 16%, #dce8d4)) 0 18px / 34px 6px no-repeat,
+    linear-gradient(90deg, var(--student-entry-accent) 0 8px, transparent 8px 13px, var(--student-entry-accent-2) 13px 21px, transparent 21px 26px, color-mix(in srgb, var(--student-entry-accent) 54%, #ffffff) 26px 34px) 0 36px / 34px 16px no-repeat;
+}
+
+.student-entry-page .visual-microscope,
+.student-entry-page .visual-flask {
+  color: var(--student-entry-accent);
+}
+
+.student-entry-page .teacher-entry-card h2 {
+  color: var(--student-entry-text);
+}
+
+.student-entry-page .teacher-entry-card p {
+  color: var(--student-entry-muted);
+}
+
+.student-entry-page .teacher-entry-card button {
+  color: var(--student-entry-button-text);
+  background: linear-gradient(135deg, var(--student-entry-accent), var(--student-entry-accent-2));
+  box-shadow: 0 16px 28px color-mix(in srgb, var(--student-entry-accent) 26%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.student-entry-page .teacher-entry-card button:hover {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--student-entry-accent) 88%, #ffffff), color-mix(in srgb, var(--student-entry-accent-2) 90%, #ffffff));
+  box-shadow: 0 22px 36px color-mix(in srgb, var(--student-entry-accent) 32%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.34);
+}
+
+@keyframes student-entry-grid-drift {
+  from {
+    transform: perspective(760px) rotateX(58deg) translate3d(-1.2%, -10%, 0);
+  }
+
+  to {
+    transform: perspective(760px) rotateX(58deg) translate3d(1.2%, -7%, 0);
+  }
+}
+
+@keyframes student-entry-stream-flow {
+  from {
+    background-position: -360px 0;
+  }
+
+  to {
+    background-position: 360px 0;
+  }
+}
+
+@keyframes student-entry-particle-float {
+  0%,
+  100% {
+    opacity: 0.34;
+    transform: translate3d(0, 0, 0) scale(0.85);
+  }
+
+  50% {
+    opacity: 0.78;
+    transform: translate3d(18px, -24px, 0) scale(1);
+  }
+}
+
+@media (max-width: 991px) {
+  .student-entry-page .teacher-entry-topbar {
+    flex-wrap: wrap;
+  }
+
+  .student-entry-page .teacher-entry-userline {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .student-entry-theme-toggle {
+    min-height: 38px;
+  }
+
+  .student-entry-theme-toggle button {
+    min-width: 52px;
+    min-height: 30px;
+    padding-inline: 10px;
+  }
+}
+
 .student-course-drawer-layer {
   position: fixed;
   inset: 0;
