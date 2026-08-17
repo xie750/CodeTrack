@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { ArrowRight, BookOpenCheck, CalendarClock, CheckCircle2, FlaskConical, Loader2, LockKeyhole, Microscope, Sparkles, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api, apiCache, type LearningContext, type StudentTaskCard } from "../api";
@@ -11,6 +11,20 @@ const STUDENT_ENTRY_THEME_KEY = "codetrack.student.entry.theme";
 type StudentEntryPortalProps = {
   authUser: AuthUser;
   accountSlot: ReactNode;
+};
+
+type MotionParticle = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  ox: number;
+  oy: number;
+  size: number;
+  alpha: number;
+  color: string;
+  twinkle: number;
+  twinkleSpeed: number;
 };
 
 function readStoredEntryTheme(): StudentEntryTheme {
@@ -33,6 +47,155 @@ function handleCardPointerMove(event: PointerEvent<HTMLElement>) {
 function resetCardTilt(event: PointerEvent<HTMLElement>) {
   event.currentTarget.style.setProperty("--tilt-x", "0deg");
   event.currentTarget.style.setProperty("--tilt-y", "0deg");
+}
+
+function particlePalette(theme: StudentEntryTheme) {
+  return theme === "cloud"
+    ? ["23,108,245", "22,182,160", "73,145,230", "255,255,255"]
+    : ["255,255,255", "78,202,255", "85,224,180", "128,166,255"];
+}
+
+function StudentEntryMotionBackdrop({ theme }: { theme: StudentEntryTheme }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return undefined;
+    const drawingCanvas = canvas;
+    const drawingContext = ctx;
+
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const mouse = { x: -9999, y: -9999, active: false };
+    const particles: MotionParticle[] = [];
+    const colors = particlePalette(theme);
+    let width = 0;
+    let height = 0;
+    let frameId = 0;
+
+    function makeParticle(index = 0): MotionParticle {
+      const color = colors[Math.floor(Math.random() * colors.length)] ?? colors[0];
+      return {
+        x: Math.random() * width,
+        y: Math.random() * height,
+        vx: (Math.random() - 0.5) * 0.18,
+        vy: 0.05 + Math.random() * 0.22,
+        ox: 0,
+        oy: 0,
+        size: 0.8 + Math.random() * 2.2,
+        alpha: 0.28 + Math.random() * 0.48,
+        color,
+        twinkle: index * 0.47 + Math.random() * Math.PI * 2,
+        twinkleSpeed: 0.6 + Math.random() * 1.6
+      };
+    }
+
+    function resize() {
+      const rect = drawingCanvas.getBoundingClientRect();
+      width = Math.max(1, rect.width);
+      height = Math.max(1, rect.height);
+      drawingCanvas.width = Math.floor(width * dpr);
+      drawingCanvas.height = Math.floor(height * dpr);
+      drawingContext.setTransform(dpr, 0, 0, dpr, 0, 0);
+      particles.length = 0;
+      const count = reduceMotion ? 0 : Math.min(150, Math.max(72, Math.floor((width * height) / 9800)));
+      for (let index = 0; index < count; index += 1) particles.push(makeParticle(index));
+    }
+
+    function updatePointer(event: globalThis.PointerEvent) {
+      const rect = drawingCanvas.getBoundingClientRect();
+      mouse.x = event.clientX - rect.left;
+      mouse.y = event.clientY - rect.top;
+      mouse.active = true;
+    }
+
+    function leavePointer() {
+      mouse.active = false;
+    }
+
+    function draw(timestamp: number) {
+      drawingContext.clearRect(0, 0, width, height);
+      const time = timestamp * 0.001;
+      const repelRadius = 118;
+
+      for (let i = 0; i < particles.length; i += 1) {
+        const point = particles[i];
+        point.x += point.vx;
+        point.y += point.vy;
+
+        if (point.y > height + 24) {
+          point.y = -16;
+          point.x = Math.random() * width;
+        }
+        if (point.x < -24) point.x = width + 24;
+        if (point.x > width + 24) point.x = -24;
+
+        let drawX = point.x + point.ox;
+        let drawY = point.y + point.oy;
+        const dx = drawX - mouse.x;
+        const dy = drawY - mouse.y;
+        const distanceSq = dx * dx + dy * dy;
+
+        if (mouse.active && distanceSq < repelRadius * repelRadius && distanceSq > 0.01) {
+          const distance = Math.sqrt(distanceSq);
+          const force = (repelRadius - distance) / repelRadius;
+          point.ox += (dx / distance) * force * 18;
+          point.oy += (dy / distance) * force * 18;
+        }
+
+        point.ox *= 0.84;
+        point.oy *= 0.84;
+        drawX = point.x + point.ox;
+        drawY = point.y + point.oy;
+
+        const pulse = 0.72 + 0.28 * Math.sin(time * point.twinkleSpeed + point.twinkle);
+        drawingContext.globalAlpha = point.alpha * pulse;
+        drawingContext.fillStyle = `rgb(${point.color})`;
+        drawingContext.beginPath();
+        drawingContext.arc(drawX, drawY, point.size, 0, Math.PI * 2);
+        drawingContext.fill();
+
+        for (let j = i + 1; j < particles.length; j += 1) {
+          const next = particles[j];
+          const nextX = next.x + next.ox;
+          const nextY = next.y + next.oy;
+          const lineDx = drawX - nextX;
+          const lineDy = drawY - nextY;
+          const lineDistanceSq = lineDx * lineDx + lineDy * lineDy;
+          if (lineDistanceSq < 98 * 98) {
+            const lineAlpha = (1 - Math.sqrt(lineDistanceSq) / 98) * (theme === "cloud" ? 0.12 : 0.18);
+            drawingContext.globalAlpha = lineAlpha;
+            drawingContext.strokeStyle = theme === "cloud" ? "rgb(23,108,245)" : "rgb(78,202,255)";
+            drawingContext.lineWidth = 1;
+            drawingContext.beginPath();
+            drawingContext.moveTo(drawX, drawY);
+            drawingContext.lineTo(nextX, nextY);
+            drawingContext.stroke();
+          }
+        }
+      }
+
+      drawingContext.globalAlpha = 1;
+      frameId = window.requestAnimationFrame(draw);
+    }
+
+    resize();
+    if (!reduceMotion) frameId = window.requestAnimationFrame(draw);
+
+    window.addEventListener("resize", resize);
+    window.addEventListener("pointermove", updatePointer);
+    window.addEventListener("pointerleave", leavePointer);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.removeEventListener("resize", resize);
+      window.removeEventListener("pointermove", updatePointer);
+      window.removeEventListener("pointerleave", leavePointer);
+    };
+  }, [theme]);
+
+  return <canvas className="student-entry-particle-canvas" ref={canvasRef} aria-hidden="true" />;
 }
 
 function StudentPortalTopbar({
@@ -234,22 +397,10 @@ export default function StudentEntryPortal({ authUser, accountSlot }: StudentEnt
   return (
     <main className="teacher-entry-page student-entry-page" data-entry-theme={entryTheme}>
       <div className="student-entry-backdrop" aria-hidden="true">
+        <StudentEntryMotionBackdrop theme={entryTheme} />
         <span className="student-entry-grid" />
         <span className="student-entry-stream stream-a" />
         <span className="student-entry-stream stream-b" />
-        {Array.from({ length: 18 }).map((_, index) => (
-          <span
-            className="student-entry-particle"
-            style={{
-              "--particle-x": `${(index * 37 + 11) % 100}%`,
-              "--particle-y": `${(index * 53 + 17) % 100}%`,
-              "--particle-size": `${2 + (index % 4)}px`,
-              "--particle-delay": `${-(index * 0.37).toFixed(2)}s`,
-              "--particle-duration": `${8 + (index % 5) * 1.4}s`
-            } as CSSProperties}
-            key={index}
-          />
-        ))}
       </div>
       <StudentPortalTopbar accountSlot={accountSlot} theme={entryTheme} onThemeChange={changeEntryTheme} />
 

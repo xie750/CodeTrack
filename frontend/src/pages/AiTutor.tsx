@@ -24,13 +24,14 @@ import {
 } from "lucide-react";
 import {
   api,
-  GeneratedResource,
-  LearningContext,
-  StudentAiChatCitation,
-  StudentAiChatMessage,
-  StudentAiChatResponse,
-  StudentAiChatSession,
-  StudentProfile
+  type GeneratedResource,
+  type GeneratedResourceType,
+  type LearningContext,
+  type StudentAiChatCitation,
+  type StudentAiChatMessage,
+  type StudentAiChatResponse,
+  type StudentAiChatSession,
+  type StudentProfile
 } from "../api";
 import robotImg from "../assets/ui-home/ai-tutor-bot.png";
 
@@ -55,13 +56,14 @@ type AiChatTurn = {
 };
 
 const fallbackSuggestedActions = ["继续解释", "生成练习", "保存为笔记", "只给一级提示"];
-const resourceOutputActions = [
-  { label: "PPT", type: "PPT", icon: <Presentation size={15} />, enabled: true },
-  { label: "思维导图", type: "MIND_MAP", icon: <Waypoints size={15} />, enabled: false },
-  { label: "文档", type: "DOCUMENT", icon: <FileText size={15} />, enabled: false },
-  { label: "练习题", type: "PRACTICE_SET", icon: <FileQuestion size={15} />, enabled: false },
-  { label: "播客", type: "PODCAST_SCRIPT", icon: <Podcast size={15} />, enabled: false }
+const resourceOutputActions: Array<{ label: string; type: GeneratedResourceType; icon: JSX.Element }> = [
+  { label: "PPT", type: "PPT", icon: <Presentation size={15} /> },
+  { label: "思维导图", type: "MIND_MAP", icon: <Waypoints size={15} /> },
+  { label: "文档", type: "DOCUMENT", icon: <FileText size={15} /> },
+  { label: "练习题", type: "PRACTICE_SET", icon: <FileQuestion size={15} /> },
+  { label: "播客", type: "PODCAST_SCRIPT", icon: <Podcast size={15} /> }
 ];
+const resourceTypeLabels = Object.fromEntries(resourceOutputActions.map((item) => [item.type, item.label])) as Record<string, string>;
 const openingPrompts = [
   "栈和队列的区别与场景",
   "链表反转的代码思路",
@@ -167,6 +169,7 @@ function messageToTurn(message: StudentAiChatMessage): AiChatTurn {
 }
 
 function resourceToTurn(id: string, resource: GeneratedResource): AiChatTurn {
+  const label = resource.resource_type_label ?? resourceTypeLabels[resource.resource_type] ?? resource.resource_type;
   return {
     id,
     role: "assistant",
@@ -178,9 +181,37 @@ function resourceToTurn(id: string, resource: GeneratedResource): AiChatTurn {
     profileUsed: true,
     sourceUsed: Boolean(resource.citations.length),
     safetyNote: "AI 生成资源已基于课程资料进行引用校验，建议结合课堂讲义复核关键概念。",
-    modelName: "LangGraph + python-pptx",
+    modelName: resource.resource_type === "PPT" ? "LangGraph + python-pptx" : `LangGraph + ${label}渲染器`,
     resource
   };
+}
+
+function resourceMetric(resource: GeneratedResource) {
+  const label = resource.resource_type_label ?? resourceTypeLabels[resource.resource_type] ?? resource.resource_type;
+  if (resource.resource_type === "PPT") return `${resource.slide_count || resource.item_count} 页演示文稿`;
+  if (resource.resource_type === "DOCUMENT") return `${resource.item_count} 节文档`;
+  if (resource.resource_type === "MIND_MAP") return `${resource.item_count} 个节点`;
+  if (resource.resource_type === "PRACTICE_SET") return `${resource.item_count} 道练习`;
+  if (resource.resource_type === "PODCAST_SCRIPT") return `${resource.item_count} 段播客稿`;
+  if (resource.resource_type === "KNOWLEDGE_CARD") return `${resource.item_count} 张卡片`;
+  return `${resource.item_count || 1} 个${label}`;
+}
+
+function resourcePreviewTitle(resource: GeneratedResource) {
+  const payload = resource.render_payload;
+  return (
+    payload.slides?.[0]?.title ||
+    payload.sections?.[0]?.heading ||
+    payload.nodes?.[0]?.label ||
+    payload.questions?.[0]?.stem ||
+    payload.cards?.[0]?.front ||
+    payload.segments?.[0]?.label ||
+    resource.title
+  );
+}
+
+function resourcePreviewSubtitle(resource: GeneratedResource) {
+  return resource.resource_type_label ?? resourceTypeLabels[resource.resource_type] ?? resource.resource_type;
 }
 
 function AiRunSummary({
@@ -270,19 +301,18 @@ function GeneratedResourceCard({
   onPreview: () => void;
   onSave: () => void;
 }) {
-  const slides = resource.render_payload.slides ?? [];
-  const firstSlide = slides[0];
+  const metric = resourceMetric(resource);
   return (
     <div className="ai-resource-card-shell">
       <button type="button" className="ai-resource-card-main" onClick={onPreview}>
         <span className="ai-resource-thumb-preview">
           <i />
-          <strong>{firstSlide?.title ?? resource.title}</strong>
-          <small>{firstSlide?.subtitle ?? `${resource.slide_count} 页演示文稿`}</small>
+          <strong>{resourcePreviewTitle(resource)}</strong>
+          <small>{resourcePreviewSubtitle(resource)} · {resource.file_format}</small>
         </span>
         <span className="ai-resource-card-copy">
           <b>{resource.title}</b>
-          <small>{resource.resource_type} · {resource.slide_count} 页 · {Math.round(resource.confidence * 100)}% 置信度</small>
+          <small>{resourcePreviewSubtitle(resource)} · {metric} · {Math.round(resource.confidence * 100)}% 置信度</small>
           <em>{resource.summary}</em>
         </span>
       </button>
@@ -307,14 +337,45 @@ function ResourcePreviewModal({
   resource: GeneratedResource | null;
   onClose: () => void;
 }) {
-  const [activeSlide, setActiveSlide] = useState(0);
-  const slides = resource?.render_payload.slides ?? [];
-  const slide = slides[Math.min(activeSlide, Math.max(slides.length - 1, 0))];
+  const [activeItem, setActiveItem] = useState(0);
+  const payload = resource?.render_payload;
+  const slides = payload?.slides ?? [];
+  const sections = payload?.sections ?? [];
+  const nodes = payload?.nodes ?? [];
+  const questions = payload?.questions ?? [];
+  const cards = payload?.cards ?? [];
+  const segments = payload?.segments ?? [];
+  const navItems = slides.length
+    ? slides.map((item) => item.title)
+    : sections.length
+      ? sections.map((item) => item.heading)
+      : nodes.length
+        ? nodes.filter((item) => item.level <= 1).map((item) => item.label)
+        : questions.length
+          ? questions.map((item, index) => `第 ${index + 1} 题`)
+          : cards.length
+            ? cards.map((item, index) => item.front || `卡片 ${index + 1}`)
+            : segments.map((item) => `${item.speaker} · ${item.label}`);
   const citationMap = new Map((resource?.citations ?? []).map((item) => [item.source_id, item]));
 
   useEffect(() => {
-    setActiveSlide(0);
+    setActiveItem(0);
   }, [resource?.id]);
+
+  const activeIndex = Math.min(activeItem, Math.max(navItems.length - 1, 0));
+  const activeSlide = slides[activeIndex];
+  const activeSection = sections[activeIndex];
+  const activeQuestion = questions[activeIndex];
+  const activeCard = cards[activeIndex];
+  const activeSegment = segments[activeIndex];
+  const activeCitationIds =
+    activeSlide?.citation_ids ??
+    activeSection?.citation_ids ??
+    activeQuestion?.citation_ids ??
+    activeCard?.citation_ids ??
+    activeSegment?.citation_ids ??
+    nodes[0]?.citation_ids ??
+    [];
 
   return (
     <Modal
@@ -326,40 +387,104 @@ function ResourcePreviewModal({
       className="ai-resource-preview-modal"
       title={resource ? `${resource.title} · 实时预览` : ""}
     >
-      {resource && slide ? (
+      {resource ? (
         <div className="ai-resource-preview">
-          <aside className="ai-resource-slide-nav" aria-label="幻灯片页码">
-            {slides.map((item, index) => (
-              <button type="button" key={`${resource.id}_${index}`} className={index === activeSlide ? "active" : ""} onClick={() => setActiveSlide(index)}>
+          <aside className="ai-resource-slide-nav" aria-label="资源目录">
+            {navItems.map((title, index) => (
+              <button type="button" key={`${resource.id}_${index}`} className={index === activeIndex ? "active" : ""} onClick={() => setActiveItem(index)}>
                 <span>{index + 1}</span>
-                <strong>{item.title}</strong>
+                <strong>{title}</strong>
               </button>
             ))}
           </aside>
           <main className="ai-resource-stage">
-            <section className={`ai-preview-slide ${slide.layout ?? "content"}`}>
-              <header>
+            {activeSlide ? (
+              <section className={`ai-preview-slide ${activeSlide.layout ?? "content"}`}>
+                <header>
+                  <small>{resource.knowledge_point || "自主学习资源"}</small>
+                  <h2>{activeSlide.title}</h2>
+                  {activeSlide.subtitle ? <p>{activeSlide.subtitle}</p> : null}
+                </header>
+                <ul>
+                  {activeSlide.bullets.map((bullet, index) => (
+                    <li key={`${activeSlide.title}_${index}`}>{bullet}</li>
+                  ))}
+                </ul>
+                {activeSlide.speaker_notes ? (
+                  <footer>
+                    <strong>讲稿提示</strong>
+                    <p>{activeSlide.speaker_notes}</p>
+                  </footer>
+                ) : null}
+              </section>
+            ) : activeSection ? (
+              <section className="ai-preview-document">
                 <small>{resource.knowledge_point || "自主学习资源"}</small>
-                <h2>{slide.title}</h2>
-                {slide.subtitle ? <p>{slide.subtitle}</p> : null}
-              </header>
-              <ul>
-                {slide.bullets.map((bullet, index) => (
-                  <li key={`${slide.title}_${index}`}>{bullet}</li>
+                <h2>{activeSection.heading}</h2>
+                {activeSection.paragraphs.map((paragraph, index) => (
+                  <p key={`${activeSection.heading}_${index}`}>{paragraph}</p>
                 ))}
-              </ul>
-              {slide.speaker_notes ? (
+              </section>
+            ) : nodes.length ? (
+              <section className="ai-preview-mindmap">
+                <div className="ai-mindmap-center">
+                  <strong>{nodes[0]?.label ?? resource.title}</strong>
+                  <span>{nodes[0]?.summary ?? resource.summary}</span>
+                </div>
+                <div className="ai-mindmap-branches">
+                  {nodes.filter((node) => node.level === 1).map((node) => (
+                    <article key={node.id}>
+                      <b>{node.label}</b>
+                      <p>{node.summary}</p>
+                      <div>
+                        {nodes.filter((child) => child.level === 2 && payload?.edges?.some((edge) => edge.source === node.id && edge.target === child.id)).map((child) => (
+                          <span key={child.id}>{child.label}</span>
+                        ))}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            ) : activeQuestion ? (
+              <section className="ai-preview-practice">
+                <small>{resource.knowledge_point || "自主学习资源"}</small>
+                <h2>{activeQuestion.stem}</h2>
+                {activeQuestion.options?.length ? (
+                  <ol>
+                    {activeQuestion.options.map((option) => <li key={option}>{option}</li>)}
+                  </ol>
+                ) : null}
                 <footer>
-                  <strong>讲稿提示</strong>
-                  <p>{slide.speaker_notes}</p>
+                  <strong>参考答案</strong>
+                  <p>{activeQuestion.answer}</p>
+                  <strong>解析</strong>
+                  <p>{activeQuestion.analysis}</p>
                 </footer>
-              ) : null}
-            </section>
+              </section>
+            ) : activeCard ? (
+              <section className="ai-preview-cards">
+                <article>
+                  <small>正面</small>
+                  <h2>{activeCard.front}</h2>
+                </article>
+                <article>
+                  <small>背面</small>
+                  <p>{activeCard.back}</p>
+                  {activeCard.tips?.map((tip) => <span key={tip}>{tip}</span>)}
+                </article>
+              </section>
+            ) : activeSegment ? (
+              <section className="ai-preview-podcast">
+                <small>{activeSegment.label}</small>
+                <h2>{activeSegment.speaker}</h2>
+                <p>{activeSegment.text}</p>
+              </section>
+            ) : null}
             <section className="ai-resource-preview-meta">
-              <span>{activeSlide + 1}/{slides.length}</span>
+              <span>{activeIndex + 1}/{Math.max(navItems.length, 1)}</span>
               <span>AI 生成</span>
               <span>置信度 {Math.round(resource.confidence * 100)}%</span>
-              {(slide.citation_ids ?? []).map((sourceId) => {
+              {activeCitationIds.map((sourceId) => {
                 const source = citationMap.get(sourceId);
                 return source ? <span key={sourceId}>引用：{source.title}</span> : null;
               })}
@@ -386,7 +511,7 @@ export default function AiTutor() {
   const [sessions, setSessions] = useState<StudentAiChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [turns, setTurns] = useState<AiChatTurn[]>([]);
-  const [activeResourceType, setActiveResourceType] = useState<"PPT" | null>(null);
+  const [activeResourceType, setActiveResourceType] = useState<GeneratedResourceType | null>(null);
   const [previewResource, setPreviewResource] = useState<GeneratedResource | null>(null);
   const hydratedRef = useRef(false);
   const threadRef = useRef<HTMLDivElement | null>(null);
@@ -513,8 +638,8 @@ export default function AiTutor() {
   }
 
   async function sendMessage(messageOverride?: string) {
-    if (activeResourceType === "PPT") {
-      await generatePpt(messageOverride);
+    if (activeResourceType) {
+      await generateResource(activeResourceType, messageOverride);
       return;
     }
     const message = (messageOverride ?? draft).trim();
@@ -609,9 +734,10 @@ export default function AiTutor() {
     }
   }
 
-  async function generatePpt(messageOverride?: string) {
+  async function generateResource(resourceType: GeneratedResourceType, messageOverride?: string) {
     const message = (messageOverride ?? draft).trim();
     if (!message || sending) return;
+    const label = resourceTypeLabels[resourceType] ?? "资源";
     const userTurn: AiChatTurn = {
       id: `student_${Date.now()}`,
       role: "student",
@@ -622,7 +748,7 @@ export default function AiTutor() {
     const pendingTurn: AiChatTurn = {
       id: pendingId,
       role: "assistant",
-      content: "正在生成 PPT 资源...",
+      content: `正在生成${label}资源...`,
       time: nowLabel(),
       loading: true
     };
@@ -632,7 +758,7 @@ export default function AiTutor() {
     setError(null);
     setTurns((current) => [...current, userTurn, pendingTurn]);
     try {
-      const result = await api.generatePptResource(message, courseId, currentSessionId);
+      const result = await api.generateResource(resourceType, message, courseId, currentSessionId);
       setCurrentSessionId(result.session.id);
       setSessions((current) => {
         const withoutCurrent = current.filter((item) => item.id !== result.session.id);
@@ -827,11 +953,10 @@ export default function AiTutor() {
                 type="button"
                 className={`ai-resource-action${activeResourceType === action.type ? " active" : ""}`}
                 key={action.label}
-                aria-disabled={!action.enabled ? "true" : undefined}
-                disabled={!action.enabled || sending}
-                title={action.enabled ? `生成${action.label}` : "后续接入"}
+                disabled={sending}
+                title={`生成${action.label}`}
                 onClick={() => {
-                  if (action.type === "PPT") setActiveResourceType((current) => current === "PPT" ? null : "PPT");
+                  setActiveResourceType((current) => current === action.type ? null : action.type);
                 }}
               >
                 {action.icon}
@@ -849,7 +974,7 @@ export default function AiTutor() {
                   sendMessage();
                 }
               }}
-              placeholder={activeResourceType === "PPT" ? "输入 PPT 生成要求，例如：帮我生成关于队列的讲解 PPT" : `有问题，尽管问 AI 助学导师。当前课程：${courseName}；薄弱点：${activePoint}；常见错因：${frequentError}`}
+              placeholder={activeResourceType ? `输入${resourceTypeLabels[activeResourceType] ?? "资源"}生成要求，例如：帮我生成关于队列的讲解${resourceTypeLabels[activeResourceType] ?? "资源"}` : `有问题，尽管问 AI 助学导师。当前课程：${courseName}；薄弱点：${activePoint}；常见错因：${frequentError}`}
               rows={2}
               disabled={sending || loadingSession}
             />

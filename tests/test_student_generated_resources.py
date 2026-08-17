@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.core.config import get_settings
@@ -41,3 +42,53 @@ def test_student_can_generate_save_and_download_ppt_resource(monkeypatch):
         assert downloaded.status_code == 200
         assert downloaded.headers["content-type"] == "application/vnd.openxmlformats-officedocument.presentationml.presentation"
         assert len(downloaded.content) > 1000
+
+
+@pytest.mark.parametrize(
+    ("resource_type", "payload_key", "min_size"),
+    [
+        ("DOCUMENT", "sections", 1000),
+        ("MIND_MAP", "nodes", 200),
+        ("PRACTICE_SET", "questions", 200),
+        ("KNOWLEDGE_CARD", "cards", 200),
+        ("PODCAST_SCRIPT", "segments", 200),
+    ],
+)
+def test_student_can_generate_save_and_download_generic_resources(monkeypatch, resource_type, payload_key, min_size):
+    monkeypatch.setenv("CODETRACK_MODEL_API_KEY", "")
+    monkeypatch.setenv("CODETRACK_MODEL_NAME", "")
+    monkeypatch.setenv("CODETRACK_MODEL_GATEWAY_URL", "")
+    get_settings.cache_clear()
+
+    with TestClient(app) as client:
+        generated = client.post(
+            "/api/v1/student/resources/generate",
+            headers=STUDENT,
+            json={
+                "course_id": "course_ds_001",
+                "resource_type": resource_type,
+                "message": "帮我生成关于队列的学习资源",
+            },
+        )
+        assert generated.status_code == 200
+        resource = generated.json()["data"]["resource"]
+        assert resource["resource_type"] == resource_type
+        assert resource["status"] == "READY"
+        assert resource["item_count"] >= 1
+        assert resource["render_payload"][payload_key]
+        assert resource["citations"]
+        assert resource["download_available"] is True
+        assert resource["saved_to_resource_center"] is False
+
+        saved = client.post(f"/api/v1/student/resources/{resource['id']}/save", headers=STUDENT)
+        assert saved.status_code == 200
+        assert saved.json()["data"]["saved_to_resource_center"] is True
+
+        listing = client.get("/api/v1/student/resources/generated", headers=STUDENT)
+        assert listing.status_code == 200
+        ids = {item["id"] for item in listing.json()["data"]["items"]}
+        assert resource["id"] in ids
+
+        downloaded = client.get(f"/api/v1/student/resources/{resource['id']}/download", headers=STUDENT)
+        assert downloaded.status_code == 200
+        assert len(downloaded.content) > min_size

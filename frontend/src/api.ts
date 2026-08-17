@@ -260,9 +260,61 @@ export type GeneratedResourceSlide = {
   layout?: string;
 };
 
+export type GeneratedResourceSection = {
+  heading: string;
+  paragraphs: string[];
+  citation_ids?: string[];
+};
+
+export type GeneratedResourceNode = {
+  id: string;
+  label: string;
+  level: number;
+  summary?: string;
+  citation_ids?: string[];
+};
+
+export type GeneratedResourceEdge = {
+  source: string;
+  target: string;
+  label?: string;
+};
+
+export type GeneratedResourceQuestion = {
+  type: string;
+  stem: string;
+  options?: string[];
+  answer: string;
+  analysis: string;
+  citation_ids?: string[];
+};
+
+export type GeneratedResourceCard = {
+  front: string;
+  back: string;
+  tips?: string[];
+  citation_ids?: string[];
+};
+
+export type GeneratedResourcePodcastSegment = {
+  speaker: string;
+  label: string;
+  text: string;
+  citation_ids?: string[];
+};
+
+export type GeneratedResourceType =
+  | "PPT"
+  | "DOCUMENT"
+  | "MIND_MAP"
+  | "PRACTICE_SET"
+  | "KNOWLEDGE_CARD"
+  | "PODCAST_SCRIPT";
+
 export type GeneratedResource = {
   id: string;
-  resource_type: "PPT" | string;
+  resource_type: GeneratedResourceType | string;
+  resource_type_label?: string;
   title: string;
   status: string;
   summary: string;
@@ -273,10 +325,18 @@ export type GeneratedResource = {
   citations: GeneratedResourceCitation[];
   render_payload: {
     slides?: GeneratedResourceSlide[];
+    sections?: GeneratedResourceSection[];
+    nodes?: GeneratedResourceNode[];
+    edges?: GeneratedResourceEdge[];
+    questions?: GeneratedResourceQuestion[];
+    cards?: GeneratedResourceCard[];
+    segments?: GeneratedResourcePodcastSegment[];
     [key: string]: unknown;
   };
   file_format: string;
   slide_count: number;
+  item_count: number;
+  download_available?: boolean;
   saved_to_resource_center: boolean;
   created_at: string | null;
   updated_at: string | null;
@@ -289,6 +349,8 @@ export type GeneratePptResourceResponse = {
   user_message_id: string;
   assistant_message_id: string;
 };
+
+export type GenerateResourceResponse = GeneratePptResourceResponse;
 
 export type StudentAiChatSession = {
   id: string;
@@ -882,6 +944,12 @@ export const api = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message, course_id: courseId, session_id: sessionId })
+    }),
+  generateResource: (resourceType: GeneratedResourceType | string, message: string, courseId?: string, sessionId?: string | null) =>
+    request<GenerateResourceResponse>("/api/v1/student/resources/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ resource_type: resourceType, message, course_id: courseId, session_id: sessionId })
     }),
   saveGeneratedResource: (resourceId: string) =>
     request<GeneratedResource>(`/api/v1/student/resources/${encodeURIComponent(resourceId)}/save`, {

@@ -10,19 +10,22 @@ import {
   Download,
   Eye,
   FileCode2,
+  FileQuestion,
   FileText,
   Github,
   GraduationCap,
   LibraryBig,
   Network,
   Presentation,
+  Podcast,
   RefreshCw,
   Search,
   Star,
   ThumbsUp,
-  UserRound
+  UserRound,
+  Waypoints
 } from "lucide-react";
-import { api, GeneratedResource } from "../api";
+import { api, type GeneratedResource } from "../api";
 import { authHeaders } from "../authSession";
 
 type ResourceType = "视频教程" | "代码项目" | "文章文档" | "电子书" | "学习路线";
@@ -152,6 +155,24 @@ function resourceIcon(type: ResourceType) {
   return <Network size={18} />;
 }
 
+function generatedResourceIcon(resource: GeneratedResource) {
+  if (resource.resource_type === "PPT") return <Presentation size={24} />;
+  if (resource.resource_type === "DOCUMENT") return <FileText size={24} />;
+  if (resource.resource_type === "MIND_MAP") return <Waypoints size={24} />;
+  if (resource.resource_type === "PRACTICE_SET") return <FileQuestion size={24} />;
+  if (resource.resource_type === "PODCAST_SCRIPT") return <Podcast size={24} />;
+  return <FileText size={24} />;
+}
+
+function generatedResourceMetric(resource: GeneratedResource) {
+  if (resource.resource_type === "PPT") return { value: resource.slide_count || resource.item_count, label: "页 PPT" };
+  if (resource.resource_type === "DOCUMENT") return { value: resource.item_count, label: "节文档" };
+  if (resource.resource_type === "MIND_MAP") return { value: resource.item_count, label: "个节点" };
+  if (resource.resource_type === "PRACTICE_SET") return { value: resource.item_count, label: "道练习" };
+  if (resource.resource_type === "PODCAST_SCRIPT") return { value: resource.item_count, label: "段播客" };
+  return { value: resource.item_count || 1, label: "个资源" };
+}
+
 export default function StudentResourceCenter() {
   const [activeType, setActiveType] = useState<"全部" | ResourceType>("全部");
   const [difficulty, setDifficulty] = useState<Difficulty>("全部");
@@ -164,7 +185,7 @@ export default function StudentResourceCenter() {
     let alive = true;
     api.listGeneratedResources()
       .then((result) => {
-        if (alive) setGeneratedResources(result.items);
+        if (alive) setGeneratedResources(Array.isArray(result.items) ? result.items : []);
       })
       .catch(() => {
         if (alive) setGeneratedError("AI 生成资源暂时加载失败。");
@@ -209,7 +230,7 @@ export default function StudentResourceCenter() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${resource.title}.${resource.file_format.toLowerCase()}`;
+    link.download = `${resource.title}.${(resource.file_format || "PPTX").toLowerCase()}`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -251,31 +272,36 @@ export default function StudentResourceCenter() {
         {generatedError ? <p className="student-generated-error">{generatedError}</p> : null}
         {generatedResources.length ? (
           <div className="student-generated-grid">
-            {generatedResources.map((resource) => (
-              <article className="student-generated-card" key={resource.id}>
-                <div className="student-generated-thumb">
-                  <Presentation size={24} />
-                  <strong>{resource.slide_count}</strong>
-                  <span>页 PPT</span>
-                </div>
-                <div className="student-generated-body">
-                  <h3>{resource.title}</h3>
-                  <p>{resource.summary}</p>
-                  <div className="student-generated-tags">
-                    <span><BookmarkCheck size={14} /> 已加入资源中心</span>
-                    <span>{resource.knowledge_point || "自主学习"}</span>
-                    <span>引用 {resource.citations.length} 条</span>
+            {generatedResources.map((resource) => {
+              const metric = generatedResourceMetric(resource);
+              return (
+                <article className="student-generated-card" key={resource.id}>
+                  <div className="student-generated-thumb">
+                    {generatedResourceIcon(resource)}
+                    <strong>{metric.value}</strong>
+                    <span>{metric.label}</span>
                   </div>
-                </div>
-                <button type="button" onClick={() => downloadGeneratedResource(resource)}>
-                  <Download size={16} />
-                  导出
-                </button>
-              </article>
-            ))}
+                  <div className="student-generated-body">
+                    <h3>{resource.title}</h3>
+                    <p>{resource.summary}</p>
+                    <div className="student-generated-tags">
+                      <span><BookmarkCheck size={14} /> 已加入资源中心</span>
+                      <span>{resource.resource_type_label ?? resource.resource_type}</span>
+                      <span>{resource.knowledge_point || "自主学习"}</span>
+                      <span>{resource.file_format}</span>
+                      <span>引用 {(resource.citations ?? []).length} 条</span>
+                    </div>
+                  </div>
+                  <button type="button" onClick={() => downloadGeneratedResource(resource)} disabled={!resource.download_available}>
+                    <Download size={16} />
+                    导出
+                  </button>
+                </article>
+              );
+            })}
           </div>
         ) : (
-          <p className="student-generated-empty">还没有加入资源中心的 AI 生成资源。可以在 AI 助学中生成 PPT 后点击书签保存。</p>
+          <p className="student-generated-empty">还没有加入资源中心的 AI 生成资源。可以在 AI 助学中生成学习产物后点击书签保存。</p>
         )}
       </section>
 

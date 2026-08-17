@@ -32,9 +32,29 @@ except Exception:  # pragma: no cover - optional dependency fallback
 
 
 WORKFLOW_TYPE = "student_ppt_resource_generation"
+GENERIC_WORKFLOW_TYPE = "student_resource_generation"
 PROMPT_VERSION = "student_ppt_resource_v0.1"
+GENERIC_PROMPT_VERSION = "student_resource_v0.2"
 MAX_SOURCE_COUNT = 5
 MAX_SOURCE_CHARS = 900
+
+SUPPORTED_RESOURCE_TYPES = {
+    "PPT",
+    "DOCUMENT",
+    "MIND_MAP",
+    "PRACTICE_SET",
+    "KNOWLEDGE_CARD",
+    "PODCAST_SCRIPT",
+}
+
+RESOURCE_TYPE_LABELS = {
+    "PPT": "PPT",
+    "DOCUMENT": "文档",
+    "MIND_MAP": "思维导图",
+    "PRACTICE_SET": "练习题",
+    "KNOWLEDGE_CARD": "知识卡片",
+    "PODCAST_SCRIPT": "播客稿",
+}
 
 
 class PptResourceState(TypedDict, total=False):
@@ -53,6 +73,29 @@ class PptResourceState(TypedDict, total=False):
     summary: str
     confidence: float
     file_path: str
+    resource: StudentGeneratedResource
+    run: AgentRun
+
+
+class GenericResourceState(TypedDict, total=False):
+    run_id: str
+    student_id: str
+    class_id: str
+    course_id: str
+    session_id: str | None
+    message: str
+    resource_type: str
+    knowledge_point: str
+    profile: dict[str, Any] | None
+    sources: list[KnowledgeSource]
+    citations: list[dict[str, Any]]
+    title: str
+    summary: str
+    confidence: float
+    render_payload: dict[str, Any]
+    file_path: str
+    file_format: str
+    item_count: int
     resource: StudentGeneratedResource
     run: AgentRun
 
@@ -390,13 +433,409 @@ def _render_pptx(resource_id: str, title: str, slides: list[dict[str, Any]], cit
     return str(path)
 
 
+def _citation_titles(citations: list[dict[str, Any]]) -> str:
+    titles = [str(item.get("title", "")).strip() for item in citations if str(item.get("title", "")).strip()]
+    return "；".join(titles[:3]) or "课程知识库"
+
+
+def _common_source_ids(sources: list[KnowledgeSource], limit: int = 3) -> list[str]:
+    return [source.id for source in sources[:limit]]
+
+
+def _fallback_document(
+    *,
+    message: str,
+    course: Course,
+    knowledge_point: str,
+    sources: list[KnowledgeSource],
+) -> tuple[str, str, dict[str, Any], int]:
+    source_ids = _common_source_ids(sources)
+    source_summary = sources[0].summary if sources else f"围绕{knowledge_point}生成学习讲解。"
+    title = f"{knowledge_point}学习文档"
+    sections = [
+        {
+            "heading": "学习目标",
+            "paragraphs": [
+                f"本资源面向{course.name}自主学习场景，帮助学生围绕“{message}”形成可复习的完整文档。",
+                f"学习后应能说清{knowledge_point}的基本含义、关键操作、边界条件和常见应用。"
+            ],
+            "citation_ids": source_ids[:1],
+        },
+        {
+            "heading": "核心概念",
+            "paragraphs": [
+                source_summary,
+                f"理解{knowledge_point}时，需要同时关注抽象规则、状态变化和实际实现中的约束。"
+            ],
+            "citation_ids": source_ids[:2],
+        },
+        {
+            "heading": "关键过程",
+            "paragraphs": [
+                "先识别输入、输出和状态变量，再按步骤追踪每一次操作对状态的影响。",
+                "建议用表格、手绘过程图或伪过程记录中间状态，避免只记结论。"
+            ],
+            "citation_ids": source_ids[:2],
+        },
+        {
+            "heading": "易错点与自检",
+            "paragraphs": [
+                "常见问题集中在空结构、满结构、边界输入和更新顺序上。",
+                "完成学习后，可以用普通用例、最小用例和边界用例各做一次自测。"
+            ],
+            "citation_ids": source_ids[1:3] or source_ids[:1],
+        },
+        {
+            "heading": "下一步学习建议",
+            "paragraphs": [
+                f"先保存本文档，再生成一组{knowledge_point}练习题巩固判断和实现能力。",
+                "如果仍不稳定，可以回到 AI 对话窗口继续追问某个小步骤。"
+            ],
+            "citation_ids": source_ids[:1],
+        },
+    ]
+    summary = f"围绕“{message}”生成 {len(sections)} 节中文学习文档。"
+    return title, summary, {"sections": sections}, len(sections)
+
+
+def _fallback_mind_map(
+    *,
+    message: str,
+    course: Course,
+    knowledge_point: str,
+    sources: list[KnowledgeSource],
+) -> tuple[str, str, dict[str, Any], int]:
+    source_ids = _common_source_ids(sources)
+    center_id = "center"
+    branch_labels = [
+        ("concept", "核心概念", [f"{knowledge_point}是什么", "结构规则", "适用场景"]),
+        ("operation", "关键操作", ["输入与输出", "状态变化", "复杂度关注"]),
+        ("boundary", "边界条件", ["空结构", "满结构", "最小用例"]),
+        ("mistake", "常见错误", ["更新顺序", "遗漏判断", "只测普通用例"]),
+        ("practice", "练习路径", ["画状态图", "写伪过程", "做边界测试"]),
+    ]
+    nodes = [
+        {
+            "id": center_id,
+            "label": f"{knowledge_point}学习地图",
+            "level": 0,
+            "summary": f"{course.name} · {message}",
+            "citation_ids": source_ids[:1],
+        }
+    ]
+    edges: list[dict[str, Any]] = []
+    for index, (branch_id, label, children) in enumerate(branch_labels, start=1):
+        node_id = f"branch_{branch_id}"
+        nodes.append(
+            {
+                "id": node_id,
+                "label": label,
+                "level": 1,
+                "summary": " / ".join(children),
+                "citation_ids": source_ids[: min(len(source_ids), 2)],
+            }
+        )
+        edges.append({"source": center_id, "target": node_id, "label": "展开"})
+        for child_index, child in enumerate(children, start=1):
+            child_id = f"{branch_id}_{child_index}"
+            nodes.append(
+                {
+                    "id": child_id,
+                    "label": child,
+                    "level": 2,
+                    "summary": f"用于理解{knowledge_point}的{label}。",
+                    "citation_ids": source_ids[index % len(source_ids): index % len(source_ids) + 1] if source_ids else [],
+                }
+            )
+            edges.append({"source": node_id, "target": child_id, "label": "包含"})
+    title = f"{knowledge_point}思维导图"
+    summary = f"围绕“{message}”生成 {len(nodes)} 个节点的学习地图。"
+    return title, summary, {"nodes": nodes, "edges": edges}, len(nodes)
+
+
+def _fallback_practice_set(
+    *,
+    message: str,
+    knowledge_point: str,
+    sources: list[KnowledgeSource],
+) -> tuple[str, str, dict[str, Any], int]:
+    source_ids = _common_source_ids(sources)
+    title = f"{knowledge_point}巩固练习"
+    questions = [
+        {
+            "type": "single_choice",
+            "stem": f"关于{knowledge_point}的核心规则，下列说法更合理的是哪一项？",
+            "options": ["只关注最终结果", "需要跟踪状态变化和边界情况", "不需要测试空输入", "实现时无需考虑复杂度"],
+            "answer": "需要跟踪状态变化和边界情况",
+            "analysis": f"{knowledge_point}学习不能只记结论，必须能解释状态如何变化。",
+            "citation_ids": source_ids[:1],
+        },
+        {
+            "type": "short_answer",
+            "stem": f"请用自己的话说明{knowledge_point}最容易出错的一个边界情况。",
+            "answer": "示例：空结构、满结构、只有一个元素时的状态更新。",
+            "analysis": "能主动识别边界情况，说明已经从概念理解走向实现检查。",
+            "citation_ids": source_ids[:2],
+        },
+        {
+            "type": "process",
+            "stem": f"给定一个小规模样例，请手动画出{knowledge_point}每一步操作后的状态。",
+            "answer": "按操作顺序列出状态变量或结构内容，确保每一步都符合不变式。",
+            "analysis": "过程追踪可以发现只看最终结果时漏掉的更新顺序问题。",
+            "citation_ids": source_ids[:2],
+        },
+        {
+            "type": "debug",
+            "stem": f"如果{knowledge_point}实现只能通过普通用例，却过不了边界用例，你会优先检查哪里？",
+            "answer": "优先检查空/满判断、指针或索引更新顺序、返回值约定。",
+            "analysis": "边界失败通常不是整体思路错误，而是状态维护细节不完整。",
+            "citation_ids": source_ids[1:3] or source_ids[:1],
+        },
+        {
+            "type": "reflection",
+            "stem": f"完成“{message}”后，写出一个你还不确定的点。",
+            "answer": "把不确定点带回 AI 对话继续追问，或生成配套讲解资源。",
+            "analysis": "反思题用于把一次练习转成下一轮学习目标。",
+            "citation_ids": source_ids[:1],
+        },
+    ]
+    summary = f"围绕“{message}”生成 {len(questions)} 道巩固练习。"
+    return title, summary, {"questions": questions}, len(questions)
+
+
+def _fallback_knowledge_card(
+    *,
+    message: str,
+    knowledge_point: str,
+    sources: list[KnowledgeSource],
+) -> tuple[str, str, dict[str, Any], int]:
+    source_ids = _common_source_ids(sources)
+    cards = [
+        {
+            "front": f"{knowledge_point}是什么？",
+            "back": f"{knowledge_point}是一类需要理解规则、状态和边界条件的学习主题。",
+            "tips": ["先讲规则", "再画状态", "最后测边界"],
+            "citation_ids": source_ids[:1],
+        },
+        {
+            "front": "为什么要画过程？",
+            "back": "过程图能暴露状态变化是否符合不变式，特别适合排查更新顺序问题。",
+            "tips": ["记录每一步", "标出入口出口", "关注最小用例"],
+            "citation_ids": source_ids[:2],
+        },
+        {
+            "front": "如何自检？",
+            "back": "用普通用例、空/满或最小用例、连续操作用例分别验证。",
+            "tips": ["不要只测一个例子", "把失败原因写成一句话"],
+            "citation_ids": source_ids[1:3] or source_ids[:1],
+        },
+    ]
+    title = f"{knowledge_point}知识卡片"
+    summary = f"围绕“{message}”生成 {len(cards)} 张复习卡片。"
+    return title, summary, {"cards": cards}, len(cards)
+
+
+def _fallback_podcast_script(
+    *,
+    message: str,
+    course: Course,
+    knowledge_point: str,
+    sources: list[KnowledgeSource],
+) -> tuple[str, str, dict[str, Any], int]:
+    source_ids = _common_source_ids(sources)
+    title = f"{knowledge_point}播客讲解稿"
+    segments = [
+        {
+            "speaker": "主持人",
+            "label": "开场",
+            "text": f"今天我们用一段短讲，梳理{course.name}里的{knowledge_point}。问题来自：{message}。",
+            "citation_ids": source_ids[:1],
+        },
+        {
+            "speaker": "讲解者",
+            "label": "概念",
+            "text": f"先抓住主线：{knowledge_point}不是孤立术语，要和操作规则、状态变化、边界情况一起理解。",
+            "citation_ids": source_ids[:2],
+        },
+        {
+            "speaker": "主持人",
+            "label": "追问",
+            "text": "那学生最容易卡在哪里？",
+            "citation_ids": [],
+        },
+        {
+            "speaker": "讲解者",
+            "label": "易错点",
+            "text": "常见卡点是只记住普通情况，没有检查空结构、满结构、最小规模和连续操作后的状态。",
+            "citation_ids": source_ids[1:3] or source_ids[:1],
+        },
+        {
+            "speaker": "主持人",
+            "label": "行动",
+            "text": "听完之后，建议先画一个小例子的状态变化，再生成配套练习检验自己。",
+            "citation_ids": source_ids[:1],
+        },
+    ]
+    summary = f"围绕“{message}”生成 {len(segments)} 段双人播客讲解稿。"
+    return title, summary, {"segments": segments}, len(segments)
+
+
+def _fallback_resource_payload(
+    *,
+    resource_type: str,
+    message: str,
+    course: Course,
+    knowledge_point: str,
+    sources: list[KnowledgeSource],
+) -> tuple[str, str, dict[str, Any], int]:
+    if resource_type == "DOCUMENT":
+        return _fallback_document(message=message, course=course, knowledge_point=knowledge_point, sources=sources)
+    if resource_type == "MIND_MAP":
+        return _fallback_mind_map(message=message, course=course, knowledge_point=knowledge_point, sources=sources)
+    if resource_type == "PRACTICE_SET":
+        return _fallback_practice_set(message=message, knowledge_point=knowledge_point, sources=sources)
+    if resource_type == "KNOWLEDGE_CARD":
+        return _fallback_knowledge_card(message=message, knowledge_point=knowledge_point, sources=sources)
+    if resource_type == "PODCAST_SCRIPT":
+        return _fallback_podcast_script(message=message, course=course, knowledge_point=knowledge_point, sources=sources)
+    raise ApiError(400, "UNSUPPORTED_RESOURCE_TYPE", "暂不支持该资源类型。", details={"resource_type": resource_type})
+
+
+def _render_docx(resource_id: str, title: str, payload: dict[str, Any], citations: list[dict[str, Any]]) -> tuple[str, str]:
+    try:
+        from docx import Document
+    except ModuleNotFoundError as exc:
+        raise ApiError(
+            503,
+            "DOC_RENDERER_NOT_INSTALLED",
+            "文档生成依赖尚未安装，请先安装 backend/requirements.txt 中的 python-docx。",
+            details={"missing_module": exc.name},
+        ) from exc
+
+    settings = get_settings()
+    storage_dir = Path(settings.resource_storage_dir) / "generated" / "document"
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    path = storage_dir / f"{resource_id}.docx"
+    document = Document()
+    document.add_heading(title, level=1)
+    for section in payload.get("sections", []):
+        if not isinstance(section, dict):
+            continue
+        document.add_heading(str(section.get("heading", "学习小节")), level=2)
+        for paragraph in section.get("paragraphs", []):
+            if str(paragraph).strip():
+                document.add_paragraph(str(paragraph).strip())
+    if citations:
+        document.add_heading("引用来源", level=2)
+        for citation in citations[:5]:
+            document.add_paragraph(f"{citation.get('title', '')}：{citation.get('summary', '')}", style=None)
+    document.save(path)
+    return str(path), "DOCX"
+
+
+def _markdown_lines(resource_type: str, title: str, payload: dict[str, Any], citations: list[dict[str, Any]]) -> list[str]:
+    lines = [f"# {title}", ""]
+    if resource_type == "DOCUMENT":
+        for section in payload.get("sections", []):
+            if isinstance(section, dict):
+                lines.extend([f"## {section.get('heading', '学习小节')}", ""])
+                for paragraph in section.get("paragraphs", []):
+                    if str(paragraph).strip():
+                        lines.extend([str(paragraph).strip(), ""])
+    elif resource_type == "MIND_MAP":
+        nodes = payload.get("nodes", [])
+        edges = payload.get("edges", [])
+        lines.extend(["## 节点", ""])
+        for node in nodes if isinstance(nodes, list) else []:
+            if isinstance(node, dict):
+                indent = "  " * int(node.get("level", 0) or 0)
+                lines.append(f"{indent}- {node.get('label', '')}：{node.get('summary', '')}")
+        lines.extend(["", "## 关系", ""])
+        for edge in edges if isinstance(edges, list) else []:
+            if isinstance(edge, dict):
+                lines.append(f"- {edge.get('source')} -> {edge.get('target')}：{edge.get('label', '')}")
+    elif resource_type == "PRACTICE_SET":
+        for index, question in enumerate(payload.get("questions", []), start=1):
+            if not isinstance(question, dict):
+                continue
+            lines.extend([f"## 第 {index} 题", "", str(question.get("stem", "")), ""])
+            options = question.get("options", [])
+            if isinstance(options, list):
+                lines.extend([f"- {option}" for option in options])
+                lines.append("")
+            lines.extend([f"答案：{question.get('answer', '')}", "", f"解析：{question.get('analysis', '')}", ""])
+    elif resource_type == "KNOWLEDGE_CARD":
+        for index, card in enumerate(payload.get("cards", []), start=1):
+            if isinstance(card, dict):
+                lines.extend([f"## 卡片 {index}", "", f"正面：{card.get('front', '')}", "", f"背面：{card.get('back', '')}", ""])
+                tips = card.get("tips", [])
+                if isinstance(tips, list):
+                    lines.extend([f"- {tip}" for tip in tips])
+                    lines.append("")
+    elif resource_type == "PODCAST_SCRIPT":
+        for segment in payload.get("segments", []):
+            if isinstance(segment, dict):
+                lines.extend([f"## {segment.get('speaker', '')} · {segment.get('label', '')}", "", str(segment.get("text", "")), ""])
+    else:
+        lines.extend([json.dumps(payload, ensure_ascii=False, indent=2), ""])
+    if citations:
+        lines.extend(["## 引用来源", ""])
+        for citation in citations[:5]:
+            lines.append(f"- {citation.get('title', '')}：{citation.get('summary', '')}")
+    return lines
+
+
+def _render_markdown(resource_id: str, resource_type: str, title: str, payload: dict[str, Any], citations: list[dict[str, Any]]) -> tuple[str, str]:
+    settings = get_settings()
+    storage_dir = Path(settings.resource_storage_dir) / "generated" / resource_type.lower()
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    path = storage_dir / f"{resource_id}.md"
+    path.write_text("\n".join(_markdown_lines(resource_type, title, payload, citations)), encoding="utf-8")
+    return str(path), "MD"
+
+
+def _render_generic_resource(resource_id: str, resource_type: str, title: str, payload: dict[str, Any], citations: list[dict[str, Any]]) -> tuple[str, str]:
+    if resource_type == "DOCUMENT":
+        try:
+            return _render_docx(resource_id, title, payload, citations)
+        except ApiError as exc:
+            detail = exc.detail if isinstance(exc.detail, dict) else {}
+            if detail.get("code") == "DOC_RENDERER_NOT_INSTALLED":
+                return _render_markdown(resource_id, resource_type, title, payload, citations)
+            raise
+    return _render_markdown(resource_id, resource_type, title, payload, citations)
+
+
+def resource_media_type(resource: StudentGeneratedResource) -> str:
+    format_map = {
+        "PPTX": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "DOCX": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "MD": "text/markdown; charset=utf-8",
+        "JSON": "application/json",
+    }
+    return format_map.get((resource.file_format or "").upper(), "application/octet-stream")
+
+
 def _serialize_resource(resource: StudentGeneratedResource) -> dict[str, Any]:
     render_payload = _json_loads(resource.render_payload_json, {})
     citations = _json_loads(resource.citations_json, [])
-    slides = render_payload.get("slides", []) if isinstance(render_payload, dict) else []
+    if not isinstance(render_payload, dict):
+        render_payload = {}
+    slides = render_payload.get("slides", [])
+    sections = render_payload.get("sections", [])
+    nodes = render_payload.get("nodes", [])
+    questions = render_payload.get("questions", [])
+    cards = render_payload.get("cards", [])
+    segments = render_payload.get("segments", [])
+    item_count = 0
+    for collection in (slides, sections, nodes, questions, cards, segments):
+        if isinstance(collection, list) and collection:
+            item_count = len(collection)
+            break
     return {
         "id": resource.id,
         "resource_type": resource.resource_type,
+        "resource_type_label": RESOURCE_TYPE_LABELS.get(resource.resource_type, resource.resource_type),
         "title": resource.title,
         "status": resource.status,
         "summary": resource.summary,
@@ -408,6 +847,8 @@ def _serialize_resource(resource: StudentGeneratedResource) -> dict[str, Any]:
         "render_payload": render_payload,
         "file_format": resource.file_format,
         "slide_count": len(slides) if isinstance(slides, list) else 0,
+        "item_count": item_count,
+        "download_available": bool(resource.file_path),
         "saved_to_resource_center": resource.saved_to_resource_center,
         "created_at": iso(resource.created_at),
         "updated_at": iso(resource.updated_at),
@@ -554,6 +995,141 @@ def _render_node(db: Session, state: PptResourceState) -> PptResourceState:
     return state
 
 
+def _validate_resource_type(resource_type: str) -> str:
+    normalized = (resource_type or "").strip().upper()
+    if normalized not in SUPPORTED_RESOURCE_TYPES:
+        raise ApiError(
+            400,
+            "UNSUPPORTED_RESOURCE_TYPE",
+            "暂不支持该资源类型。",
+            details={"resource_type": resource_type, "supported": sorted(SUPPORTED_RESOURCE_TYPES)},
+        )
+    return normalized
+
+
+def _create_generic_run_node(db: Session, state: GenericResourceState) -> GenericResourceState:
+    context = AgentRunContext(
+        run_id=state["run_id"],
+        workflow_type=GENERIC_WORKFLOW_TYPE,
+        student_id=state["student_id"],
+        course_id=state["course_id"],
+    )
+    run = start_run(
+        db,
+        context,
+        input_payload={
+            "resource_type": state["resource_type"],
+            "message": _trim(state["message"], 300),
+            "session_id": state.get("session_id"),
+        },
+        model_provider="RULE_FALLBACK",
+        model_name="rule-template",
+        prompt_version=GENERIC_PROMPT_VERSION,
+    )
+    state["run"] = run
+    record_step(db, run, step_name="create_run", step_order=1, output_summary={"run_id": run.id})
+    return state
+
+
+def _generic_context_node(db: Session, user: User, course: Course, state: GenericResourceState) -> GenericResourceState:
+    profile = serialize_learner_profile(
+        db,
+        student_id=user.id,
+        course_id=course.id,
+        class_id=state["class_id"],
+    )
+    sources = _load_sources(db, course.id, state["message"])
+    knowledge_point = _guess_knowledge_point(state["message"], sources)
+    state["profile"] = profile
+    state["sources"] = sources
+    state["knowledge_point"] = knowledge_point
+    record_step(
+        db,
+        state["run"],
+        step_name="build_context",
+        step_order=2,
+        output_summary={
+            "profile_available": profile is not None,
+            "source_ids": [source.id for source in sources],
+            "knowledge_point": knowledge_point,
+        },
+    )
+    return state
+
+
+def _generic_content_node(db: Session, course: Course, state: GenericResourceState) -> GenericResourceState:
+    sources = state.get("sources", [])
+    title, summary, render_payload, item_count = _fallback_resource_payload(
+        resource_type=state["resource_type"],
+        message=state["message"],
+        course=course,
+        knowledge_point=state["knowledge_point"],
+        sources=sources,
+    )
+    citations = [_citation(source) for source in sources]
+    state["title"] = title
+    state["summary"] = summary
+    state["render_payload"] = render_payload
+    state["citations"] = citations
+    state["item_count"] = item_count
+    state["confidence"] = 0.82 if citations else 0.5
+    record_step(
+        db,
+        state["run"],
+        step_name="generate_structured_content",
+        step_order=3,
+        output_summary={
+            "resource_type": state["resource_type"],
+            "item_count": item_count,
+            "citation_count": len(citations),
+        },
+    )
+    return state
+
+
+def _generic_render_node(db: Session, state: GenericResourceState) -> GenericResourceState:
+    resource_id = _new_id("res")
+    path, file_format = _render_generic_resource(
+        resource_id,
+        state["resource_type"],
+        state["title"],
+        state["render_payload"],
+        state["citations"],
+    )
+    resource = StudentGeneratedResource(
+        id=resource_id,
+        student_id=state["student_id"],
+        course_id=state["course_id"],
+        class_id=state["class_id"],
+        run_id=state["run_id"],
+        session_id=state.get("session_id"),
+        resource_type=state["resource_type"],
+        title=state["title"],
+        prompt=state["message"],
+        knowledge_point=state["knowledge_point"],
+        summary=state["summary"],
+        status="READY",
+        render_payload_json=_json_dumps(state["render_payload"]),
+        citations_json=_json_dumps(state["citations"]),
+        file_path=path,
+        file_format=file_format,
+        confidence=state["confidence"],
+        saved_to_resource_center=False,
+    )
+    db.add(resource)
+    state["resource"] = resource
+    state["file_path"] = path
+    state["file_format"] = file_format
+    record_step(
+        db,
+        state["run"],
+        step_name="render_resource_file_and_preview",
+        step_order=4,
+        output_summary={"resource_id": resource_id, "file_format": file_format},
+    )
+    return state
+
+
 async def generate_ppt_resource(
     db: Session,
     *,
@@ -603,6 +1179,72 @@ async def generate_ppt_resource(
         model_provider="OPENAI_COMPATIBLE" if get_settings().model_api_key else "RULE_FALLBACK",
         model_name=get_settings().model_name or "rule-template",
         prompt_version=PROMPT_VERSION,
+    )
+    return _serialize_resource(resource)
+
+
+async def generate_learning_resource(
+    db: Session,
+    *,
+    user: User,
+    class_id: str,
+    course: Course,
+    message: str,
+    resource_type: str,
+    session_id: str | None = None,
+) -> dict[str, Any]:
+    normalized_type = _validate_resource_type(resource_type)
+    if normalized_type == "PPT":
+        return await generate_ppt_resource(
+            db,
+            user=user,
+            class_id=class_id,
+            course=course,
+            message=message,
+            session_id=session_id,
+        )
+
+    state: GenericResourceState = {
+        "run_id": new_run_id(),
+        "student_id": user.id,
+        "class_id": class_id,
+        "course_id": course.id,
+        "session_id": session_id,
+        "message": message.strip(),
+        "resource_type": normalized_type,
+    }
+
+    if StateGraph is not None:
+        graph = StateGraph(GenericResourceState)
+        graph.add_node("create_run", lambda graph_state: _create_generic_run_node(db, graph_state))
+        graph.add_node("build_context", lambda graph_state: _generic_context_node(db, user, course, graph_state))
+        graph.add_node("generate_content", lambda graph_state: _generic_content_node(db, course, graph_state))
+        graph.add_node("render_resource", lambda graph_state: _generic_render_node(db, graph_state))
+        graph.set_entry_point("create_run")
+        graph.add_edge("create_run", "build_context")
+        graph.add_edge("build_context", "generate_content")
+        graph.add_edge("generate_content", "render_resource")
+        graph.add_edge("render_resource", END)
+        state = await graph.compile().ainvoke(state)
+    else:
+        state = _create_generic_run_node(db, state)
+        state = _generic_context_node(db, user, course, state)
+        state = _generic_content_node(db, course, state)
+        state = _generic_render_node(db, state)
+
+    resource = state["resource"]
+    finish_run(
+        db,
+        state["run"],
+        output={
+            "resource_id": resource.id,
+            "title": resource.title,
+            "resource_type": resource.resource_type,
+            "item_count": state["item_count"],
+        },
+        model_provider="RULE_FALLBACK",
+        model_name="rule-template",
+        prompt_version=GENERIC_PROMPT_VERSION,
     )
     return _serialize_resource(resource)
 
