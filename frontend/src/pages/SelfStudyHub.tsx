@@ -1,6 +1,6 @@
-import { type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, Bot, BookOpen, ChartNoAxesColumnIncreasing, Database, Flame, FolderOpen, Network, Route as RouteIcon } from "lucide-react";
+import { ArrowLeft, Bot, BookOpen, ChartNoAxesColumnIncreasing, ChevronsLeft, ChevronsRight, Database, Flame, FolderOpen, Network, Route as RouteIcon } from "lucide-react";
 import StudentRouteBreadcrumb from "../components/StudentRouteBreadcrumb";
 import SelfStudy from "./SelfStudy";
 import LearningProfile from "./LearningProfile";
@@ -42,15 +42,16 @@ export default function SelfStudyHub() {
 function SelfStudyShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const activePath = location.pathname.replace(/^\/self-study\/?/, "");
   const activeTab = selfStudyTabs.find((item) => item.path === activePath) ?? selfStudyTabs[0];
 
   return (
-    <div className="student-work-window self-study-window">
+    <div className={`student-work-window self-study-window${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
       <aside className="student-window-sidebar">
-        <button className="student-window-back" type="button" onClick={() => navigate("/")}>
+        <button className="student-window-back" type="button" onClick={() => navigate("/")} title="返回入口">
           <ArrowLeft size={17} />
-          返回入口
+          <span>返回入口</span>
         </button>
         <div className="student-window-title">
           <span className="teacher-soft-icon green"><RouteIcon size={22} /></span>
@@ -61,7 +62,7 @@ function SelfStudyShell({ children }: { children: ReactNode }) {
         </div>
         <nav className="student-window-nav" aria-label="自主学习导航">
           {selfStudyTabs.map((item) => (
-            <NavLink key={item.label} to={selfStudyPath(item.path)} end={item.path === ""}>
+            <NavLink key={item.label} to={selfStudyPath(item.path)} end={item.path === ""} title={item.label}>
               {item.icon}
               <span>{item.label}</span>
             </NavLink>
@@ -74,6 +75,20 @@ function SelfStudyShell({ children }: { children: ReactNode }) {
             <small>很棒哦，保持学习节奏！</small>
           </div>
         </div>
+        <button
+          className="student-window-rail-toggle"
+          type="button"
+          onClick={() => setSidebarCollapsed((current) => !current)}
+          aria-label={sidebarCollapsed ? "展开自主学习导航" : "收起自主学习导航"}
+          title={sidebarCollapsed ? "展开导航" : "收起导航"}
+        >
+          <span className="student-window-grip" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </span>
+          {sidebarCollapsed ? <ChevronsRight size={16} /> : <ChevronsLeft size={16} />}
+        </button>
       </aside>
       <main className="student-window-content">
         {activePath ? (

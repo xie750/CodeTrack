@@ -1236,6 +1236,17 @@ def seed_demo_data(db: Session) -> None:
             "删中间节点、position 等于长度、position 为负数。"
             "只测中间节点的代码几乎必然在头节点上出错，因为那是唯一没有前驱的位置。",
         ),
+        "kb_queue_fifo_basic": (
+            "队列的先进先出规则",
+            "队列是一种先进先出的线性结构，常用于任务排队、广度优先搜索和缓冲区。",
+            "HIGH",
+            "第三章 线性表",
+            ["栈与队列", "队列", "循环队列"],
+            "队列只允许在队尾入队，在队头出队，访问顺序遵循 FIFO。"
+            "顺序队列容易出现假溢出，因此常使用循环队列复用数组空间。"
+            "实现循环队列时需要明确 front、rear 的含义，并区分队空和队满状态。"
+            "常见处理方式包括保留一个空位，或额外记录元素数量。",
+        ),
     }
     for source_id, (title, summary, level, chapter, points, content) in sources.items():
         upsert(

@@ -249,6 +249,47 @@ export type StudentAiChatResponse = {
   assistant_message_id?: string;
 };
 
+export type GeneratedResourceCitation = StudentAiChatCitation;
+
+export type GeneratedResourceSlide = {
+  title: string;
+  subtitle?: string;
+  bullets: string[];
+  speaker_notes?: string;
+  citation_ids?: string[];
+  layout?: string;
+};
+
+export type GeneratedResource = {
+  id: string;
+  resource_type: "PPT" | string;
+  title: string;
+  status: string;
+  summary: string;
+  knowledge_point: string;
+  course_id: string;
+  run_id?: string | null;
+  confidence: number;
+  citations: GeneratedResourceCitation[];
+  render_payload: {
+    slides?: GeneratedResourceSlide[];
+    [key: string]: unknown;
+  };
+  file_format: string;
+  slide_count: number;
+  saved_to_resource_center: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+  saved_at: string | null;
+};
+
+export type GeneratePptResourceResponse = {
+  resource: GeneratedResource;
+  session: StudentAiChatSession;
+  user_message_id: string;
+  assistant_message_id: string;
+};
+
 export type StudentAiChatSession = {
   id: string;
   student_id: string;
@@ -268,7 +309,7 @@ export type StudentAiChatMessage = {
   role: "student" | "assistant" | string;
   content: string;
   status: string;
-  metadata: Partial<StudentAiChatResponse> & { error?: { code: string; message: string; details: Record<string, unknown> } };
+  metadata: Partial<StudentAiChatResponse> & { resource?: GeneratedResource; error?: { code: string; message: string; details: Record<string, unknown> } };
   run_id: string | null;
   created_at: string | null;
 };
@@ -836,6 +877,24 @@ export const api = {
       `/api/v1/student/ai-chat/sessions/${encodeURIComponent(sessionId)}`,
       { method: "DELETE" }
     ),
+  generatePptResource: (message: string, courseId?: string, sessionId?: string | null) =>
+    request<GeneratePptResourceResponse>("/api/v1/student/resources/ppt/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, course_id: courseId, session_id: sessionId })
+    }),
+  saveGeneratedResource: (resourceId: string) =>
+    request<GeneratedResource>(`/api/v1/student/resources/${encodeURIComponent(resourceId)}/save`, {
+      method: "POST"
+    }),
+  listGeneratedResources: (courseId?: string) => {
+    const params = new URLSearchParams();
+    if (courseId) params.set("course_id", courseId);
+    const suffix = params.toString() ? `?${params.toString()}` : "";
+    return request<{ items: GeneratedResource[] }>(`/api/v1/student/resources/generated${suffix}`);
+  },
+  generatedResourceDownloadUrl: (resourceId: string) =>
+    `/api/v1/student/resources/${encodeURIComponent(resourceId)}/download`,
   submitCode: async (taskId: string, language: string, sourceCode: string) => {
     const result = await request<SubmitResponse>(`/api/v1/tasks/${taskId}/submissions`, {
       method: "POST",

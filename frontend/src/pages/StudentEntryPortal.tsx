@@ -1,13 +1,22 @@
-import { useEffect, useMemo, useState, type PointerEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react";
 import { ArrowRight, BookOpenCheck, CalendarClock, CheckCircle2, FlaskConical, Loader2, LockKeyhole, Microscope, Sparkles, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api, apiCache, type LearningContext, type StudentTaskCard } from "../api";
 import type { AuthUser } from "../authSession";
 
+type StudentEntryTheme = "starmap" | "cloud";
+
+const STUDENT_ENTRY_THEME_KEY = "codetrack.student.entry.theme";
+
 type StudentEntryPortalProps = {
   authUser: AuthUser;
   accountSlot: ReactNode;
 };
+
+function readStoredEntryTheme(): StudentEntryTheme {
+  if (typeof window === "undefined") return "starmap";
+  return window.localStorage.getItem(STUDENT_ENTRY_THEME_KEY) === "cloud" ? "cloud" : "starmap";
+}
 
 function studentName(user: AuthUser) {
   return user.display_name || user.username || "同学";
@@ -26,7 +35,15 @@ function resetCardTilt(event: PointerEvent<HTMLElement>) {
   event.currentTarget.style.setProperty("--tilt-y", "0deg");
 }
 
-function StudentPortalTopbar({ accountSlot }: { accountSlot: ReactNode }) {
+function StudentPortalTopbar({
+  accountSlot,
+  theme,
+  onThemeChange
+}: {
+  accountSlot: ReactNode;
+  theme: StudentEntryTheme;
+  onThemeChange: (theme: StudentEntryTheme) => void;
+}) {
   return (
     <header className="teacher-entry-topbar">
       <button className="teacher-entry-brand" type="button" aria-label="CodeTrack Student">
@@ -38,6 +55,14 @@ function StudentPortalTopbar({ accountSlot }: { accountSlot: ReactNode }) {
           <i aria-hidden="true" />
           学生助学空间已连接
         </span>
+        <div className="student-entry-theme-toggle" aria-label="入口背景风格切换">
+          <button type="button" className={theme === "starmap" ? "active" : ""} aria-pressed={theme === "starmap"} onClick={() => onThemeChange("starmap")}>
+            星图
+          </button>
+          <button type="button" className={theme === "cloud" ? "active" : ""} aria-pressed={theme === "cloud"} onClick={() => onThemeChange("cloud")}>
+            云图
+          </button>
+        </div>
         {accountSlot}
       </div>
     </header>
@@ -199,10 +224,34 @@ function CourseDrawer({ open, onClose }: { open: boolean; onClose: () => void })
 export default function StudentEntryPortal({ authUser, accountSlot }: StudentEntryPortalProps) {
   const navigate = useNavigate();
   const [courseDrawerOpen, setCourseDrawerOpen] = useState(false);
+  const [entryTheme, setEntryTheme] = useState<StudentEntryTheme>(readStoredEntryTheme);
+
+  function changeEntryTheme(nextTheme: StudentEntryTheme) {
+    setEntryTheme(nextTheme);
+    window.localStorage.setItem(STUDENT_ENTRY_THEME_KEY, nextTheme);
+  }
 
   return (
-    <main className="teacher-entry-page">
-      <StudentPortalTopbar accountSlot={accountSlot} />
+    <main className="teacher-entry-page student-entry-page" data-entry-theme={entryTheme}>
+      <div className="student-entry-backdrop" aria-hidden="true">
+        <span className="student-entry-grid" />
+        <span className="student-entry-stream stream-a" />
+        <span className="student-entry-stream stream-b" />
+        {Array.from({ length: 18 }).map((_, index) => (
+          <span
+            className="student-entry-particle"
+            style={{
+              "--particle-x": `${(index * 37 + 11) % 100}%`,
+              "--particle-y": `${(index * 53 + 17) % 100}%`,
+              "--particle-size": `${2 + (index % 4)}px`,
+              "--particle-delay": `${-(index * 0.37).toFixed(2)}s`,
+              "--particle-duration": `${8 + (index % 5) * 1.4}s`
+            } as CSSProperties}
+            key={index}
+          />
+        ))}
+      </div>
+      <StudentPortalTopbar accountSlot={accountSlot} theme={entryTheme} onThemeChange={changeEntryTheme} />
 
       <section className="teacher-entry-hero" aria-labelledby="student-entry-title">
         <div className="teacher-entry-orbit" aria-hidden="true">

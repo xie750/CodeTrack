@@ -1,11 +1,13 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BookOpen,
+  BookmarkCheck,
   CalendarDays,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   Code2,
+  Download,
   Eye,
   FileCode2,
   FileText,
@@ -13,12 +15,15 @@ import {
   GraduationCap,
   LibraryBig,
   Network,
+  Presentation,
   RefreshCw,
   Search,
   Star,
   ThumbsUp,
   UserRound
 } from "lucide-react";
+import { api, GeneratedResource } from "../api";
+import { authHeaders } from "../authSession";
 
 type ResourceType = "视频教程" | "代码项目" | "文章文档" | "电子书" | "学习路线";
 type Difficulty = "全部" | "入门" | "初级" | "中级" | "高级";
@@ -152,6 +157,22 @@ export default function StudentResourceCenter() {
   const [difficulty, setDifficulty] = useState<Difficulty>("全部");
   const [query, setQuery] = useState("");
   const [savedIds, setSavedIds] = useState(() => new Set(["python-video-2024", "python-crash-course"]));
+  const [generatedResources, setGeneratedResources] = useState<GeneratedResource[]>([]);
+  const [generatedError, setGeneratedError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api.listGeneratedResources()
+      .then((result) => {
+        if (alive) setGeneratedResources(result.items);
+      })
+      .catch(() => {
+        if (alive) setGeneratedError("AI 生成资源暂时加载失败。");
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const visibleResources = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -176,6 +197,25 @@ export default function StudentResourceCenter() {
     });
   }
 
+  async function downloadGeneratedResource(resource: GeneratedResource) {
+    const response = await fetch(api.generatedResourceDownloadUrl(resource.id), {
+      headers: authHeaders()
+    });
+    if (!response.ok) {
+      setGeneratedError("资源导出失败，请稍后再试。");
+      return;
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${resource.title}.${resource.file_format.toLowerCase()}`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="student-resource-page">
       <header className="student-resource-header">
@@ -198,6 +238,45 @@ export default function StudentResourceCenter() {
             {item}
           </button>
         ))}
+      </section>
+
+      <section className="student-generated-resources" aria-label="AI 生成资源">
+        <header>
+          <div>
+            <h2>AI 生成资源</h2>
+            <p>从 AI 对话中加入资源中心的学习产物，可在这里管理和导出</p>
+          </div>
+          <span>{generatedResources.length} 个资源</span>
+        </header>
+        {generatedError ? <p className="student-generated-error">{generatedError}</p> : null}
+        {generatedResources.length ? (
+          <div className="student-generated-grid">
+            {generatedResources.map((resource) => (
+              <article className="student-generated-card" key={resource.id}>
+                <div className="student-generated-thumb">
+                  <Presentation size={24} />
+                  <strong>{resource.slide_count}</strong>
+                  <span>页 PPT</span>
+                </div>
+                <div className="student-generated-body">
+                  <h3>{resource.title}</h3>
+                  <p>{resource.summary}</p>
+                  <div className="student-generated-tags">
+                    <span><BookmarkCheck size={14} /> 已加入资源中心</span>
+                    <span>{resource.knowledge_point || "自主学习"}</span>
+                    <span>引用 {resource.citations.length} 条</span>
+                  </div>
+                </div>
+                <button type="button" onClick={() => downloadGeneratedResource(resource)}>
+                  <Download size={16} />
+                  导出
+                </button>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="student-generated-empty">还没有加入资源中心的 AI 生成资源。可以在 AI 助学中生成 PPT 后点击书签保存。</p>
+        )}
       </section>
 
       <div className="student-resource-layout">

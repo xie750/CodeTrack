@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Drawer } from "antd";
+import { Alert, Drawer, Modal } from "antd";
 import {
+  Bookmark,
+  BookOpen,
   Check,
   FileQuestion,
   FileText,
@@ -22,6 +24,7 @@ import {
 } from "lucide-react";
 import {
   api,
+  GeneratedResource,
   LearningContext,
   StudentAiChatCitation,
   StudentAiChatMessage,
@@ -47,15 +50,17 @@ type AiChatTurn = {
   sourceUsed?: boolean;
   safetyNote?: string;
   modelName?: string;
+  resource?: GeneratedResource;
+  resourceSaving?: boolean;
 };
 
 const fallbackSuggestedActions = ["继续解释", "生成练习", "保存为笔记", "只给一级提示"];
 const resourceOutputActions = [
-  { label: "PPT", icon: <Presentation size={15} /> },
-  { label: "思维导图", icon: <Waypoints size={15} /> },
-  { label: "文档", icon: <FileText size={15} /> },
-  { label: "练习题", icon: <FileQuestion size={15} /> },
-  { label: "播客", icon: <Podcast size={15} /> }
+  { label: "PPT", type: "PPT", icon: <Presentation size={15} />, enabled: true },
+  { label: "思维导图", type: "MIND_MAP", icon: <Waypoints size={15} />, enabled: false },
+  { label: "文档", type: "DOCUMENT", icon: <FileText size={15} />, enabled: false },
+  { label: "练习题", type: "PRACTICE_SET", icon: <FileQuestion size={15} />, enabled: false },
+  { label: "播客", type: "PODCAST_SCRIPT", icon: <Podcast size={15} />, enabled: false }
 ];
 const openingPrompts = [
   "栈和队列的区别与场景",
@@ -63,6 +68,7 @@ const openingPrompts = [
   "二叉树遍历方式对比",
   "动态规划的核心思想"
 ];
+const previewLimit = 76;
 
 function nowLabel() {
   return new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
@@ -119,6 +125,17 @@ function responseToTurn(id: string, result: StudentAiChatResponse): AiChatTurn {
   };
 }
 
+function compactPreview(content: string) {
+  const text = content.replace(/\s+/g, " ").trim();
+  if (!text) return "正在生成回答...";
+  return text.length > previewLimit ? `${text.slice(0, previewLimit)}...` : text;
+}
+
+function scrollTurnIntoView(turnId: string) {
+  const target = document.querySelector<HTMLElement>(`[data-ai-turn-id="${turnId}"]`);
+  target?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
 function confidenceBadge(turn: AiChatTurn) {
   if (!turn.sourceUsed) return "通用回答";
   return `置信度 ${Math.round((turn.confidence ?? 0.7) * 100)}%`;
@@ -144,8 +161,214 @@ function messageToTurn(message: StudentAiChatMessage): AiChatTurn {
     profileUsed: typeof metadata.profile_used === "boolean" ? metadata.profile_used : undefined,
     sourceUsed: typeof metadata.source_used === "boolean" ? metadata.source_used : undefined,
     safetyNote: typeof metadata.safety_note === "string" ? metadata.safety_note : undefined,
-    modelName: typeof metadata.model_name === "string" ? metadata.model_name : undefined
+    modelName: typeof metadata.model_name === "string" ? metadata.model_name : undefined,
+    resource: metadata.resource
   };
+}
+
+function resourceToTurn(id: string, resource: GeneratedResource): AiChatTurn {
+  return {
+    id,
+    role: "assistant",
+    content: `已生成资源：${resource.title}`,
+    time: nowLabel(),
+    confidence: resource.confidence,
+    citations: resource.citations,
+    suggestedActions: ["加入资源中心", "打开预览"],
+    profileUsed: true,
+    sourceUsed: Boolean(resource.citations.length),
+    safetyNote: "AI 生成资源已基于课程资料进行引用校验，建议结合课堂讲义复核关键概念。",
+    modelName: "LangGraph + python-pptx",
+    resource
+  };
+}
+
+function AiRunSummary({
+  turn,
+  courseName,
+  activePoint,
+  frequentError
+}: {
+  turn: AiChatTurn;
+  courseName: string;
+  activePoint: string;
+  frequentError: string;
+}) {
+  const citationCount = turn.citations?.length ?? 0;
+  const actionCount = turn.suggestedActions?.length || fallbackSuggestedActions.length;
+  const sourceState = turn.loading ? "running" : turn.sourceUsed ? "done" : "muted";
+  const profileState = turn.loading ? "running" : turn.profileUsed ? "done" : "muted";
+
+  return (
+    <div className="ai-run-summary" aria-label="AI 回答处理过程">
+      <article className={turn.loading ? "running" : turn.error ? "error" : "done"}>
+        <span><Check size={15} /></span>
+        <div>
+          <strong>{turn.loading ? "正在组织回答" : turn.error ? "需要处理" : "回答已生成"}</strong>
+          <small>{turn.loading ? "流式输出中" : turn.error ? "连接或配置异常" : `完成于 ${turn.time}`}</small>
+        </div>
+      </article>
+      <article className={sourceState}>
+        <span><BookOpen size={15} /></span>
+        <div>
+          <strong>{turn.loading ? "检索课程知识库" : citationCount ? `引用 ${citationCount} 个来源` : "未命中课程引用"}</strong>
+          <small>{turn.loading ? courseName : citationCount ? courseName : "先用通用讲解兜底"}</small>
+        </div>
+      </article>
+      <article className={profileState}>
+        <span><FileText size={15} /></span>
+        <div>
+          <strong>{turn.loading ? "读取学习画像" : turn.profileUsed ? "已结合学习画像" : "画像未参与"}</strong>
+          <small>{turn.loading || turn.profileUsed ? `${activePoint} / ${frequentError}` : "可继续补充学习记录"}</small>
+        </div>
+      </article>
+      {!turn.loading && !turn.error ? (
+        <article className="action">
+          <span><PenLine size={15} /></span>
+          <div>
+            <strong>{actionCount} 个下一步动作</strong>
+            <small>可追问、练习或保存资料</small>
+          </div>
+        </article>
+      ) : null}
+    </div>
+  );
+}
+
+function AiThreadOutline({ turns }: { turns: AiChatTurn[] }) {
+  if (!turns.length) return null;
+
+  return (
+    <aside className="ai-thread-outline" aria-label="对话时间轴">
+      {turns.map((turn, index) => (
+        <button
+          type="button"
+          className={`ai-thread-dot ${turn.role}${turn.loading ? " loading" : ""}${turn.error ? " error" : ""}`}
+          key={turn.id}
+          aria-label={`定位到第 ${index + 1} 条${turn.role === "student" ? "提问" : "回答"}`}
+          onClick={() => scrollTurnIntoView(turn.id)}
+        >
+          <i aria-hidden="true" />
+          <span className="ai-thread-preview" role="tooltip">
+            <strong>{turn.role === "student" ? "你的提问" : turn.loading ? "AI 正在回答" : "AI 助学导师"}</strong>
+            <small>{compactPreview(turn.content)}</small>
+          </span>
+        </button>
+      ))}
+    </aside>
+  );
+}
+
+function GeneratedResourceCard({
+  resource,
+  saving,
+  onPreview,
+  onSave
+}: {
+  resource: GeneratedResource;
+  saving?: boolean;
+  onPreview: () => void;
+  onSave: () => void;
+}) {
+  const slides = resource.render_payload.slides ?? [];
+  const firstSlide = slides[0];
+  return (
+    <div className="ai-resource-card-shell">
+      <button type="button" className="ai-resource-card-main" onClick={onPreview}>
+        <span className="ai-resource-thumb-preview">
+          <i />
+          <strong>{firstSlide?.title ?? resource.title}</strong>
+          <small>{firstSlide?.subtitle ?? `${resource.slide_count} 页演示文稿`}</small>
+        </span>
+        <span className="ai-resource-card-copy">
+          <b>{resource.title}</b>
+          <small>{resource.resource_type} · {resource.slide_count} 页 · {Math.round(resource.confidence * 100)}% 置信度</small>
+          <em>{resource.summary}</em>
+        </span>
+      </button>
+      <button
+        type="button"
+        className={`ai-resource-bookmark${resource.saved_to_resource_center ? " saved" : ""}`}
+        aria-label={resource.saved_to_resource_center ? "已加入资源中心" : "加入资源中心"}
+        title={resource.saved_to_resource_center ? "已加入资源中心" : "加入资源中心"}
+        onClick={onSave}
+        disabled={saving || resource.saved_to_resource_center}
+      >
+        <Bookmark size={19} fill={resource.saved_to_resource_center ? "currentColor" : "none"} />
+      </button>
+    </div>
+  );
+}
+
+function ResourcePreviewModal({
+  resource,
+  onClose
+}: {
+  resource: GeneratedResource | null;
+  onClose: () => void;
+}) {
+  const [activeSlide, setActiveSlide] = useState(0);
+  const slides = resource?.render_payload.slides ?? [];
+  const slide = slides[Math.min(activeSlide, Math.max(slides.length - 1, 0))];
+  const citationMap = new Map((resource?.citations ?? []).map((item) => [item.source_id, item]));
+
+  useEffect(() => {
+    setActiveSlide(0);
+  }, [resource?.id]);
+
+  return (
+    <Modal
+      open={Boolean(resource)}
+      onCancel={onClose}
+      footer={null}
+      centered
+      width={1040}
+      className="ai-resource-preview-modal"
+      title={resource ? `${resource.title} · 实时预览` : ""}
+    >
+      {resource && slide ? (
+        <div className="ai-resource-preview">
+          <aside className="ai-resource-slide-nav" aria-label="幻灯片页码">
+            {slides.map((item, index) => (
+              <button type="button" key={`${resource.id}_${index}`} className={index === activeSlide ? "active" : ""} onClick={() => setActiveSlide(index)}>
+                <span>{index + 1}</span>
+                <strong>{item.title}</strong>
+              </button>
+            ))}
+          </aside>
+          <main className="ai-resource-stage">
+            <section className={`ai-preview-slide ${slide.layout ?? "content"}`}>
+              <header>
+                <small>{resource.knowledge_point || "自主学习资源"}</small>
+                <h2>{slide.title}</h2>
+                {slide.subtitle ? <p>{slide.subtitle}</p> : null}
+              </header>
+              <ul>
+                {slide.bullets.map((bullet, index) => (
+                  <li key={`${slide.title}_${index}`}>{bullet}</li>
+                ))}
+              </ul>
+              {slide.speaker_notes ? (
+                <footer>
+                  <strong>讲稿提示</strong>
+                  <p>{slide.speaker_notes}</p>
+                </footer>
+              ) : null}
+            </section>
+            <section className="ai-resource-preview-meta">
+              <span>{activeSlide + 1}/{slides.length}</span>
+              <span>AI 生成</span>
+              <span>置信度 {Math.round(resource.confidence * 100)}%</span>
+              {(slide.citation_ids ?? []).map((sourceId) => {
+                const source = citationMap.get(sourceId);
+                return source ? <span key={sourceId}>引用：{source.title}</span> : null;
+              })}
+            </section>
+          </main>
+        </div>
+      ) : null}
+    </Modal>
+  );
 }
 
 export default function AiTutor() {
@@ -163,6 +386,8 @@ export default function AiTutor() {
   const [sessions, setSessions] = useState<StudentAiChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [turns, setTurns] = useState<AiChatTurn[]>([]);
+  const [activeResourceType, setActiveResourceType] = useState<"PPT" | null>(null);
+  const [previewResource, setPreviewResource] = useState<GeneratedResource | null>(null);
   const hydratedRef = useRef(false);
   const threadRef = useRef<HTMLDivElement | null>(null);
 
@@ -288,6 +513,10 @@ export default function AiTutor() {
   }
 
   async function sendMessage(messageOverride?: string) {
+    if (activeResourceType === "PPT") {
+      await generatePpt(messageOverride);
+      return;
+    }
     const message = (messageOverride ?? draft).trim();
     if (!message || sending) return;
     const userTurn: AiChatTurn = {
@@ -380,6 +609,77 @@ export default function AiTutor() {
     }
   }
 
+  async function generatePpt(messageOverride?: string) {
+    const message = (messageOverride ?? draft).trim();
+    if (!message || sending) return;
+    const userTurn: AiChatTurn = {
+      id: `student_${Date.now()}`,
+      role: "student",
+      content: message,
+      time: nowLabel()
+    };
+    const pendingId = `assistant_${Date.now()}`;
+    const pendingTurn: AiChatTurn = {
+      id: pendingId,
+      role: "assistant",
+      content: "正在生成 PPT 资源...",
+      time: nowLabel(),
+      loading: true
+    };
+
+    setDraft("");
+    setSending(true);
+    setError(null);
+    setTurns((current) => [...current, userTurn, pendingTurn]);
+    try {
+      const result = await api.generatePptResource(message, courseId, currentSessionId);
+      setCurrentSessionId(result.session.id);
+      setSessions((current) => {
+        const withoutCurrent = current.filter((item) => item.id !== result.session.id);
+        return [result.session, ...withoutCurrent];
+      });
+      setTurns((current) => current.map((turn) => (
+        turn.id === pendingId ? resourceToTurn(pendingId, result.resource) : turn
+      )));
+      await refreshSessions(result.session.course_id ?? courseId);
+    } catch (err) {
+      setTurns((current) => current.map((turn) => (
+        turn.id === pendingId
+          ? {
+              id: pendingId,
+              role: "assistant",
+              content: errorMessage(err),
+              time: nowLabel(),
+              error: true,
+              suggestedActions: ["检查配置", "稍后重试"]
+            }
+          : turn
+      )));
+    } finally {
+      setSending(false);
+      setActiveResourceType(null);
+    }
+  }
+
+  async function saveResource(resource: GeneratedResource) {
+    if (resource.saved_to_resource_center) return;
+    setTurns((current) => current.map((turn) => (
+      turn.resource?.id === resource.id ? { ...turn, resourceSaving: true } : turn
+    )));
+    try {
+      const saved = await api.saveGeneratedResource(resource.id);
+      setTurns((current) => current.map((turn) => (
+        turn.resource?.id === resource.id ? { ...turn, resource: saved, resourceSaving: false } : turn
+      )));
+      if (previewResource?.id === resource.id) setPreviewResource(saved);
+    } catch (err) {
+      setError(errorMessage(err));
+      setTurns((current) => current.map((turn) => (
+        turn.resource?.id === resource.id ? { ...turn, resourceSaving: false } : turn
+      )));
+    }
+  }
+
   return (
     <div className={`ai-workspace-page${turns.length ? " ai-has-chat" : " ai-empty-chat"}`}>
       <header className="ai-workspace-header">
@@ -400,6 +700,7 @@ export default function AiTutor() {
       {error ? <Alert className="ai-workspace-alert" type="warning" message={error} showIcon /> : null}
 
       <main className="ai-learning-workspace" aria-label="AI Learning Workspace">
+        <AiThreadOutline turns={turns} />
         <div className="ai-thread" ref={threadRef}>
           {loadingSession ? <div className="ai-chat-loading">正在恢复历史会话...</div> : null}
           {!loadingSession && !turns.length ? (
@@ -422,14 +723,14 @@ export default function AiTutor() {
           ) : null}
           {turns.map((turn) => (
             turn.role === "student" ? (
-              <article className="ai-turn ai-turn-user" key={turn.id}>
+              <article className="ai-turn ai-turn-user" key={turn.id} data-ai-turn-id={turn.id}>
                 <div className="ai-user-bubble">
                   {turn.content}
                   <time>{turn.time}</time>
                 </div>
               </article>
             ) : (
-              <article className="ai-turn ai-turn-assistant" key={turn.id}>
+              <article className="ai-turn ai-turn-assistant" key={turn.id} data-ai-turn-id={turn.id}>
                 <div className="ai-assistant-avatar" aria-hidden="true">
                   <img src={robotImg} alt="" />
                 </div>
@@ -438,6 +739,7 @@ export default function AiTutor() {
                     <strong>AI 助学导师</strong>
                     <span><Check size={14} /> {turn.loading ? (turn.content ? "回答中" : "思考中") : turn.error ? "需要处理" : "思考完成"}</span>
                   </header>
+                  <AiRunSummary turn={turn} courseName={courseName} activePoint={activePoint} frequentError={frequentError} />
 
                   {turn.loading && !turn.content ? (
                     <div className="ai-answer-loading">
@@ -454,6 +756,18 @@ export default function AiTutor() {
                         ))}
                         {turn.loading ? <span className="ai-stream-caret" /> : null}
                       </section>
+
+                      {turn.resource && !turn.loading ? (
+                        <section>
+                          <h2>生成资源</h2>
+                          <GeneratedResourceCard
+                            resource={turn.resource}
+                            saving={turn.resourceSaving}
+                            onPreview={() => setPreviewResource(turn.resource ?? null)}
+                            onSave={() => saveResource(turn.resource as GeneratedResource)}
+                          />
+                        </section>
+                      ) : null}
 
                       {!turn.error && !turn.loading ? (
                         <section>
@@ -509,7 +823,17 @@ export default function AiTutor() {
         <footer className="ai-sticky-composer" aria-label="AI 输入区">
           <div className="ai-prompt-row">
             {resourceOutputActions.map((action) => (
-              <button type="button" className="ai-resource-action" key={action.label} aria-disabled="true" title="资源生成入口待接入">
+              <button
+                type="button"
+                className={`ai-resource-action${activeResourceType === action.type ? " active" : ""}`}
+                key={action.label}
+                aria-disabled={!action.enabled ? "true" : undefined}
+                disabled={!action.enabled || sending}
+                title={action.enabled ? `生成${action.label}` : "后续接入"}
+                onClick={() => {
+                  if (action.type === "PPT") setActiveResourceType((current) => current === "PPT" ? null : "PPT");
+                }}
+              >
                 {action.icon}
                 {action.label}
               </button>
@@ -525,7 +849,7 @@ export default function AiTutor() {
                   sendMessage();
                 }
               }}
-              placeholder={`有问题，尽管问 AI 助学导师。当前课程：${courseName}；薄弱点：${activePoint}；常见错因：${frequentError}`}
+              placeholder={activeResourceType === "PPT" ? "输入 PPT 生成要求，例如：帮我生成关于队列的讲解 PPT" : `有问题，尽管问 AI 助学导师。当前课程：${courseName}；薄弱点：${activePoint}；常见错因：${frequentError}`}
               rows={2}
               disabled={sending || loadingSession}
             />
@@ -605,6 +929,7 @@ export default function AiTutor() {
           {!filteredSessions.length ? <p className="ai-session-empty">还没有历史会话，发送第一条问题后会自动保存。</p> : null}
         </div>
       </Drawer>
+      <ResourcePreviewModal resource={previewResource} onClose={() => setPreviewResource(null)} />
     </div>
   );
 }

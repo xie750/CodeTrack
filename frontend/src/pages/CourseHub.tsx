@@ -8,6 +8,8 @@ import {
   CalendarDays,
   ChartNoAxesColumnIncreasing,
   CheckCircle2,
+  ChevronsLeft,
+  ChevronsRight,
   ClipboardList,
   Clock3,
   Code2,
@@ -115,6 +117,7 @@ export default function CourseHub({ onOpenWorkspace }: CourseHubProps) {
 function CourseHubShell({ courseId, children }: { courseId: string; children: ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [context, setContext] = useState<LearningContext | null>(apiCache.peekLearningContext());
   const course = context?.courses.find((item) => item.course_id === courseId);
   const basePath = coursePath(courseId);
@@ -132,11 +135,11 @@ function CourseHubShell({ courseId, children }: { courseId: string; children: Re
   }, []);
 
   return (
-    <div className="student-work-window">
+    <div className={`student-work-window${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
       <aside className="student-window-sidebar">
-        <button className="student-window-back" type="button" onClick={() => navigate("/")}>
+        <button className="student-window-back" type="button" onClick={() => navigate("/")} title="返回入口">
           <ArrowLeft size={17} />
-          返回入口
+          <span>返回入口</span>
         </button>
         <div className="student-window-title">
           <span className="teacher-soft-icon blue"><GraduationCap size={22} /></span>
@@ -147,12 +150,26 @@ function CourseHubShell({ courseId, children }: { courseId: string; children: Re
         </div>
         <nav className="student-window-nav" aria-label="课程内导航">
           {courseTabs.map((item) => (
-            <NavLink key={item.label} to={coursePath(courseId, item.path)} end={item.path === ""}>
+            <NavLink key={item.label} to={coursePath(courseId, item.path)} end={item.path === ""} title={item.label}>
               {item.icon}
               <span>{item.label}</span>
             </NavLink>
           ))}
         </nav>
+        <button
+          className="student-window-rail-toggle"
+          type="button"
+          onClick={() => setSidebarCollapsed((current) => !current)}
+          aria-label={sidebarCollapsed ? "展开课程导航" : "收起课程导航"}
+          title={sidebarCollapsed ? "展开导航" : "收起导航"}
+        >
+          <span className="student-window-grip" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </span>
+          {sidebarCollapsed ? <ChevronsRight size={16} /> : <ChevronsLeft size={16} />}
+        </button>
       </aside>
       <main className="student-window-content">
         <StudentRouteBreadcrumb

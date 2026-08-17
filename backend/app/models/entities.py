@@ -995,6 +995,36 @@ class AiTutorMessage(Base):
     session: Mapped[AiTutorSession] = relationship(back_populates="messages")
 
 
+class StudentGeneratedResource(Base):
+    __tablename__ = "student_generated_resources"
+    __table_args__ = (
+        Index("ix_student_generated_resources_student_saved", "student_id", "saved_to_resource_center", "updated_at"),
+        Index("ix_student_generated_resources_student_course", "student_id", "course_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    student_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id"), nullable=False)
+    class_id: Mapped[str] = mapped_column(ForeignKey("classes.id"), nullable=False)
+    run_id: Mapped[str | None] = mapped_column(ForeignKey("agent_runs.id"))
+    session_id: Mapped[str | None] = mapped_column(ForeignKey("ai_tutor_sessions.id"))
+    resource_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    title: Mapped[str] = mapped_column(String(180), nullable=False)
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    knowledge_point: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="READY")
+    render_payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    citations_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    file_path: Mapped[str | None] = mapped_column(Text)
+    file_format: Mapped[str] = mapped_column(String(20), nullable=False, default="PPTX")
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.72)
+    saved_to_resource_center: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    saved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
 class IdempotencyRecord(Base):
     __tablename__ = "idempotency_records"
     __table_args__ = (
