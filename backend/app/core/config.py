@@ -30,6 +30,20 @@ class Settings(BaseSettings):
     resource_max_upload_mb: int = Field(default=20)
     api_prefix: str = Field(default="/api/v1")
 
+    # Optional external PPT renderer. When disabled or unavailable, student
+    # resource generation falls back to the local PPTX renderer.
+    presenton_enabled: bool = Field(default=False)
+    presenton_base_url: str | None = Field(default=None)
+    presenton_public_base_url: str | None = Field(default=None)
+    presenton_api_key: str | None = Field(default=None)
+    presenton_auth_type: str = Field(default="bearer")
+    presenton_username: str | None = Field(default=None)
+    presenton_password: str | None = Field(default=None)
+    presenton_template: str | None = Field(default=None)
+    presenton_language: str = Field(default="Chinese")
+    presenton_slide_count: int = Field(default=6)
+    presenton_timeout_seconds: int = Field(default=180)
+
     redis_url: str = Field(default="redis://localhost:6379/0")
     s3_endpoint: str = Field(default="http://localhost:9000")
     s3_access_key: str = Field(default="minioadmin")

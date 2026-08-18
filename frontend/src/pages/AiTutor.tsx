@@ -169,7 +169,8 @@ function messageToTurn(message: StudentAiChatMessage): AiChatTurn {
 }
 
 function resourceToTurn(id: string, resource: GeneratedResource): AiChatTurn {
-  const label = resource.resource_type_label ?? resourceTypeLabels[resource.resource_type] ?? resource.resource_type;
+  const modelName = generatedResourceModelName(resource);
+  const presentonError = resource.render_payload.metadata?.presenton_error;
   return {
     id,
     role: "assistant",
@@ -180,10 +181,19 @@ function resourceToTurn(id: string, resource: GeneratedResource): AiChatTurn {
     suggestedActions: ["加入资源中心", "打开预览"],
     profileUsed: true,
     sourceUsed: Boolean(resource.citations.length),
-    safetyNote: "AI 生成资源已基于课程资料进行引用校验，建议结合课堂讲义复核关键概念。",
-    modelName: resource.resource_type === "PPT" ? "LangGraph + python-pptx" : `LangGraph + ${label}渲染器`,
+    safetyNote: presentonError ? `Presenton 暂未生成成功，已自动回退到本地 PPTX 渲染器。原因：${presentonError}` : "AI 生成资源已基于课程资料进行引用校验，建议结合课堂讲义复核关键概念。",
+    modelName,
     resource
   };
+}
+
+function generatedResourceModelName(resource: GeneratedResource) {
+  const renderer = resource.render_payload.metadata?.renderer;
+  if (renderer === "presenton") return "LangGraph + Presenton";
+  if (renderer === "local_pptx") return "LangGraph + python-pptx";
+  if (resource.resource_type === "PPT") return "LangGraph + PPT renderer";
+  const label = resource.resource_type_label ?? resourceTypeLabels[resource.resource_type] ?? resource.resource_type;
+  return `LangGraph + ${label}渲染器`;
 }
 
 function resourceMetric(resource: GeneratedResource) {
@@ -200,6 +210,7 @@ function resourceMetric(resource: GeneratedResource) {
 function resourcePreviewTitle(resource: GeneratedResource) {
   const payload = resource.render_payload;
   return (
+    payload.presenton_slides?.[0]?.title ||
     payload.slides?.[0]?.title ||
     payload.sections?.[0]?.heading ||
     payload.nodes?.[0]?.label ||
@@ -211,6 +222,10 @@ function resourcePreviewTitle(resource: GeneratedResource) {
 }
 
 function resourcePreviewSubtitle(resource: GeneratedResource) {
+  if (resource.render_payload.metadata?.renderer === "presenton") {
+    const count = resource.render_payload.presenton_slides?.length || resource.item_count || resource.slide_count;
+    return `Presenton · ${count} 页`;
+  }
   return resource.resource_type_label ?? resourceTypeLabels[resource.resource_type] ?? resource.resource_type;
 }
 
@@ -302,18 +317,20 @@ function GeneratedResourceCard({
   onSave: () => void;
 }) {
   const metric = resourceMetric(resource);
+  const presentonSlide = resource.render_payload.presenton_slides?.[0];
   return (
     <div className="ai-resource-card-shell">
       <button type="button" className="ai-resource-card-main" onClick={onPreview}>
-        <span className="ai-resource-thumb-preview">
+        <span className={`ai-resource-thumb-preview${presentonSlide ? " presenton" : ""}`}>
           <i />
+          {presentonSlide?.image_url ? <img src={presentonSlide.image_url} alt="" /> : null}
           <strong>{resourcePreviewTitle(resource)}</strong>
           <small>{resourcePreviewSubtitle(resource)} · {resource.file_format}</small>
         </span>
         <span className="ai-resource-card-copy">
           <b>{resource.title}</b>
           <small>{resourcePreviewSubtitle(resource)} · {metric} · {Math.round(resource.confidence * 100)}% 置信度</small>
-          <em>{resource.summary}</em>
+          <em>{presentonSlide?.summary || resource.summary}</em>
         </span>
       </button>
       <button
@@ -339,15 +356,18 @@ function ResourcePreviewModal({
 }) {
   const [activeItem, setActiveItem] = useState(0);
   const payload = resource?.render_payload;
+  const presentonSlides = payload?.presenton_slides ?? [];
   const slides = payload?.slides ?? [];
   const sections = payload?.sections ?? [];
   const nodes = payload?.nodes ?? [];
   const questions = payload?.questions ?? [];
   const cards = payload?.cards ?? [];
   const segments = payload?.segments ?? [];
-  const navItems = slides.length
-    ? slides.map((item) => item.title)
-    : sections.length
+  const navItems = presentonSlides.length
+    ? presentonSlides.map((item) => item.title)
+    : slides.length
+      ? slides.map((item) => item.title)
+      : sections.length
       ? sections.map((item) => item.heading)
       : nodes.length
         ? nodes.filter((item) => item.level <= 1).map((item) => item.label)
@@ -363,6 +383,7 @@ function ResourcePreviewModal({
   }, [resource?.id]);
 
   const activeIndex = Math.min(activeItem, Math.max(navItems.length - 1, 0));
+  const activePresentonSlide = presentonSlides[activeIndex];
   const activeSlide = slides[activeIndex];
   const activeSection = sections[activeIndex];
   const activeQuestion = questions[activeIndex];
@@ -398,7 +419,22 @@ function ResourcePreviewModal({
             ))}
           </aside>
           <main className="ai-resource-stage">
-            {activeSlide ? (
+            {activePresentonSlide ? (
+              <section className="ai-preview-presenton-slide">
+                <header>
+                  <small>{activePresentonSlide.layout_group || "Presenton 生成"}</small>
+                  <h2>{activePresentonSlide.title}</h2>
+                </header>
+                {activePresentonSlide.image_url ? <img src={activePresentonSlide.image_url} alt="" /> : null}
+                <p>{activePresentonSlide.summary}</p>
+                {activePresentonSlide.speaker_note ? (
+                  <footer>
+                    <strong>讲稿提示</strong>
+                    <p>{activePresentonSlide.speaker_note}</p>
+                  </footer>
+                ) : null}
+              </section>
+            ) : activeSlide ? (
               <section className={`ai-preview-slide ${activeSlide.layout ?? "content"}`}>
                 <header>
                   <small>{resource.knowledge_point || "自主学习资源"}</small>

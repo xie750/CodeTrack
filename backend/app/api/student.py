@@ -222,6 +222,28 @@ def serialize_student_knowledge_graph(graph: StudentKnowledgeGraph, course: Cour
     }
 
 
+def generated_resource_model_name(resource: dict) -> str:
+    payload = resource.get("render_payload") if isinstance(resource, dict) else {}
+    metadata = payload.get("metadata") if isinstance(payload, dict) else {}
+    renderer = metadata.get("renderer") if isinstance(metadata, dict) else None
+    if renderer == "presenton":
+        return "LangGraph + Presenton"
+    if renderer == "local_pptx":
+        return "LangGraph + python-pptx"
+    if resource.get("resource_type") == "PPT":
+        return "LangGraph + PPT renderer"
+    label = resource.get("resource_type_label") or resource.get("resource_type") or "资源"
+    return f"LangGraph + {label}渲染器"
+
+
+def generated_resource_safety_note(resource: dict) -> str:
+    payload = resource.get("render_payload") if isinstance(resource, dict) else {}
+    metadata = payload.get("metadata") if isinstance(payload, dict) else {}
+    if isinstance(metadata, dict) and metadata.get("presenton_error"):
+        return f"Presenton 暂未生成成功，已自动回退到本地 PPTX 渲染器。原因：{metadata.get('presenton_error')}"
+    return "AI 生成资源已基于课程资料进行引用校验，建议结合课堂讲义复核关键概念。"
+
+
 @router.get("/learning-context")
 def learning_context(db: Session = Depends(get_db), user: User = Depends(current_user)):
     require_role(user, "STUDENT")
@@ -448,9 +470,9 @@ async def student_generate_ppt_resource(
             "suggested_actions": ["加入资源中心", "打开预览"],
             "profile_used": True,
             "source_used": bool(resource["citations"]),
-            "safety_note": "AI 生成资源已基于课程资料进行引用校验，建议结合课堂讲义复核关键概念。",
+            "safety_note": generated_resource_safety_note(resource),
             "model_provider": "WORKFLOW",
-            "model_name": "LangGraph + python-pptx",
+            "model_name": generated_resource_model_name(resource),
         },
         run_id=resource.get("run_id"),
     )
@@ -515,9 +537,9 @@ async def student_generate_resource(
             "suggested_actions": ["加入资源中心", "打开预览"],
             "profile_used": True,
             "source_used": bool(resource["citations"]),
-            "safety_note": "AI 生成资源已基于课程资料进行引用校验，建议结合课堂讲义复核关键概念。",
+            "safety_note": generated_resource_safety_note(resource),
             "model_provider": "WORKFLOW",
-            "model_name": "LangGraph + resource renderer",
+            "model_name": generated_resource_model_name(resource),
         },
         run_id=resource.get("run_id"),
     )

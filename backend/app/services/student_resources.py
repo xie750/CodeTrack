@@ -2,6 +2,7 @@ import json
 import re
 from pathlib import Path
 from typing import Any, TypedDict
+from urllib.parse import urljoin
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -22,6 +23,12 @@ from backend.app.models import (
 )
 from backend.app.models.entities import utc_now
 from backend.app.services.learner_profile import serialize_learner_profile
+from backend.app.services.presenton_client import (
+    PresentonError,
+    fetch_presenton_slides_sync,
+    generate_presenton_pptx,
+    presenton_configured,
+)
 from backend.app.services.submissions import iso
 
 try:
@@ -433,6 +440,74 @@ def _render_pptx(resource_id: str, title: str, slides: list[dict[str, Any]], cit
     return str(path)
 
 
+async def _render_ppt_resource_file(
+    db: Session,
+    state: PptResourceState,
+    resource_id: str,
+) -> tuple[str, str, dict[str, Any]]:
+    settings = get_settings()
+    metadata: dict[str, Any] = {"renderer": "local_pptx"}
+    if presenton_configured(settings):
+        output_dir = Path(settings.resource_storage_dir) / "generated" / "presenton"
+        try:
+            result = await generate_presenton_pptx(
+                resource_id=resource_id,
+                title=state["title"],
+                message=state["message"],
+                knowledge_point=state["knowledge_point"],
+                slides=state["slides"],
+                citations=state["citations"],
+                output_dir=output_dir,
+                settings=settings,
+            )
+        except PresentonError as exc:
+            metadata["presenton_error"] = str(exc)[:400]
+            record_step(
+                db,
+                state["run"],
+                step_name="render_presenton_pptx",
+                step_order=5,
+                status="FAILED",
+                output_summary={"fallback": True, "reason": str(exc)[:240]},
+            )
+        else:
+            provider_payload = result.get("provider_payload") if isinstance(result.get("provider_payload"), dict) else {}
+            metadata.update(
+                {
+                    "renderer": "presenton",
+                    "presenton_presentation_id": provider_payload.get("presentation_id"),
+                    "presenton_edit_path": provider_payload.get("edit_path"),
+                    "presenton_edit_url": result.get("edit_url"),
+                    "presenton_download_path": result.get("download_path"),
+                    "presenton_download_url": result.get("download_url"),
+                }
+            )
+            if isinstance(result.get("presenton_slides"), list):
+                state["presenton_slides"] = result["presenton_slides"]
+            record_step(
+                db,
+                state["run"],
+                step_name="render_presenton_pptx",
+                step_order=5,
+                output_summary={
+                    "resource_id": resource_id,
+                    "file_format": result["file_format"],
+                    "presentation_id": provider_payload.get("presentation_id"),
+                },
+            )
+            return str(result["file_path"]), str(result["file_format"]), metadata
+
+    path = _render_pptx(resource_id, state["title"], state["slides"], state["citations"])
+    record_step(
+        db,
+        state["run"],
+        step_name="render_local_pptx",
+        step_order=6 if metadata.get("presenton_error") else 5,
+        output_summary={"resource_id": resource_id, "file_format": "PPTX", "renderer": "local_pptx"},
+    )
+    return path, "PPTX", metadata
+
+
 def _citation_titles(citations: list[dict[str, Any]]) -> str:
     titles = [str(item.get("title", "")).strip() for item in citations if str(item.get("title", "")).strip()]
     return "；".join(titles[:3]) or "课程知识库"
@@ -821,6 +896,21 @@ def _serialize_resource(resource: StudentGeneratedResource) -> dict[str, Any]:
     citations = _json_loads(resource.citations_json, [])
     if not isinstance(render_payload, dict):
         render_payload = {}
+    metadata = render_payload.get("metadata")
+    if isinstance(metadata, dict) and metadata.get("renderer") == "presenton":
+        settings = get_settings()
+        public_base_url = settings.presenton_public_base_url or settings.presenton_base_url
+        edit_path = metadata.get("presenton_edit_path")
+        download_path = metadata.get("presenton_download_path")
+        if public_base_url and isinstance(edit_path, str) and edit_path and not metadata.get("presenton_edit_url"):
+            metadata["presenton_edit_url"] = urljoin(str(public_base_url).rstrip("/") + "/", edit_path.lstrip("/"))
+        if public_base_url and isinstance(download_path, str) and download_path and not metadata.get("presenton_download_url"):
+            metadata["presenton_download_url"] = urljoin(str(public_base_url).rstrip("/") + "/", download_path.lstrip("/"))
+        render_payload["metadata"] = metadata
+        if not render_payload.get("presenton_slides") and isinstance(metadata.get("presenton_presentation_id"), str):
+            slides_from_presenton = fetch_presenton_slides_sync(str(metadata["presenton_presentation_id"]), settings)
+            if slides_from_presenton:
+                render_payload["presenton_slides"] = slides_from_presenton
     slides = render_payload.get("slides", [])
     sections = render_payload.get("sections", [])
     nodes = render_payload.get("nodes", [])
@@ -959,9 +1049,9 @@ async def _content_node(db: Session, course: Course, state: PptResourceState) ->
     return state
 
 
-def _render_node(db: Session, state: PptResourceState) -> PptResourceState:
+async def _render_node(db: Session, state: PptResourceState) -> PptResourceState:
     resource_id = _new_id("res")
-    path = _render_pptx(resource_id, state["title"], state["slides"], state["citations"])
+    path, file_format, render_metadata = await _render_ppt_resource_file(db, state, resource_id)
     resource = StudentGeneratedResource(
         id=resource_id,
         student_id=state["student_id"],
@@ -975,10 +1065,16 @@ def _render_node(db: Session, state: PptResourceState) -> PptResourceState:
         knowledge_point=state["knowledge_point"],
         summary=state["summary"],
         status="READY",
-        render_payload_json=_json_dumps({"slides": state["slides"]}),
+        render_payload_json=_json_dumps(
+            {
+                "slides": state["slides"],
+                "presenton_slides": state.get("presenton_slides", []),
+                "metadata": render_metadata,
+            }
+        ),
         citations_json=_json_dumps(state["citations"]),
         file_path=path,
-        file_format="PPTX",
+        file_format=file_format,
         confidence=state["confidence"],
         saved_to_resource_center=False,
     )
@@ -988,9 +1084,9 @@ def _render_node(db: Session, state: PptResourceState) -> PptResourceState:
     record_step(
         db,
         state["run"],
-        step_name="render_pptx_and_preview",
-        step_order=5,
-        output_summary={"resource_id": resource_id, "file_format": "PPTX"},
+        step_name="persist_ppt_resource",
+        step_order=7,
+        output_summary={"resource_id": resource_id, "file_format": file_format, "renderer": render_metadata.get("renderer")},
     )
     return state
 
@@ -1154,11 +1250,14 @@ async def generate_ppt_resource(
         async def generate_content_node(graph_state: PptResourceState) -> PptResourceState:
             return await _content_node(db, course, graph_state)
 
+        async def render_resource_node(graph_state: PptResourceState) -> PptResourceState:
+            return await _render_node(db, graph_state)
+
         graph = StateGraph(PptResourceState)
         graph.add_node("create_run", lambda graph_state: _create_run_node(db, graph_state))
         graph.add_node("build_context", lambda graph_state: _context_node(db, user, course, graph_state))
         graph.add_node("generate_content", generate_content_node)
-        graph.add_node("render_resource", lambda graph_state: _render_node(db, graph_state))
+        graph.add_node("render_resource", render_resource_node)
         graph.set_entry_point("create_run")
         graph.add_edge("create_run", "build_context")
         graph.add_edge("build_context", "generate_content")
@@ -1169,7 +1268,7 @@ async def generate_ppt_resource(
         state = _create_run_node(db, state)
         state = _context_node(db, user, course, state)
         state = await _content_node(db, course, state)
-        state = _render_node(db, state)
+        state = await _render_node(db, state)
 
     resource = state["resource"]
     finish_run(
