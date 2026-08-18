@@ -4,7 +4,7 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-
 import { useRef } from 'react'
 import { CheckCircle2, CircleAlert } from 'lucide-react'
 
-import { api, setCurrentUser, type ApiCourse, type BootstrapData } from '../api'
+import { api, type ApiCourse, type BootstrapData } from '../api'
 import { ExactShell, PageLoader, type ExactView } from './components'
 import { ExactCreateCourse, ExactCourses, ExactDashboard, ExactPortal } from './pages-global'
 import { ExactCourseSettings, ExactInvite, ExactWorkspace } from './pages-course'
@@ -13,12 +13,13 @@ import { ExactClassesV2 } from './ExactClassesV2'
 import { ExactTasksV2 } from './ExactTasksV2'
 import { ExactMaterialsV2 } from './ExactMaterialsV2'
 import { ExactGraphV2 } from './ExactGraphV2'
+import { ExactCourseContent } from './ExactCourseContent'
 import { matchTeacherRoute, teacherPath } from '../routes/routeConfig'
 
 const { Text } = Typography
 
 const courseOnlyViews: ExactView[] = [
-  'workspace', 'classes', 'invite', 'tasks', 'materials', 'graph',
+  'workspace', 'content', 'classes', 'invite', 'tasks', 'materials', 'graph',
   'monitor', 'grading', 'analytics', 'reviews', 'discussion', 'course-settings',
 ]
 
@@ -26,7 +27,7 @@ export default function ExactApp({ loggedIn, onLogin, onLogout }: { loggedIn: bo
   const location = useLocation()
   const routerNavigate = useNavigate()
   const matchedRoute = useMemo(() => matchTeacherRoute(location.pathname), [location.pathname])
-  const [entered, setEntered] = useState(() => location.pathname.startsWith('/teacher/'))
+  const [entered, setEntered] = useState(() => loggedIn && location.pathname.startsWith('/teacher/'))
   const [bootstrap, setBootstrap] = useState<BootstrapData | null>(null)
   const [courseId, setCourseId] = useState(() => matchedRoute.courseId || 'course-ds')
   const courseIdRef = useRef(courseId)
@@ -43,28 +44,30 @@ export default function ExactApp({ loggedIn, onLogin, onLogout }: { loggedIn: bo
     try {
       const data = await api.bootstrap(requestedCourseId, requestedClassId)
       setBootstrap(data)
+      if (data.selected_course_id !== courseIdRef.current) {
+        courseIdRef.current = data.selected_course_id
+        setCourseId(data.selected_course_id)
+      }
+      if (data.selected_class_id !== classId) setClassId(data.selected_class_id)
     } catch (reason: any) {
       if (reason?.status === 403) {
-        try {
-          setCurrentUser('teacher-01', '王老师')
-          localStorage.setItem('codetrack_user', JSON.stringify({ id: 'teacher-01', name: '王老师' }))
-          const data = await api.bootstrap(requestedCourseId, requestedClassId)
-          setBootstrap(data)
-          return
-        } catch (retryReason: any) {
-          setError(retryReason.message || '教师身份恢复后仍无法读取教学数据')
-          return
-        }
+        setError('当前教师账号无权访问该课程，请重新登录')
+        onLogout()
+        return
       }
       setError(reason.message || '无法连接 CodeTrack 后端')
     } finally {
       setLoading(false)
     }
-  }, [courseId, classId])
+  }, [courseId, classId, onLogout])
 
   useEffect(() => {
-    if (entered) load()
-  }, [entered, load])
+    if (loggedIn && entered) load()
+  }, [loggedIn, entered, load])
+
+  useEffect(() => {
+    if (!loggedIn) setEntered(false)
+  }, [loggedIn])
 
   useEffect(() => {
     if (!matchedRoute.courseId || matchedRoute.courseId === courseIdRef.current) return
@@ -116,7 +119,7 @@ export default function ExactApp({ loggedIn, onLogin, onLogout }: { loggedIn: bo
     }
   }
 
-  if (!entered) return <ExactPortal loggedIn={loggedIn} onLogin={onLogin} onEnter={() => { setEntered(true); routerNavigate('/teacher/dashboard') }} />
+  if (!loggedIn || !entered) return <ExactPortal loggedIn={loggedIn} onLogin={(userId, name) => { onLogin(userId, name); routerNavigate('/', { replace: true }) }} onLogout={onLogout} onEnter={() => { setEntered(true); routerNavigate('/teacher/dashboard') }} />
 
   if (loading && !bootstrap) {
     return <div className="exact-boot"><PageLoader /></div>
@@ -139,6 +142,7 @@ export default function ExactApp({ loggedIn, onLogin, onLogout }: { loggedIn: bo
     classId,
     courses: bootstrap.courses,
     classes,
+    teacher: bootstrap.teacher,
     onNavigate: navigate,
     onRefresh: load,
     notify,
@@ -151,13 +155,14 @@ export default function ExactApp({ loggedIn, onLogin, onLogout }: { loggedIn: bo
   const content = <Routes>
     <Route path="/teacher/dashboard" element={dashboard} />
     <Route path="/teacher/courses" element={<ExactCourses courses={bootstrap.courses} onReload={load} onCourse={chooseCourse} onNavigate={navigate} />} />
-    <Route path="/teacher/courses/new" element={<ExactCreateCourse onDone={courseCreated} onCancel={() => navigate('courses')} />} />
+    <Route path="/teacher/courses/new" element={<ExactCreateCourse teacher={bootstrap.teacher} onDone={courseCreated} onCancel={() => navigate('courses')} />} />
     <Route path="/teacher/classes" element={<Navigate to="/teacher/courses" replace />} />
     <Route path="/teacher/tasks" element={<Navigate to="/teacher/courses" replace />} />
     <Route path="/teacher/materials" element={<Navigate to="/teacher/courses" replace />} />
     <Route path="/teacher/analytics" element={<Navigate to="/teacher/courses" replace />} />
-    <Route path="/teacher/settings" element={<ExactSettings courseId={courseId} classId={classId} onNavigate={navigate} notify={notify} />} />
+    <Route path="/teacher/settings" element={<ExactSettings courseId={courseId} classId={classId} onNavigate={navigate} notify={notify} teacher={bootstrap.teacher} />} />
     <Route path="/teacher/courses/:courseId/workspace" element={<ExactWorkspace {...common} />} />
+    <Route path="/teacher/courses/:courseId/content" element={<ExactCourseContent {...common} />} />
     <Route path="/teacher/courses/:courseId/classes" element={classesPage} />
     <Route path="/teacher/courses/:courseId/invite" element={<ExactInvite {...common} />} />
     <Route path="/teacher/courses/:courseId/tasks" element={tasksPage} />
@@ -190,7 +195,7 @@ export default function ExactApp({ loggedIn, onLogin, onLogout }: { loggedIn: bo
       {error && <Alert className="exact-inline-error" type="warning" showIcon message={error} action={<Button size="small" onClick={() => void load()}>重新加载</Button>} />}
       {content}
     </ExactShell>
-    <Drawer title="通知中心" open={noticeOpen} onClose={() => setNoticeOpen(false)} width={420}>
+    <Drawer title="通知中心" open={noticeOpen} onClose={() => setNoticeOpen(false)} size="large">
       <div className="exact-notifications">{bootstrap.notifications.map((item) => <button key={item.id} onClick={() => readNotice(item.id)}><span className={item.read ? '' : 'unread'} />{item.type === 'ai' ? <Tag color="purple">AI</Tag> : item.type === 'risk' ? <Tag color="red">预警</Tag> : <Tag color="green">任务</Tag>}<div><strong>{item.title}</strong><Text>{item.content}</Text><small>{item.created_at.slice(0,16).replace('T',' ')}</small></div>{item.read && <CheckCircle2 size={15} />}</button>)}</div>
     </Drawer>
   </>

@@ -6,87 +6,90 @@ import {
 import {
   Archive, ArrowRight, Bell, BookOpen, Bot, Edit3, Eye, Check, CheckCircle2, ChevronLeft, ChevronRight,
   CalendarDays, CircleHelp, ClipboardCheck, Clock3, Code2, EyeOff, FileText, FlaskConical, GraduationCap, ImageUp, Info, KeyRound, Lightbulb,
-  ListChecks, Lock, LogIn, MessageSquareText, MoreVertical, Plus, RefreshCw, Search, Settings2, Sparkles, Trash2, User, Users,
+  ListChecks, Lock, LogIn, LogOut, MessageSquareText, MoreVertical, Plus, RefreshCw, Search, Settings2, Sparkles, Trash2, User, Users,
 } from 'lucide-react'
 import { Line, LineChart, ResponsiveContainer, Tooltip as ChartTooltip, XAxis, YAxis } from 'recharts'
 
-import { api, type ApiClass, type ApiCourse, getCurrentUserName } from '../api'
+import { api, type ApiClass, type ApiCourse, type ApiTeacher, getCurrentUserName } from '../api'
 import type { ExactView } from './components'
 import { PageLoader } from './components'
 
 const { Text, Title, Paragraph } = Typography
 
-const DEMO_ACCOUNTS = [
-  { id: 'teacher-01', name: '王老师', department: '计算机科学与技术学院', number: 'T2024001', password: '123456' },
-  { id: 'teacher-02', name: '林老师', department: '软件学院', number: 'T2024002', password: '123456' },
-]
-
-export function ExactPortal({ loggedIn, onLogin, onEnter }: { loggedIn: boolean; onLogin: (userId: string, name: string) => void; onEnter: () => void }) {
+export function ExactPortal({ loggedIn, onLogin, onLogout, onEnter }: { loggedIn: boolean; onLogin: (userId: string, name: string) => void; onLogout: () => void; onEnter: () => void }) {
   const teacherName = getCurrentUserName()
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
+  const [accounts, setAccounts] = useState<ApiTeacher[]>([])
   const [showPassword, setShowPassword] = useState(false)
   const [messageApi, contextHolder] = message.useMessage()
 
-  const doLogin = async (userId: string, name: string, enteredPassword: string) => {
-    if (enteredPassword !== '123456') { messageApi.error('密码错误，请重试'); return }
+  useEffect(() => {
+    if (loggedIn) return
+    api.teacherAccounts()
+      .then(setAccounts)
+      .catch((reason: any) => messageApi.error(reason.message || '教师账号加载失败'))
+  }, [loggedIn, messageApi])
+
+  const doLogin = async (username: string, enteredPassword: string) => {
     setLoading(true)
-    await new Promise((r) => setTimeout(r, 400))
-    onLogin(userId, name)
-    setLoading(false)
+    try {
+      const account = await api.teacherLogin(username, enteredPassword)
+      onLogin(account.id, account.name)
+      return true
+    } catch (reason: any) {
+      messageApi.error(reason.message || '用户名或密码错误，请重新输入')
+      return false
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields()
-      const matched = DEMO_ACCOUNTS.find((a) => a.name === values.username)
-      if (!matched) { messageApi.error('账号不存在，请使用演示账号登录'); return }
-      await doLogin(matched.id, matched.name, values.password)
+      await doLogin(values.username.trim(), values.password)
     } catch { /* form validation */ }
   }
 
-  const quickLogin = async (account: typeof DEMO_ACCOUNTS[number]) => {
-    form.setFieldsValue({ username: account.name, password: account.password })
-    await doLogin(account.id, account.name, account.password)
+  const quickLogin = async (account: ApiTeacher) => {
+    form.setFieldsValue({ username: account.number || account.name, password: '123456' })
+    await doLogin(account.number || account.name, '123456')
   }
+
+  if (!loggedIn) return <main className="exact-login-page exact-login-simple">
+    {contextHolder}
+    <section className="exact-login-shell exact-login-shell-simple">
+      <div className="exact-login-panel">
+        <div className="exact-login-brand"><span>&lt;/&gt;</span><strong>CodeTrack</strong><small>Teacher</small></div>
+        <div className="exact-login-title"><span><Lock size={19} /></span><div><Title level={2}>教师登录</Title><Text type="secondary">登录后进入 CodeTrack 教师工作台</Text></div></div>
+        <Form form={form} layout="vertical" onFinish={handleSubmit} initialValues={{ username: '', password: '' }} requiredMark={false}>
+          <Form.Item label="教师姓名 / 账号" name="username" rules={[{ required: true, message: '请输入教师姓名或账号' }]}>
+            <Input prefix={<User size={16} />} placeholder="例如：王老师 或 T2024001" size="large" autoComplete="username" autoFocus />
+          </Form.Item>
+          <Form.Item label="密码" name="password" rules={[{ required: true, message: '请输入密码' }]}>
+            <Input prefix={<KeyRound size={16} />} suffix={<button type="button" className="portal-pwd-toggle" aria-label={showPassword ? '隐藏密码' : '显示密码'} onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button>} type={showPassword ? 'text' : 'password'} placeholder="请输入登录密码" size="large" autoComplete="current-password" />
+          </Form.Item>
+          <Button type="primary" htmlType="submit" loading={loading} icon={<LogIn size={16} />} size="large" block className="portal-login-btn">登录教师端</Button>
+        </Form>
+        <div className="exact-login-demo-divider"><span>演示账号快速登录</span></div>
+        <div className="exact-login-demo-list">{accounts.map((account) => <button type="button" key={account.id} disabled={loading} onClick={() => void quickLogin(account)}><span>{account.name.slice(0, 1)}</span><div><strong>{account.name}</strong><small>{account.number}</small></div><ChevronRight size={14} /></button>)}</div>
+        <div className="exact-login-demo-password"><KeyRound size={12} /><span>演示密码</span><strong>123456</strong></div>
+        <footer>仅限授权教师账号访问</footer>
+      </div>
+    </section>
+  </main>
 
   return <main className="exact-portal">
     {contextHolder}
     <header>
       <div className="exact-logo"><span>&lt;/&gt;</span><strong>CodeTrack Teacher</strong></div>
-      <Space size={12}><Tag color="green" bordered={false}>课程知识库已连接</Tag><Avatar size={28} className="exact-avatar">{teacherName.slice(0, 1)}</Avatar><Text strong>{teacherName}</Text><ChevronRight size={13} /></Space>
+      <Space size={12}><Tag color="green" variant="filled">课程知识库已连接</Tag><Dropdown trigger={['click']} menu={{ items: [{ key: 'logout', icon: <LogOut size={14} />, label: '退出登录', onClick: onLogout }] }}><button type="button" className="exact-portal-account"><Avatar size={28} className="exact-avatar">{teacherName.slice(0, 1)}</Avatar><Text strong>{teacherName}</Text><ChevronRight size={13} /></button></Dropdown></Space>
     </header>
     <section>
       <div className="exact-portal-orbit"><span /><span /><span /><Code2 /></div>
 
-      {!loggedIn ? <>
-        <Title>教师登录</Title>
-        <Text type="secondary">请输入账号密码进入 CodeTrack 教学平台</Text>
-
-        <div className="portal-login-form">
-          <Form form={form} layout="vertical" onFinish={handleSubmit} initialValues={{ username: '王老师', password: '123456' }}>
-            <Form.Item name="username" rules={[{ required: true, message: '请输入账号' }]}>
-              <Input prefix={<User size={15} />} placeholder="教师账号（姓名）" size="large" autoComplete="username" />
-            </Form.Item>
-            <Form.Item name="password" rules={[{ required: true, message: '请输入密码' }]}>
-              <Input prefix={<KeyRound size={15} />} suffix={<button type="button" className="portal-pwd-toggle" onClick={() => setShowPassword(!showPassword)} tabIndex={-1}>{showPassword ? <EyeOff size={15} /> : <Eye size={15} />}</button>} type={showPassword ? 'text' : 'password'} placeholder="登录密码" size="large" autoComplete="current-password" />
-            </Form.Item>
-            <Button type="primary" htmlType="submit" loading={loading} icon={<LogIn size={16} />} size="large" block className="portal-login-btn">登录教师端</Button>
-          </Form>
-        </div>
-
-        <div className="portal-login-divider"><span>演示账号快速登录</span></div>
-        <div className="portal-demo-cards">
-          {DEMO_ACCOUNTS.map((a) => (
-            <button key={a.id} className="portal-demo-card" onClick={() => quickLogin(a)} disabled={loading}>
-              <span className="portal-demo-avatar">{a.name.slice(0, 1)}</span>
-              <div><strong>{a.name}</strong><small>{a.department} · {a.number}</small></div>
-              <span className="portal-demo-pwd">{a.password}</span>
-              <ArrowRight size={14} />
-            </button>
-          ))}
-        </div>
-      </> : <>
+      <>
         <Title>你好，{teacherName}</Title>
         <Text type="secondary">欢迎进入 CodeTrack 教师端，智能助力教学管理与科研协作。</Text>
         <div className="exact-entry-grid">
@@ -103,7 +106,7 @@ export function ExactPortal({ loggedIn, onLogin, onEnter }: { loggedIn: boolean;
             <Button type="primary" size="large" onClick={() => window.alert('科研工作区将在后续版本接入')}>进入科研 <ArrowRight size={15} /></Button>
           </article>
         </div>
-      </>}
+      </>
     </section>
   </main>
 }
@@ -281,12 +284,9 @@ export function ExactCourses({ courses, onReload, onCourse, onNavigate }: Course
   ]
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('codetrack-create-course-draft')
-      setDraft(stored ? JSON.parse(stored) : null)
-    } catch {
-      setDraft(null)
-    }
+    api.courseDraft()
+      .then((stored) => setDraft(stored as StoredCourseDraft | null))
+      .catch(() => setDraft(null))
   }, [])
 
   useEffect(() => {
@@ -383,10 +383,14 @@ export function ExactCourses({ courses, onReload, onCourse, onNavigate }: Course
     },
   })
 
-  const discardDraft = () => {
-    localStorage.removeItem('codetrack-create-course-draft')
-    setDraft(null)
-    messageApi.success('课程草稿已删除')
+  const discardDraft = async () => {
+    try {
+      await api.deleteCourseDraft()
+      setDraft(null)
+      messageApi.success('课程草稿已删除')
+    } catch (reason: any) {
+      messageApi.error(reason.message || '课程草稿删除失败')
+    }
   }
 
   return <div className="exact-page exact-courses">
@@ -464,9 +468,10 @@ const COMPUTER_DIRECTIONS = [
 interface CreateCourseProps {
   onDone: (course: ApiCourse, classId: string) => void
   onCancel: () => void
+  teacher: ApiTeacher
 }
 
-export function ExactCreateCourse({ onDone, onCancel }: CreateCourseProps) {
+export function ExactCreateCourse({ onDone, onCancel, teacher }: CreateCourseProps) {
   const [step, setStep] = useState(0)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -511,22 +516,20 @@ export function ExactCreateCourse({ onDone, onCancel }: CreateCourseProps) {
   }
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('codetrack-create-course-draft')
+    api.courseDraft().then((stored) => {
       if (!stored) return
-      const parsed = JSON.parse(stored)
+      const parsed = stored as StoredCourseDraft
       if (parsed.values) form.setFieldsValue({ ...parsed.values, major: COMPUTER_MAJOR, code: '' })
-      if (Array.isArray(parsed.knowledgePoints)) {
-        setSelectedKnowledge(parsed.knowledgePoints)
-        setKnowledgePoints((current) => Array.from(new Set([...current, ...parsed.knowledgePoints])))
+      const restoredKnowledgePoints = parsed.knowledgePoints
+      if (Array.isArray(restoredKnowledgePoints)) {
+        setSelectedKnowledge(restoredKnowledgePoints)
+        setKnowledgePoints((current) => Array.from(new Set([...current, ...restoredKnowledgePoints])))
       }
       if (parsed.coverUrl) {
         setCoverUrl(parsed.coverUrl)
         setCoverUploaded(parsed.coverUrl.startsWith('data:'))
       }
-    } catch {
-      localStorage.removeItem('codetrack-create-course-draft')
-    }
+    }).catch(() => setError('课程草稿读取失败，请稍后重试'))
   }, [form])
 
   const watchedName = Form.useWatch('name', form) || ''
@@ -545,7 +548,7 @@ export function ExactCreateCourse({ onDone, onCancel }: CreateCourseProps) {
   const aiEnabled = Form.useWatch('ai_enabled', form) ?? true
   const chapters = teachingChapters.map((chapter) => chapter.name).filter(Boolean)
 
-  const saveDraft = () => {
+  const saveDraft = async () => {
     const savedAt = new Date()
     const values = { ...form.getFieldsValue(true), major: COMPUTER_MAJOR, code: '' }
     const draft = {
@@ -554,13 +557,13 @@ export function ExactCreateCourse({ onDone, onCancel }: CreateCourseProps) {
       savedAt: savedAt.toISOString(),
     }
     try {
-      localStorage.setItem('codetrack-create-course-draft', JSON.stringify({ ...draft, coverUrl }))
-    } catch {
-      localStorage.setItem('codetrack-create-course-draft', JSON.stringify(draft))
+      await api.saveCourseDraft({ ...draft, coverUrl })
+      const hours = String(savedAt.getHours()).padStart(2, '0')
+      const minutes = String(savedAt.getMinutes()).padStart(2, '0')
+      setLastSaved(`今天 ${hours}:${minutes}`)
+    } catch (reason: any) {
+      setError(reason.message || '课程草稿保存失败')
     }
-    const hours = String(savedAt.getHours()).padStart(2, '0')
-    const minutes = String(savedAt.getMinutes()).padStart(2, '0')
-    setLastSaved(`今天 ${hours}:${minutes}`)
   }
   const addKnowledgePoint = () => {
     const value = customKnowledge.trim()
@@ -632,10 +635,10 @@ export function ExactCreateCourse({ onDone, onCancel }: CreateCourseProps) {
         course_id: created.id,
         name: '软件工程1班',
         schedule: '周二 3-4 节',
-        mentor: '王老师',
+        mentor: teacher.name,
       })
       setCreatedCourse({ course: created, classId: group.id })
-      localStorage.removeItem('codetrack-create-course-draft')
+      await api.deleteCourseDraft()
       setStep(2)
     } catch (reason: any) {
       setError(reason.message)
@@ -773,7 +776,7 @@ export function ExactCreateCourse({ onDone, onCancel }: CreateCourseProps) {
                 <div><span><Users size={15} /></span><small>已绑定班级数量</small><b>1 个班级</b></div>
                 <div><span><CalendarDays size={15} /></span><small>学期</small><b>{watchedTerm || defaults.term}</b></div>
                 <div><span><ListChecks size={15} /></span><small>知识点模板</small><b>{selectedKnowledge.join('、')}</b></div>
-                <div><span><GraduationCap size={15} /></span><small>授课教师</small><b>王老师</b></div>
+                <div><span><GraduationCap size={15} /></span><small>授课教师</small><b>{teacher.name}</b></div>
                 <div><span><Sparkles size={15} /></span><small>AI 知识库状态</small><b className={aiEnabled ? 'enabled' : ''}>{aiEnabled ? '已启用' : '未启用'}</b></div>
               </div>
             </section>
@@ -791,13 +794,13 @@ export function ExactCreateCourse({ onDone, onCancel }: CreateCourseProps) {
           <Title level={3}>{watchedName || '未命名课程'}</Title>
           <Text type="secondary">{watchedTerm || '请选择开课学期'}</Text>
           <div className="preview-tags">{watchedMajor && <Tag>{watchedMajor}</Tag>}{watchedDirections.map((item: string) => <Tag color="green" key={item}>{item}</Tag>)}</div>
-          <div className="preview-meta"><span><Clock3 size={13} /> {watchedWeeks} 周</span><span><BookOpen size={13} /> {watchedHours} 学时</span><span><Users size={13} /> 王老师</span></div>
+          <div className="preview-meta"><span><Clock3 size={13} /> {watchedWeeks} 周</span><span><BookOpen size={13} /> {watchedHours} 学时</span><span><Users size={13} /> {teacher.name}</span></div>
           <div className="preview-description-card"><strong>课程简介</strong><p>{watchedDescription || '课程简介将显示在这里。'}</p></div>
           <div className="preview-knowledge"><strong>知识模块</strong><div>{selectedKnowledge.map((item) => <span key={item}>{item}</span>)}</div></div>
           <div className="preview-code"><Lock size={12} /><span>课程代码</span><strong>{watchedCode || '创建后自动生成'}</strong></div>
         </div>}
         {step === 1 && <div className="create-setting-preview teaching-live-preview"><Title level={4}>设置预览</Title><Text type="secondary">当前教学设置的概要信息</Text><section><strong><CalendarDays size={15} /> 授课安排</strong><p>{watchedStartWeek} - {watchedEndWeek}　·　总学时 {watchedHours} 学时　·　每周 {watchedWeeklyHours} 学时</p><Tag color="green">授课模式：{watchedTeachingMode}{watchedTeachingMode === '混合' ? '（理论 + 实验）' : ''}</Tag></section><section><strong><ListChecks size={15} /> 教学章节概览（{teachingChapters.length} 个章节）</strong>{teachingChapters.slice(0,5).map((chapter) => <span key={chapter.id}><i />{chapter.weeks}　{chapter.name}<Tag icon={chapter.mode.includes('实验') ? <FlaskConical size={11} /> : <BookOpen size={11} />}>{chapter.mode}</Tag></span>)}</section><Alert type="success" showIcon message="班级配置将在课程创建完成后进入课程工作空间进行设置。" /></div>}
-        {step === 2 && <div className="create-result-preview completion-result-preview"><Title level={4}>课程创建结果</Title><Text type="secondary">以下是课程在学生端的展示效果预览</Text><div className="result-course-card"><div className="result-cover"><img src={coverUrl} alt="课程封面" /><Tag color="green">进行中</Tag></div><div className="result-course-copy"><Title level={3}>{watchedName || defaults.name}</Title><div className="result-meta"><span><GraduationCap size={13} />王老师</span><span><Clock3 size={13} />{watchedHours} 学时</span><span><Users size={13} />1 个班级</span></div><p>{watchedDescription || defaults.description}</p><Space wrap>{watchedDirections.map((item: string) => <Tag color="green" key={item}>{item}</Tag>)}</Space></div></div><section><strong>创建进度检查</strong>{['基础信息已完成','教学设置已完成', aiEnabled ? '知识库已启用' : '知识库未启用'].map((item) => <span key={item}><CheckCircle2 size={14} />{item}<b>已完成</b></span>)}</section><Alert type="info" showIcon message="课程创建完成后，您可以随时在课程设置中调整和完善各项内容。" /></div>}
+        {step === 2 && <div className="create-result-preview completion-result-preview"><Title level={4}>课程创建结果</Title><Text type="secondary">以下是课程在学生端的展示效果预览</Text><div className="result-course-card"><div className="result-cover"><img src={coverUrl} alt="课程封面" /><Tag color="green">进行中</Tag></div><div className="result-course-copy"><Title level={3}>{watchedName || defaults.name}</Title><div className="result-meta"><span><GraduationCap size={13} />{teacher.name}</span><span><Clock3 size={13} />{watchedHours} 学时</span><span><Users size={13} />1 个班级</span></div><p>{watchedDescription || defaults.description}</p><Space wrap>{watchedDirections.map((item: string) => <Tag color="green" key={item}>{item}</Tag>)}</Space></div></div><section><strong>创建进度检查</strong>{['基础信息已完成','教学设置已完成', aiEnabled ? '知识库已启用' : '知识库未启用'].map((item) => <span key={item}><CheckCircle2 size={14} />{item}<b>已完成</b></span>)}</section><Alert type="info" showIcon message="课程创建完成后，您可以随时在课程设置中调整和完善各项内容。" /></div>}
       </aside>
     </div>
     <div className="create-actions">

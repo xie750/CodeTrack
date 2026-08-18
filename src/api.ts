@@ -46,12 +46,40 @@ async function request<T>(
 }
 
 export interface BootstrapData {
-  teacher: { id: string; name: string; email: string; department: string }
+  teacher: ApiTeacher
   courses: ApiCourse[]
   classes: ApiClass[]
   selected_course_id: string
   selected_class_id: string
   notifications: ApiNotification[]
+}
+
+export interface ApiTeacher {
+  id: string
+  name: string
+  number: string
+  email: string
+  department: string
+}
+
+export interface ApiTeacherPreference {
+  notifications_enabled: boolean
+  ai_assistant_enabled: boolean
+  email_digest: boolean
+  updated_at: string
+}
+
+export interface ApiAnnouncement {
+  id: string
+  title: string
+  summary: string
+  content: string[]
+  date: string
+  published_at: string
+  author: string
+  audience: string
+  pinned: boolean
+  read: boolean
 }
 
 export interface ApiCourse {
@@ -153,6 +181,29 @@ export interface ApiMaterial {
   updated_at: string
 }
 
+export interface ApiKnowledgePoint {
+  id: string
+  name: string
+  description: string
+  difficulty: string
+  mastery: number
+}
+
+export interface ApiChapter {
+  id: string
+  title: string
+  description: string
+  position: number
+  teaching_mode: string
+  status: 'draft' | 'published'
+  knowledge_points: ApiKnowledgePoint[]
+}
+
+export interface ApiStudentChapter extends ApiChapter {
+  materials: Array<{ id: string; title: string; type: string; size: string; content_url: string | null }>
+  tasks: Array<{ id: string; title: string; type: string; due_at: string; difficulty: string }>
+}
+
 export interface ApiSubmission {
   id: string
   task_id: string
@@ -179,7 +230,7 @@ export interface ApiSubmission {
     needs_teacher_review: boolean
     review_status: string | null
   }
-  grade: null | { id: string; score: number; status: string; comment: string }
+  grade: null | { id: string; score: number; status: string; comment: string; dimensions?: { autoTest: number; codeQuality: number; report: number; participation: number } | null }
   feedback: Array<{ id: string; content: string; status: string; student_visible: boolean }>
 }
 
@@ -231,23 +282,52 @@ export interface ApiDiscussion {
   replies: ApiDiscussionReply[]
 }
 
-async function uploadMaterial(courseId: string, file: File, chapterLabel = '绗?2 绔?绾挎€ц〃') {
+async function uploadMaterial(courseId: string, file: File, chapterLabel = '未分类', visibility = 'teacher') {
   const body = new FormData()
   body.append('course_id', courseId)
   body.append('chapter_label', chapterLabel)
-  body.append('visibility', 'teacher')
+  body.append('visibility', visibility)
   body.append('file', file)
   const response = await fetch(API_BASE + '/teacher/materials/upload', {
     method: 'POST',
-    headers: { 'X-User-Id': 'teacher-01' },
+    headers: { 'X-User-Id': _currentUserId },
     body,
   })
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) throw new ApiError(payload.detail || 'Upload failed', response.status)
   return payload.data
 }
+
+async function createTeacherGraphFromFiles(files: File[], fields: { title: string; description: string; target_classes: string }) {
+  const body = new FormData()
+  files.forEach((file) => body.append('files', file))
+  body.append('title', fields.title)
+  body.append('description', fields.description)
+  body.append('target_classes', fields.target_classes)
+  const response = await fetch(API_BASE + '/teacher/knowledge-graphs/from-files', {
+    method: 'POST',
+    headers: { 'X-User-Id': _currentUserId },
+    body,
+  })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) throw new ApiError(payload.detail || '图谱生成失败', response.status)
+  return payload.data
+}
 export const api = {
   health: () => request<{ status: string }>('/health'),
+  teacherAccounts: () => request<ApiTeacher[]>('/teacher/auth/accounts'),
+  teacherLogin: (username: string, password: string) =>
+    request<ApiTeacher>('/teacher/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
+  courseDraft: () => request<Record<string, unknown> | null>('/teacher/course-draft'),
+  saveCourseDraft: (payload: Record<string, unknown>) =>
+    request<Record<string, unknown>>('/teacher/course-draft', { method: 'PUT', body: JSON.stringify({ payload }) }),
+  deleteCourseDraft: () => request<{ deleted: boolean }>('/teacher/course-draft', { method: 'DELETE' }),
+  announcements: (courseId: string) => request<ApiAnnouncement[]>('/teacher/courses/' + courseId + '/announcements'),
+  markAnnouncementRead: (announcementId: string) =>
+    request<{ id: string; read: boolean }>('/teacher/announcements/' + announcementId + '/read', { method: 'PATCH' }),
+  preferences: () => request<ApiTeacherPreference>('/teacher/preferences'),
+  savePreferences: (body: Omit<ApiTeacherPreference, 'updated_at'>) =>
+    request<ApiTeacherPreference>('/teacher/preferences', { method: 'PUT', body: JSON.stringify(body) }),
   bootstrap: (courseId = 'course-ds', classId = 'class-se1') =>
     request<BootstrapData>('/teacher/bootstrap?course_id=' + courseId + '&class_id=' + classId),
   dashboard: (courseId: string, classId: string) =>
@@ -259,12 +339,12 @@ export const api = {
   classes: (courseId: string) => request<ApiClass[]>('/teacher/classes?course_id=' + courseId),
   createClass: (body: unknown) => request<ApiClass>('/teacher/classes', { method: 'POST', body: JSON.stringify(body) }),
   regenerateJoinCode: (classId: string) => request<{ class_id: string; join_code: string }>('/teacher/classes/' + classId + '/join-code', { method: 'POST' }),
-  joinClass: (joinCode: string) => request<{ class_id: string; class_name: string; joined: boolean }>('/classes/' + encodeURIComponent(joinCode) + '/join', { method: 'POST' }, 'student-01'),
   importStudents: (classId: string, students: Array<{ name: string; number: string }>) => request<any>('/teacher/classes/' + classId + '/students/import', { method: 'POST', body: JSON.stringify({ students }) }),
   students: (classId: string) => request<ApiStudent[]>('/teacher/classes/' + classId + '/students'),
   classJoinStatus: (classId: string) => request<ApiClassJoinStatus>('/teacher/classes/' + classId + '/join-status'),
-  chapters: (courseId: string) => request<any[]>('/teacher/courses/' + courseId + '/chapters'),
-  createChapter: (courseId: string, body: unknown) => request<any>('/teacher/courses/' + courseId + '/chapters', { method: 'POST', body: JSON.stringify(body) }),
+  chapters: (courseId: string) => request<ApiChapter[]>('/teacher/courses/' + courseId + '/chapters'),
+  createChapter: (courseId: string, body: unknown) => request<ApiChapter>('/teacher/courses/' + courseId + '/chapters', { method: 'POST', body: JSON.stringify(body) }),
+  updateChapter: (chapterId: string, body: unknown) => request<ApiChapter>('/teacher/chapters/' + chapterId, { method: 'PATCH', body: JSON.stringify(body) }),
   createKnowledgePoint: (body: unknown) => request<any>('/teacher/knowledge-points', { method: 'POST', body: JSON.stringify(body) }),
   tasks: (courseId: string) => request<ApiTask[]>('/teacher/tasks?course_id=' + courseId),
   aiTaskDraft: (body: unknown) => request<any>('/teacher/tasks/ai-draft', { method: 'POST', body: JSON.stringify(body) }),
@@ -291,12 +371,17 @@ export const api = {
   confirmGraphCandidates: (courseId: string, candidates: unknown[]) => request<any>('/teacher/knowledge-graph/confirm', { method: 'POST', body: JSON.stringify({ course_id: courseId, candidates }) }),
   updateGraphNode: (nodeId: string, body: unknown) => request<any>('/teacher/knowledge-graph/nodes/' + nodeId, { method: 'PUT', body: JSON.stringify(body) }),
   graph: (courseId: string) => request<any>('/teacher/knowledge-graph?course_id=' + courseId),
+  teacherGraphs: () => request<any[]>('/teacher/knowledge-graphs'),
+  teacherGraph: (graphId: number) => request<any>('/teacher/knowledge-graphs/' + graphId),
+  createTeacherGraph: (body: unknown) => request<any>('/teacher/knowledge-graphs', { method: 'POST', body: JSON.stringify(body) }),
+  createTeacherGraphFromFiles,
+  saveTeacherGraph: (graphId: number, body: unknown) => request<any>('/teacher/knowledge-graphs/' + graphId, { method: 'PUT', body: JSON.stringify(body) }),
+  publishTeacherGraph: (graphId: number) => request<any>('/teacher/knowledge-graphs/' + graphId + '/publish', { method: 'POST' }),
+  deleteTeacherGraph: (graphId: number) => request<any>('/teacher/knowledge-graphs/' + graphId, { method: 'DELETE' }),
   discussions: (courseId: string, classId?: string) => request<ApiDiscussion[]>('/teacher/discussions?course_id=' + courseId + (classId ? '&class_id=' + classId : '')),
   createDiscussion: (body: { course_id: string; class_id: string; title: string; content: string; publish: boolean }) => request<ApiDiscussion>('/teacher/discussions', { method: 'POST', body: JSON.stringify(body) }),
   publishDiscussion: (discussionId: string) => request<ApiDiscussion>('/teacher/discussions/' + discussionId + '/publish', { method: 'POST' }),
   endDiscussion: (discussionId: string) => request<ApiDiscussion>('/teacher/discussions/' + discussionId + '/end', { method: 'POST' }),
-  studentDiscussions: () => request<ApiDiscussion[]>('/student/discussions', {}, 'student-03'),
-  replyDiscussion: (discussionId: string, content: string) => request<ApiDiscussion>('/student/discussions/' + discussionId + '/replies', { method: 'POST', body: JSON.stringify({ content }) }, 'student-03'),
   submissions: (taskId: string) => request<ApiSubmission[]>('/teacher/submissions?task_id=' + taskId),
   submission: (submissionId: string) => request<ApiSubmission>('/teacher/submissions/' + submissionId),
   saveGrade: (submissionId: string, body: unknown) => request<any>('/teacher/submissions/' + submissionId + '/grade', { method: 'PUT', body: JSON.stringify(body) }),
@@ -306,6 +391,4 @@ export const api = {
   reviewAction: (reviewId: string, body: unknown) => request<any>('/teacher/ai-reviews/' + reviewId + '/action', { method: 'POST', body: JSON.stringify(body) }),
   analytics: (courseId: string, classId: string) => request<any>('/teacher/analytics/overview?course_id=' + courseId + '&class_id=' + classId),
   markNotification: (notificationId: string) => request<any>('/teacher/notifications/' + notificationId, { method: 'PATCH', body: JSON.stringify({ read: true }) }),
-  studentSubmit: (taskId: string, sourceCode: string) => request<ApiSubmission>('/student/tasks/' + taskId + '/submissions', { method: 'POST', body: JSON.stringify({ source_code: sourceCode, hint_level: 1 }) }, 'student-03'),
 }
-

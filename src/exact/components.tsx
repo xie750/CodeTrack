@@ -3,6 +3,7 @@ import { Avatar, Badge, Breadcrumb, Button, Dropdown, Select, Space, Tag, Toolti
 import {
   ArrowLeft, Bell, BookOpen, Bot, BrainCircuit, ChevronDown, ChevronRight, ClipboardList, FileText,
   GraduationCap, Home, LineChart, LogOut, MessageSquareText, Network, Settings, Users,
+  ListTree,
 } from 'lucide-react'
 
 import type { ApiClass, ApiCourse } from '../api'
@@ -15,6 +16,7 @@ export type ExactView =
   | 'courses'
   | 'create-course'
   | 'workspace'
+  | 'content'
   | 'classes'
   | 'invite'
   | 'tasks'
@@ -68,6 +70,7 @@ const globalItems: Array<[ExactView, string, ReactNode]> = [
 
 const courseItems: Array<[ExactView, string, ReactNode]> = [
   ['workspace', '课程工作空间首页', <Home size={17} />],
+  ['content', '课程章节内容', <ListTree size={17} />],
   ['classes', '班级管理', <Users size={17} />],
   ['tasks', '任务管理', <ClipboardList size={17} />],
   ['materials', '资料管理', <FileText size={17} />],
@@ -94,7 +97,7 @@ export function ExactShell(props: ShellProps) {
     <header className="exact-topbar">
       <div className="exact-logo"><span>&lt;/&gt;</span><strong>CodeTrack</strong><small>Teacher</small></div>
       <div className="exact-context">
-        <Tag color="green" bordered={false}>课程知识库已连接</Tag>
+        <Tag color="green" variant="filled">课程知识库已连接</Tag>
         <Tooltip title="通知">
           <Badge count={props.notificationCount} size="small"><Button type="text" icon={<Bell size={18} />} onClick={props.onNotifications} /></Badge>
         </Tooltip>

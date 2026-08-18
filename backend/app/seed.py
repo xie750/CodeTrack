@@ -101,7 +101,14 @@ def seed_database(db: Session) -> None:
         "第 6 章 图",
     ]
     chapters = [
-        Chapter(id=f"chapter-{index}", course_id=course.id, title=title, position=index)
+        Chapter(
+            id=f"chapter-{index}",
+            course_id=course.id,
+            title=title,
+            position=index,
+            teaching_mode=["理论讲授", "案例教学", "混合式教学", "翻转课堂", "实验实训", "项目制教学"][index - 1],
+            status="published" if index <= 3 else "draft",
+        )
         for index, title in enumerate(chapter_titles, 1)
     ]
     db.add_all(chapters)

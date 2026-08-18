@@ -1,6 +1,23 @@
 from datetime import datetime
 
+from typing import Any
+
 from pydantic import BaseModel, Field, model_validator
+
+
+class TeacherLogin(BaseModel):
+    username: str = Field(min_length=1, max_length=80)
+    password: str = Field(min_length=1, max_length=128)
+
+
+class CourseDraftUpsert(BaseModel):
+    payload: dict[str, Any]
+
+
+class TeacherPreferenceUpdate(BaseModel):
+    notifications_enabled: bool = True
+    ai_assistant_enabled: bool = True
+    email_digest: bool = False
 
 
 class CourseCreate(BaseModel):
@@ -33,6 +50,14 @@ class ClassCreate(BaseModel):
 class ChapterCreate(BaseModel):
     title: str = Field(min_length=2, max_length=160)
     description: str = ""
+    teaching_mode: str = "理论讲授"
+
+
+class ChapterUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=2, max_length=160)
+    description: str | None = None
+    teaching_mode: str | None = None
+    status: str | None = Field(default=None, pattern="^(draft|published)$")
 
 
 class KnowledgePointCreate(BaseModel):
@@ -104,6 +129,7 @@ class StudentSubmissionCreate(BaseModel):
 class GradeUpsert(BaseModel):
     score: int = Field(ge=0, le=100)
     comment: str = ""
+    dimensions: dict[str, int] | None = None
 
 
 class FeedbackCreate(BaseModel):

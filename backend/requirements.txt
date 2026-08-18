@@ -6,3 +6,5 @@ python-multipart==0.0.32
 alembic==1.18.5
 pytest
 httpx
+pypdf
+python-docx

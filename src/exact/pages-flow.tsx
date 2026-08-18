@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   Alert, Avatar, Button, Col, Divider, Form, Input, InputNumber, Progress, Row,
-  Segmented, Select, Slider, Space, Statistic, Table, Tabs, Tag, Timeline,
+  Segmented, Select, Slider, Space, Statistic, Switch, Table, Tabs, Tag, Timeline,
   Typography,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
@@ -15,7 +15,10 @@ import {
   Tooltip as ChartTooltip, XAxis, YAxis,
 } from 'recharts'
 
-import { api, type ApiClass, type ApiReview, type ApiStudent, type ApiSubmission, type ApiTask } from '../api'
+import {
+  api, type ApiClass, type ApiReview, type ApiStudent, type ApiSubmission, type ApiTask,
+  type ApiTeacher, type ApiTeacherPreference,
+} from '../api'
 import type { ExactView } from './components'
 import { CourseBreadcrumb, EmptyPanel, PageLoader } from './components'
 
@@ -26,6 +29,41 @@ interface FlowProps {
   classId: string
   onNavigate: (view: ExactView) => void
   notify: (text: string) => void
+}
+
+type ScoreDimensions = {
+  autoTest: number
+  codeQuality: number
+  report: number
+  participation: number
+}
+
+const scoreDimensionMeta: Array<{ key: keyof ScoreDimensions; label: string; max: number }> = [
+  { key: 'autoTest', label: '自动测试', max: 40 },
+  { key: 'codeQuality', label: '代码质量', max: 30 },
+  { key: 'report', label: '实验报告', max: 20 },
+  { key: 'participation', label: '课堂表现', max: 10 },
+]
+
+function aiScoreSuggestion(totalScore: number): ScoreDimensions {
+  const bounded = Math.max(0, Math.min(100, Math.round(totalScore)))
+  const suggestion: ScoreDimensions = { autoTest: 0, codeQuality: 0, report: 0, participation: 0 }
+  const ranked = scoreDimensionMeta
+    .map((item) => {
+      const raw = bounded * item.max / 100
+      suggestion[item.key] = Math.floor(raw)
+      return { ...item, fraction: raw - Math.floor(raw) }
+    })
+    .sort((left, right) => right.fraction - left.fraction)
+  let remainder = bounded - Object.values(suggestion).reduce((sum, value) => sum + value, 0)
+  for (const item of ranked) {
+    if (!remainder) break
+    if (suggestion[item.key] < item.max) {
+      suggestion[item.key] += 1
+      remainder -= 1
+    }
+  }
+  return suggestion
 }
 
 export function ExactMonitor({ courseId, onNavigate, notify }: FlowProps) {
@@ -79,6 +117,7 @@ export function ExactGrading({ courseId, onNavigate, notify }: FlowProps) {
   const [rows, setRows] = useState<ApiSubmission[]>([])
   const [selected, setSelected] = useState<ApiSubmission | null>(null)
   const [score, setScore] = useState(0)
+  const [scoreDimensions, setScoreDimensions] = useState<ScoreDimensions>(() => aiScoreSuggestion(0))
   const [comment, setComment] = useState('')
   const [saving, setSaving] = useState(false)
   const [studentSearch, setStudentSearch] = useState('')
@@ -93,19 +132,44 @@ export function ExactGrading({ courseId, onNavigate, notify }: FlowProps) {
       if (!items.length) { setRows([]); setSelected(null) }
     }).finally(() => setLoading(false))
   }, [courseId])
-  const load = () => { if (taskId) api.submissions(taskId).then((items) => { setRows(items); const current = items[0] || null; setSelected(current); setScore(current?.grade?.score ?? current?.evaluation?.score ?? 0); setComment(current?.grade?.comment || '') }) }
+  const applyStudentScore = (row: ApiSubmission | null) => {
+    const nextScore = row?.grade?.score ?? row?.evaluation?.score ?? 0
+    setSelected(row)
+    setScore(nextScore)
+    setScoreDimensions(row?.grade?.dimensions || aiScoreSuggestion(nextScore))
+    setComment(row?.grade?.comment || '')
+  }
+  const load = () => { if (taskId) api.submissions(taskId).then((items) => { setRows(items); applyStudentScore(items[0] || null) }) }
   useEffect(() => { void load() }, [taskId])
   useEffect(() => { setStudentSearch('') }, [taskId])
   const visibleRows = useMemo(() => {
     const keyword = studentSearch.trim().toLowerCase()
     return rows.filter((row) => !keyword || `${row.student.name} ${row.student.number}`.toLowerCase().includes(keyword))
   }, [rows, studentSearch])
-  const pick = (row: ApiSubmission) => { setSelected(row); setScore(row.grade?.score ?? row.evaluation?.score ?? 0); setComment(row.grade?.comment || '') }
+  const pick = (row: ApiSubmission) => applyStudentScore(row)
+  const updateFinalScore = (value: number | null) => {
+    const nextScore = Math.max(0, Math.min(100, value || 0))
+    setScore(nextScore)
+    setScoreDimensions(aiScoreSuggestion(nextScore))
+  }
+  const updateScoreDimension = (key: keyof ScoreDimensions, value: number) => {
+    setScoreDimensions((current) => {
+      const next = { ...current, [key]: value }
+      setScore(Object.values(next).reduce((sum, item) => sum + item, 0))
+      return next
+    })
+  }
+  const restoreAiSuggestion = () => {
+    const suggestedScore = selected?.grade?.score ?? selected?.evaluation?.score ?? 0
+    setScore(suggestedScore)
+    setScoreDimensions(aiScoreSuggestion(suggestedScore))
+    notify('已恢复 AI 评分建议')
+  }
   const save = async (publish: boolean) => {
     if (!selected) return
     setSaving(true)
     try {
-      await api.saveGrade(selected.id, { score, comment })
+      await api.saveGrade(selected.id, { score, comment, dimensions: scoreDimensions })
       if (comment) await api.feedback(selected.id, { content: comment, publish })
       if (publish) await api.publishGrade(selected.id)
       notify(publish ? '成绩与教师反馈已发布到学生端' : '批改草稿已保存')
@@ -120,7 +184,7 @@ export function ExactGrading({ courseId, onNavigate, notify }: FlowProps) {
     <div className="grading-layout-real">
       <aside className="grading-student-list"><Input allowClear prefix={<Search size={14} />} value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} placeholder="搜索学生姓名或学号" />{visibleRows.map((row) => <button className={selected?.id === row.id ? 'active' : ''} key={row.id} onClick={() => pick(row)}><Avatar size={27} className="exact-avatar">{row.student.name.slice(-1)}</Avatar><div><strong>{row.student.name}</strong><small>{row.student.number} · {row.evaluation?.passed_tests}/{row.evaluation?.total_tests} 测试 · L{row.hint_level}</small></div><Tag color={row.grade?.status === 'grade_published' ? 'green' : 'orange'}>{row.grade?.status === 'grade_published' ? '已发布' : '待批改'}</Tag></button>)}{!visibleRows.length && <div className="grading-student-empty">{rows.length ? '没有匹配的学生' : '当前任务暂无学生提交'}</div>}</aside>
       <main><div className="grading-code-head"><span>提交代码 · 版本 #{selected?.version}</span><Space><Button icon={<RefreshCw size={14} />}>重新评测</Button><Button icon={<Code2 size={14} />}>版本对比</Button></Space></div><pre>{selected?.source_code}</pre><div className="grading-tests">{selected?.evaluation?.details.map((item) => <span className={item.passed ? 'pass' : 'fail'} key={item.name}><CheckCircle2 size={14} />{item.name}</span>)}</div></main>
-      <aside className="grading-score"><div className="final-score"><small>最终得分</small><InputNumber value={score} min={0} max={100} onChange={(value) => setScore(value || 0)} /><strong>/ 100</strong></div><Divider /><strong>评分依据</strong>{[['自动测试',40,Math.round(score * .4)],['代码质量',30,Math.round(score * .3)],['实验报告',20,Math.round(score * .2)],['课堂表现',10,Math.round(score * .1)]].map((item) => <div className="score-dimension" key={item[0] as string}><span>{item[0]}<small>{item[2]}/{item[1]}</small></span><Slider value={item[2] as number} max={item[1] as number} disabled /></div>)}<Divider /><strong>教师反馈</strong><Input.TextArea rows={5} value={comment} onChange={(event) => setComment(event.target.value)} placeholder="输入给学生的具体反馈" /><div className="grade-actions"><Button loading={saving} onClick={() => save(false)}>保存草稿</Button><Button type="primary" loading={saving} icon={<Send size={14} />} onClick={() => save(true)}>发布成绩</Button></div></aside>
+      <aside className="grading-score"><div className="final-score"><small>最终得分</small><InputNumber value={score} min={0} max={100} onChange={updateFinalScore} /><strong>/ 100</strong></div><Divider /><div className="score-basis-heading"><span><strong>评分依据</strong><Tag color="green" icon={<Sparkles size={11} />}>AI 建议</Tag></span><Button type="link" size="small" onClick={restoreAiSuggestion}>恢复建议</Button></div><p className="score-basis-hint">AI 提供初始评分，拖动各项后由教师最终确认。</p>{scoreDimensionMeta.map((item) => <div className="score-dimension" key={item.key}><span>{item.label}<small>{scoreDimensions[item.key]}/{item.max}</small></span><Slider aria-label={item.label} value={scoreDimensions[item.key]} max={item.max} onChange={(value) => updateScoreDimension(item.key, value)} /></div>)}<Divider /><strong>教师反馈</strong><Input.TextArea rows={5} value={comment} onChange={(event) => setComment(event.target.value)} placeholder="输入给学生的具体反馈" /><div className="grade-actions"><Button loading={saving} onClick={() => save(false)}>保存草稿</Button><Button type="primary" loading={saving} icon={<Send size={14} />} onClick={() => save(true)}>发布成绩</Button></div></aside>
     </div>
   </div>
 }
@@ -192,6 +256,39 @@ export function ExactReviews({ notify }: FlowProps) {
   return <div className="exact-course-page exact-reviews"><div className="exact-page-title"><div><Title level={2}>AI 审核中心</Title><Text type="secondary">审核低置信度、规则兜底和学生争议诊断。</Text></div></div><div className="review-layout-real"><aside><Segmented options={['待审核 ' + rows.filter((item) => item.status === 'pending').length,'全部记录']} />{rows.map((item) => <button className={selected?.id === item.id ? 'active' : ''} key={item.id} onClick={() => setSelected(item)}><div><strong>{item.student}</strong><Tag color={item.status === 'pending' ? 'orange' : 'green'}>{item.status === 'pending' ? '待审核' : '已处理'}</Tag></div><span>{item.task}</span><small>{item.type} · {item.confidence}%</small></button>)}</aside><main><div className="detail-header"><div><Tag color="orange">待审核</Tag><Title level={3}>{selected?.type}</Title><Text type="secondary">{selected?.student} · {selected?.task}</Text></div><Space><Button danger icon={<X size={14} />} onClick={() => action('rejected')}>驳回</Button><Button icon={<Edit3 size={14} />} onClick={() => { setText(selected?.explanation || ''); setEditing(true) }}>修改后接受</Button><Button type="primary" icon={<Check size={14} />} onClick={() => action('accepted')}>接受诊断</Button></Space></div><div className="ai-original"><div><Bot size={17} /><strong>AI 原始诊断</strong><Tag color={(selected?.confidence || 0) < 70 ? 'orange' : 'green'}>{selected?.confidence}% 置信度</Tag></div><Paragraph>{selected?.explanation}</Paragraph><span><FileText size={14} /> 引用来源：{selected?.source}</span></div><Alert type={selected?.fallback ? 'warning' : 'info'} showIcon message={selected?.fallback ? '规则兜底结果' : '模型诊断结果'} description="原始诊断不可覆盖，教师审核版本单独保存并记录审计日志。" /><Divider /><Timeline items={[{ color: 'green', children: 'AI 诊断生成 · ' + selected?.created_at.slice(0,16).replace('T',' ') },{ color: 'blue', children: '进入教师审核队列' }]} />{editing && <div className="review-editor"><strong>教师修订内容</strong><Input.TextArea rows={6} value={text} onChange={(event) => setText(event.target.value)} /><Space><Button onClick={() => setEditing(false)}>取消</Button><Button type="primary" onClick={() => action('modified')}>保存并接受</Button></Space></div>}</main></div></div>
 }
 
-export function ExactSettings({ notify }: FlowProps) {
-  return <div className="exact-course-page exact-settings"><div className="exact-page-title"><div><Title level={2}>个人设置</Title><Text type="secondary">管理教师资料、通知和 AI 助教偏好。</Text></div></div><div className="settings-real"><aside>{['个人资料','通知设置','AI 助教偏好','数据与隐私'].map((item,index) => <button className={index === 0 ? 'active' : ''} key={item}>{item}<ChevronRight size={14} /></button>)}</aside><main><Title level={3}>个人资料</Title><Form layout="vertical"><Row gutter={14}><Col span={12}><Form.Item label="姓名"><Input value="王老师" readOnly /></Form.Item></Col><Col span={12}><Form.Item label="教师编号"><Input value="T2024001" readOnly /></Form.Item></Col></Row><Form.Item label="所属院系"><Input value="计算机科学与技术学院" readOnly /></Form.Item><Form.Item label="邮箱"><Input value="wang.teacher@university.edu.cn" readOnly /></Form.Item><Alert type="info" showIcon message="账号资料由统一认证服务维护" /><Button type="primary" onClick={() => notify('通知与 AI 偏好已保存')}>保存偏好</Button></Form></main></div></div>
+export function ExactSettings({ notify, teacher }: FlowProps & { teacher: ApiTeacher }) {
+  const [preferences, setPreferences] = useState<ApiTeacherPreference | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    api.preferences()
+      .then(setPreferences)
+      .catch((reason: any) => setError(reason.message || '教师偏好加载失败'))
+  }, [])
+
+  const updatePreference = (key: keyof Omit<ApiTeacherPreference, 'updated_at'>, value: boolean) => {
+    setPreferences((current) => current ? { ...current, [key]: value } : current)
+  }
+
+  const save = async () => {
+    if (!preferences) return
+    setSaving(true)
+    setError('')
+    try {
+      const saved = await api.savePreferences({
+        notifications_enabled: preferences.notifications_enabled,
+        ai_assistant_enabled: preferences.ai_assistant_enabled,
+        email_digest: preferences.email_digest,
+      })
+      setPreferences(saved)
+      notify('通知与 AI 偏好已写入数据库')
+    } catch (reason: any) {
+      setError(reason.message || '教师偏好保存失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return <div className="exact-course-page exact-settings"><div className="exact-page-title"><div><Title level={2}>个人设置</Title><Text type="secondary">管理教师资料、通知和 AI 助教偏好。</Text></div></div><div className="settings-real"><aside>{['个人资料','通知设置','AI 助教偏好','数据与隐私'].map((item,index) => <button className={index === 0 ? 'active' : ''} key={item}>{item}<ChevronRight size={14} /></button>)}</aside><main><Title level={3}>个人资料</Title><Form layout="vertical"><Row gutter={14}><Col span={12}><Form.Item label="姓名"><Input value={teacher.name} readOnly /></Form.Item></Col><Col span={12}><Form.Item label="教师编号"><Input value={teacher.number} readOnly /></Form.Item></Col></Row><Form.Item label="所属院系"><Input value={teacher.department} readOnly /></Form.Item><Form.Item label="邮箱"><Input value={teacher.email} readOnly /></Form.Item><Alert type="info" showIcon message="账号资料由数据库教师档案维护" />{preferences ? <div className="settings-preferences"><Form.Item label="站内通知"><Switch checked={preferences.notifications_enabled} onChange={(value) => updatePreference('notifications_enabled', value)} checkedChildren="开启" unCheckedChildren="关闭" /></Form.Item><Form.Item label="AI 助教"><Switch checked={preferences.ai_assistant_enabled} onChange={(value) => updatePreference('ai_assistant_enabled', value)} checkedChildren="开启" unCheckedChildren="关闭" /></Form.Item><Form.Item label="邮件摘要"><Switch checked={preferences.email_digest} onChange={(value) => updatePreference('email_digest', value)} checkedChildren="开启" unCheckedChildren="关闭" /></Form.Item></div> : !error && <PageLoader />}{error && <Alert type="error" showIcon message={error} />}<Button type="primary" loading={saving} disabled={!preferences} onClick={() => void save()}>保存偏好</Button></Form></main></div></div>
 }

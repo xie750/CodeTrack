@@ -89,10 +89,15 @@ def test_teacher_student_grade_closed_loop():
         grade_response = client.put(
             f"/api/v1/teacher/submissions/{submission['id']}/grade",
             headers=teacher_headers(),
-            json={"score": 93, "comment": "边界处理完整。"},
+            json={
+                "score": 93,
+                "comment": "边界处理完整。",
+                "dimensions": {"autoTest": 38, "codeQuality": 28, "report": 18, "participation": 9},
+            },
         )
         assert grade_response.status_code == 200
         assert grade_response.json()["data"]["status"] == "graded"
+        assert grade_response.json()["data"]["dimensions"]["autoTest"] == 38
 
         publish_grade_response = client.post(
             f"/api/v1/teacher/submissions/{submission['id']}/grade/publish",
