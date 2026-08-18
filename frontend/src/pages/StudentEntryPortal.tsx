@@ -4,9 +4,9 @@ import { useNavigate } from "react-router-dom";
 import { api, apiCache, type LearningContext, type StudentTaskCard } from "../api";
 import type { AuthUser } from "../authSession";
 
-type StudentEntryTheme = "starmap" | "cloud";
+export type StudentEntryTheme = "starmap" | "cloud";
 
-const STUDENT_ENTRY_THEME_KEY = "codetrack.student.entry.theme";
+export const STUDENT_ENTRY_THEME_KEY = "codetrack.student.entry.theme";
 
 type StudentEntryPortalProps = {
   authUser: AuthUser;
@@ -27,7 +27,7 @@ type MotionParticle = {
   twinkleSpeed: number;
 };
 
-function readStoredEntryTheme(): StudentEntryTheme {
+export function readStoredEntryTheme(): StudentEntryTheme {
   if (typeof window === "undefined") return "starmap";
   return window.localStorage.getItem(STUDENT_ENTRY_THEME_KEY) === "cloud" ? "cloud" : "starmap";
 }
@@ -55,7 +55,7 @@ function particlePalette(theme: StudentEntryTheme) {
     : ["255,255,255", "78,202,255", "85,224,180", "128,166,255"];
 }
 
-function StudentEntryMotionBackdrop({ theme }: { theme: StudentEntryTheme }) {
+export function StudentEntryMotionBackdrop({ theme }: { theme: StudentEntryTheme }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {

@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 
 from backend.app.core.config import get_settings
 from backend.app.main import app
+from backend.app.services.presenton_client import _generation_body
 
 
 STUDENT = {"X-Demo-User-Id": "user_student_001"}
@@ -42,6 +43,71 @@ def test_student_can_generate_save_and_download_ppt_resource(monkeypatch):
         assert downloaded.status_code == 200
         assert downloaded.headers["content-type"] == "application/vnd.openxmlformats-officedocument.presentationml.presentation"
         assert len(downloaded.content) > 1000
+
+
+def test_ppt_generation_uses_presenton_when_configured(monkeypatch, tmp_path):
+    monkeypatch.setenv("CODETRACK_MODEL_API_KEY", "")
+    monkeypatch.setenv("CODETRACK_MODEL_NAME", "")
+    monkeypatch.setenv("CODETRACK_MODEL_GATEWAY_URL", "")
+    monkeypatch.setenv("CODETRACK_PRESENTON_ENABLED", "true")
+    monkeypatch.setenv("CODETRACK_PRESENTON_BASE_URL", "http://presenton.local")
+    get_settings.cache_clear()
+
+    async def fake_presenton(**kwargs):
+        output_path = tmp_path / f"{kwargs['resource_id']}.pptx"
+        output_path.write_bytes(b"presenton-pptx" * 100)
+        return {
+            "file_path": str(output_path),
+            "file_format": "PPTX",
+            "download_path": "/generated/fake.pptx",
+            "provider_payload": {
+                "presentation_id": "deck_001",
+                "edit_path": "/app/fake/edit",
+            },
+        }
+
+    monkeypatch.setattr(
+        "backend.app.services.student_resources.generate_presenton_pptx",
+        fake_presenton,
+    )
+
+    with TestClient(app) as client:
+        generated = client.post(
+            "/api/v1/student/resources/generate",
+            headers=STUDENT,
+            json={
+                "course_id": "course_ds_001",
+                "resource_type": "PPT",
+                "message": "帮我生成关于队列的讲解 PPT",
+            },
+        )
+        assert generated.status_code == 200
+        resource = generated.json()["data"]["resource"]
+        assert resource["resource_type"] == "PPT"
+        assert resource["file_format"] == "PPTX"
+        assert resource["render_payload"]["metadata"]["renderer"] == "presenton"
+        assert resource["render_payload"]["metadata"]["presenton_presentation_id"] == "deck_001"
+
+
+def test_presenton_generation_body_uses_fixed_slide_markdown():
+    settings = get_settings()
+    slides = [
+        {
+            "title": "队列讲解",
+            "subtitle": "数据结构",
+            "bullets": ["FIFO 先进先出", "适合任务排队"],
+            "speaker_notes": "先用排队场景解释。",
+        },
+        {"title": "常见错误", "bullets": ["空队列未判断"]},
+    ]
+
+    body = _generation_body(settings, "生成队列教学 PPT", slides)
+
+    assert "n_slides" not in body
+    assert body["include_title_slide"] is False
+    assert body["slides_markdown"][0].startswith("# 队列讲解")
+    assert "FIFO 先进先出" in body["slides_markdown"][0]
+    assert "不要重新规划页数" in body["instructions"]
 
 
 @pytest.mark.parametrize(

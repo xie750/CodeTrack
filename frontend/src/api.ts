@@ -3,6 +3,39 @@ import { authHeaders, getAccessToken, type AuthUser } from "./authSession";
 export type ApiMeta = { request_id: string; [key: string]: unknown };
 export type ApiResponse<T> = { data: T; meta: ApiMeta };
 export type ApiErrorBody = { error: { code: string; message: string; details: Record<string, unknown> }; meta: ApiMeta };
+export type ApiErrorKind = "network" | "server" | "auth" | "forbidden" | "bad_response" | "request";
+
+type ApiRequestErrorOptions = {
+  kind: ApiErrorKind;
+  status?: number;
+  code?: string;
+  requestId?: string;
+  rawMessage?: string;
+  recovery?: string;
+  details?: Record<string, unknown>;
+};
+
+export class ApiRequestError extends Error {
+  kind: ApiErrorKind;
+  status?: number;
+  code?: string;
+  requestId?: string;
+  rawMessage?: string;
+  recovery?: string;
+  details?: Record<string, unknown>;
+
+  constructor(message: string, options: ApiRequestErrorOptions) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.kind = options.kind;
+    this.status = options.status;
+    this.code = options.code;
+    this.requestId = options.requestId;
+    this.rawMessage = options.rawMessage;
+    this.recovery = options.recovery;
+    this.details = options.details;
+  }
+}
 
 export type TaskListItem = {
   task_id: string;
@@ -303,6 +336,18 @@ export type GeneratedResourcePodcastSegment = {
   citation_ids?: string[];
 };
 
+export type GeneratedResourcePresentonSlide = {
+  id?: string | null;
+  index: number;
+  layout?: string | null;
+  layout_group?: string | null;
+  title: string;
+  summary: string;
+  image_url?: string | null;
+  speaker_note?: string | null;
+  content?: Record<string, unknown>;
+};
+
 export type GeneratedResourceType =
   | "PPT"
   | "DOCUMENT"
@@ -331,6 +376,17 @@ export type GeneratedResource = {
     questions?: GeneratedResourceQuestion[];
     cards?: GeneratedResourceCard[];
     segments?: GeneratedResourcePodcastSegment[];
+    presenton_slides?: GeneratedResourcePresentonSlide[];
+    metadata?: {
+      renderer?: string;
+      presenton_error?: string;
+      presenton_presentation_id?: string | null;
+      presenton_edit_path?: string | null;
+      presenton_edit_url?: string | null;
+      presenton_download_path?: string | null;
+      presenton_download_url?: string | null;
+      [key: string]: unknown;
+    };
     [key: string]: unknown;
   };
   file_format: string;
@@ -715,13 +771,53 @@ function clearApiCache(predicate?: (url: string) => boolean) {
   }
 }
 
+function compactTechnicalMessage(message: string) {
+  const normalized = message.replace(/\s+/g, " ").trim();
+  return normalized.length > 220 ? `${normalized.slice(0, 220)}...` : normalized;
+}
+
+function classifyApiStatus(status: number, code?: string): ApiErrorKind {
+  if (status === 401 || code?.startsWith("AUTH_")) return "auth";
+  if (status === 403) return "forbidden";
+  if (status >= 500) return "server";
+  return "request";
+}
+
+function apiRecovery(kind: ApiErrorKind) {
+  if (kind === "network" || kind === "server" || kind === "bad_response") {
+    return "请确认后端服务已启动并且接口地址可访问，然后重试。";
+  }
+  if (kind === "auth") return "请重新确认账号、密码或登录状态。";
+  if (kind === "forbidden") return "请切换到有权限的账号，或返回当前角色可访问的页面。";
+  return "请检查当前输入后重试。";
+}
+
+function userFacingApiMessage(status: number, code?: string, message?: string) {
+  if (code === "AUTH_LOGIN_REQUIRED" || code === "AUTH_LOGIN_FAILED") return message || "账号或密码不正确。";
+  if (code === "AUTH_TOKEN_EXPIRED") return message || "登录状态已过期，请重新登录。";
+  if (code?.startsWith("AUTH_") || status === 401) return message || "登录状态需要确认，请重新登录。";
+  if (status === 403) return message || "当前账号没有访问该资源的权限。";
+  if (status >= 500) return "后端服务暂时不可用，请稍后重试。";
+  return message || "请求没有完成，请稍后重试。";
+}
+
 export async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(authHeaders());
   new Headers(options.headers).forEach((value, key) => headers.set(key, value));
-  const response = await fetch(url, {
-    ...options,
-    headers
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers
+    });
+  } catch (error) {
+    const rawMessage = error instanceof Error ? error.message : String(error);
+    throw new ApiRequestError("暂时无法连接后端服务。", {
+      kind: "network",
+      rawMessage,
+      recovery: apiRecovery("network")
+    });
+  }
   const text = await response.text();
   let body: ApiResponse<T> | ApiErrorBody | null = null;
   if (text) {
@@ -733,13 +829,36 @@ export async function request<T>(url: string, options: RequestInit = {}): Promis
   }
   if (!body) {
     if (!response.ok) {
-      throw new Error(`${response.status} ${response.statusText}: ${text || "响应不是 JSON"}`);
+      const kind = response.status >= 500 ? "server" : "bad_response";
+      const technicalMessage = compactTechnicalMessage(`${response.status} ${response.statusText}: ${text || "响应不是 JSON"}`);
+      throw new ApiRequestError(userFacingApiMessage(response.status), {
+        kind,
+        status: response.status,
+        rawMessage: technicalMessage,
+        recovery: apiRecovery(kind)
+      });
     }
-    throw new Error("服务端响应不是 JSON");
+    throw new ApiRequestError("服务端返回格式异常，请稍后重试。", {
+      kind: "bad_response",
+      status: response.status,
+      rawMessage: text ? compactTechnicalMessage(text) : "响应不是 JSON",
+      recovery: apiRecovery("bad_response")
+    });
   }
   if (!response.ok || "error" in body) {
-    const message = "error" in body ? `${body.error.code}: ${body.error.message}` : response.statusText;
-    throw new Error(message);
+    const code = "error" in body ? body.error.code : undefined;
+    const errorMessage = "error" in body ? body.error.message : undefined;
+    const kind = classifyApiStatus(response.status, code);
+    const message = userFacingApiMessage(response.status, code, errorMessage);
+    throw new ApiRequestError(message, {
+      kind,
+      status: response.status,
+      code,
+      requestId: body.meta?.request_id,
+      rawMessage: "error" in body ? `${body.error.code}: ${body.error.message}` : response.statusText,
+      recovery: apiRecovery(kind),
+      details: "error" in body ? body.error.details : undefined
+    });
   }
   return body.data;
 }
