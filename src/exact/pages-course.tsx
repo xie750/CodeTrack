@@ -6,9 +6,9 @@ import {
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import {
-  BarChart3, Bell, BookOpen, BrainCircuit, Check, CheckCircle2, ChevronRight, ClipboardCheck,
+  ArrowLeft, BarChart3, Bell, BookOpen, BrainCircuit, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck,
   Clock3, Code2, Copy, Database, Download, Edit3, Eye, FileCode2, FileText,
-  Folder, GitBranch, Globe2, Link2, ListChecks, MessageSquareText, Network, Plus,
+  Folder, GitBranch, Globe2, Link2, ListChecks, Megaphone, MessageSquareText, Network, Pin, Plus,
   QrCode, RefreshCw, Save, Search, Send, Settings, SlidersHorizontal, Sparkles, UploadCloud, UserPlus,
   Users, WandSparkles,
 } from 'lucide-react'
@@ -16,19 +16,47 @@ import { Cell, Pie, PieChart, ResponsiveContainer } from 'recharts'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 import {
-  api, type ApiClass, type ApiClassJoinStatus, type ApiCourse, type ApiDiscussion, type ApiMaterial, type ApiStudent,
-  type ApiTask,
+  api, type ApiAnnouncement, type ApiClass, type ApiClassJoinStatus, type ApiCourse, type ApiDiscussion, type ApiMaterial,
+  type ApiStudent, type ApiTask, type ApiTeacher,
 } from '../api'
 import type { ExactView } from './components'
 import { CourseBreadcrumb, EmptyPanel, PageLoader } from './components'
 
 const { Text, Title, Paragraph } = Typography
 
+function parseStudentCsv(text: string) {
+  const rows = text.replace(/^\uFEFF/, '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+  if (!rows.length) return []
+  const split = (line: string) => {
+    const values: string[] = []
+    let current = ''
+    let quoted = false
+    for (let index = 0; index < line.length; index += 1) {
+      const character = line[index]
+      if (character === '"' && quoted && line[index + 1] === '"') { current += '"'; index += 1 }
+      else if (character === '"') quoted = !quoted
+      else if (character === ',' && !quoted) { values.push(current.trim()); current = '' }
+      else current += character
+    }
+    values.push(current.trim())
+    return values
+  }
+  const first = split(rows[0]).map((value) => value.toLowerCase())
+  const hasHeader = first.some((value) => ['姓名', 'name', '学号', 'number', 'student_number'].includes(value))
+  const nameIndex = Math.max(0, first.findIndex((value) => ['姓名', 'name'].includes(value)))
+  const numberIndex = first.findIndex((value) => ['学号', 'number', 'student_number'].includes(value))
+  return rows.slice(hasHeader ? 1 : 0).map(split).map((columns) => ({
+    name: columns[nameIndex]?.trim() || '',
+    number: columns[numberIndex >= 0 ? numberIndex : 1]?.trim() || '',
+  })).filter((row) => row.name && row.number)
+}
+
 interface CommonProps {
   courseId: string
   classId: string
   courses: ApiCourse[]
   classes: ApiClass[]
+  teacher: ApiTeacher
   onNavigate: (view: ExactView) => void
   onRefresh: () => void | Promise<void>
   notify: (text: string) => void
@@ -44,6 +72,10 @@ export function ExactWorkspace(props: CommonProps) {
   const [discussionLoading, setDiscussionLoading] = useState(false)
   const [discussionMode, setDiscussionMode] = useState<'home' | 'create' | 'live' | 'history'>('home')
   const [selectedDiscussionId, setSelectedDiscussionId] = useState('')
+  const [announcementOpen, setAnnouncementOpen] = useState(false)
+  const [announcements, setAnnouncements] = useState<ApiAnnouncement[]>([])
+  const [selectedAnnouncementId, setSelectedAnnouncementId] = useState('')
+  const [announcementFilter, setAnnouncementFilter] = useState<'all' | 'unread'>('all')
   const [discussionForm] = Form.useForm()
   const course = props.courses.find((item) => item.id === props.courseId)
   const courseClasses = props.classes.filter((item) => item.course_id === props.courseId)
@@ -52,6 +84,14 @@ export function ExactWorkspace(props: CommonProps) {
     api.dashboard(props.courseId, props.classId).then(setDashboard)
     api.materials(props.courseId).then(setMaterials)
   }, [props.courseId, props.classId])
+
+  useEffect(() => {
+    api.announcements(props.courseId)
+      .then(setAnnouncements)
+      .catch((reason: any) => props.notify(reason.message || '课程公告加载失败'))
+    setSelectedAnnouncementId('')
+    setAnnouncementFilter('all')
+  }, [props.courseId])
 
   const loadDiscussions = async (quiet = false) => {
     if (!quiet) setDiscussionLoading(true)
@@ -158,6 +198,21 @@ export function ExactWorkspace(props: CommonProps) {
     props.onNavigate('tasks')
   }
 
+  const openAnnouncementCenter = () => {
+    setSelectedAnnouncementId('')
+    setAnnouncementFilter('all')
+    setAnnouncementOpen(true)
+  }
+
+  const openAnnouncement = (announcementId: string) => {
+    setAnnouncementOpen(true)
+    setSelectedAnnouncementId(announcementId)
+    if (announcements.find((item) => item.id === announcementId)?.read) return
+    api.markAnnouncementRead(announcementId)
+      .then(() => setAnnouncements((current) => current.map((item) => item.id === announcementId ? { ...item, read: true } : item)))
+      .catch((reason: any) => props.notify(reason.message || '公告已读状态保存失败'))
+  }
+
   if (!dashboard) return <PageLoader />
 
   const metrics = [
@@ -167,12 +222,6 @@ export function ExactWorkspace(props: CommonProps) {
     ['未提交提醒', dashboard.summary.overdue_students, '较上周 ↓ 3', Bell, 'monitor'],
     ['平均学习进度', dashboard.summary.completion_rate + '%', '较上周 ↑ 5%', BarChart3, 'analytics'],
     ['优秀率', '28%', '较上周 ↑ 3%', MessageSquareText, 'analytics'],
-  ]
-
-  const announcements = [
-    { title: '第6周 树与二叉树 章节资料已更新', detail: '已上传课堂PPT、历年真题与拓展阅读，请同学们及时查看。', date: '05-28', pinned: true },
-    { title: '第33次作业《线性表4组》提交截止提醒', detail: '截止时间：2024-05-31 23:59，请按时提交。', date: '05-27', pinned: false },
-    { title: '下周课程安排预告', detail: '第7周围绕存储结构、最短路径初步算法展开。', date: '05-26', pinned: false },
   ]
 
   const materialCounts = [0, 0, 0, 0]
@@ -195,6 +244,14 @@ export function ExactWorkspace(props: CommonProps) {
   const historyDiscussions = discussions.filter((item) => item.status === 'ended')
   const draftDiscussions = discussions.filter((item) => item.status === 'draft')
   const selectedDiscussion = discussions.find((item) => item.id === selectedDiscussionId)
+  const selectedAnnouncement = announcements.find((item) => item.id === selectedAnnouncementId)
+  const unreadAnnouncementCount = announcements.filter((item) => !item.read).length
+  const visibleAnnouncements = announcementFilter === 'unread'
+    ? announcements.filter((item) => !item.read)
+    : announcements
+  const selectedAnnouncementIndex = selectedAnnouncement
+    ? announcements.findIndex((item) => item.id === selectedAnnouncement.id)
+    : -1
 
   return <div className="exact-course-page exact-workspace">
     <div className="workspace-heading">
@@ -202,7 +259,7 @@ export function ExactWorkspace(props: CommonProps) {
         <img src="/ui-assets/workspace-course-icon.png" alt="" />
         <div>
           <div className="workspace-title-line"><Title level={2}>{course?.name || '未命名课程'}</Title><Tag color="green">{course?.term || '当前学期'}</Tag></div>
-          <div className="workspace-course-meta"><Text type="secondary">课程代码：{course?.code}</Text><Text type="secondary">授课教师：王老师</Text><Text type="secondary">开课院系：计算机科学与技术学院</Text></div>
+          <div className="workspace-course-meta"><Text type="secondary">课程代码：{course?.code}</Text><Text type="secondary">授课教师：{props.teacher.name}</Text><Text type="secondary">开课院系：{props.teacher.department}</Text></div>
         </div>
       </div>
       <Button icon={<Settings size={15} />} onClick={() => props.onNavigate('course-settings')}>课程设置</Button>
@@ -212,13 +269,13 @@ export function ExactWorkspace(props: CommonProps) {
 
     <div className="workspace-board">
       <section className="exact-block workspace-panel workspace-announcements">
-        <div className="exact-block-title"><strong><Bell size={14} /> 课程公告</strong><Button type="link">更多 <ChevronRight size={13} /></Button></div>
-        <div className="workspace-panel-body">{announcements.map((item) => <div className="workspace-list-row" key={item.title}>
+        <div className="exact-block-title"><strong><Bell size={14} /> 课程公告 {unreadAnnouncementCount > 0 && <em>{unreadAnnouncementCount}</em>}</strong><Button type="link" onClick={openAnnouncementCenter}>更多 <ChevronRight size={13} /></Button></div>
+        <div className="workspace-panel-body">{announcements.slice(0, 3).map((item) => <button type="button" className={`workspace-list-row ${item.read ? 'is-read' : 'is-unread'}`} key={item.id} onClick={() => openAnnouncement(item.id)}>
           <span className="dot" />
-          <div><strong>{item.pinned && <Tag color="orange">置顶</Tag>}{item.title}</strong><small>{item.detail}</small></div>
+          <div><strong>{item.pinned && <Tag color="orange">置顶</Tag>}{item.title}</strong><small>{item.summary}</small></div>
           <time>{item.date}</time>
-        </div>)}</div>
-        <Button className="workspace-panel-more" type="link">查看全部公告 <ChevronRight size={13} /></Button>
+        </button>)}</div>
+        <Button className="workspace-panel-more" type="link" onClick={openAnnouncementCenter}>查看全部公告 <ChevronRight size={13} /></Button>
       </section>
 
       <section className="exact-block workspace-panel workspace-recent-tasks">
@@ -260,6 +317,47 @@ export function ExactWorkspace(props: CommonProps) {
         <Button className="workspace-panel-more" type="link" onClick={() => props.onNavigate('analytics')}>查看完整分析 <ChevronRight size={13} /></Button>
       </section>
     </div>
+
+    <Drawer
+      rootClassName="workspace-announcement-drawer"
+      title={<span><Megaphone size={18} /> 课程公告</span>}
+      placement="right"
+      open={announcementOpen}
+      onClose={() => setAnnouncementOpen(false)}
+      width={500}
+    >
+      {!selectedAnnouncement ? <div className="announcement-center">
+        <header className="announcement-center-head">
+          <div><strong>{course?.name || '当前课程'}</strong><small>{unreadAnnouncementCount ? `${unreadAnnouncementCount} 条公告未读` : '公告已全部读完'}</small></div>
+          <Segmented value={announcementFilter} onChange={(value) => setAnnouncementFilter(value as 'all' | 'unread')} options={[{ label: `全部 ${announcements.length}`, value: 'all' }, { label: `未读 ${unreadAnnouncementCount}`, value: 'unread' }]} />
+        </header>
+        <div className="announcement-center-list">
+          {visibleAnnouncements.map((item) => {
+            const read = item.read
+            return <button type="button" className={read ? 'is-read' : 'is-unread'} key={item.id} onClick={() => openAnnouncement(item.id)}>
+              <span className="announcement-state">{item.pinned ? <Pin size={14} /> : <i />}</span>
+              <div><strong>{item.title}</strong><p>{item.summary}</p><small>{item.author} · {item.audience}</small></div>
+              <time>{item.date}<ChevronRight size={14} /></time>
+            </button>
+          })}
+          {!visibleAnnouncements.length && <div className="announcement-empty"><CheckCircle2 size={30} /><strong>没有未读公告</strong><p>新公告发布后会显示在这里。</p></div>}
+        </div>
+      </div> : <article className="announcement-detail">
+        <button type="button" className="announcement-back" onClick={() => setSelectedAnnouncementId('')}><ArrowLeft size={15} /> 返回公告列表</button>
+        <div className="announcement-detail-heading">
+          <div>{selectedAnnouncement.pinned && <Tag color="orange" icon={<Pin size={11} />}>置顶公告</Tag>}<Tag color="green">已读</Tag></div>
+          <h2>{selectedAnnouncement.title}</h2>
+          <p><span>{selectedAnnouncement.author}</span><span>{selectedAnnouncement.published_at}</span></p>
+        </div>
+        <div className="announcement-detail-content">{selectedAnnouncement.content.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</div>
+        <div className="announcement-audience"><Users size={15} /><span><small>接收范围</small><strong>{selectedAnnouncement.audience}</strong></span></div>
+        <footer className="announcement-detail-nav">
+          <Button disabled={selectedAnnouncementIndex <= 0} icon={<ChevronLeft size={14} />} onClick={() => openAnnouncement(announcements[selectedAnnouncementIndex - 1].id)}>上一篇</Button>
+          <span>{selectedAnnouncementIndex + 1} / {announcements.length}</span>
+          <Button disabled={selectedAnnouncementIndex >= announcements.length - 1} onClick={() => openAnnouncement(announcements[selectedAnnouncementIndex + 1].id)}>下一篇 <ChevronRight size={14} /></Button>
+        </footer>
+      </article>}
+    </Drawer>
 
     <Drawer
       rootClassName={'workspace-discussion-drawer ' + (discussionMode === 'live' ? 'is-live' : '')}
@@ -437,6 +535,7 @@ export function ExactInvite(props: CommonProps) {
   const [copied, setCopied] = useState('')
   const [joinCode, setJoinCode] = useState(selected?.join_code || '')
   const [refreshing, setRefreshing] = useState(false)
+  const [importing, setImporting] = useState(false)
   const [methodEnabled, setMethodEnabled] = useState({ link: true, qr: true, code: true })
   const inviteUrl = `${window.location.origin}/join/${joinCode}`
 
@@ -493,6 +592,33 @@ export function ExactInvite(props: CommonProps) {
   const toggleMethod = (method: keyof typeof methodEnabled, checked: boolean) => {
     setMethodEnabled((current) => ({ ...current, [method]: checked }))
   }
+  const importStudentFile = async (file: File) => {
+    if (!selected) return false
+    setImporting(true)
+    try {
+      const rows = parseStudentCsv(await file.text())
+      if (!rows.length) throw new Error('CSV 中未识别到有效的姓名和学号')
+      const result = await api.importStudents(selected.id, rows)
+      props.notify(`导入完成：成功加入 ${result.enrolled} 人，跳过 ${result.skipped} 人`)
+      const [studentRows, status] = await Promise.all([api.students(selected.id), api.classJoinStatus(selected.id)])
+      setStudents(studentRows)
+      setJoinStatus(status)
+      await props.onRefresh()
+    } catch (reason: any) {
+      props.notify(reason.message || '学生名单导入失败')
+    } finally {
+      setImporting(false)
+    }
+    return false
+  }
+  const downloadImportTemplate = () => {
+    const blob = new Blob(['\uFEFF姓名,学号\r\n张三,2026000001\r\n'], { type: 'text/csv;charset=utf-8' })
+    const anchor = document.createElement('a')
+    anchor.href = URL.createObjectURL(blob)
+    anchor.download = 'CodeTrack学生导入模板.csv'
+    anchor.click()
+    URL.revokeObjectURL(anchor.href)
+  }
 
   return <div className="exact-course-page exact-invite">
     <div className="invite-breadcrumb"><CourseBreadcrumb current="邀请学生加入" onNavigate={props.onNavigate} /></div>
@@ -528,7 +654,7 @@ export function ExactInvite(props: CommonProps) {
           </div>
         </section>
 
-        <div className="batch-import"><div><FileText size={24} /><span><strong>批量导入</strong><small>通过 Excel 或 CSV 文件批量导入学生列表，系统将校验姓名与学号。</small></span></div><Upload beforeUpload={() => false} showUploadList={false}><Button icon={<UploadCloud size={15} />}>点击或拖拽文件上传</Button></Upload><Button type="link" icon={<Download size={14} />}>下载 Excel 模板</Button></div>
+        <div className="batch-import"><div><FileText size={24} /><span><strong>批量导入</strong><small>通过 CSV 文件批量导入学生列表，系统将校验姓名与学号。</small></span></div><Upload accept=".csv,text/csv" beforeUpload={importStudentFile} showUploadList={false}><Button loading={importing} icon={<UploadCloud size={15} />}>选择 CSV 文件</Button></Upload><Button type="link" icon={<Download size={14} />} onClick={downloadImportTemplate}>下载 CSV 模板</Button></div>
       </main>
       <aside>
         <div className="exact-block-title"><strong>学生加入状态</strong><Button type="link" onClick={showAllJoinStatus}>查看全部</Button></div>
@@ -580,14 +706,6 @@ export function ExactTasks(props: CommonProps) {
       load()
     } catch (reason: any) { props.notify(reason.message) } finally { setPublishing(false) }
   }
-  const simulateSubmit = async () => {
-    if (!selected || selected.status !== 'published') return props.notify('请先发布任务')
-    try {
-      await api.studentSubmit(selected.id, 'if (!head) return head; if (index == 0) { delete head; } current->next = nullptr;')
-      props.notify('学生王子轩已提交，教师监控已收到新记录')
-      props.onNavigate('monitor')
-    } catch (reason: any) { props.notify(reason.message) }
-  }
   if (!tasks.length) return <PageLoader />
   return <div className="exact-course-page exact-tasks">
     <div className="tasks-layout">
@@ -608,7 +726,7 @@ export function ExactTasks(props: CommonProps) {
           <Form.Item><Checkbox defaultChecked>允许学生使用分层提示</Checkbox></Form.Item>
         </Form>
         <div className="side-panel-actions"><Button onClick={create} loading={saving}>保存为草稿</Button><Button type="primary" onClick={selected?.status === 'draft' ? publish : create} loading={publishing}>{selected?.status === 'draft' ? '确认发布' : '确认创建'}</Button></div>
-        <Button block className="simulate-student" onClick={simulateSubmit}>模拟学生提交并进入教师监控</Button>
+        <Button block className="simulate-student" disabled>学生提交接口已预留，当前未启用</Button>
       </aside>
     </div>
   </div>

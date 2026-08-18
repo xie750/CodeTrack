@@ -36,6 +36,7 @@ from .models import (
 )
 from .schemas import (
     ChapterCreate,
+    ChapterUpdate,
     ClassCreate,
     CourseCreate,
     CourseUpdate,
@@ -54,11 +55,15 @@ from .uploads import router as uploads_router
 from .class_ops import router as class_ops_router
 from .material_ops import router as material_ops_router
 from .class_seed_patch import ensure_class_prototype_data, prototype_class_metrics
+from .chapter_content_seed import ensure_chapter_content_seed
 from .task_ai import router as task_ai_router
+from .task_grade_seed import ensure_task_grade_fixture
 from .material_folder_ops import router as material_folder_router
 from .material_folder_seed import ensure_default_material_folders
 from .graph_ops import router as graph_ops_router
 from .discussion_ops import router as discussion_ops_router
+from .teacher_graphs import router as teacher_graphs_router
+from .frontend_persistence import router as frontend_persistence_router, ensure_frontend_persistence_seed
 
 
 def uid(prefix: str) -> str:
@@ -88,14 +93,41 @@ def ensure_class_filter_columns() -> None:
             connection.execute(text("ALTER TABLE class_groups ADD COLUMN major VARCHAR(120) NOT NULL DEFAULT '软件工程'"))
 
 
+def ensure_grade_dimension_column() -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    if "grades" not in inspect(engine).get_table_names():
+        return
+    columns = {item["name"] for item in inspect(engine).get_columns("grades")}
+    if "dimensions_json" not in columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE grades ADD COLUMN dimensions_json TEXT NOT NULL DEFAULT ''"))
+
+
+def ensure_chapter_content_columns() -> None:
+    if engine.dialect.name != "sqlite" or "chapters" not in inspect(engine).get_table_names():
+        return
+    columns = {item["name"] for item in inspect(engine).get_columns("chapters")}
+    with engine.begin() as connection:
+        if "teaching_mode" not in columns:
+            connection.execute(text("ALTER TABLE chapters ADD COLUMN teaching_mode VARCHAR(40) NOT NULL DEFAULT '理论讲授'"))
+        if "status" not in columns:
+            connection.execute(text("ALTER TABLE chapters ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'draft'"))
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     Base.metadata.create_all(engine)
     ensure_class_filter_columns()
+    ensure_grade_dimension_column()
+    ensure_chapter_content_columns()
     with SessionLocal() as db:
         seed_database(db)
         ensure_class_prototype_data(db)
+        ensure_chapter_content_seed(db)
+        ensure_task_grade_fixture(db)
         ensure_default_material_folders(db)
+        ensure_frontend_persistence_seed(db)
     yield
 
 
@@ -120,6 +152,9 @@ app.include_router(task_ai_router)
 app.include_router(material_folder_router)
 app.include_router(graph_ops_router)
 app.include_router(discussion_ops_router)
+app.include_router(teacher_graphs_router, prefix="/api/v1")
+app.include_router(teacher_graphs_router, prefix="/api")
+app.include_router(frontend_persistence_router)
 
 def current_teacher(
     x_user_id: str = Header(default="teacher-01"),
@@ -279,6 +314,7 @@ def serialize_submission(submission: Submission, include_hidden: bool = True):
             "score": grade.score,
             "status": grade.status,
             "comment": grade.comment,
+            "dimensions": json.loads(grade.dimensions_json) if grade.dimensions_json else None,
             "published_at": grade.published_at.isoformat() if grade.published_at else None,
         },
         "feedback": [
@@ -306,16 +342,24 @@ def teacher_bootstrap(
     teacher: User = Depends(current_teacher),
     db: Session = Depends(get_db),
 ):
-    owned_course(db, teacher, course_id)
     courses = db.scalars(select(Course).where(Course.teacher_id == teacher.id).order_by(Course.created_at)).all()
+    selected_course = next((item for item in courses if item.id == course_id), None) or (courses[0] if courses else None)
+    if selected_course is None:
+        raise HTTPException(status_code=404, detail="当前教师还没有课程")
+    course_id = selected_course.id
     class_groups = db.scalars(
         select(ClassGroup).join(Course).where(Course.teacher_id == teacher.id).order_by(ClassGroup.name)
     ).all()
+    selected_class = next(
+        (item for item in class_groups if item.id == class_id and item.course_id == course_id),
+        next((item for item in class_groups if item.course_id == course_id), None),
+    )
+    class_id = selected_class.id if selected_class else ""
     notifications = db.scalars(
         select(Notification).where(Notification.user_id == teacher.id).order_by(Notification.created_at.desc())
     ).all()
     return envelope({
-        "teacher": {"id": teacher.id, "name": teacher.name, "email": teacher.email, "department": teacher.department},
+        "teacher": {"id": teacher.id, "name": teacher.name, "number": teacher.number, "email": teacher.email, "department": teacher.department},
         "courses": [serialize_course(db, course) for course in courses],
         "classes": [
             {
@@ -604,6 +648,8 @@ def list_chapters(course_id: str, teacher: User = Depends(current_teacher), db: 
             "title": item.title,
             "description": item.description,
             "position": item.position,
+            "teaching_mode": item.teaching_mode,
+            "status": item.status,
             "knowledge_points": [
                 {
                     "id": kp.id,
@@ -625,11 +671,86 @@ def list_chapters(course_id: str, teacher: User = Depends(current_teacher), db: 
 def create_chapter(course_id: str, payload: ChapterCreate, teacher: User = Depends(current_teacher), db: Session = Depends(get_db)):
     owned_course(db, teacher, course_id)
     position = (db.scalar(select(func.max(Chapter.position)).where(Chapter.course_id == course_id)) or 0) + 1
-    chapter = Chapter(id=uid("chapter"), course_id=course_id, title=payload.title, description=payload.description, position=position)
+    chapter = Chapter(id=uid("chapter"), course_id=course_id, title=payload.title, description=payload.description, position=position, teaching_mode=payload.teaching_mode)
     db.add(chapter)
     audit(db, teacher.id, "chapter.create", "chapter", chapter.id)
     db.commit()
-    return envelope({"id": chapter.id, "title": chapter.title, "position": chapter.position})
+    return envelope({"id": chapter.id, "title": chapter.title, "position": chapter.position, "teaching_mode": chapter.teaching_mode, "status": chapter.status})
+
+
+@app.patch("/api/v1/teacher/chapters/{chapter_id}")
+def update_chapter(chapter_id: str, payload: ChapterUpdate, teacher: User = Depends(current_teacher), db: Session = Depends(get_db)):
+    chapter = db.get(Chapter, chapter_id)
+    if not chapter:
+        raise HTTPException(status_code=404, detail="章节不存在")
+    owned_course(db, teacher, chapter.course_id)
+    values = payload.model_dump(exclude_none=True)
+    allowed_modes = {"理论讲授", "翻转课堂", "案例教学", "项目制教学", "实验实训", "混合式教学"}
+    if "teaching_mode" in values and values["teaching_mode"] not in allowed_modes:
+        raise HTTPException(status_code=422, detail="不支持的教学方式")
+    for key, value in values.items():
+        setattr(chapter, key, value)
+    if values.get("status") == "published":
+        materials = db.scalars(select(Material).where(Material.course_id == chapter.course_id)).all()
+        for material in materials:
+            if material.chapter_label == chapter.title and material.status == "ready":
+                material.visibility = "students"
+    if values.get("status") == "draft":
+        materials = db.scalars(select(Material).where(Material.course_id == chapter.course_id)).all()
+        for material in materials:
+            if material.chapter_label == chapter.title and material.status == "ready":
+                material.visibility = "teacher"
+    audit(db, teacher.id, "chapter.update", "chapter", chapter.id, json.dumps(values, ensure_ascii=False))
+    db.commit()
+    db.refresh(chapter)
+    return envelope({
+        "id": chapter.id,
+        "title": chapter.title,
+        "description": chapter.description,
+        "position": chapter.position,
+        "teaching_mode": chapter.teaching_mode,
+        "status": chapter.status,
+    })
+
+
+@app.get("/api/v1/student/courses/{course_id}/content")
+def student_course_content(course_id: str, student: User = Depends(current_student), db: Session = Depends(get_db)):
+    enrolled = db.scalar(
+        select(func.count()).select_from(Enrollment).join(ClassGroup).where(
+            Enrollment.student_id == student.id,
+            ClassGroup.course_id == course_id,
+        )
+    ) or 0
+    if not enrolled:
+        raise HTTPException(status_code=403, detail="未加入该课程")
+    chapters = db.scalars(
+        select(Chapter)
+        .options(selectinload(Chapter.knowledge_points))
+        .where(Chapter.course_id == course_id, Chapter.status == "published")
+        .order_by(Chapter.position)
+    ).all()
+    class_ids = db.scalars(select(Enrollment.class_id).where(Enrollment.student_id == student.id)).all()
+    materials = db.scalars(select(Material).where(
+        Material.course_id == course_id,
+        Material.visibility == "students",
+        Material.status == "ready",
+    )).all()
+    tasks = db.scalars(select(Task).where(
+        Task.course_id == course_id,
+        Task.class_id.in_(class_ids),
+        Task.status == "published",
+    )).all()
+    return envelope([{
+        "id": chapter.id,
+        "title": chapter.title,
+        "description": chapter.description,
+        "position": chapter.position,
+        "teaching_mode": chapter.teaching_mode,
+        "status": "published",
+        "knowledge_points": [{"id": point.id, "name": point.name, "description": point.description, "difficulty": point.difficulty} for point in chapter.knowledge_points],
+        "materials": [{"id": item.id, "title": item.title, "type": item.type, "size": item.size, "content_url": item.content_url} for item in materials if item.chapter_label == chapter.title],
+        "tasks": [{"id": item.id, "title": item.title, "type": item.type, "due_at": item.due_at.isoformat(), "difficulty": item.difficulty} for item in tasks if item.chapter_label == chapter.title],
+    } for chapter in chapters])
 
 
 @app.post("/api/v1/teacher/knowledge-points", status_code=201)
@@ -867,18 +988,27 @@ def save_grade(submission_id: str, payload: GradeUpsert, teacher: User = Depends
     submission = db.get(Submission, submission_id)
     if not submission:
         raise HTTPException(status_code=404, detail="提交不存在")
+    if payload.dimensions:
+        dimension_limits = {"autoTest": 40, "codeQuality": 30, "report": 20, "participation": 10}
+        if set(payload.dimensions) != set(dimension_limits):
+            raise HTTPException(status_code=422, detail="评分依据字段不完整")
+        if any(value < 0 or value > dimension_limits[key] for key, value in payload.dimensions.items()):
+            raise HTTPException(status_code=422, detail="评分依据超出允许范围")
+        if sum(payload.dimensions.values()) != payload.score:
+            raise HTTPException(status_code=422, detail="评分依据之和必须等于最终得分")
     task_owner(db, teacher, submission.task_id)
     grade = db.scalar(select(Grade).where(Grade.submission_id == submission_id))
     if not grade:
-        grade = Grade(id=uid("grade"), submission_id=submission_id, teacher_id=teacher.id, score=payload.score, comment=payload.comment)
+        grade = Grade(id=uid("grade"), submission_id=submission_id, teacher_id=teacher.id, score=payload.score, comment=payload.comment, dimensions_json=json.dumps(payload.dimensions, ensure_ascii=False) if payload.dimensions else "")
         db.add(grade)
     else:
         grade.score = payload.score
         grade.comment = payload.comment
+        grade.dimensions_json = json.dumps(payload.dimensions, ensure_ascii=False) if payload.dimensions else ""
         grade.status = "graded"
     audit(db, teacher.id, "grade.save", "submission", submission_id)
     db.commit()
-    return envelope({"id": grade.id, "score": grade.score, "status": grade.status, "comment": grade.comment})
+    return envelope({"id": grade.id, "score": grade.score, "status": grade.status, "comment": grade.comment, "dimensions": payload.dimensions})
 
 
 @app.post("/api/v1/teacher/submissions/{submission_id}/grade/publish")

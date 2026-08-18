@@ -1,68 +1,49 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import * as echarts from 'echarts'
+import { Button, Input, Modal, Select, Slider, Spin, Tag, Tooltip, Typography } from 'antd'
 import {
-  forceCollide, forceLink, forceManyBody, forceSimulation,
-  type SimulationLinkDatum, type SimulationNodeDatum,
-} from 'd3-force'
-import {
-  Alert, Button, Checkbox, Col, Form, Input, InputNumber, Modal, Row, Select,
-  Space, Tag, Typography,
-} from 'antd'
-import {
-  BrainCircuit, ChevronDown, CloudDownload, Edit3, Expand, ExternalLink, FileText, Filter,
-  GitFork, Link2, LocateFixed, Maximize2, Minus, Network, Plus, Search,
-  Send, Settings, Sparkles, X,
+  CirclePlus, FileText, GitBranch, Link2, MousePointer2, Network, RefreshCw,
+  Save, Send, Sparkles, Trash2, UploadCloud, WandSparkles,
 } from 'lucide-react'
 
 import { api, type ApiClass, type ApiCourse } from '../api'
 import type { ExactView } from './components'
-import { CourseBreadcrumb, EmptyPanel, PageLoader } from './components'
+import { CourseBreadcrumb } from './components'
 import './graph-exact.css'
 
-const { Text, Title, Paragraph } = Typography
+const { Text, Title } = Typography
+
+type NodeType = '知识点' | '概念' | '方法' | '公式' | '案例' | '能力'
+type EdgeType = '前驱' | '后继' | '相关'
+type Selection = { kind: 'node' | 'edge'; id: string } | null
 
 interface GraphNode {
   id: string
-  name: string
+  label: string
+  type: NodeType
   description: string
-  difficulty: string
-  mastery: number
+  difficulty: number
   x: number
   y: number
-  materials?: GraphMaterial[]
-}
-
-interface GraphMaterial {
-  id: string
-  title: string
-  type: string
-  chapter: string
-  size: string
-  content_url?: string | null
-  updated_at: string
-  relation?: 'explicit' | 'chapter' | 'recommended'
+  color: string
+  source: 'ai' | 'custom'
 }
 
 interface GraphEdge {
+  id: string
   source: string
   target: string
-  type?: string
+  type: EdgeType
+  label: EdgeType
 }
 
-interface ForceNode extends SimulationNodeDatum {
-  id: string
-  name: string
-  description: string
-  difficulty: string
-  mastery: number
-  x: number
-  y: number
-  materials?: GraphMaterial[]
+interface SourceFile { filename: string; mime_type: string; size_bytes: number }
+interface GraphSummary {
+  id: number; title: string; status: 'draft' | 'published'; node_count: number; edge_count: number; updated_at: string
 }
-
-interface ForceEdge extends SimulationLinkDatum<ForceNode> {
-  source: string | ForceNode
-  target: string | ForceNode
-  type?: string
+interface TeacherGraph extends GraphSummary {
+  description: string; target_classes: string[]; source_files: SourceFile[]; source_summary: string
+  nodes: GraphNode[]; edges: GraphEdge[]; created_at: string; published_at: string
 }
 
 interface Props {
@@ -75,506 +56,331 @@ interface Props {
   notify: (text: string) => void
 }
 
-interface ForceGraphProps {
-  nodes: GraphNode[]
-  edges: GraphEdge[]
-  selectedId: string
-  search: string
-  zoom: number
-  resetSignal: number
-  onSelect: (id: string) => void
+const NODE_TYPES: NodeType[] = ['知识点', '概念', '方法', '公式', '案例', '能力']
+const EDGE_TYPES: EdgeType[] = ['前驱', '后继', '相关']
+const NODE_COLORS: Record<NodeType, string> = {
+  知识点: '#2563eb', 概念: '#2563eb', 方法: '#0f766e', 公式: '#7c3aed', 案例: '#d97706', 能力: '#dc2626',
+}
+const EDGE_STYLES: Record<EdgeType, { color: string; width: number; type: 'solid' | 'dashed' }> = {
+  前驱: { color: '#CBD5E1', width: 1.5, type: 'solid' },
+  后继: { color: '#67E8F9', width: 1.2, type: 'solid' },
+  相关: { color: '#93C5FD', width: 1.2, type: 'dashed' },
 }
 
-function ForceGraph({ nodes, edges, selectedId, search, zoom, resetSignal, onSelect }: ForceGraphProps) {
+function uid(prefix: string) {
+  return `${prefix}-${Math.random().toString(16).slice(2, 10)}`
+}
+
+function fileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character] || character)
+}
+
+function GraphCanvas({ graph, selection, mode, linkStart, onSelection, onLinkNode, onNodePosition }: {
+  graph: TeacherGraph
+  selection: Selection
+  mode: 'select' | 'connect'
+  linkStart: string
+  onSelection: (selection: Selection) => void
+  onLinkNode: (nodeId: string) => void
+  onNodePosition: (nodeId: string, x: number, y: number) => void
+}) {
   const hostRef = useRef<HTMLDivElement>(null)
-  const frameRef = useRef<number | null>(null)
-  const driftFrameRef = useRef<number | null>(null)
-  const driftRef = useRef({ x: 0, y: 0 })
-  const fluidRef = useRef({ x: 0, y: 0, vx: 0, vy: 0, active: false, initialized: false })
-  const [size, setSize] = useState({ width: 760, height: 560 })
-  const [layoutNodes, setLayoutNodes] = useState<ForceNode[]>([])
-  const [cursor, setCursor] = useState({ x: 0, y: 0, active: false })
-  const [drift, setDrift] = useState({ x: 0, y: 0 })
+  const chartRef = useRef<echarts.ECharts | null>(null)
+  const handlersRef = useRef({ onSelection, onLinkNode, onNodePosition, mode })
+  handlersRef.current = { onSelection, onLinkNode, onNodePosition, mode }
 
   useEffect(() => {
     if (!hostRef.current) return
-    const observer = new ResizeObserver(([entry]) => {
-      const width = Math.max(560, Math.round(entry.contentRect.width))
-      const height = Math.max(460, Math.round(entry.contentRect.height))
-      setSize({ width, height })
-    })
+    const chart = echarts.init(hostRef.current, undefined, { renderer: 'canvas' })
+    chartRef.current = chart
+    let draggingNodeId = ''
+    const click = (params: any) => {
+      if (params.dataType === 'node') {
+        if (handlersRef.current.mode === 'connect') handlersRef.current.onLinkNode(params.data.id)
+        else handlersRef.current.onSelection({ kind: 'node', id: params.data.id })
+      } else if (params.dataType === 'edge') {
+        handlersRef.current.onSelection({ kind: 'edge', id: params.data.id })
+      }
+    }
+    const dragEnd = (params: any) => {
+      const point = chart.convertFromPixel({ seriesIndex: 0 }, [params.event.offsetX, params.event.offsetY]) as number[]
+      if (params.dataType === 'node' && Array.isArray(point)) handlersRef.current.onNodePosition(params.data.id, point[0], point[1])
+    }
+    const pointerDown = (params: any) => {
+      draggingNodeId = params.dataType === 'node' ? params.data.id : ''
+    }
+    const pointerUp = (event: any) => {
+      if (!draggingNodeId) return
+      const point = chart.convertFromPixel({ seriesIndex: 0 }, [event.offsetX, event.offsetY]) as number[]
+      if (Array.isArray(point) && point.every(Number.isFinite)) handlersRef.current.onNodePosition(draggingNodeId, point[0], point[1])
+      draggingNodeId = ''
+    }
+    chart.on('click', click)
+    chart.on('mousedown', pointerDown)
+    chart.on('dragend', dragEnd)
+    chart.getZr().on('mouseup', pointerUp)
+    const observer = new ResizeObserver(() => chart.resize())
     observer.observe(hostRef.current)
-    return () => observer.disconnect()
+    return () => { observer.disconnect(); chart.getZr().off('mouseup', pointerUp); chart.dispose(); chartRef.current = null }
   }, [])
 
   useEffect(() => {
-    const animateDrift = (time: number) => {
-      const fluid = fluidRef.current
-      const pointerX = fluid.active ? (fluid.x - size.width / 2) / Math.max(1, size.width / 2) : 0
-      const pointerY = fluid.active ? (fluid.y - size.height / 2) / Math.max(1, size.height / 2) : 0
-      const targetX = Math.max(-1, Math.min(1, pointerX)) * 38 + Math.sin(time * .00032) * 7
-      const targetY = Math.max(-1, Math.min(1, pointerY)) * 30 + Math.cos(time * .00027) * 6
-      driftRef.current.x += (targetX - driftRef.current.x) * .045
-      driftRef.current.y += (targetY - driftRef.current.y) * .045
-      setDrift({ x: driftRef.current.x, y: driftRef.current.y })
-      driftFrameRef.current = requestAnimationFrame(animateDrift)
-    }
-    driftFrameRef.current = requestAnimationFrame(animateDrift)
-    return () => {
-      if (driftFrameRef.current !== null) cancelAnimationFrame(driftFrameRef.current)
-      driftFrameRef.current = null
-    }
-  }, [size.height, size.width])
+    const chart = chartRef.current
+    if (!chart) return
+    const selectedNode = selection?.kind === 'node' ? selection.id : ''
+    const selectedEdge = selection?.kind === 'edge' ? selection.id : ''
+    chart.setOption({
+      animationDuration: 800,
+      animationEasingUpdate: 'quinticInOut',
+      tooltip: {
+        trigger: 'item', backgroundColor: '#fff', borderColor: '#E5EAF2', borderWidth: 1,
+        padding: [10, 14], textStyle: { color: '#334155', fontSize: 12 }, extraCssText: 'border-radius:10px;box-shadow:0 4px 16px rgba(15,23,42,.08)',
+        formatter: (params: any) => params.dataType === 'edge'
+          ? `<strong>${escapeHtml(params.data.type)}</strong>`
+          : `<strong>${escapeHtml(params.data.label)}</strong><div style="margin-top:6px"><span style="color:${params.data.color}">${escapeHtml(params.data.type)}</span> · 难度 ${'★'.repeat(params.data.difficulty)}</div><div style="margin-top:5px;color:#64748b;max-width:220px">${escapeHtml(params.data.description || '暂无说明')}</div>`,
+      },
+      series: [{
+        type: 'graph', layout: 'force', roam: true, draggable: true, focusNodeAdjacency: true,
+        edgeSymbol: ['none', 'arrow'], edgeSymbolSize: 7, selectedMode: 'single',
+        scaleLimit: { min: .35, max: 3 },
+        force: { repulsion: 360, gravity: .08, edgeLength: [105, 210], friction: .58 },
+        data: graph.nodes.map((node) => ({
+          ...node, name: node.label, symbolSize: 30 + Math.max(1, Math.min(5, node.difficulty)) * 8,
+          selected: selectedNode === node.id,
+          itemStyle: {
+            color: '#fff', borderColor: linkStart === node.id ? '#f59e0b' : selectedNode === node.id ? '#2563eb' : node.color,
+            borderWidth: linkStart === node.id || selectedNode === node.id ? 4 : 1.5,
+            shadowBlur: linkStart === node.id || selectedNode === node.id ? 16 : 8,
+            shadowColor: `${linkStart === node.id ? '#f59e0b' : node.color}33`,
+          },
+          label: { show: true, position: 'bottom', formatter: '{b}', fontSize: 11, fontWeight: 700, color: '#374151', distance: 7, width: 112, overflow: 'truncate' },
+        })),
+        links: graph.edges.map((edge) => {
+          const style = EDGE_STYLES[edge.type]
+          const selected = selectedEdge === edge.id
+          return { ...edge, lineStyle: { color: selected ? '#2563eb' : style.color, width: selected ? 2.8 : style.width, type: style.type, opacity: selected ? .96 : .78, curveness: .15 } }
+        }),
+        label: { show: true }, edgeLabel: { show: false },
+        emphasis: { focus: 'adjacency' },
+      }],
+    }, true)
+  }, [graph, linkStart, selection])
 
-  useEffect(() => {
-    const centerX = size.width * .59
-    const centerY = size.height * .52
-    const baseRadius = Math.min(size.width * .34, size.height * .37)
-    fluidRef.current.x = centerX
-    fluidRef.current.y = centerY
-    const simulationNodes: ForceNode[] = nodes.map((node, index) => {
-      const isCore = node.id === 'kp-linked' || index === 0
-      const satelliteIndex = isCore ? 0 : index - 1
-      const ring = Math.floor(satelliteIndex / 8)
-      const ringCount = Math.min(8, Math.max(1, nodes.length - 1 - ring * 8))
-      const angle = (satelliteIndex % 8) / ringCount * Math.PI * 2 - Math.PI / 2
-      const radius = isCore ? 0 : baseRadius + ring * 82
-      const startX = isCore ? centerX : centerX + Math.cos(angle) * radius
-      const startY = isCore ? centerY : centerY + Math.sin(angle) * radius * .78
-      return {
-        ...node,
-        x: startX + (index % 3 - 1) * 7,
-        y: startY + ((index + 1) % 3 - 1) * 7,
-        vx: 0,
-        vy: 0,
-      }
-    })
-    const links: ForceEdge[] = edges.map((edge) => ({ ...edge }))
-    const flowForce = (alpha: number) => {
-      const time = performance.now() * .00028
-      const fluid = fluidRef.current
-      fluid.vx *= .88
-      fluid.vy *= .88
-      const centroid = simulationNodes.reduce((total, node) => ({
-        x: total.x + (node.x || centerX),
-        y: total.y + (node.y || centerY),
-      }), { x: 0, y: 0 })
-      centroid.x /= Math.max(1, simulationNodes.length)
-      centroid.y /= Math.max(1, simulationNodes.length)
-
-      // The cursor controls where the whole graph slowly drifts. This common force moves
-      // every node together, so the graph feels fluid without collapsing its structure.
-      const pointerX = fluid.active ? (fluid.x - centerX) / Math.max(1, size.width / 2) : 0
-      const pointerY = fluid.active ? (fluid.y - centerY) / Math.max(1, size.height / 2) : 0
-      const targetCenterX = centerX + Math.max(-1, Math.min(1, pointerX)) * Math.min(105, size.width * .12)
-      const targetCenterY = centerY + Math.max(-1, Math.min(1, pointerY)) * Math.min(82, size.height * .12)
-      const globalFlowX = (targetCenterX - centroid.x) * .00085 + fluid.vx * .0018
-      const globalFlowY = (targetCenterY - centroid.y) * .00085 + fluid.vy * .0018
-
-      simulationNodes.forEach((node, index) => {
-        const phase = time + index * 1.73
-        const direction = index % 2 ? 1 : -1
-        const dx = (node.x || centerX) - centroid.x
-        const dy = (node.y || centerY) - centroid.y
-        const distance = Math.max(60, Math.hypot(dx, dy))
-        const wave = .075 * alpha
-        const pointerDx = (node.x || centerX) - fluid.x
-        const pointerDy = (node.y || centerY) - fluid.y
-        const pointerRadius = Math.max(36, Math.hypot(pointerDx, pointerDy))
-        const ripple = fluid.active ? Math.max(0, 1 - pointerRadius / 340) * .024 * alpha : 0
-        node.vx = (node.vx || 0) + globalFlowX + Math.cos(phase * 1.13) * wave - dy / distance * .018 * alpha * direction - pointerDy / pointerRadius * ripple
-        node.vy = (node.vy || 0) + globalFlowY + Math.sin(phase * .91) * wave + dx / distance * .018 * alpha * direction + pointerDx / pointerRadius * ripple
-      })
-    }
-
-    const simulation = forceSimulation(simulationNodes)
-      .force('link', forceLink<ForceNode, ForceEdge>(links).id((node) => node.id).distance(178).strength(.075))
-      .force('charge', forceManyBody<ForceNode>().strength(-620))
-      .force('collision', forceCollide<ForceNode>().radius(84).strength(1))
-      .force('continuous-flow', flowForce)
-      .alpha(.28)
-      .alphaDecay(0)
-      .velocityDecay(.36)
-
-    simulation.on('tick', () => {
-      simulationNodes.forEach((node) => {
-        const nextX = node.x || centerX
-        const nextY = node.y || centerY
-        if (nextX < 82 || nextX > size.width - 82) node.vx = -(node.vx || 0) * .68
-        if (nextY < 76 || nextY > size.height - 96) node.vy = -(node.vy || 0) * .68
-        node.x = Math.max(82, Math.min(size.width - 82, nextX))
-        node.y = Math.max(76, Math.min(size.height - 96, nextY))
-      })
-      if (frameRef.current !== null) return
-      frameRef.current = requestAnimationFrame(() => {
-        frameRef.current = null
-        setLayoutNodes(simulationNodes.map((node) => ({ ...node })))
-      })
-    })
-
-    simulation.restart()
-    return () => {
-      simulation.stop()
-      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current)
-      frameRef.current = null
-    }
-  }, [edges, nodes, resetSignal, size.height, size.width])
-
-  const nodeMap = useMemo(() => new Map(layoutNodes.map((node) => [node.id, node])), [layoutNodes])
-  const transformedCursor = useMemo(() => ({
-    x: (cursor.x - size.width / 2) / zoom + size.width / 2,
-    y: (cursor.y - size.height / 2) / zoom + size.height / 2,
-  }), [cursor.x, cursor.y, size.height, size.width, zoom])
-
-  const pointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect()
-    const rawX = event.clientX - rect.left
-    const rawY = event.clientY - rect.top
-    const x = (rawX - size.width / 2) / zoom + size.width / 2
-    const y = (rawY - size.height / 2) / zoom + size.height / 2
-    const fluid = fluidRef.current
-    if (fluid.initialized) {
-      const deltaX = Math.max(-40, Math.min(40, x - fluid.x))
-      const deltaY = Math.max(-40, Math.min(40, y - fluid.y))
-      fluid.vx = fluid.vx * .68 + deltaX * .32
-      fluid.vy = fluid.vy * .68 + deltaY * .32
-    }
-    fluid.x = x
-    fluid.y = y
-    fluid.active = true
-    fluid.initialized = true
-    setCursor({ x: rawX, y: rawY, active: true })
-  }
-
-  const pointerLeave = () => {
-    fluidRef.current.active = false
-    fluidRef.current.initialized = false
-    setCursor((current) => ({ ...current, active: false }))
-  }
-
-  const searchKey = search.trim().toLowerCase()
-  const transform = `translate(${drift.x.toFixed(2)} ${drift.y.toFixed(2)}) translate(${size.width / 2} ${size.height / 2}) scale(${zoom}) translate(${-size.width / 2} ${-size.height / 2})`
-  const cursorDistances = layoutNodes.map((node) => Math.hypot((node.x || 0) - transformedCursor.x, (node.y || 0) - transformedCursor.y))
-  const lightRadius = 210
-  const proximityAt = (distance: number) => {
-    if (!cursor.active) return 0
-    const value = Math.max(0, Math.min(1, 1 - distance / lightRadius))
-    return value * value * (3 - 2 * value)
-  }
-  const proximityById = new Map(layoutNodes.map((node, index) => [node.id, proximityAt(cursorDistances[index])]))
-
-  return <div className="force-graph-host" ref={hostRef}>
-    <div className={'force-cursor-light ' + (cursor.active ? 'visible' : '')} style={{ left: cursor.x, top: cursor.y }} />
-    <svg
-      className="force-graph-svg"
-      viewBox={`0 0 ${size.width} ${size.height}`}
-      onPointerMove={pointerMove}
-      onPointerLeave={pointerLeave}
-      aria-label="课程知识图谱交互画布"
-    >
-      <g transform={transform}>
-        <g className="force-edges">
-          {edges.map((edge, index) => {
-            const source = nodeMap.get(edge.source)
-            const target = nodeMap.get(edge.target)
-            if (!source || !target) return null
-            const connected = source.id === selectedId || target.id === selectedId
-            const edgeProximity = ((proximityById.get(source.id) || 0) + (proximityById.get(target.id) || 0)) / 2
-            const lineLevel = Math.round(8 + edgeProximity * 116)
-            return <g key={`${edge.source}-${edge.target}-${index}`}>
-              <line
-                className={connected ? 'active' : ''}
-                x1={source.x}
-                y1={source.y}
-                x2={target.x}
-                y2={target.y}
-                style={{
-                  stroke: `rgb(${lineLevel}, ${lineLevel}, ${lineLevel})`,
-                  opacity: .82 + edgeProximity * .18,
-                }}
-              />
-              <line
-                className="force-edge-flow"
-                x1={source.x}
-                y1={source.y}
-                x2={target.x}
-                y2={target.y}
-                style={{
-                  stroke: `rgb(${Math.max(28, lineLevel)}, ${Math.max(28, lineLevel)}, ${Math.max(28, lineLevel)})`,
-                  opacity: .2 + edgeProximity * .55,
-                  animationDelay: `${-index * .19}s`,
-                }}
-              />
-            </g>
-          })}
-        </g>
-        <g className="force-nodes">
-          {layoutNodes.map((node, index) => {
-            const proximity = proximityAt(cursorDistances[index])
-            const selected = node.id === selectedId
-            const searchMatch = !!searchKey && node.name.toLowerCase().includes(searchKey)
-            const scale = 1 + proximity * .09
-            const coreLevel = Math.round(4 + proximity * 74)
-            const edgeLevel = Math.round(24 + proximity * 174)
-            const iconLevel = Math.round(118 + proximity * 137)
-            return <g
-              className={`force-node color-${index % 6} ${selected ? 'selected' : ''} ${searchMatch ? 'search-match' : ''} ${node.materials?.length ? 'has-materials' : ''}`}
-              key={node.id}
-              transform={`translate(${node.x || 0} ${node.y || 0}) scale(${scale})`}
-              style={{
-                '--node-core-fill': `rgb(${coreLevel}, ${coreLevel}, ${coreLevel})`,
-                '--node-edge-color': `rgb(${edgeLevel}, ${edgeLevel}, ${edgeLevel})`,
-                '--node-icon-color': `rgb(${iconLevel}, ${iconLevel}, ${iconLevel})`,
-                '--node-proximity': proximity,
-              } as React.CSSProperties}
-              onClick={() => onSelect(node.id)}
-              role="button"
-              tabIndex={0}
-            >
-              <circle className="force-node-halo" r={37} />
-              <circle className="force-node-core" r={29} />
-              {node.id === 'kp-linked' || index === 0 ? <Link2 x={-12} y={-12} width={24} height={24} /> : index % 2 ? <BrainCircuit x={-11} y={-11} width={22} height={22} /> : <Network x={-11} y={-11} width={22} height={22} />}
-              {!!node.materials?.length && <g className="force-node-material-marker">
-                <title>{`已关联 ${node.materials.length} 份课程资料`}</title>
-                <circle cx={24} cy={-23} r={9} />
-                <FileText x={19} y={-28} width={10} height={10} />
-              </g>}
-              <foreignObject x={-70} y={40} width={140} height={42}>
-                <div className="force-node-label" title={node.name}>{node.name}</div>
-              </foreignObject>
-            </g>
-          })}
-        </g>
-      </g>
-    </svg>
-    <div className="force-graph-legend"><Sparkles size={13} /><span>移动鼠标探索关联层级</span></div>
-  </div>
+  return <div className="kg-canvas" ref={hostRef} aria-label="知识图谱交互画布" />
 }
 
 export function ExactGraphV2(props: Props) {
-  const [graph, setGraph] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] } | null>(null)
-  const [selectedId, setSelectedId] = useState('kp-linked')
-  const [editOpen, setEditOpen] = useState(false)
-  const [createOpen, setCreateOpen] = useState(false)
-  const [aiOpen, setAiOpen] = useState(false)
-  const [aiLoading, setAiLoading] = useState(false)
-  const [candidates, setCandidates] = useState<any[]>([])
-  const [candidateNames, setCandidateNames] = useState<string[]>([])
-  const [search, setSearch] = useState('')
-  const [zoom, setZoom] = useState(1)
-  const [resetSignal, setResetSignal] = useState(0)
-  const [importCollapsed, setImportCollapsed] = useState(false)
-  const [previewMaterial, setPreviewMaterial] = useState<GraphMaterial | null>(null)
-  const [form] = Form.useForm()
+  const [graphs, setGraphs] = useState<GraphSummary[]>([])
+  const [graph, setGraph] = useState<TeacherGraph | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [generating, setGenerating] = useState(false)
+  const [error, setError] = useState('')
+  const [selection, setSelection] = useState<Selection>(null)
+  const [mode, setMode] = useState<'select' | 'connect'>('select')
+  const [edgeType, setEdgeType] = useState<EdgeType>('前驱')
+  const [linkStart, setLinkStart] = useState('')
+  const [files, setFiles] = useState<File[]>([])
+  const [title, setTitle] = useState('')
+  const [targetClasses, setTargetClasses] = useState('')
+  const [description, setDescription] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
 
-  const load = () => api.graph(props.courseId).then((data) => {
-    setGraph(data)
-    setSelectedId((current) => data.nodes.some((item: GraphNode) => item.id === current) ? current : data.nodes[0]?.id || '')
-  }).catch((reason: any) => props.notify(reason.message || '知识图谱加载失败'))
-
-  useEffect(() => { void load() }, [props.courseId])
-
-  const selected = useMemo(
-    () => graph?.nodes.find((item) => item.id === selectedId) || graph?.nodes[0],
-    [graph, selectedId],
-  )
-
-  const related = useMemo(() => {
-    if (!graph || !selected) return []
-    const ids = graph.edges.flatMap((edge) => edge.source === selected.id ? [edge.target] : edge.target === selected.id ? [edge.source] : [])
-    return graph.nodes.filter((item) => ids.includes(item.id))
-  }, [graph, selected])
-
-  const openEdit = () => {
-    if (!selected) return
-    form.setFieldsValue({
-      name: selected.name,
-      description: selected.description,
-      difficulty: selected.difficulty,
-      mastery: selected.mastery,
-      position_x: selected.x,
-      position_y: selected.y,
-    })
-    setEditOpen(true)
-  }
-
-  const saveNode = async () => {
-    if (!selected) return
+  const loadList = useCallback(async (preferredId?: number) => {
+    setLoading(true); setError('')
     try {
-      await api.updateGraphNode(selected.id, form.getFieldsValue())
-      props.notify('知识点全部信息已更新')
-      setEditOpen(false)
-      await load()
-    } catch (reason: any) {
-      props.notify(reason.message)
-    }
+      const rows = await api.teacherGraphs() as GraphSummary[]
+      setGraphs(rows)
+      const target = preferredId ?? graph?.id ?? rows[0]?.id
+      if (target) setGraph(await api.teacherGraph(target))
+      else setGraph(null)
+    } catch (reason: any) { setError(reason.message || '图谱加载失败') }
+    finally { setLoading(false) }
+  }, [graph?.id])
+
+  useEffect(() => { void loadList() }, [])
+
+  const openGraph = async (id: number) => {
+    setLoading(true); setError(''); setSelection(null); setLinkStart('')
+    try { setGraph(await api.teacherGraph(id)) }
+    catch (reason: any) { setError(reason.message || '图谱加载失败') }
+    finally { setLoading(false) }
   }
 
-  const createNode = async () => {
+  const patchGraph = (patch: Partial<TeacherGraph>) => setGraph((current) => current ? { ...current, ...patch } : current)
+  const selectedNode = selection?.kind === 'node' ? graph?.nodes.find((item) => item.id === selection.id) : undefined
+  const selectedEdge = selection?.kind === 'edge' ? graph?.edges.find((item) => item.id === selection.id) : undefined
+
+  const createBlank = async () => {
+    setSaving(true); setError('')
     try {
-      const chapters = await api.chapters(props.courseId)
-      const values = form.getFieldsValue()
-      await api.createKnowledgePoint({
-        chapter_id: chapters[0].id,
-        name: values.name,
-        description: values.description || '',
-        difficulty: values.difficulty || '基础',
-        position_x: 65,
-        position_y: 45,
-      })
-      props.notify('知识点已创建')
-      setCreateOpen(false)
-      form.resetFields()
-      await load()
-    } catch (reason: any) {
-      props.notify(reason.message)
-    }
+      const created = await api.createTeacherGraph({ title: title.trim() || '未命名知识图谱', description, target_classes: splitClasses(targetClasses) })
+      setTitle(''); setDescription(''); setTargetClasses(''); setGraph(created); await loadList(created.id); props.notify('空白图谱已创建')
+    } catch (reason: any) { setError(reason.message || '创建失败') }
+    finally { setSaving(false) }
   }
 
-  const generateCandidates = async () => {
-    setAiOpen(true)
-    setAiLoading(true)
+  const generate = async () => {
+    if (!files.length) { setError('请先选择 PDF、Word、Markdown 或 TXT 资料'); return }
+    setGenerating(true); setError('')
     try {
-      const result = await api.aiGraphCandidates(props.courseId)
-      setCandidates(result.candidates)
-      setCandidateNames(result.candidates.map((item: any) => item.name))
-    } catch (reason: any) {
-      props.notify(reason.message)
-    } finally {
-      setAiLoading(false)
-    }
+      const created = await api.createTeacherGraphFromFiles(files, { title: title.trim() || files[0].name.replace(/\.[^.]+$/, ''), description, target_classes: targetClasses })
+      setFiles([]); setTitle(''); setDescription(''); setTargetClasses(''); setGraph(created); await loadList(created.id); props.notify('资料分析完成，图谱草稿已生成')
+    } catch (reason: any) { setError(reason.message || '图谱生成失败') }
+    finally { setGenerating(false) }
   }
 
-  const confirmCandidates = async () => {
-    setAiLoading(true)
+  const save = async () => {
+    if (!graph) return
+    setSaving(true); setError('')
     try {
-      const chosen = candidates.filter((item) => candidateNames.includes(item.name))
-      await api.confirmGraphCandidates(props.courseId, chosen)
-      props.notify('AI 候选节点已由教师确认并创建')
-      setAiOpen(false)
-      await load()
-    } catch (reason: any) {
-      props.notify(reason.message)
-    } finally {
-      setAiLoading(false)
+      const saved = await api.saveTeacherGraph(graph.id, graph)
+      setGraph(saved); await loadList(saved.id); props.notify('图谱草稿已保存')
+    } catch (reason: any) { setError(reason.message || '保存失败') }
+    finally { setSaving(false) }
+  }
+
+  const publish = async () => {
+    if (!graph) return
+    setSaving(true); setError('')
+    try {
+      await api.saveTeacherGraph(graph.id, graph)
+      const published = await api.publishTeacherGraph(graph.id)
+      setGraph(published); await loadList(published.id); props.notify('知识图谱已发布')
+    } catch (reason: any) { setError(reason.message || '发布失败') }
+    finally { setSaving(false) }
+  }
+
+  const addNode = () => {
+    if (!graph) return
+    const count = graph.nodes.length
+    const node: GraphNode = { id: uid('node'), label: `自定义节点 ${count + 1}`, type: '知识点', description: '教师手动添加的知识点。', difficulty: 2, x: 160 + count % 4 * 150, y: 120 + Math.floor(count / 4) * 96, color: '#2563eb', source: 'custom' }
+    patchGraph({ nodes: [...graph.nodes, node], node_count: count + 1 }); setSelection({ kind: 'node', id: node.id }); setMode('select')
+  }
+
+  const automaticLayout = () => {
+    if (!graph?.nodes.length) return
+    const count = Math.max(1, graph.nodes.length - 1)
+    const nodes = graph.nodes.map((node, index) => index === 0 ? { ...node, x: 430, y: 270 } : { ...node, x: 430 + 270 * Math.cos(-Math.PI / 2 + (index - 1) * Math.PI * 2 / count), y: 270 + 175 * Math.sin(-Math.PI / 2 + (index - 1) * Math.PI * 2 / count) })
+    patchGraph({ nodes }); props.notify('已按椭圆关系重新布局')
+  }
+
+  const removeSelection = () => {
+    if (!graph || !selection) return
+    if (selection.kind === 'node') {
+      const nodes = graph.nodes.filter((item) => item.id !== selection.id)
+      const edges = graph.edges.filter((item) => item.source !== selection.id && item.target !== selection.id)
+      patchGraph({ nodes, edges, node_count: nodes.length, edge_count: edges.length })
+    } else {
+      const edges = graph.edges.filter((item) => item.id !== selection.id)
+      patchGraph({ edges, edge_count: edges.length })
     }
+    setSelection(null)
   }
 
-  const resetView = () => {
-    setZoom(1)
-    setResetSignal((value) => value + 1)
+  const chooseLinkNode = (id: string) => {
+    if (!graph) return
+    if (!linkStart) { setLinkStart(id); props.notify('已选择起始节点，请点击目标节点'); return }
+    if (linkStart === id) { setLinkStart(''); setError('起始节点与目标节点不能相同'); return }
+    if (graph.edges.some((item) => item.source === linkStart && item.target === id && item.type === edgeType)) { setLinkStart(''); setError('相同关系已存在'); return }
+    const edge: GraphEdge = { id: uid('edge'), source: linkStart, target: id, type: edgeType, label: edgeType }
+    patchGraph({ edges: [...graph.edges, edge], edge_count: graph.edges.length + 1 }); setSelection({ kind: 'edge', id: edge.id }); setLinkStart(''); setMode('select')
   }
 
-  const requestFullscreen = () => {
-    const stage = document.querySelector<HTMLElement>('.graph-v2-stage')
-    if (stage?.requestFullscreen) void stage.requestFullscreen()
+  const updateNode = (patch: Partial<GraphNode>) => {
+    if (!graph || !selectedNode) return
+    const next = { ...selectedNode, ...patch }
+    if (patch.type) next.color = NODE_COLORS[patch.type]
+    patchGraph({ nodes: graph.nodes.map((item) => item.id === next.id ? next : item) })
+  }
+  const updateEdge = (type: EdgeType) => {
+    if (!graph || !selectedEdge) return
+    patchGraph({ edges: graph.edges.map((item) => item.id === selectedEdge.id ? { ...item, type, label: type } : item) })
+  }
+  const deleteGraph = () => {
+    if (!graph) return
+    Modal.confirm({ title: '删除当前图谱？', content: '节点、关系和来源资料将一并删除，此操作不可撤销。', okText: '删除', okButtonProps: { danger: true }, cancelText: '取消', onOk: async () => { await api.deleteTeacherGraph(graph.id); setGraph(null); setSelection(null); await loadList(); props.notify('图谱已删除') } })
   }
 
-  if (!graph) return <PageLoader />
+  const associated = useMemo(() => !graph || !selectedNode ? [] : graph.edges.filter((edge) => edge.source === selectedNode.id || edge.target === selectedNode.id).map((edge) => ({ edge, node: graph.nodes.find((node) => node.id === (edge.source === selectedNode.id ? edge.target : edge.source)), direction: edge.source === selectedNode.id ? '出' : '入' })).filter((item) => item.node), [graph, selectedNode])
+  const totalPublished = graphs.filter((item) => item.status === 'published').length
 
-  return <div className="exact-course-page graph-v2-page">
-    <div className="graph-v2-heading">
-      <div><CourseBreadcrumb current="课程知识图谱" onNavigate={props.onNavigate} /><Title level={2}>课程知识图谱</Title><Text type="secondary">构建课程知识体系，梳理知识点关联关系，支撑教学设计与学情分析。</Text></div>
-      <Space className="graph-v2-toolbar" wrap>
-        <Button icon={<LocateFixed size={14} />} onClick={() => setCreateOpen(true)}>添加概念</Button>
-        <Button icon={<GitFork size={14} />} onClick={() => props.notify('请先选择父节点，再添加子级')}>添加子级</Button>
-        <Button icon={<Network size={14} />} onClick={() => props.notify('关系编辑模式已开启')}>添加关系 <ChevronDown size={12} /></Button>
-        <Button icon={<Expand size={14} />} onClick={() => props.notify('交叉关联模式已开启')}>交叉关联</Button>
-        <Button icon={<Settings size={14} />} onClick={openEdit}>节点样式</Button>
-        <Button type="primary" icon={<BrainCircuit size={14} />} onClick={generateCandidates}>AI 生成图谱</Button>
-      </Space>
-    </div>
-
-    <div className="graph-v2-layout">
-      <main className="graph-v2-stage">
-        <div className="graph-v2-search">
-          <Input allowClear value={search} onChange={(event) => setSearch(event.target.value)} prefix={<Search size={14} />} placeholder="搜索知识点" suffix={<Settings size={13} />} />
-          <Button icon={<Filter size={14} />} onClick={() => props.notify('当前显示全部知识点')}>筛选</Button>
-          <Button aria-label="收起导入面板" onClick={() => setImportCollapsed((value) => !value)}>{importCollapsed ? '»' : '«'}</Button>
-        </div>
-        {!importCollapsed && <div className="graph-v2-import">
-          <strong>从素材导入知识点</strong>
-          <button onClick={() => props.onNavigate('materials')}><FileText size={16} /><span><b>从教学资源导入</b><small>从课件、教案等资源导入</small></span><ChevronDown size={12} /></button>
-          <button onClick={() => props.onNavigate('materials')}><Link2 size={16} /><span><b>从文档导入</b><small>从文档、PPT、试题等导入</small></span><ChevronDown size={12} /></button>
-          <button onClick={generateCandidates}><BrainCircuit size={16} /><span><b>从 AI 资料库生成</b><small>从大纲提取候选知识点</small></span><ChevronDown size={12} /></button>
-        </div>}
-
-        {graph.nodes.length ? <ForceGraph
-          nodes={graph.nodes}
-          edges={graph.edges}
-          selectedId={selected?.id || ''}
-          search={search}
-          zoom={zoom}
-          resetSignal={resetSignal}
-          onSelect={setSelectedId}
-        /> : <EmptyPanel text="当前课程还没有知识点，可以先使用 AI 从课程大纲生成候选节点" />}
-
-        <div className="graph-v2-zoom">
-          <Button size="small" aria-label="适配画布" icon={<Maximize2 size={13} />} onClick={resetView} />
-          <Button size="small" aria-label="放大" icon={<Plus size={13} />} onClick={() => setZoom((value) => Math.min(1.35, value + .1))} />
-          <Button size="small" aria-label="缩小" icon={<Minus size={13} />} onClick={() => setZoom((value) => Math.max(.75, value - .1))} />
-          <span>{Math.round(zoom * 100)}%</span>
-          <Button size="small" aria-label="全屏" icon={<Expand size={13} />} onClick={requestFullscreen} />
-        </div>
-        <div className="graph-v2-minimap">{graph.nodes.slice(0,12).map((node, index) => <i key={node.id} style={{ left: `${18 + index % 4 * 21}%`, top: `${20 + Math.floor(index / 4) * 27}%` }} />)}</div>
-      </main>
-
-      <aside className="graph-v2-detail">
-        {selected ? <>
-          <div className="graph-v2-detail-head"><span><Link2 size={18} /></span><div><Title level={3}>{selected.name}</Title><Tag color="green">核心知识</Tag></div><Button icon={<Edit3 size={14} />} onClick={openEdit}>编辑</Button><Button type="text" icon={<X size={15} />} /></div>
-          <div className="graph-v2-definition"><strong>节点定义</strong><Paragraph>{selected.description || '该知识点是课程知识结构中的核心概念，与多个前置和关联知识相连。'}</Paragraph></div>
-          <div className="graph-v2-difficulty"><strong>难易程度</strong><Tag color="gold">{selected.difficulty || '中等'}</Tag></div>
-          <div className="graph-v2-related"><div><strong>前置知识（{Math.min(related.length, 2)}）</strong><Button type="link">＋ 添加</Button></div>{related.slice(0,2).map((item) => <span key={item.id}><i className="blue" />{item.name}<small>掌握度 {item.mastery}%</small></span>)}</div>
-          <div className="graph-v2-related"><div><strong>关联知识（{related.length}）</strong><Button type="link">＋ 添加</Button></div>{related.slice(0,5).map((item, index) => <span key={item.id}><i className={'r' + index} />{item.name}<small>掌握度 {item.mastery}%</small></span>)}</div>
-          <section className="graph-v2-materials">
-            <div><strong>关联资料（{selected.materials?.length || 0}）</strong><Button type="link" onClick={() => props.onNavigate('materials')}>管理资料</Button></div>
-            {selected.materials?.length ? selected.materials.map((material) => <button key={material.id} onClick={() => setPreviewMaterial(material)}>
-              <span><FileText size={16} /></span>
-              <span><b title={material.title}>{material.title}</b><small>{material.relation === 'explicit' ? '已导入' : material.relation === 'chapter' ? '章节匹配' : '课程推荐'} · {material.chapter || '课程资料'} · {material.size || material.type.toUpperCase()}</small></span>
-              <ExternalLink size={13} />
-            </button>) : <div className="graph-v2-material-empty">
-              <FileText size={18} /><span>该知识点暂未关联资料</span><Button size="small" onClick={() => props.onNavigate('materials')}>去资料管理导入</Button>
-            </div>}
+  return <div className="exact-course-page kg-page">
+    <header className="kg-page-head">
+      <div><CourseBreadcrumb current="知识图谱" onNavigate={props.onNavigate} /><Title level={2}>知识图谱</Title><Text type="secondary">上传课程资料生成图谱草稿，教师可继续自定义节点、调整关系并发布到目标班级。</Text></div>
+      <div className="kg-head-actions">
+        <Tooltip title="重新加载图谱"><Button icon={<RefreshCw size={15} />} onClick={() => void loadList(graph?.id)}>刷新</Button></Tooltip>
+        <Button icon={<Save size={15} />} disabled={!graph || saving} loading={saving} onClick={() => void save()}>保存草稿</Button>
+        <Button type="primary" icon={<Send size={15} />} disabled={!graph || saving} onClick={() => void publish()}>发布</Button>
+      </div>
+      <div className="kg-stats">
+        <Stat label="图谱总数" value={graphs.length} /><Stat label="已发布" value={totalPublished} /><Stat label="当前节点" value={graph?.nodes.length || 0} /><Stat label="当前关系" value={graph?.edges.length || 0} />
+      </div>
+    </header>
+    {error && <div className="kg-error" role="alert"><span>{error}</span><button onClick={() => setError('')}>关闭</button></div>}
+    <Spin spinning={loading} description="正在加载图谱">
+      <div className="kg-layout">
+        <aside className="kg-left">
+          <section className="kg-card kg-generator">
+            <CardTitle icon={<WandSparkles size={16} />} title="资料生成" extra={<Tag color="blue">PDF / Word / MD / TXT</Tag>} />
+            <label>图谱名称<Input value={title} placeholder="例如：数据结构课程图谱" onChange={(event) => setTitle(event.target.value)} /></label>
+            <label>发布班级<Input.TextArea value={targetClasses} rows={2} placeholder="中文逗号、英文逗号或换行分隔" onChange={(event) => setTargetClasses(event.target.value)} /></label>
+            <label>说明<Input.TextArea value={description} rows={2} placeholder="填写图谱用途或教学目标" onChange={(event) => setDescription(event.target.value)} /></label>
+            <input ref={inputRef} hidden type="file" multiple accept=".pdf,.docx,.md,.txt" onChange={(event) => setFiles(Array.from(event.target.files || []))} />
+            <button type="button" className="kg-upload" onClick={() => inputRef.current?.click()}><UploadCloud size={22} /><strong>{files.length ? `已选择 ${files.length} 个文件` : '选择课程资料'}</strong><small>单个文件不超过 20 MB</small></button>
+            {!!files.length && <div className="kg-file-list">{files.map((file) => <span key={`${file.name}-${file.size}`}><FileText size={13} /><b>{file.name}</b><small>{fileSize(file.size)}</small></span>)}</div>}
+            <Button block type="primary" icon={<Sparkles size={15} />} loading={generating} disabled={saving} onClick={() => void generate()}>分析并生成图谱</Button>
+            <Button block icon={<CirclePlus size={15} />} loading={saving} disabled={generating} onClick={() => void createBlank()}>新建空白图谱</Button>
           </section>
-          <Button type="primary" size="large" block icon={<Send size={14} />} onClick={() => props.notify('知识图谱已发布')}>发布图谱</Button>
-        </> : <EmptyPanel text="选择或创建知识点后查看详情" />}
-      </aside>
-    </div>
-
-    <Modal title="AI 从大纲提取知识图谱候选" open={aiOpen} onCancel={() => setAiOpen(false)} onOk={confirmCandidates} confirmLoading={aiLoading} okText="确认并创建节点">
-      <Alert type="warning" showIcon message="AI 只生成候选节点，教师确认后才写入正式知识图谱。" />
-      <Checkbox.Group className="graph-ai-candidates" value={candidateNames} onChange={(values) => setCandidateNames(values as string[])}>
-        {candidates.map((item) => <Checkbox key={item.name} value={item.name}><strong>{item.name}</strong><small>{item.description}</small></Checkbox>)}
-      </Checkbox.Group>
-    </Modal>
-
-    <Modal title="编辑知识点全部信息" open={editOpen} onCancel={() => setEditOpen(false)} onOk={saveNode} okText="保存全部信息">
-      <Form form={form} layout="vertical">
-        <Form.Item label="知识点名称" name="name" rules={[{ required: true }]}><Input /></Form.Item>
-        <Form.Item label="节点定义" name="description"><Input.TextArea rows={4} /></Form.Item>
-        <Row gutter={12}><Col span={12}><Form.Item label="难度" name="difficulty"><Select options={['基础','中等','进阶','挑战'].map((value) => ({ value, label: value }))} /></Form.Item></Col><Col span={12}><Form.Item label="掌握度" name="mastery"><InputNumber min={0} max={100} suffix="%" /></Form.Item></Col></Row>
-        <Row gutter={12}><Col span={12}><Form.Item label="横向位置" name="position_x"><InputNumber min={0} max={100} /></Form.Item></Col><Col span={12}><Form.Item label="纵向位置" name="position_y"><InputNumber min={0} max={100} /></Form.Item></Col></Row>
-      </Form>
-    </Modal>
-
-    <Modal title="添加知识点" open={createOpen} onCancel={() => setCreateOpen(false)} onOk={createNode} okText="创建节点">
-      <Form form={form} layout="vertical"><Form.Item label="知识点名称" name="name" rules={[{ required: true }]}><Input /></Form.Item><Form.Item label="节点定义" name="description"><Input.TextArea rows={4} /></Form.Item><Form.Item label="难度" name="difficulty" initialValue="基础"><Select options={['基础','进阶','挑战'].map((value) => ({ value, label: value }))} /></Form.Item></Form>
-    </Modal>
-
-    <Modal
-      className="graph-material-preview-modal"
-      title="知识点关联资料"
-      open={!!previewMaterial}
-      onCancel={() => setPreviewMaterial(null)}
-      footer={previewMaterial?.content_url ? <Button type="primary" href={previewMaterial.content_url} target="_blank" icon={<ExternalLink size={14} />}>打开原资料</Button> : null}
-      width={720}
-    >
-      {previewMaterial && <div className="graph-material-preview">
-        <div className="graph-material-preview-head"><span><FileText size={22} /></span><div><strong>{previewMaterial.title}</strong><small>{previewMaterial.chapter || '课程资料'} · {previewMaterial.size || previewMaterial.type.toUpperCase()}</small></div></div>
-        {previewMaterial.type === 'pdf' && previewMaterial.content_url
-          ? <iframe title={previewMaterial.title} src={previewMaterial.content_url} />
-          : <div className="graph-material-preview-body"><CloudDownload size={34} /><strong>{previewMaterial.title}</strong><p>该资料已作为当前知识点的教学证据，可用于备课、课堂讲解和 AI 知识库引用。</p>{!previewMaterial.content_url && <Tag>当前资料暂无在线原文件</Tag>}</div>}
-      </div>}
-    </Modal>
+          <section className="kg-card kg-list-card">
+            <CardTitle icon={<Network size={16} />} title="图谱列表" extra={<span className="kg-count">{graphs.length}</span>} />
+            <div className="kg-graph-list">{graphs.map((item) => <button type="button" key={item.id} className={graph?.id === item.id ? 'active' : ''} onClick={() => void openGraph(item.id)}><span><strong>{item.title}</strong><Tag color={item.status === 'published' ? 'green' : 'default'}>{item.status === 'published' ? '已发布' : '草稿'}</Tag></span><small>{item.node_count} 节点 · {item.edge_count} 关系</small></button>)}{!graphs.length && <div className="kg-list-empty">还没有图谱</div>}</div>
+          </section>
+        </aside>
+        <main className="kg-main">
+          <div className="kg-toolbar">
+            <div className="kg-segment"><Button type={mode === 'select' ? 'primary' : 'text'} icon={<MousePointer2 size={14} />} onClick={() => { setMode('select'); setLinkStart('') }}>选择</Button><Button type={mode === 'connect' ? 'primary' : 'text'} icon={<Link2 size={14} />} onClick={() => setMode('connect')}>连接</Button></div>
+            <Select value={edgeType} options={EDGE_TYPES.map((value) => ({ value, label: value }))} onChange={setEdgeType} aria-label="关系类型" />
+            <Button icon={<CirclePlus size={14} />} disabled={!graph} onClick={addNode}>节点</Button>
+            <Button icon={<GitBranch size={14} />} disabled={!graph?.nodes.length} onClick={automaticLayout}>布局</Button>
+            <Button danger icon={<Trash2 size={14} />} disabled={!selection} onClick={removeSelection}>删除</Button>
+            {mode === 'connect' && <span className="kg-connect-hint">{linkStart ? '请选择目标节点' : '请选择起始节点'}</span>}
+          </div>
+          <section className="kg-canvas-shell">
+            {graph && graph.nodes.length ? <GraphCanvas graph={graph} selection={selection} mode={mode} linkStart={linkStart} onSelection={setSelection} onLinkNode={chooseLinkNode} onNodePosition={(id, x, y) => patchGraph({ nodes: graph.nodes.map((node) => node.id === id ? { ...node, x, y } : node) })} /> : <div className="kg-empty"><Network size={36} /><strong>还没有图谱内容</strong><span>上传资料自动生成，或先新建空白图谱再手动添加节点。</span></div>}
+          </section>
+        </main>
+        <aside className="kg-right">
+          <section className="kg-card kg-properties">
+            <CardTitle icon={<MousePointer2 size={16} />} title="属性面板" />
+            {!selection && <div className="kg-property-empty"><MousePointer2 size={25} /><p>选择画布中的节点或关系后，可在这里编辑名称、类型、难度和说明。</p></div>}
+            {selectedNode && <div className="kg-form">
+              <label>节点名称<Input value={selectedNode.label} maxLength={32} onChange={(event) => updateNode({ label: event.target.value })} /></label>
+              <label>节点类型<Select value={selectedNode.type} options={NODE_TYPES.map((value) => ({ value, label: value }))} onChange={(value) => updateNode({ type: value })} /></label>
+              <label><span>难度 <b>{selectedNode.difficulty}</b></span><Slider min={1} max={5} marks={{ 1: '1', 3: '3', 5: '5' }} value={selectedNode.difficulty} onChange={(value) => updateNode({ difficulty: value })} /></label>
+              <label>说明<Input.TextArea rows={4} maxLength={120} value={selectedNode.description} onChange={(event) => updateNode({ description: event.target.value })} /></label>
+              <div className="kg-associated"><strong>关联节点</strong>{associated.map(({ edge, node, direction }) => <button type="button" key={edge.id} onClick={() => setSelection({ kind: 'edge', id: edge.id })}><span>{direction} · {edge.type}</span><b>{node?.label}</b></button>)}{!associated.length && <small>暂无关联关系</small>}</div>
+            </div>}
+            {selectedEdge && <div className="kg-form"><label>关系类型<Select value={selectedEdge.type} options={EDGE_TYPES.map((value) => ({ value, label: value }))} onChange={updateEdge} /></label><div className="kg-endpoints"><span>起点<strong>{graph?.nodes.find((node) => node.id === selectedEdge.source)?.label || '-'}</strong></span><GitBranch size={17} /><span>终点<strong>{graph?.nodes.find((node) => node.id === selectedEdge.target)?.label || '-'}</strong></span></div></div>}
+          </section>
+          <section className="kg-card kg-source">
+            <CardTitle icon={<FileText size={16} />} title="来源资料" extra={graph && <Tag color={graph.status === 'published' ? 'green' : 'default'}>{graph.status === 'published' ? '已发布' : '草稿'}</Tag>} />
+            {graph?.source_files.length ? <div className="kg-source-files">{graph.source_files.map((file) => <span key={file.filename}><FileText size={14} /><b>{file.filename}</b><small>{fileSize(file.size_bytes)}</small></span>)}</div> : <p className="kg-muted">当前图谱没有上传来源资料。</p>}
+            {graph?.source_summary && <div className="kg-summary"><strong>资料摘要</strong><p>{graph.source_summary}</p></div>}
+            <Button block danger icon={<Trash2 size={14} />} disabled={!graph} onClick={deleteGraph}>删除当前图谱</Button>
+          </section>
+        </aside>
+      </div>
+    </Spin>
   </div>
 }
+
+function splitClasses(value: string) { return value.split(/[,，\n]+/).map((item) => item.trim()).filter(Boolean) }
+function Stat({ label, value }: { label: string; value: number }) { return <div><span>{label}</span><strong>{value}</strong></div> }
+function CardTitle({ icon, title, extra }: { icon: React.ReactNode; title: string; extra?: React.ReactNode }) { return <header className="kg-card-title"><span>{icon}<strong>{title}</strong></span>{extra}</header> }

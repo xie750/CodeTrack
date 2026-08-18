@@ -20,7 +20,7 @@ const globalPaths: Record<string, ExactView> = {
 }
 
 const courseViews = new Set<ExactView>([
-  'workspace', 'classes', 'invite', 'tasks', 'materials', 'graph',
+  'workspace', 'content', 'classes', 'invite', 'tasks', 'materials', 'graph',
   'monitor', 'grading', 'analytics', 'reviews',
   'course-settings',
 ])

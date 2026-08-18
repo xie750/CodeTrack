@@ -24,6 +24,34 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 
 
+class TeacherCredential(Base):
+    __tablename__ = "teacher_credentials"
+
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    password_salt: Mapped[str] = mapped_column(String(64))
+    password_hash: Mapped[str] = mapped_column(String(128))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+
+class TeacherPreference(Base):
+    __tablename__ = "teacher_preferences"
+
+    teacher_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    notifications_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    ai_assistant_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    email_digest: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+
+class CourseDraft(Base):
+    __tablename__ = "course_drafts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    teacher_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True)
+    payload_json: Mapped[str] = mapped_column(Text, default="{}")
+    saved_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+
 class Course(Base):
     __tablename__ = "courses"
 
@@ -43,6 +71,30 @@ class Course(Base):
     chapters: Mapped[list[Chapter]] = relationship(back_populates="course", cascade="all, delete-orphan", order_by="Chapter.position")
     tasks: Mapped[list[Task]] = relationship(back_populates="course", cascade="all, delete-orphan")
     materials: Mapped[list[Material]] = relationship(back_populates="course", cascade="all, delete-orphan")
+
+
+class CourseAnnouncement(Base):
+    __tablename__ = "course_announcements"
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id", ondelete="CASCADE"), index=True)
+    author_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    summary: Mapped[str] = mapped_column(Text, default="")
+    content_json: Mapped[str] = mapped_column(Text, default="[]")
+    audience: Mapped[str] = mapped_column(String(200), default="全部授课班级")
+    pinned: Mapped[bool] = mapped_column(Boolean, default=False)
+    published_at: Mapped[datetime] = mapped_column(DateTime, default=now, index=True)
+
+
+class AnnouncementRead(Base):
+    __tablename__ = "announcement_reads"
+    __table_args__ = (UniqueConstraint("announcement_id", "user_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    announcement_id: Mapped[str] = mapped_column(ForeignKey("course_announcements.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    read_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 
 
 class ClassGroup(Base):
@@ -84,6 +136,8 @@ class Chapter(Base):
     title: Mapped[str] = mapped_column(String(160))
     description: Mapped[str] = mapped_column(Text, default="")
     position: Mapped[int] = mapped_column(Integer)
+    teaching_mode: Mapped[str] = mapped_column(String(40), default="理论讲授")
+    status: Mapped[str] = mapped_column(String(20), default="draft")
 
     course: Mapped[Course] = relationship(back_populates="chapters")
     knowledge_points: Mapped[list[KnowledgePoint]] = relationship(back_populates="chapter", cascade="all, delete-orphan")
@@ -102,6 +156,24 @@ class KnowledgePoint(Base):
     position_y: Mapped[int] = mapped_column(Integer, default=50)
 
     chapter: Mapped[Chapter] = relationship(back_populates="knowledge_points")
+
+
+class TeacherKnowledgeGraph(Base):
+    __tablename__ = "teacher_knowledge_graphs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    title: Mapped[str] = mapped_column(String(160))
+    description: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(20), default="draft")
+    target_classes: Mapped[str] = mapped_column(Text, default="[]")
+    source_files: Mapped[str] = mapped_column(Text, default="[]")
+    source_summary: Mapped[str] = mapped_column(Text, default="")
+    nodes_json: Mapped[str] = mapped_column(Text, default="[]")
+    edges_json: Mapped[str] = mapped_column(Text, default="[]")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
 class Material(Base):
@@ -237,6 +309,7 @@ class Grade(Base):
     submission_id: Mapped[str] = mapped_column(ForeignKey("submissions.id"), unique=True)
     teacher_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     score: Mapped[int] = mapped_column(Integer)
+    dimensions_json: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(30), default="graded")
     comment: Mapped[str] = mapped_column(Text, default="")
     published_at: Mapped[datetime | None] = mapped_column(DateTime)

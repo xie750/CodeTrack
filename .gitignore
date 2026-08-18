@@ -15,3 +15,11 @@ backend/uploads/*
 artifacts/
 backups/
 reference_extract/
+
+# 本地临时/草稿与文档转储（非代码，不入库）
+tmp/
+codetrack_core.txt
+pdf_full_utf8.txt
+research_norm.txt
+tmp申报表.txt
+tmp附件论文.txt
