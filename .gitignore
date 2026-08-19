@@ -9,6 +9,7 @@ frontend/dist/
 frontend/tsconfig.tsbuildinfo
 backend-uvicorn-generated-resources*.log
 frontend-vite-generated-resources*.log
+tools/ppt-master*/
 # 资料中心端到端校验脚本的截图产物
 frontend/.resource-check/
 

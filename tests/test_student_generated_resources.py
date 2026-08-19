@@ -1,4 +1,5 @@
 import pytest
+import sys
 from fastapi.testclient import TestClient
 
 from backend.app.core.config import get_settings
@@ -13,6 +14,7 @@ def test_student_can_generate_save_and_download_ppt_resource(monkeypatch):
     monkeypatch.setenv("CODETRACK_MODEL_API_KEY", "")
     monkeypatch.setenv("CODETRACK_MODEL_NAME", "")
     monkeypatch.setenv("CODETRACK_MODEL_GATEWAY_URL", "")
+    monkeypatch.setenv("CODETRACK_PPT_RENDERER", "local")
     get_settings.cache_clear()
 
     with TestClient(app) as client:
@@ -49,6 +51,7 @@ def test_ppt_generation_uses_presenton_when_configured(monkeypatch, tmp_path):
     monkeypatch.setenv("CODETRACK_MODEL_API_KEY", "")
     monkeypatch.setenv("CODETRACK_MODEL_NAME", "")
     monkeypatch.setenv("CODETRACK_MODEL_GATEWAY_URL", "")
+    monkeypatch.setenv("CODETRACK_PPT_RENDERER", "presenton")
     monkeypatch.setenv("CODETRACK_PRESENTON_ENABLED", "true")
     monkeypatch.setenv("CODETRACK_PRESENTON_BASE_URL", "http://presenton.local")
     get_settings.cache_clear()
@@ -89,6 +92,75 @@ def test_ppt_generation_uses_presenton_when_configured(monkeypatch, tmp_path):
         assert resource["render_payload"]["metadata"]["presenton_presentation_id"] == "deck_001"
 
 
+def test_ppt_generation_uses_ppt_master_command_when_configured(monkeypatch, tmp_path):
+    monkeypatch.setenv("CODETRACK_MODEL_API_KEY", "")
+    monkeypatch.setenv("CODETRACK_MODEL_NAME", "")
+    monkeypatch.setenv("CODETRACK_MODEL_GATEWAY_URL", "")
+    monkeypatch.setenv("CODETRACK_PPT_RENDERER", "ppt_master")
+    monkeypatch.setenv("CODETRACK_PPT_MASTER_ENABLED", "true")
+
+    runner = tmp_path / "fake_ppt_master.py"
+    runner.write_text(
+        """
+import argparse
+import json
+from pathlib import Path
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--request-json", required=True)
+parser.add_argument("--output-pptx", required=True)
+args = parser.parse_args()
+request = json.loads(Path(args.request_json).read_text(encoding="utf-8"))
+assert request["ppt_master_home"]
+assert request["ppt_master_skill_dir"].endswith("skills" + "/" + "ppt-master") or request["ppt_master_skill_dir"].endswith("skills" + "\\\\" + "ppt-master")
+Path(args.output_pptx).write_bytes(b"ppt-master-pptx" * 100)
+Path(request["metadata_json"]).write_text(json.dumps({"project_id": "pm_001", "export_path": args.output_pptx}), encoding="utf-8")
+print("ppt master done")
+""".strip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CODETRACK_PPT_MASTER_COMMAND", f'"{sys.executable}" "{runner}"')
+    ppt_master_home = tmp_path / "ppt-master-main"
+    (ppt_master_home / "skills" / "ppt-master").mkdir(parents=True)
+    monkeypatch.setenv("CODETRACK_PPT_MASTER_HOME", str(ppt_master_home))
+    monkeypatch.setenv("CODETRACK_PPT_MASTER_WORKSPACE_DIR", str(tmp_path / "workspace"))
+    get_settings.cache_clear()
+
+    with TestClient(app) as client:
+        generated = client.post(
+            "/api/v1/student/resources/generate",
+            headers=STUDENT,
+            json={
+                "course_id": "course_ds_001",
+                "resource_type": "PPT",
+                "message": "帮我生成关于队列的讲解 PPT",
+            },
+        )
+        assert generated.status_code == 200
+        resource = generated.json()["data"]["resource"]
+        assert resource["resource_type"] == "PPT"
+        assert resource["file_format"] == "PPTX"
+        metadata = resource["render_payload"]["metadata"]
+        assert metadata["renderer"] == "ppt_master"
+        assert metadata["renderer_requested"] == "ppt_master"
+        assert metadata["ppt_master_project_id"] == "pm_001"
+
+
+def test_student_can_read_ppt_renderer_config(monkeypatch):
+    monkeypatch.setenv("CODETRACK_PPT_RENDERER", "ppt_master")
+    monkeypatch.setenv("CODETRACK_PPT_MASTER_ENABLED", "false")
+    get_settings.cache_clear()
+
+    with TestClient(app) as client:
+        response = client.get("/api/v1/student/resources/ppt/renderers", headers=STUDENT)
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["requested"] == "ppt_master"
+    assert payload["active"] == "local_pptx"
+    assert payload["available"]["local_pptx"] is True
+
+
 def test_presenton_generation_body_uses_fixed_slide_markdown():
     settings = get_settings()
     slides = [
@@ -124,6 +196,7 @@ def test_student_can_generate_save_and_download_generic_resources(monkeypatch, r
     monkeypatch.setenv("CODETRACK_MODEL_API_KEY", "")
     monkeypatch.setenv("CODETRACK_MODEL_NAME", "")
     monkeypatch.setenv("CODETRACK_MODEL_GATEWAY_URL", "")
+    monkeypatch.setenv("CODETRACK_PPT_RENDERER", "local")
     get_settings.cache_clear()
 
     with TestClient(app) as client:

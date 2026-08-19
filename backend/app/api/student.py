@@ -46,6 +46,7 @@ from backend.app.services.student_resources import (
     generate_ppt_resource,
     get_generated_resource,
     list_saved_generated_resources,
+    ppt_renderer_config_payload,
     resource_media_type,
     save_generated_resource,
 )
@@ -228,6 +229,8 @@ def generated_resource_model_name(resource: dict) -> str:
     renderer = metadata.get("renderer") if isinstance(metadata, dict) else None
     if renderer == "presenton":
         return "LangGraph + Presenton"
+    if renderer == "ppt_master":
+        return "LangGraph + PPT Master"
     if renderer == "local_pptx":
         return "LangGraph + python-pptx"
     if resource.get("resource_type") == "PPT":
@@ -241,6 +244,10 @@ def generated_resource_safety_note(resource: dict) -> str:
     metadata = payload.get("metadata") if isinstance(payload, dict) else {}
     if isinstance(metadata, dict) and metadata.get("presenton_error"):
         return f"Presenton 暂未生成成功，已自动回退到本地 PPTX 渲染器。原因：{metadata.get('presenton_error')}"
+    if isinstance(metadata, dict) and metadata.get("ppt_master_error"):
+        return f"PPT Master 暂未生成成功，已自动回退到本地 PPTX 渲染器。原因：{metadata.get('ppt_master_error')}"
+    if isinstance(metadata, dict) and metadata.get("renderer_config_error"):
+        return f"PPT 渲染器配置暂不可用，已自动回退到本地 PPTX 渲染器。原因：{metadata.get('renderer_config_error')}"
     return "AI 生成资源已基于课程资料进行引用校验，建议结合课堂讲义复核关键概念。"
 
 
@@ -552,6 +559,12 @@ async def student_generate_resource(
             "assistant_message_id": assistant_message.id,
         }
     )
+
+
+@router.get("/resources/ppt/renderers")
+def student_ppt_renderers(user: User = Depends(current_user)):
+    require_role(user, "STUDENT")
+    return ok(ppt_renderer_config_payload())
 
 
 @router.post("/resources/{resource_id}/save")

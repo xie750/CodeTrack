@@ -27,8 +27,10 @@ import {
 } from "lucide-react";
 import { api, type GeneratedResource } from "../api";
 import { authHeaders } from "../authSession";
+import GeneratedResourcePreviewModal from "../components/GeneratedResourcePreviewModal";
 
 type ResourceType = "视频教程" | "代码项目" | "文章文档" | "电子书" | "学习路线";
+type ResourceFolder = "全部" | "资源生成" | ResourceType;
 type Difficulty = "全部" | "入门" | "初级" | "中级" | "高级";
 
 type ResourceItem = {
@@ -46,14 +48,6 @@ type ResourceItem = {
   imageTone: "python" | "github" | "doc" | "book" | "algo" | "route";
   duration?: string;
 };
-
-const resourceTypes: Array<{ label: "全部" | ResourceType; count: number }> = [
-  { label: "全部", count: 126 },
-  { label: "视频教程", count: 42 },
-  { label: "代码项目", count: 34 },
-  { label: "文章文档", count: 36 },
-  { label: "电子书", count: 8 }
-];
 
 const difficultyOptions: Difficulty[] = ["全部", "入门", "初级", "中级", "高级"];
 const hotSearches = ["Python基础", "数据结构", "Flask实战", "爬虫", "Pandas", "机器学习", "可视化"];
@@ -174,12 +168,13 @@ function generatedResourceMetric(resource: GeneratedResource) {
 }
 
 export default function StudentResourceCenter() {
-  const [activeType, setActiveType] = useState<"全部" | ResourceType>("全部");
+  const [activeType, setActiveType] = useState<ResourceFolder>("全部");
   const [difficulty, setDifficulty] = useState<Difficulty>("全部");
   const [query, setQuery] = useState("");
   const [savedIds, setSavedIds] = useState(() => new Set(["python-video-2024", "python-crash-course"]));
   const [generatedResources, setGeneratedResources] = useState<GeneratedResource[]>([]);
   const [generatedError, setGeneratedError] = useState<string | null>(null);
+  const [previewResource, setPreviewResource] = useState<GeneratedResource | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -195,6 +190,30 @@ export default function StudentResourceCenter() {
     };
   }, []);
 
+  const generatedVisibleResources = useMemo(() => {
+    const keyword = query.trim().toLowerCase();
+    return generatedResources.filter((item) => (
+      !keyword ||
+      item.title.toLowerCase().includes(keyword) ||
+      item.summary.toLowerCase().includes(keyword) ||
+      item.knowledge_point.toLowerCase().includes(keyword) ||
+      (item.resource_type_label ?? item.resource_type).toLowerCase().includes(keyword)
+    ));
+  }, [generatedResources, query]);
+
+  const resourceTypes = useMemo<Array<{ label: ResourceFolder; count: number }>>(() => {
+    const typeCount = (type: ResourceType) => resources.filter((item) => item.type === type).length;
+    return [
+      { label: "全部", count: resources.length + generatedResources.length },
+      { label: "资源生成", count: generatedResources.length },
+      { label: "视频教程", count: typeCount("视频教程") },
+      { label: "代码项目", count: typeCount("代码项目") },
+      { label: "文章文档", count: typeCount("文章文档") },
+      { label: "电子书", count: typeCount("电子书") },
+      { label: "学习路线", count: typeCount("学习路线") }
+    ];
+  }, [generatedResources.length]);
+
   const visibleResources = useMemo(() => {
     const keyword = query.trim().toLowerCase();
     return resources.filter((item) => {
@@ -208,6 +227,9 @@ export default function StudentResourceCenter() {
       return typeMatched && difficultyMatched && queryMatched;
     });
   }, [activeType, difficulty, query]);
+  const showGeneratedResources = activeType === "全部" || activeType === "资源生成";
+  const showExternalResources = activeType !== "资源生成";
+  const totalVisibleCount = (showGeneratedResources ? generatedVisibleResources.length : 0) + (showExternalResources ? visibleResources.length : 0);
 
   function toggleSaved(id: string) {
     setSavedIds((current) => {
@@ -261,50 +283,6 @@ export default function StudentResourceCenter() {
         ))}
       </section>
 
-      <section className="student-generated-resources" aria-label="AI 生成资源">
-        <header>
-          <div>
-            <h2>AI 生成资源</h2>
-            <p>从 AI 对话中加入资源中心的学习产物，可在这里管理和导出</p>
-          </div>
-          <span>{generatedResources.length} 个资源</span>
-        </header>
-        {generatedError ? <p className="student-generated-error">{generatedError}</p> : null}
-        {generatedResources.length ? (
-          <div className="student-generated-grid">
-            {generatedResources.map((resource) => {
-              const metric = generatedResourceMetric(resource);
-              return (
-                <article className="student-generated-card" key={resource.id}>
-                  <div className="student-generated-thumb">
-                    {generatedResourceIcon(resource)}
-                    <strong>{metric.value}</strong>
-                    <span>{metric.label}</span>
-                  </div>
-                  <div className="student-generated-body">
-                    <h3>{resource.title}</h3>
-                    <p>{resource.summary}</p>
-                    <div className="student-generated-tags">
-                      <span><BookmarkCheck size={14} /> 已加入资源中心</span>
-                      <span>{resource.resource_type_label ?? resource.resource_type}</span>
-                      <span>{resource.knowledge_point || "自主学习"}</span>
-                      <span>{resource.file_format}</span>
-                      <span>引用 {(resource.citations ?? []).length} 条</span>
-                    </div>
-                  </div>
-                  <button type="button" onClick={() => downloadGeneratedResource(resource)} disabled={!resource.download_available}>
-                    <Download size={16} />
-                    导出
-                  </button>
-                </article>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="student-generated-empty">还没有加入资源中心的 AI 生成资源。可以在 AI 助学中生成学习产物后点击书签保存。</p>
-        )}
-      </section>
-
       <div className="student-resource-layout">
         <aside className="student-resource-types" aria-label="资源类型">
           <h2>资源类型</h2>
@@ -350,43 +328,97 @@ export default function StudentResourceCenter() {
             </button>
           </section>
 
-          <div className="student-resource-count">找到约 {visibleResources.length ? 126 : 0} 条相关结果</div>
+          <div className="student-resource-count">找到 {totalVisibleCount} 条相关结果</div>
 
-          <section className="student-resource-grid" aria-label="资源列表">
-            {visibleResources.map((item) => (
-              <article className="student-resource-card" key={item.id}>
-                <div className={`student-resource-thumb ${item.imageTone}`}>
-                  <span>{resourceIcon(item.type)}</span>
-                  {item.duration ? <em>{item.duration}</em> : null}
+          {showGeneratedResources ? (
+            <section className="student-generated-resources" aria-label="AI 生成资源">
+              <header>
+                <div>
+                  <h2>资源生成</h2>
+                  <p>从 AI 助学中加入资源中心的学习产物，可在这里预览、打开和导出</p>
                 </div>
-                <div className="student-resource-card-body">
-                  <header>
-                    <h2>{item.title}</h2>
-                    <button type="button" onClick={() => toggleSaved(item.id)} aria-label={`${savedIds.has(item.id) ? "取消收藏" : "收藏"} ${item.title}`}>
-                      <span>{savedIds.has(item.id) ? "已收藏" : "收藏"}</span>
-                      <Star size={17} fill={savedIds.has(item.id) ? "currentColor" : "none"} />
-                    </button>
-                  </header>
-                  <div className="student-resource-author">
-                    <span><UserRound size={14} /> {item.author}</span>
-                    <span>{item.platform === "GitHub" ? <Github size={14} /> : <GraduationCap size={14} />} {item.platform}</span>
-                  </div>
-                  <p>{item.summary}</p>
-                  <div className="student-resource-tags">
-                    {item.tags.map((tag) => <span key={tag}>{tag}</span>)}
-                  </div>
-                  <footer>
-                    <span><Eye size={14} /> {item.views}</span>
-                    <span><ThumbsUp size={14} /> {item.likes}</span>
-                    <span><CalendarDays size={14} /> {item.date}</span>
-                  </footer>
+                <span>{generatedVisibleResources.length} 个资源</span>
+              </header>
+              {generatedError ? <p className="student-generated-error">{generatedError}</p> : null}
+              {generatedVisibleResources.length ? (
+                <div className="student-generated-grid">
+                  {generatedVisibleResources.map((resource) => {
+                    const metric = generatedResourceMetric(resource);
+                    return (
+                      <article className="student-generated-card" key={resource.id}>
+                        <button type="button" className="student-generated-thumb" onClick={() => setPreviewResource(resource)} aria-label={`预览 ${resource.title}`}>
+                          {generatedResourceIcon(resource)}
+                          <strong>{metric.value}</strong>
+                          <span>{metric.label}</span>
+                        </button>
+                        <div className="student-generated-body">
+                          <h3>{resource.title}</h3>
+                          <p>{resource.summary}</p>
+                          <div className="student-generated-tags">
+                            <span><BookmarkCheck size={14} /> 已加入资源中心</span>
+                            <span>{resource.resource_type_label ?? resource.resource_type}</span>
+                            <span>{resource.knowledge_point || "自主学习"}</span>
+                            <span>{resource.file_format}</span>
+                            <span>引用 {(resource.citations ?? []).length} 条</span>
+                          </div>
+                        </div>
+                        <div className="student-generated-actions">
+                          <button type="button" className="primary" onClick={() => setPreviewResource(resource)}>
+                            <Eye size={16} />
+                            预览
+                          </button>
+                          <button type="button" onClick={() => downloadGeneratedResource(resource)} disabled={!resource.download_available}>
+                            <Download size={16} />
+                            导出
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
-              </article>
-            ))}
-          </section>
+              ) : (
+                <p className="student-generated-empty">还没有加入资源中心的 AI 生成资源。可以在 AI 助学中生成学习产物后点击书签保存。</p>
+              )}
+            </section>
+          ) : null}
+
+          {showExternalResources ? (
+            <section className="student-resource-grid" aria-label="资源列表">
+              {visibleResources.map((item) => (
+                <article className="student-resource-card" key={item.id}>
+                  <div className={`student-resource-thumb ${item.imageTone}`}>
+                    <span>{resourceIcon(item.type)}</span>
+                    {item.duration ? <em>{item.duration}</em> : null}
+                  </div>
+                  <div className="student-resource-card-body">
+                    <header>
+                      <h2>{item.title}</h2>
+                      <button type="button" onClick={() => toggleSaved(item.id)} aria-label={`${savedIds.has(item.id) ? "取消收藏" : "收藏"} ${item.title}`}>
+                        <span>{savedIds.has(item.id) ? "已收藏" : "收藏"}</span>
+                        <Star size={17} fill={savedIds.has(item.id) ? "currentColor" : "none"} />
+                      </button>
+                    </header>
+                    <div className="student-resource-author">
+                      <span><UserRound size={14} /> {item.author}</span>
+                      <span>{item.platform === "GitHub" ? <Github size={14} /> : <GraduationCap size={14} />} {item.platform}</span>
+                    </div>
+                    <p>{item.summary}</p>
+                    <div className="student-resource-tags">
+                      {item.tags.map((tag) => <span key={tag}>{tag}</span>)}
+                    </div>
+                    <footer>
+                      <span><Eye size={14} /> {item.views}</span>
+                      <span><ThumbsUp size={14} /> {item.likes}</span>
+                      <span><CalendarDays size={14} /> {item.date}</span>
+                    </footer>
+                  </div>
+                </article>
+              ))}
+            </section>
+          ) : null}
 
           <footer className="student-resource-pagination">
-            <span>共 126 条</span>
+            <span>共 {totalVisibleCount} 条</span>
             <div>
               <button type="button" aria-label="上一页"><ChevronLeft size={16} /></button>
               <button type="button" className="active">1</button>
@@ -403,6 +435,11 @@ export default function StudentResourceCenter() {
           </footer>
         </main>
       </div>
+      <GeneratedResourcePreviewModal
+        resource={previewResource}
+        onClose={() => setPreviewResource(null)}
+        onDownload={downloadGeneratedResource}
+      />
     </div>
   );
 }

@@ -379,12 +379,18 @@ export type GeneratedResource = {
     presenton_slides?: GeneratedResourcePresentonSlide[];
     metadata?: {
       renderer?: string;
+      renderer_requested?: string;
       presenton_error?: string;
       presenton_presentation_id?: string | null;
       presenton_edit_path?: string | null;
       presenton_edit_url?: string | null;
       presenton_download_path?: string | null;
       presenton_download_url?: string | null;
+      ppt_master_error?: string;
+      ppt_master_request_path?: string | null;
+      ppt_master_project_id?: string | null;
+      ppt_master_export_path?: string | null;
+      renderer_config_error?: string;
       [key: string]: unknown;
     };
     [key: string]: unknown;
@@ -407,6 +413,17 @@ export type GeneratePptResourceResponse = {
 };
 
 export type GenerateResourceResponse = GeneratePptResourceResponse;
+
+export type PptRendererConfig = {
+  requested: string;
+  active: string;
+  available: {
+    presenton: boolean;
+    ppt_master: boolean;
+    local_pptx: boolean;
+  };
+  fallback: boolean;
+};
 
 export type StudentAiChatSession = {
   id: string;
@@ -1082,6 +1099,8 @@ export const api = {
   },
   generatedResourceDownloadUrl: (resourceId: string) =>
     `/api/v1/student/resources/${encodeURIComponent(resourceId)}/download`,
+  getPptRendererConfig: () =>
+    request<PptRendererConfig>("/api/v1/student/resources/ppt/renderers"),
   submitCode: async (taskId: string, language: string, sourceCode: string) => {
     const result = await request<SubmitResponse>(`/api/v1/tasks/${taskId}/submissions`, {
       method: "POST",

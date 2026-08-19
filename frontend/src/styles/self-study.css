@@ -832,6 +832,7 @@
 }
 
 .student-generated-thumb {
+  width: 100%;
   min-height: 86px;
   display: grid;
   place-items: center;
@@ -841,6 +842,16 @@
   border-radius: 8px;
   color: #176cf5;
   background: linear-gradient(135deg, #eef6ff, #ffffff 64%, #ecfbf4);
+}
+
+button.student-generated-thumb {
+  padding: 0;
+  cursor: pointer;
+}
+
+button.student-generated-thumb:hover {
+  border-color: #9cc6ff;
+  background: linear-gradient(135deg, #e6f1ff, #ffffff 58%, #e7fbf2);
 }
 
 .student-generated-thumb strong {
@@ -904,7 +915,12 @@
   font-weight: 850;
 }
 
-.student-generated-card > button {
+.student-generated-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.student-generated-actions button {
   min-height: 38px;
   display: inline-flex;
   align-items: center;
@@ -919,11 +935,21 @@
   cursor: pointer;
 }
 
-.student-generated-card > button:hover {
+.student-generated-actions button.primary {
+  border-color: #176cf5;
+  color: #ffffff;
+  background: #176cf5;
+}
+
+.student-generated-actions button:hover {
   background: #eef6ff;
 }
 
-.student-generated-card > button:disabled {
+.student-generated-actions button.primary:hover {
+  background: #0f5edb;
+}
+
+.student-generated-actions button:disabled {
   cursor: not-allowed;
   opacity: 0.48;
 }
@@ -1078,8 +1104,8 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .student-generated-card > button {
-    width: 100%;
+  .student-generated-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -3673,6 +3699,262 @@
   gap: 14px;
 }
 
+.ai-ppt-viewer {
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) 46px;
+  align-items: center;
+  gap: 14px;
+}
+
+.ai-ppt-canvas-shell {
+  min-width: 0;
+  display: grid;
+  place-items: center;
+}
+
+.ai-ppt-canvas {
+  width: min(100%, 880px);
+  aspect-ratio: 16 / 9;
+  position: relative;
+  overflow: hidden;
+  padding: clamp(28px, 4.2vw, 58px);
+  display: grid;
+  grid-template-columns: minmax(0, 0.96fr) minmax(220px, 0.78fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: clamp(18px, 3vw, 38px);
+  border: 1px solid #d9e1ec;
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.94)),
+    linear-gradient(135deg, #fffaf2 0%, #f7fbff 48%, #eefaf3 100%);
+  box-shadow: 0 18px 44px rgba(30, 65, 110, 0.11);
+}
+
+.ai-ppt-canvas::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 56px;
+  background:
+    linear-gradient(170deg, transparent 0 34%, rgba(240, 142, 95, 0.12) 35% 52%, transparent 53%),
+    linear-gradient(8deg, rgba(47, 130, 99, 0.12), transparent 54%);
+  pointer-events: none;
+}
+
+.ai-ppt-canvas::after {
+  content: "";
+  position: absolute;
+  left: 72px;
+  top: 72px;
+  width: 42px;
+  height: 42px;
+  border: 1px dashed rgba(240, 142, 95, 0.36);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.ai-ppt-corner {
+  position: absolute;
+  width: 66px;
+  height: 66px;
+  pointer-events: none;
+}
+
+.ai-ppt-corner.top {
+  right: 36%;
+  top: 38px;
+  border-top: 3px solid rgba(238, 126, 88, 0.62);
+  border-left: 3px solid rgba(238, 126, 88, 0.62);
+  border-radius: 8px 0 0 0;
+}
+
+.ai-ppt-corner.bottom {
+  right: 34px;
+  bottom: 34px;
+  border-right: 3px solid rgba(77, 152, 105, 0.54);
+  border-bottom: 3px solid rgba(77, 152, 105, 0.54);
+  border-radius: 0 0 8px 0;
+}
+
+.ai-ppt-copy {
+  min-width: 0;
+  position: relative;
+  z-index: 1;
+  align-self: center;
+}
+
+.ai-ppt-copy small {
+  min-height: 28px;
+  width: max-content;
+  max-width: 100%;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #dce8f6;
+  border-radius: 7px;
+  color: #596981;
+  background: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.ai-ppt-copy h2 {
+  margin: 16px 0 0;
+  color: #3c3738;
+  font-size: clamp(30px, 4.8vw, 52px);
+  line-height: 1.18;
+  font-weight: 950;
+}
+
+.ai-ppt-copy p {
+  margin: 14px 0 0;
+  color: #707987;
+  font-size: clamp(15px, 1.6vw, 22px);
+  line-height: 1.52;
+  font-weight: 850;
+}
+
+.ai-ppt-canvas ul {
+  min-width: 0;
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+  list-style: none;
+}
+
+.ai-ppt-canvas li {
+  min-width: 0;
+  padding: 12px 14px 12px 38px;
+  position: relative;
+  border: 1px solid rgba(216, 226, 240, 0.86);
+  border-radius: 8px;
+  color: #243247;
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow: 0 8px 20px rgba(31, 59, 105, 0.045);
+  font-size: clamp(14px, 1.45vw, 18px);
+  line-height: 1.55;
+  font-weight: 800;
+}
+
+.ai-ppt-canvas li::before {
+  content: "";
+  position: absolute;
+  left: 14px;
+  top: 19px;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: #176cf5;
+  box-shadow: 0 0 0 4px rgba(23, 108, 245, 0.1);
+}
+
+.ai-ppt-canvas figure {
+  min-width: 0;
+  margin: 0;
+  position: relative;
+  z-index: 1;
+  align-self: center;
+  justify-self: end;
+  width: min(100%, 390px);
+  aspect-ratio: 1 / 1;
+  padding: 12px;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 14px 14px 0 rgba(224, 208, 190, 0.48), 0 16px 38px rgba(75, 68, 58, 0.12);
+}
+
+.ai-ppt-canvas figure img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.ai-ppt-canvas footer {
+  grid-column: 1 / -1;
+  position: relative;
+  z-index: 1;
+  align-self: end;
+  padding: 10px 12px;
+  border: 1px solid rgba(221, 231, 243, 0.9);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.ai-ppt-canvas footer strong {
+  color: #17243b;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.ai-ppt-canvas footer p {
+  margin: 4px 0 0;
+  color: #58687f;
+  font-size: 12px;
+  line-height: 1.55;
+  font-weight: 760;
+}
+
+.ai-ppt-canvas.cover,
+.ai-ppt-canvas.summary {
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.92fr);
+}
+
+.ai-ppt-canvas.cover ul,
+.ai-ppt-canvas.summary ul {
+  align-self: center;
+}
+
+.ai-ppt-canvas.mint li::before {
+  background: #11a870;
+  box-shadow: 0 0 0 4px rgba(17, 168, 112, 0.11);
+}
+
+.ai-ppt-canvas.amber li::before {
+  background: #e8863e;
+  box-shadow: 0 0 0 4px rgba(232, 134, 62, 0.12);
+}
+
+.ai-ppt-canvas.indigo li::before {
+  background: #5967e8;
+  box-shadow: 0 0 0 4px rgba(89, 103, 232, 0.12);
+}
+
+.ai-ppt-arrow {
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #dce5f1;
+  border-radius: 50%;
+  color: #7e8ba0;
+  background: #ffffff;
+  box-shadow: 0 10px 22px rgba(35, 67, 112, 0.06);
+  cursor: pointer;
+}
+
+.ai-ppt-arrow:hover:not(:disabled) {
+  border-color: #bcd5fb;
+  color: #176cf5;
+  background: #f4f8ff;
+}
+
+.ai-ppt-arrow:disabled {
+  opacity: 0.34;
+  cursor: not-allowed;
+}
+
 .ai-preview-slide {
   min-width: 0;
   min-height: 0;
@@ -4054,6 +4336,37 @@
   font-weight: 850;
 }
 
+.ai-resource-preview-meta button,
+.ai-resource-preview-meta a {
+  min-height: 32px;
+  margin-left: auto;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid #1267f8;
+  border-radius: 7px;
+  color: #ffffff;
+  background: #1267f8;
+  font-size: 12px;
+  font-weight: 900;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.ai-resource-preview-meta a {
+  margin-left: 0;
+  border-color: #dbe6f5;
+  color: #20324f;
+  background: #ffffff;
+}
+
+.ai-resource-preview-meta button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 @media (max-width: 900px) {
   .ai-workspace-page {
     min-height: auto;
@@ -4146,6 +4459,39 @@
 
   .ai-preview-slide {
     padding: 28px;
+  }
+
+  .ai-ppt-viewer {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-ppt-arrow {
+    position: absolute;
+    z-index: 2;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
+  .ai-ppt-arrow.left {
+    left: 8px;
+  }
+
+  .ai-ppt-arrow.right {
+    right: 8px;
+  }
+
+  .ai-ppt-canvas {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 28px;
+  }
+
+  .ai-ppt-canvas.cover,
+  .ai-ppt-canvas.summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ai-ppt-corner.top {
+    right: 26px;
   }
 
   .ai-preview-document,

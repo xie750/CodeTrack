@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Drawer, Modal } from "antd";
+import { Alert, Drawer } from "antd";
 import {
   Bookmark,
   BookOpen,
@@ -34,6 +34,7 @@ import {
   type StudentProfile
 } from "../api";
 import robotImg from "../assets/ui-home/ai-tutor-bot.png";
+import GeneratedResourcePreviewModal from "../components/GeneratedResourcePreviewModal";
 
 type HistoryGroup = "今天" | "昨天" | "更早";
 
@@ -171,6 +172,8 @@ function messageToTurn(message: StudentAiChatMessage): AiChatTurn {
 function resourceToTurn(id: string, resource: GeneratedResource): AiChatTurn {
   const modelName = generatedResourceModelName(resource);
   const presentonError = resource.render_payload.metadata?.presenton_error;
+  const pptMasterError = resource.render_payload.metadata?.ppt_master_error;
+  const rendererConfigError = resource.render_payload.metadata?.renderer_config_error;
   return {
     id,
     role: "assistant",
@@ -181,7 +184,13 @@ function resourceToTurn(id: string, resource: GeneratedResource): AiChatTurn {
     suggestedActions: ["加入资源中心", "打开预览"],
     profileUsed: true,
     sourceUsed: Boolean(resource.citations.length),
-    safetyNote: presentonError ? `Presenton 暂未生成成功，已自动回退到本地 PPTX 渲染器。原因：${presentonError}` : "AI 生成资源已基于课程资料进行引用校验，建议结合课堂讲义复核关键概念。",
+    safetyNote: presentonError
+      ? `Presenton 暂未生成成功，已自动回退到本地 PPTX 渲染器。原因：${presentonError}`
+      : pptMasterError
+        ? `PPT Master 暂未生成成功，已自动回退到本地 PPTX 渲染器。原因：${pptMasterError}`
+        : rendererConfigError
+          ? `PPT 渲染器配置暂不可用，已自动回退到本地 PPTX 渲染器。原因：${rendererConfigError}`
+          : "AI 生成资源已基于课程资料进行引用校验，建议结合课堂讲义复核关键概念。",
     modelName,
     resource
   };
@@ -190,6 +199,7 @@ function resourceToTurn(id: string, resource: GeneratedResource): AiChatTurn {
 function generatedResourceModelName(resource: GeneratedResource) {
   const renderer = resource.render_payload.metadata?.renderer;
   if (renderer === "presenton") return "LangGraph + Presenton";
+  if (renderer === "ppt_master") return "LangGraph + PPT Master";
   if (renderer === "local_pptx") return "LangGraph + python-pptx";
   if (resource.resource_type === "PPT") return "LangGraph + PPT renderer";
   const label = resource.resource_type_label ?? resourceTypeLabels[resource.resource_type] ?? resource.resource_type;
@@ -344,191 +354,6 @@ function GeneratedResourceCard({
         <Bookmark size={19} fill={resource.saved_to_resource_center ? "currentColor" : "none"} />
       </button>
     </div>
-  );
-}
-
-function ResourcePreviewModal({
-  resource,
-  onClose
-}: {
-  resource: GeneratedResource | null;
-  onClose: () => void;
-}) {
-  const [activeItem, setActiveItem] = useState(0);
-  const payload = resource?.render_payload;
-  const presentonSlides = payload?.presenton_slides ?? [];
-  const slides = payload?.slides ?? [];
-  const sections = payload?.sections ?? [];
-  const nodes = payload?.nodes ?? [];
-  const questions = payload?.questions ?? [];
-  const cards = payload?.cards ?? [];
-  const segments = payload?.segments ?? [];
-  const navItems = presentonSlides.length
-    ? presentonSlides.map((item) => item.title)
-    : slides.length
-      ? slides.map((item) => item.title)
-      : sections.length
-      ? sections.map((item) => item.heading)
-      : nodes.length
-        ? nodes.filter((item) => item.level <= 1).map((item) => item.label)
-        : questions.length
-          ? questions.map((item, index) => `第 ${index + 1} 题`)
-          : cards.length
-            ? cards.map((item, index) => item.front || `卡片 ${index + 1}`)
-            : segments.map((item) => `${item.speaker} · ${item.label}`);
-  const citationMap = new Map((resource?.citations ?? []).map((item) => [item.source_id, item]));
-
-  useEffect(() => {
-    setActiveItem(0);
-  }, [resource?.id]);
-
-  const activeIndex = Math.min(activeItem, Math.max(navItems.length - 1, 0));
-  const activePresentonSlide = presentonSlides[activeIndex];
-  const activeSlide = slides[activeIndex];
-  const activeSection = sections[activeIndex];
-  const activeQuestion = questions[activeIndex];
-  const activeCard = cards[activeIndex];
-  const activeSegment = segments[activeIndex];
-  const activeCitationIds =
-    activeSlide?.citation_ids ??
-    activeSection?.citation_ids ??
-    activeQuestion?.citation_ids ??
-    activeCard?.citation_ids ??
-    activeSegment?.citation_ids ??
-    nodes[0]?.citation_ids ??
-    [];
-
-  return (
-    <Modal
-      open={Boolean(resource)}
-      onCancel={onClose}
-      footer={null}
-      centered
-      width={1040}
-      className="ai-resource-preview-modal"
-      title={resource ? `${resource.title} · 实时预览` : ""}
-    >
-      {resource ? (
-        <div className="ai-resource-preview">
-          <aside className="ai-resource-slide-nav" aria-label="资源目录">
-            {navItems.map((title, index) => (
-              <button type="button" key={`${resource.id}_${index}`} className={index === activeIndex ? "active" : ""} onClick={() => setActiveItem(index)}>
-                <span>{index + 1}</span>
-                <strong>{title}</strong>
-              </button>
-            ))}
-          </aside>
-          <main className="ai-resource-stage">
-            {activePresentonSlide ? (
-              <section className="ai-preview-presenton-slide">
-                <header>
-                  <small>{activePresentonSlide.layout_group || "Presenton 生成"}</small>
-                  <h2>{activePresentonSlide.title}</h2>
-                </header>
-                {activePresentonSlide.image_url ? <img src={activePresentonSlide.image_url} alt="" /> : null}
-                <p>{activePresentonSlide.summary}</p>
-                {activePresentonSlide.speaker_note ? (
-                  <footer>
-                    <strong>讲稿提示</strong>
-                    <p>{activePresentonSlide.speaker_note}</p>
-                  </footer>
-                ) : null}
-              </section>
-            ) : activeSlide ? (
-              <section className={`ai-preview-slide ${activeSlide.layout ?? "content"}`}>
-                <header>
-                  <small>{resource.knowledge_point || "自主学习资源"}</small>
-                  <h2>{activeSlide.title}</h2>
-                  {activeSlide.subtitle ? <p>{activeSlide.subtitle}</p> : null}
-                </header>
-                <ul>
-                  {activeSlide.bullets.map((bullet, index) => (
-                    <li key={`${activeSlide.title}_${index}`}>{bullet}</li>
-                  ))}
-                </ul>
-                {activeSlide.speaker_notes ? (
-                  <footer>
-                    <strong>讲稿提示</strong>
-                    <p>{activeSlide.speaker_notes}</p>
-                  </footer>
-                ) : null}
-              </section>
-            ) : activeSection ? (
-              <section className="ai-preview-document">
-                <small>{resource.knowledge_point || "自主学习资源"}</small>
-                <h2>{activeSection.heading}</h2>
-                {activeSection.paragraphs.map((paragraph, index) => (
-                  <p key={`${activeSection.heading}_${index}`}>{paragraph}</p>
-                ))}
-              </section>
-            ) : nodes.length ? (
-              <section className="ai-preview-mindmap">
-                <div className="ai-mindmap-center">
-                  <strong>{nodes[0]?.label ?? resource.title}</strong>
-                  <span>{nodes[0]?.summary ?? resource.summary}</span>
-                </div>
-                <div className="ai-mindmap-branches">
-                  {nodes.filter((node) => node.level === 1).map((node) => (
-                    <article key={node.id}>
-                      <b>{node.label}</b>
-                      <p>{node.summary}</p>
-                      <div>
-                        {nodes.filter((child) => child.level === 2 && payload?.edges?.some((edge) => edge.source === node.id && edge.target === child.id)).map((child) => (
-                          <span key={child.id}>{child.label}</span>
-                        ))}
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              </section>
-            ) : activeQuestion ? (
-              <section className="ai-preview-practice">
-                <small>{resource.knowledge_point || "自主学习资源"}</small>
-                <h2>{activeQuestion.stem}</h2>
-                {activeQuestion.options?.length ? (
-                  <ol>
-                    {activeQuestion.options.map((option) => <li key={option}>{option}</li>)}
-                  </ol>
-                ) : null}
-                <footer>
-                  <strong>参考答案</strong>
-                  <p>{activeQuestion.answer}</p>
-                  <strong>解析</strong>
-                  <p>{activeQuestion.analysis}</p>
-                </footer>
-              </section>
-            ) : activeCard ? (
-              <section className="ai-preview-cards">
-                <article>
-                  <small>正面</small>
-                  <h2>{activeCard.front}</h2>
-                </article>
-                <article>
-                  <small>背面</small>
-                  <p>{activeCard.back}</p>
-                  {activeCard.tips?.map((tip) => <span key={tip}>{tip}</span>)}
-                </article>
-              </section>
-            ) : activeSegment ? (
-              <section className="ai-preview-podcast">
-                <small>{activeSegment.label}</small>
-                <h2>{activeSegment.speaker}</h2>
-                <p>{activeSegment.text}</p>
-              </section>
-            ) : null}
-            <section className="ai-resource-preview-meta">
-              <span>{activeIndex + 1}/{Math.max(navItems.length, 1)}</span>
-              <span>AI 生成</span>
-              <span>置信度 {Math.round(resource.confidence * 100)}%</span>
-              {activeCitationIds.map((sourceId) => {
-                const source = citationMap.get(sourceId);
-                return source ? <span key={sourceId}>引用：{source.title}</span> : null;
-              })}
-            </section>
-          </main>
-        </div>
-      ) : null}
-    </Modal>
   );
 }
 
@@ -1090,7 +915,7 @@ export default function AiTutor() {
           {!filteredSessions.length ? <p className="ai-session-empty">还没有历史会话，发送第一条问题后会自动保存。</p> : null}
         </div>
       </Drawer>
-      <ResourcePreviewModal resource={previewResource} onClose={() => setPreviewResource(null)} />
+      <GeneratedResourcePreviewModal resource={previewResource} onClose={() => setPreviewResource(null)} />
     </div>
   );
 }

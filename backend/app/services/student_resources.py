@@ -29,6 +29,11 @@ from backend.app.services.presenton_client import (
     generate_presenton_pptx,
     presenton_configured,
 )
+from backend.app.services.ppt_master_client import (
+    PptMasterError,
+    generate_ppt_master_pptx,
+    ppt_master_configured,
+)
 from backend.app.services.submissions import iso
 
 try:
@@ -440,14 +445,146 @@ def _render_pptx(resource_id: str, title: str, slides: list[dict[str, Any]], cit
     return str(path)
 
 
+def _ppt_renderer_mode(settings: Any) -> str:
+    mode = str(getattr(settings, "ppt_renderer", "auto") or "auto").strip().lower()
+    aliases = {
+        "": "auto",
+        "python": "local",
+        "python-pptx": "local",
+        "local_pptx": "local",
+        "pptmaster": "ppt_master",
+        "ppt-master": "ppt_master",
+    }
+    return aliases.get(mode, mode)
+
+
+def ppt_renderer_config_payload() -> dict[str, Any]:
+    settings = get_settings()
+    mode = _ppt_renderer_mode(settings)
+    presenton_ready = presenton_configured(settings)
+    ppt_master_ready = ppt_master_configured(settings)
+    ppt_master_home = Path(settings.ppt_master_home).resolve() if settings.ppt_master_home else None
+    ppt_master_skill_dir = ppt_master_home / "skills" / "ppt-master" if ppt_master_home else None
+    if mode == "presenton":
+        active = "presenton" if presenton_ready else "local_pptx"
+    elif mode == "ppt_master":
+        active = "ppt_master" if ppt_master_ready else "local_pptx"
+    elif mode == "local":
+        active = "local_pptx"
+    elif mode == "auto":
+        active = "presenton" if presenton_ready else "local_pptx"
+    else:
+        active = "local_pptx"
+    return {
+        "requested": mode,
+        "active": active,
+        "available": {
+            "presenton": presenton_ready,
+            "ppt_master": ppt_master_ready,
+            "local_pptx": True,
+        },
+        "ppt_master": {
+            "command_configured": bool(settings.ppt_master_command),
+            "home_configured": bool(settings.ppt_master_home),
+            "home_exists": bool(ppt_master_home and ppt_master_home.exists()),
+            "skill_dir_exists": bool(ppt_master_skill_dir and ppt_master_skill_dir.exists()),
+        },
+        "fallback": active == "local_pptx" and mode not in {"local", "auto"},
+    }
+
+
 async def _render_ppt_resource_file(
     db: Session,
     state: PptResourceState,
     resource_id: str,
 ) -> tuple[str, str, dict[str, Any]]:
     settings = get_settings()
-    metadata: dict[str, Any] = {"renderer": "local_pptx"}
-    if presenton_configured(settings):
+    mode = _ppt_renderer_mode(settings)
+    metadata: dict[str, Any] = {"renderer": "local_pptx", "renderer_requested": mode}
+
+    if mode not in {"auto", "presenton", "ppt_master", "local"}:
+        metadata["renderer_config_error"] = f"未知 PPT 渲染器：{mode}"
+        record_step(
+            db,
+            state["run"],
+            step_name="select_ppt_renderer",
+            step_order=5,
+            status="FAILED",
+            output_summary={"fallback": True, "reason": metadata["renderer_config_error"]},
+        )
+
+    should_try_ppt_master = mode == "ppt_master" and ppt_master_configured(settings)
+    should_try_presenton = mode in {"auto", "presenton"} and presenton_configured(settings)
+
+    if mode == "ppt_master" and not ppt_master_configured(settings):
+        metadata["ppt_master_error"] = "PPT Master 未启用或未配置包装命令。"
+        record_step(
+            db,
+            state["run"],
+            step_name="select_ppt_master_renderer",
+            step_order=5,
+            status="FAILED",
+            output_summary={"fallback": True, "reason": metadata["ppt_master_error"]},
+        )
+
+    if mode == "presenton" and not presenton_configured(settings):
+        metadata["presenton_error"] = "Presenton 未启用或未配置服务地址。"
+        record_step(
+            db,
+            state["run"],
+            step_name="select_presenton_renderer",
+            step_order=5,
+            status="FAILED",
+            output_summary={"fallback": True, "reason": metadata["presenton_error"]},
+        )
+
+    if should_try_ppt_master:
+        output_dir = Path(settings.resource_storage_dir) / "generated" / "ppt_master"
+        try:
+            result = await generate_ppt_master_pptx(
+                resource_id=resource_id,
+                title=state["title"],
+                message=state["message"],
+                knowledge_point=state["knowledge_point"],
+                slides=state["slides"],
+                citations=state["citations"],
+                output_dir=output_dir,
+                settings=settings,
+            )
+        except PptMasterError as exc:
+            metadata["ppt_master_error"] = str(exc)[:400]
+            record_step(
+                db,
+                state["run"],
+                step_name="render_ppt_master_pptx",
+                step_order=5,
+                status="FAILED",
+                output_summary={"fallback": True, "reason": str(exc)[:240]},
+            )
+        else:
+            provider_payload = result.get("provider_payload") if isinstance(result.get("provider_payload"), dict) else {}
+            metadata.update(
+                {
+                    "renderer": "ppt_master",
+                    "ppt_master_request_path": result.get("request_path"),
+                    "ppt_master_stdout_tail": result.get("stdout_tail"),
+                    "ppt_master_stderr_tail": result.get("stderr_tail"),
+                    "ppt_master_project_id": provider_payload.get("project_id"),
+                    "ppt_master_export_path": provider_payload.get("export_path"),
+                    "ppt_master_implementation": provider_payload.get("implementation"),
+                    "ppt_master_official_converter_error": provider_payload.get("official_converter_error"),
+                }
+            )
+            record_step(
+                db,
+                state["run"],
+                step_name="render_ppt_master_pptx",
+                step_order=5,
+                output_summary={"resource_id": resource_id, "file_format": result["file_format"], "renderer": "ppt_master"},
+            )
+            return str(result["file_path"]), str(result["file_format"]), metadata
+
+    if should_try_presenton:
         output_dir = Path(settings.resource_storage_dir) / "generated" / "presenton"
         try:
             result = await generate_presenton_pptx(
@@ -475,6 +612,7 @@ async def _render_ppt_resource_file(
             metadata.update(
                 {
                     "renderer": "presenton",
+                    "renderer_requested": mode,
                     "presenton_presentation_id": provider_payload.get("presentation_id"),
                     "presenton_edit_path": provider_payload.get("edit_path"),
                     "presenton_edit_url": result.get("edit_url"),
@@ -502,7 +640,7 @@ async def _render_ppt_resource_file(
         db,
         state["run"],
         step_name="render_local_pptx",
-        step_order=6 if metadata.get("presenton_error") else 5,
+        step_order=6 if (metadata.get("presenton_error") or metadata.get("ppt_master_error") or metadata.get("renderer_config_error")) else 5,
         output_summary={"resource_id": resource_id, "file_format": "PPTX", "renderer": "local_pptx"},
     )
     return path, "PPTX", metadata
