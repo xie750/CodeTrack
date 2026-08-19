@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Button, Input } from "antd";
-import { AlertTriangle, ArrowRight, BookOpenCheck, LockKeyhole, LogIn, RefreshCw, ShieldCheck, Sparkles, UserPlus, UserRound } from "lucide-react";
+import { AlertTriangle, ArrowRight, LockKeyhole, LogIn, RefreshCw, ShieldCheck, Sparkles, UserPlus, UserRound } from "lucide-react";
 import { ApiRequestError, api, apiCache } from "../api";
 import { setAccessToken, type AuthUser } from "../authSession";
 import { readStoredEntryTheme, StudentEntryMotionBackdrop, STUDENT_ENTRY_THEME_KEY, type StudentEntryTheme } from "./StudentEntryPortal";
@@ -154,135 +154,170 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       </div>
       <LoginThemeToggle theme={entryTheme} onThemeChange={changeEntryTheme} />
 
-      <section className={`login-stage ${authMode === "register" ? "show-register" : ""}`} aria-label="CodeTrack 账号入口">
-        <article className="login-brand-card">
-          <div className="login-brand">
-            <span className="ct-brand-mark login-mark" aria-hidden="true" />
-            <strong>
-              Code<span>Track</span>
-            </strong>
+      <section className={`login-stage login-shell-stack ${authMode === "register" ? "show-register" : ""}`} aria-label="CodeTrack 账号入口">
+        <article className="login-shell-card login-shell-login" aria-label="登录账号">
+          <div className="login-shell-visual">
+            <div className="login-brand">
+              <span className="ct-brand-mark login-mark" aria-hidden="true" />
+              <strong>
+                Code<span>Track</span>
+              </strong>
+            </div>
+            <div className="login-copy">
+              <span className="login-kicker">
+                <Sparkles size={15} />
+                AI 专业助学空间
+              </span>
+              <h1>欢迎进入 CodeTrack</h1>
+              <p>连接课程任务、自主学习、AI 助学和个人学习资料沉淀。</p>
+            </div>
+            <div className="login-wave-visual" aria-hidden="true">
+              <span className="login-wave-line wave-a" />
+              <span className="login-wave-line wave-b" />
+              <span className="login-mini-panel">
+                <i />
+                <i />
+                <i />
+                <b />
+              </span>
+              <span className="login-orbit-dot dot-a" />
+              <span className="login-orbit-dot dot-b" />
+              <span className="login-orbit-dot dot-c" />
+            </div>
           </div>
-          <div className="login-copy">
-            <span className="login-kicker">
-              <Sparkles size={15} />
-              AI 专业助学空间
-            </span>
-            <h1>欢迎进入 CodeTrack</h1>
-            <p>连接课程任务、自主学习、AI 助学和个人学习资料沉淀。</p>
+
+          <div className="login-shell-form">
+            <div className="login-auth-head">
+              <div>
+                <span>账号登录</span>
+                <h2>登录账号</h2>
+              </div>
+              <div className="login-mode-toggle" aria-label="账号入口切换">
+                <button type="button" className={authMode === "login" ? "active" : ""} aria-pressed={authMode === "login"} disabled={authMode === "register"} onClick={() => changeAuthMode("login")}>
+                  登录
+                </button>
+                <button type="button" className={authMode === "register" ? "active" : ""} aria-pressed={authMode === "register"} disabled={authMode === "register"} onClick={() => changeAuthMode("register")}>
+                  注册
+                </button>
+              </div>
+            </div>
+
+            <form className="login-form" onSubmit={handleSubmit}>
+              <label>
+                <span>账号</span>
+                <Input
+                  size="large"
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  prefix={<UserRound size={18} />}
+                  autoComplete="username"
+                  placeholder="请输入账号"
+                  disabled={authMode === "register"}
+                />
+              </label>
+              <label>
+                <span>密码</span>
+                <Input.Password
+                  size="large"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  prefix={<LockKeyhole size={18} />}
+                  autoComplete="current-password"
+                  placeholder="请输入密码"
+                  disabled={authMode === "register"}
+                />
+              </label>
+              {loginIssue ? <LoginErrorNotice issue={loginIssue} loading={loading} /> : null}
+              <Button type="primary" htmlType="submit" size="large" loading={loading} disabled={authMode === "register"} icon={<LogIn size={18} />}>
+                立即登录
+              </Button>
+
+              <div className="login-demo-accounts" aria-label="演示账号">
+                <span>演示账号</span>
+                <button type="button" onClick={() => selectDemoAccount("wang")}>王同学 / wang</button>
+                <button type="button" onClick={() => selectDemoAccount("liu")}>刘同学 / liu</button>
+                <button type="button" onClick={() => selectDemoAccount("teacher_wang")}>王老师 / teacher_wang</button>
+                <button type="button" onClick={() => selectDemoAccount("teacher_li")}>李老师 / teacher_li</button>
+              </div>
+            </form>
           </div>
-          <div className="login-hero-visual" aria-hidden="true">
-            <span className="login-visual-window">
-              <i />
-              <i />
-              <i />
-              <b />
-              <em />
-            </span>
-            <span className="login-visual-book">
-              <BookOpenCheck size={34} strokeWidth={2.1} />
-            </span>
-            <span className="login-visual-chip chip-a" />
-            <span className="login-visual-chip chip-b" />
-          </div>
+          <button className="login-card-peek-action" type="button" tabIndex={authMode === "login" ? -1 : 0} onClick={() => changeAuthMode("login")}>
+            切换到登录
+          </button>
         </article>
 
-        <div className="login-auth-perspective">
-          <div className="login-auth-card">
-            <section className="login-auth-face login-auth-face-front" aria-label="登录账号">
-              <div className="login-auth-head">
-                <div>
-                  <span>账号登录</span>
-                  <h2>登录账号</h2>
-                </div>
-                <div className="login-mode-toggle" aria-label="账号入口切换">
-                  <button type="button" className={authMode === "login" ? "active" : ""} aria-pressed={authMode === "login"} disabled={authMode === "register"} onClick={() => changeAuthMode("login")}>
-                    登录
-                  </button>
-                  <button type="button" className={authMode === "register" ? "active" : ""} aria-pressed={authMode === "register"} disabled={authMode === "register"} onClick={() => changeAuthMode("register")}>
-                    注册
-                  </button>
-                </div>
-              </div>
-
-              <form className="login-form" onSubmit={handleSubmit}>
-                <label>
-                  <span>账号</span>
-                  <Input
-                    size="large"
-                    value={username}
-                    onChange={(event) => setUsername(event.target.value)}
-                    prefix={<UserRound size={18} />}
-                    autoComplete="username"
-                    placeholder="请输入账号"
-                    disabled={authMode === "register"}
-                  />
-                </label>
-                <label>
-                  <span>密码</span>
-                  <Input.Password
-                    size="large"
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    prefix={<LockKeyhole size={18} />}
-                    autoComplete="current-password"
-                    placeholder="请输入密码"
-                    disabled={authMode === "register"}
-                  />
-                </label>
-                {loginIssue ? <LoginErrorNotice issue={loginIssue} loading={loading} /> : null}
-                <Button type="primary" htmlType="submit" size="large" loading={loading} disabled={authMode === "register"} icon={<LogIn size={18} />}>
-                  立即登录
-                </Button>
-
-                <div className="login-demo-accounts" aria-label="演示账号">
-                  <span>演示账号</span>
-                  <button type="button" onClick={() => selectDemoAccount("wang")}>王同学 / wang</button>
-                  <button type="button" onClick={() => selectDemoAccount("liu")}>刘同学 / liu</button>
-                  <button type="button" onClick={() => selectDemoAccount("teacher_wang")}>王老师 / teacher_wang</button>
-                  <button type="button" onClick={() => selectDemoAccount("teacher_li")}>李老师 / teacher_li</button>
-                </div>
-              </form>
-            </section>
-
-            <section className="login-auth-face login-auth-face-back" aria-label="注册账号">
-              <div className="login-auth-head">
-                <div>
-                  <span>账号注册</span>
-                  <h2>注册账号</h2>
-                </div>
-                <div className="login-mode-toggle" aria-label="账号入口切换">
-                  <button type="button" className={authMode === "login" ? "active" : ""} aria-pressed={authMode === "login"} disabled={authMode === "login"} onClick={() => changeAuthMode("login")}>
-                    登录
-                  </button>
-                  <button type="button" className={authMode === "register" ? "active" : ""} aria-pressed={authMode === "register"} disabled={authMode === "login"} onClick={() => changeAuthMode("register")}>
-                    注册
-                  </button>
-                </div>
-              </div>
-
-              <div className="register-preview">
-                <span className="register-preview-icon">
-                  <UserPlus size={24} />
-                </span>
-                <strong>注册通道待开放</strong>
-                <p>当前版本先保留注册入口，正式账号仍由后台种子数据提供。</p>
-              </div>
-              <div className="register-field-preview">
-                <label>
-                  <span>姓名</span>
-                  <Input size="large" prefix={<UserRound size={18} />} placeholder="注册后填写真实姓名" disabled />
-                </label>
-                <label>
-                  <span>账号</span>
-                  <Input size="large" prefix={<ShieldCheck size={18} />} placeholder="注册后绑定学号或工号" disabled />
-                </label>
-              </div>
-              <Button type="primary" size="large" icon={<ArrowRight size={18} />} onClick={() => changeAuthMode("login")}>
-                返回登录
-              </Button>
-            </section>
+        <article className="login-shell-card login-shell-register" aria-label="注册账号">
+          <div className="login-shell-visual">
+            <div className="login-brand">
+              <span className="ct-brand-mark login-mark" aria-hidden="true" />
+              <strong>
+                Code<span>Track</span>
+              </strong>
+            </div>
+            <div className="login-copy">
+              <span className="login-kicker">
+                <UserPlus size={15} />
+                账号空间预留
+              </span>
+              <h1>注册入口已预留</h1>
+              <p>后续接入正式注册流程后，可在这里创建学生或教师账号。</p>
+            </div>
+            <div className="login-wave-visual register" aria-hidden="true">
+              <span className="login-wave-line wave-a" />
+              <span className="login-wave-line wave-b" />
+              <span className="login-mini-panel">
+                <i />
+                <i />
+                <i />
+                <b />
+              </span>
+              <span className="login-orbit-dot dot-a" />
+              <span className="login-orbit-dot dot-b" />
+              <span className="login-orbit-dot dot-c" />
+            </div>
           </div>
-        </div>
+
+          <div className="login-shell-form">
+            <div className="login-auth-head">
+              <div>
+                <span>账号注册</span>
+                <h2>注册账号</h2>
+              </div>
+              <div className="login-mode-toggle" aria-label="账号入口切换">
+                <button type="button" className={authMode === "login" ? "active" : ""} aria-pressed={authMode === "login"} disabled={authMode === "login"} onClick={() => changeAuthMode("login")}>
+                  登录
+                </button>
+                <button type="button" className={authMode === "register" ? "active" : ""} aria-pressed={authMode === "register"} disabled={authMode === "login"} onClick={() => changeAuthMode("register")}>
+                  注册
+                </button>
+              </div>
+            </div>
+
+            <div className="register-preview">
+              <span className="register-preview-icon">
+                <UserPlus size={24} />
+              </span>
+              <strong>注册通道待开放</strong>
+              <p>当前版本先保留注册入口，正式账号仍由后台种子数据提供。</p>
+            </div>
+            <div className="register-field-preview">
+              <label>
+                <span>姓名</span>
+                <Input size="large" prefix={<UserRound size={18} />} placeholder="注册后填写真实姓名" disabled />
+              </label>
+              <label>
+                <span>账号</span>
+                <Input size="large" prefix={<ShieldCheck size={18} />} placeholder="注册后绑定学号或工号" disabled />
+              </label>
+            </div>
+            <Button type="primary" size="large" icon={<ArrowRight size={18} />} onClick={() => changeAuthMode("login")}>
+              返回登录
+            </Button>
+          </div>
+          <button className="login-card-peek-action" type="button" tabIndex={authMode === "register" ? -1 : 0} onClick={() => changeAuthMode("register")}>
+            切换到注册
+          </button>
+        </article>
       </section>
     </main>
   );

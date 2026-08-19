@@ -32,6 +32,9 @@ class Settings(BaseSettings):
 
     # Optional external PPT renderer. When disabled or unavailable, student
     # resource generation falls back to the local PPTX renderer.
+    # auto: Presenton when configured, otherwise local. Other values:
+    # presenton, ppt_master, local.
+    ppt_renderer: str = Field(default="auto")
     presenton_enabled: bool = Field(default=False)
     presenton_base_url: str | None = Field(default=None)
     presenton_public_base_url: str | None = Field(default=None)
@@ -43,6 +46,13 @@ class Settings(BaseSettings):
     presenton_language: str = Field(default="Chinese")
     presenton_slide_count: int = Field(default=6)
     presenton_timeout_seconds: int = Field(default=180)
+    # PPT Master is an agent workflow rather than an HTTP API. Configure a
+    # wrapper command that accepts a JSON request path and output PPTX path.
+    ppt_master_enabled: bool = Field(default=False)
+    ppt_master_command: str | None = Field(default=None)
+    ppt_master_home: str | None = Field(default=None)
+    ppt_master_workspace_dir: str | None = Field(default=None)
+    ppt_master_timeout_seconds: int = Field(default=300)
 
     redis_url: str = Field(default="redis://localhost:6379/0")
     s3_endpoint: str = Field(default="http://localhost:9000")
