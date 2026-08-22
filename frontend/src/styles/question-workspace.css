@@ -2128,6 +2128,18 @@
   min-height: 98px;
 }
 
+.student-graph-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.student-graph-head-actions button {
+  min-width: 104px;
+}
+
 .student-graph-stats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2206,6 +2218,40 @@
   font-weight: 900;
 }
 
+.student-graph-toolbar-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.student-graph-toolbar-actions button {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid #dbe6f2;
+  border-radius: 7px;
+  color: #345171;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.student-graph-toolbar-actions button:first-child {
+  color: #155eef;
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.student-graph-toolbar-actions button:disabled {
+  cursor: not-allowed;
+  color: #97a5b7;
+  background: #f5f7fb;
+}
+
 .student-graph-canvas-shell {
   min-height: 600px;
   padding: 12px;
@@ -2248,6 +2294,89 @@
   margin: 0;
   font-size: 13px;
   line-height: 1.65;
+}
+
+.student-graph-start-state {
+  padding: 36px 18px;
+  background:
+    radial-gradient(circle at 50% 24%, rgba(59, 130, 246, 0.08), transparent 34%),
+    rgba(255, 255, 255, 0.9);
+}
+
+.student-graph-empty-visual {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.student-graph-empty-visual span {
+  width: 52px;
+  height: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  color: #2563eb;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(37, 99, 235, 0.12);
+}
+
+.student-graph-empty-visual i {
+  width: 42px;
+  height: 1px;
+  background: linear-gradient(90deg, #cbd5e1, #60a5fa);
+}
+
+.student-graph-empty-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.student-graph-empty-actions button {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 12px;
+  border: 1px solid #c7d2fe;
+  border-radius: 7px;
+  color: #155eef;
+  background: #eef4ff;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.student-graph-empty-actions button:first-child {
+  color: #fff;
+  border-color: #2563eb;
+  background: #2563eb;
+  box-shadow: 0 12px 22px rgba(37, 99, 235, 0.2);
+}
+
+.student-graph-empty-tips {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.student-graph-empty-tips span {
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: #52627a;
+  background: #f1f5f9;
+  font-size: 11px;
+  font-weight: 900;
 }
 
 .student-graph-side {
@@ -2306,6 +2435,85 @@
 
 .student-graph-meta strong {
   color: #172033;
+}
+
+.student-graph-editor {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #e2eaf4;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.student-graph-editor label {
+  display: grid;
+  gap: 6px;
+  color: #52627a;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.student-graph-editor input,
+.student-graph-editor select,
+.student-graph-editor textarea {
+  width: 100%;
+  border: 1px solid #dce6f2;
+  border-radius: 7px;
+  color: #172033;
+  background: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  outline: none;
+}
+
+.student-graph-editor input,
+.student-graph-editor select {
+  min-height: 34px;
+  padding: 0 9px;
+}
+
+.student-graph-editor textarea {
+  min-height: 86px;
+  padding: 9px;
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.student-graph-editor input:focus,
+.student-graph-editor select:focus,
+.student-graph-editor textarea:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.student-graph-editor-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.student-graph-editor-actions button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 7px;
+  color: #fff;
+  background: #2563eb;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.student-graph-editor-actions button:last-child {
+  color: #52627a;
+  background: #edf2f7;
 }
 
 .student-graph-actions {
