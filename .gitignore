@@ -1,12 +1,20 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.codex-merge-*/
 
 *.db
 
 frontend/node_modules/
 frontend/dist/
 frontend/tsconfig.tsbuildinfo
+
+# 根目录教师端 Vite 工作区
+node_modules/
+dist/
+*.tsbuildinfo
+.pnpm-store/
+
 backend-uvicorn-generated-resources*.log
 frontend-vite-generated-resources*.log
 tools/ppt-master*/
@@ -15,6 +23,8 @@ frontend/.resource-check/
 
 # 教师端资料中心上传件的落盘目录（CODETRACK_RESOURCE_STORAGE_DIR）
 var/
+teacher_backend/uploads/*
+!teacher_backend/uploads/.gitkeep
 
 .env
 

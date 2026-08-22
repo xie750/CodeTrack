@@ -1,0 +1,10 @@
+fastapi==0.141.1
+sqlalchemy==2.0.51
+uvicorn==0.52.1
+pydantic==2.13.4
+python-multipart==0.0.32
+alembic==1.18.5
+pytest
+httpx
+pypdf
+python-docx
