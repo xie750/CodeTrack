@@ -1,180 +1,281 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  Archive,
   BookOpen,
-  BookmarkCheck,
   CalendarDays,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Code2,
+  Copy,
   Download,
+  ExternalLink,
   Eye,
   FileCode2,
   FileQuestion,
   FileText,
+  Folder,
+  FolderArchive,
   Github,
   GraduationCap,
+  Grid2X2,
   LibraryBig,
+  List,
+  MoreVertical,
+  MoveRight,
   Network,
   Presentation,
-  Podcast,
-  RefreshCw,
   Search,
-  Star,
-  ThumbsUp,
-  UserRound,
-  Waypoints
+  Settings2,
+  Tag,
+  Waypoints,
+  Wrench
 } from "lucide-react";
 import { api, type GeneratedResource } from "../api";
 import { authHeaders } from "../authSession";
 import GeneratedResourcePreviewModal from "../components/GeneratedResourcePreviewModal";
 
-type ResourceType = "视频教程" | "代码项目" | "文章文档" | "电子书" | "学习路线";
-type ResourceFolder = "全部" | "资源生成" | ResourceType;
-type Difficulty = "全部" | "入门" | "初级" | "中级" | "高级";
+type ResourceType = "官方文档" | "外部文章" | "视频教程" | "工具网站" | "知识卡片" | "AI 生成";
+type ResourceFolder = "全部收藏" | "课程资料" | "外部文章" | "视频教程" | "工具网站" | "知识卡片" | "已归档";
+type ResourceSource = "全部" | "官方" | "社区" | "视频平台" | "AI 生成";
+type SortMode = "收藏时间" | "标题";
+type SortOrder = "降序" | "升序";
+type PageMarker = number | "ellipsis-left" | "ellipsis-right";
 
-type ResourceItem = {
+type ExternalResourceItem = {
+  kind: "external";
   id: string;
-  type: ResourceType;
+  type: Exclude<ResourceType, "AI 生成">;
+  folder: Exclude<ResourceFolder, "全部收藏">;
   title: string;
-  author: string;
-  platform: string;
+  source: Exclude<ResourceSource, "全部" | "AI 生成">;
+  domain: string;
+  url: string;
   summary: string;
-  difficulty: Exclude<Difficulty, "全部">;
+  collectedAt: string;
   tags: string[];
-  views: string;
-  likes: string;
-  date: string;
-  imageTone: "python" | "github" | "doc" | "book" | "algo" | "route";
-  duration?: string;
+  tone: "python" | "pytorch" | "article" | "video" | "sklearn" | "tool";
 };
 
-const difficultyOptions: Difficulty[] = ["全部", "入门", "初级", "中级", "高级"];
-const hotSearches = ["Python基础", "数据结构", "Flask实战", "爬虫", "Pandas", "机器学习", "可视化"];
+type GeneratedResourceItem = {
+  kind: "generated";
+  id: string;
+  type: "AI 生成";
+  folder: "知识卡片";
+  title: string;
+  source: "AI 生成";
+  domain: string;
+  summary: string;
+  collectedAt: string;
+  tags: string[];
+  resource: GeneratedResource;
+};
 
-const resources: ResourceItem[] = [
+type ResourceListItem = ExternalResourceItem | GeneratedResourceItem;
+
+const folderOptions: ResourceFolder[] = ["全部收藏", "课程资料", "外部文章", "视频教程", "工具网站", "知识卡片", "已归档"];
+const resourceTypeOptions: Array<"全部" | ResourceType> = ["全部", "官方文档", "外部文章", "视频教程", "工具网站", "知识卡片", "AI 生成"];
+const sourceOptions: ResourceSource[] = ["全部", "官方", "社区", "视频平台", "AI 生成"];
+const sortModeOptions: SortMode[] = ["收藏时间", "标题"];
+const sortOrderOptions: SortOrder[] = ["降序", "升序"];
+const pageSizeOptions = [6, 12, 24];
+
+const externalResources: ExternalResourceItem[] = [
   {
-    id: "python-video-2024",
+    kind: "external",
+    id: "python-docs-312",
+    type: "官方文档",
+    folder: "课程资料",
+    title: "Python 官方文档（3.12）",
+    source: "官方",
+    domain: "docs.python.org",
+    url: "https://docs.python.org/3.12/",
+    summary: "Python 3.12.2 官方文档，包含完整的语言参考与标准库说明。",
+    collectedAt: "2024-05-18",
+    tags: ["Python", "官方文档", "参考手册"],
+    tone: "python"
+  },
+  {
+    kind: "external",
+    id: "pytorch-tutorials",
+    type: "官方文档",
+    folder: "课程资料",
+    title: "PyTorch 官方教程",
+    source: "官方",
+    domain: "pytorch.org",
+    url: "https://pytorch.org/tutorials/",
+    summary: "PyTorch 官方提供的深度学习入门与进阶教程，覆盖张量、训练循环和模型部署。",
+    collectedAt: "2024-05-16",
+    tags: ["深度学习", "PyTorch", "教程"],
+    tone: "pytorch"
+  },
+  {
+    kind: "external",
+    id: "transformer-intro",
+    type: "外部文章",
+    folder: "外部文章",
+    title: "A Gentle Introduction to Transformers",
+    source: "社区",
+    domain: "medium.com",
+    url: "https://medium.com/",
+    summary: "一篇通俗介绍 Transformer 介绍文章，适合初学者理解注意力机制和编码器结构。",
+    collectedAt: "2024-05-15",
+    tags: ["NLP", "Transformer", "深度学习"],
+    tone: "article"
+  },
+  {
+    kind: "external",
+    id: "machine-learning-video",
     type: "视频教程",
-    title: "Python零基础入门到精通（2024最新版）",
-    author: "黑马程序员",
-    platform: "B站",
-    summary: "从环境搭建到项目实战，适合 Python 初学者的系统课程",
-    difficulty: "入门",
-    tags: ["入门", "Python基础", "环境搭建"],
-    views: "12.3万",
-    likes: "1.2万",
-    date: "2024-03-15",
-    imageTone: "python",
-    duration: "12:45:30"
+    folder: "视频教程",
+    title: "机器学习入门（李宏毅）",
+    source: "视频平台",
+    domain: "youtube.com",
+    url: "https://www.youtube.com/",
+    summary: "台湾大学李宏毅教授的机器学习课程视频，适合作为机器学习核心课补充材料。",
+    collectedAt: "2024-05-14",
+    tags: ["机器学习", "视频课程", "李宏毅"],
+    tone: "video"
   },
   {
-    id: "awesome-python",
-    type: "代码项目",
-    title: "awesome-python",
-    author: "vinta / awesome-python",
-    platform: "GitHub",
-    summary: "精选的 Python 资源列表，包含框架、库、工具和学习资料",
-    difficulty: "中级",
-    tags: ["资源整合", "工具库", "GitHub"],
-    views: "8.7k",
-    likes: "16.2k",
-    date: "2024-05-10",
-    imageTone: "github"
+    kind: "external",
+    id: "sklearn-guide",
+    type: "官方文档",
+    folder: "工具网站",
+    title: "scikit-learn 用户指南",
+    source: "官方",
+    domain: "scikit-learn.org",
+    url: "https://scikit-learn.org/stable/user_guide.html",
+    summary: "scikit-learn 用户指南，覆盖常用算法、模型评估与使用示例。",
+    collectedAt: "2024-05-12",
+    tags: ["机器学习", "Scikit-learn", "官方文档"],
+    tone: "sklearn"
   },
   {
-    id: "python-function-doc",
-    type: "文章文档",
-    title: "Python 函数详解：定义、参数与返回值",
-    author: "菜鸟教程",
-    platform: "CSDN",
-    summary: "详细讲解 Python 函数的定义方式、参数类型和返回值的使用",
-    difficulty: "入门",
-    tags: ["函数", "基础语法", "参数"],
-    views: "2.1万",
-    likes: "326",
-    date: "2024-04-02",
-    imageTone: "doc"
-  },
-  {
-    id: "python-algo-video",
-    type: "视频教程",
-    title: "数据结构与算法 - Python实现",
-    author: "小甲鱼",
-    platform: "B站",
-    summary: "使用 Python 实现常见的数据结构与算法，含大量案例",
-    difficulty: "中级",
-    tags: ["数据结构", "算法", "Python实现"],
-    views: "6.8万",
-    likes: "6256",
-    date: "2024-02-20",
-    imageTone: "algo",
-    duration: "08:32:16"
-  },
-  {
-    id: "python-crash-course",
-    type: "电子书",
-    title: "Python编程：从入门到实践（第3版）",
-    author: "埃里克·马瑟斯",
-    platform: "电子书",
-    summary: "经典 Python 入门书籍，项目驱动学习，适合初学者",
-    difficulty: "入门",
-    tags: ["项目实战", "经典书籍", "入门"],
-    views: "3.4万",
-    likes: "1.2万",
-    date: "2023-12-01",
-    imageTone: "book"
-  },
-  {
-    id: "python-roadmap-2024",
-    type: "学习路线",
-    title: "Python学习路线图（2024版）",
-    author: "程序员小灰",
-    platform: "B站",
-    summary: "从零基础到就业工程师的完整学习路径规划",
-    difficulty: "入门",
-    tags: ["学习路线", "职业发展", "路径规划"],
-    views: "1.8万",
-    likes: "892",
-    date: "2024-01-18",
-    imageTone: "route"
+    kind: "external",
+    id: "tableau-learning",
+    type: "工具网站",
+    folder: "工具网站",
+    title: "Tableau 官方学习资源",
+    source: "官方",
+    domain: "tableau.com",
+    url: "https://www.tableau.com/learn/training",
+    summary: "Tableau 官方教程与学习路径，帮助快速掌握数据可视化分析。",
+    collectedAt: "2024-05-10",
+    tags: ["数据可视化", "Tableau", "教程"],
+    tone: "tool"
   }
 ];
 
-function resourceIcon(type: ResourceType) {
-  if (type === "视频教程") return <BookOpen size={18} />;
-  if (type === "代码项目") return <FileCode2 size={18} />;
-  if (type === "文章文档") return <FileText size={18} />;
-  if (type === "电子书") return <LibraryBig size={18} />;
-  return <Network size={18} />;
+function externalResourceIcon(item: ExternalResourceItem) {
+  if (item.tone === "python") return <CodePythonMark />;
+  if (item.tone === "pytorch") return <Network size={30} />;
+  if (item.tone === "article") return <FileText size={30} />;
+  if (item.tone === "video") return <BookOpen size={30} />;
+  if (item.tone === "sklearn") return <Wrench size={30} />;
+  return <Grid2X2 size={30} />;
 }
 
 function generatedResourceIcon(resource: GeneratedResource) {
   if (resource.resource_type === "PPT") return <Presentation size={24} />;
-  if (resource.resource_type === "DOCUMENT") return <FileText size={24} />;
   if (resource.resource_type === "MIND_MAP") return <Waypoints size={24} />;
   if (resource.resource_type === "PRACTICE_SET") return <FileQuestion size={24} />;
-  if (resource.resource_type === "PODCAST_SCRIPT") return <Podcast size={24} />;
+  if (resource.resource_type === "KNOWLEDGE_CARD") return <LibraryBig size={24} />;
   return <FileText size={24} />;
 }
 
 function generatedResourceMetric(resource: GeneratedResource) {
   if (resource.resource_type === "PPT") return { value: resource.slide_count || resource.item_count, label: "页 PPT" };
-  if (resource.resource_type === "DOCUMENT") return { value: resource.item_count, label: "节文档" };
   if (resource.resource_type === "MIND_MAP") return { value: resource.item_count, label: "个节点" };
   if (resource.resource_type === "PRACTICE_SET") return { value: resource.item_count, label: "道练习" };
-  if (resource.resource_type === "PODCAST_SCRIPT") return { value: resource.item_count, label: "段播客" };
-  return { value: resource.item_count || 1, label: "个资源" };
+  if (resource.resource_type === "KNOWLEDGE_CARD") return { value: resource.item_count, label: "张卡片" };
+  return { value: resource.item_count || 1, label: "节内容" };
+}
+
+function generatedToResource(resource: GeneratedResource): GeneratedResourceItem {
+  return {
+    kind: "generated",
+    id: resource.id,
+    type: "AI 生成",
+    folder: "知识卡片",
+    title: resource.title,
+    source: "AI 生成",
+    domain: "AI 助学",
+    summary: resource.summary,
+    collectedAt: resource.saved_at || resource.created_at || "",
+    tags: [
+      resource.resource_type_label ?? resource.resource_type,
+      resource.knowledge_point || "自主学习",
+      `引用 ${(resource.citations ?? []).length} 条`
+    ],
+    resource
+  };
+}
+
+function formatDate(value: string) {
+  if (!value) return "刚刚";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(date);
+}
+
+function itemSearchText(item: ResourceListItem) {
+  return [item.title, item.summary, item.type, item.source, item.domain, item.tags.join(" ")].join(" ").toLowerCase();
+}
+
+function pageMarkers(currentPage: number, totalPages: number): PageMarker[] {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+
+  const pages = new Set([1, totalPages, currentPage, currentPage - 1, currentPage + 1]);
+  if (currentPage <= 3) {
+    pages.add(2);
+    pages.add(3);
+    pages.add(4);
+  }
+  if (currentPage >= totalPages - 2) {
+    pages.add(totalPages - 1);
+    pages.add(totalPages - 2);
+    pages.add(totalPages - 3);
+  }
+
+  const normalizedPages = Array.from(pages)
+    .filter((page) => page >= 1 && page <= totalPages)
+    .sort((a, b) => a - b);
+
+  return normalizedPages.reduce<PageMarker[]>((markers, page, index) => {
+    const previous = normalizedPages[index - 1];
+    if (previous && page - previous > 1) {
+      markers.push(previous === 1 ? "ellipsis-left" : "ellipsis-right");
+    }
+    markers.push(page);
+    return markers;
+  }, []);
 }
 
 export default function StudentResourceCenter() {
-  const [activeType, setActiveType] = useState<ResourceFolder>("全部");
-  const [difficulty, setDifficulty] = useState<Difficulty>("全部");
+  const [activeFolder, setActiveFolder] = useState<ResourceFolder>("全部收藏");
+  const [resourceType, setResourceType] = useState<"全部" | ResourceType>("全部");
+  const [source, setSource] = useState<ResourceSource>("全部");
+  const [tag, setTag] = useState("全部");
+  const [sortMode, setSortMode] = useState<SortMode>("收藏时间");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("降序");
   const [query, setQuery] = useState("");
-  const [savedIds, setSavedIds] = useState(() => new Set(["python-video-2024", "python-crash-course"]));
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(12);
+  const [jumpPage, setJumpPage] = useState("1");
+  const [folderOverrides, setFolderOverrides] = useState<Record<string, ResourceFolder>>({});
   const [generatedResources, setGeneratedResources] = useState<GeneratedResource[]>([]);
   const [generatedError, setGeneratedError] = useState<string | null>(null);
   const [previewResource, setPreviewResource] = useState<GeneratedResource | null>(null);
+  const [previewExternal, setPreviewExternal] = useState<ExternalResourceItem | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -183,61 +284,126 @@ export default function StudentResourceCenter() {
         if (alive) setGeneratedResources(Array.isArray(result.items) ? result.items : []);
       })
       .catch(() => {
-        if (alive) setGeneratedError("AI 生成资源暂时加载失败。");
+        if (alive) setGeneratedError("AI 生成资源接口暂时不可用，当前先展示外部资源占位数据。");
       });
     return () => {
       alive = false;
     };
   }, []);
 
-  const generatedVisibleResources = useMemo(() => {
+  const generatedItems = useMemo(() => generatedResources.map(generatedToResource), [generatedResources]);
+
+  const allItems = useMemo<ResourceListItem[]>(() => {
+    const externalItems = externalResources.map((item) => ({
+      ...item,
+      folder: (folderOverrides[item.id] ?? item.folder) as ExternalResourceItem["folder"]
+    }));
+    return [...generatedItems, ...externalItems];
+  }, [folderOverrides, generatedItems]);
+
+  const allTags = useMemo(() => {
+    return ["全部", ...Array.from(new Set(allItems.flatMap((item) => item.tags))).slice(0, 10)];
+  }, [allItems]);
+
+  const folderCounts = useMemo(() => {
+    return folderOptions.map((folder) => ({
+      folder,
+      count: folder === "全部收藏" ? allItems.length : allItems.filter((item) => item.folder === folder).length
+    }));
+  }, [allItems]);
+
+  const tagCounts = useMemo(() => {
+    return allTags.slice(1, 7).map((item) => ({
+      label: item,
+      count: allItems.filter((resource) => resource.tags.includes(item)).length
+    }));
+  }, [allItems, allTags]);
+
+  const visibleItems = useMemo(() => {
     const keyword = query.trim().toLowerCase();
-    return generatedResources.filter((item) => (
-      !keyword ||
-      item.title.toLowerCase().includes(keyword) ||
-      item.summary.toLowerCase().includes(keyword) ||
-      item.knowledge_point.toLowerCase().includes(keyword) ||
-      (item.resource_type_label ?? item.resource_type).toLowerCase().includes(keyword)
-    ));
-  }, [generatedResources, query]);
-
-  const resourceTypes = useMemo<Array<{ label: ResourceFolder; count: number }>>(() => {
-    const typeCount = (type: ResourceType) => resources.filter((item) => item.type === type).length;
-    return [
-      { label: "全部", count: resources.length + generatedResources.length },
-      { label: "资源生成", count: generatedResources.length },
-      { label: "视频教程", count: typeCount("视频教程") },
-      { label: "代码项目", count: typeCount("代码项目") },
-      { label: "文章文档", count: typeCount("文章文档") },
-      { label: "电子书", count: typeCount("电子书") },
-      { label: "学习路线", count: typeCount("学习路线") }
-    ];
-  }, [generatedResources.length]);
-
-  const visibleResources = useMemo(() => {
-    const keyword = query.trim().toLowerCase();
-    return resources.filter((item) => {
-      const typeMatched = activeType === "全部" || item.type === activeType;
-      const difficultyMatched = difficulty === "全部" || item.difficulty === difficulty;
-      const queryMatched =
-        !keyword ||
-        item.title.toLowerCase().includes(keyword) ||
-        item.summary.toLowerCase().includes(keyword) ||
-        item.tags.some((tag) => tag.toLowerCase().includes(keyword));
-      return typeMatched && difficultyMatched && queryMatched;
+    const filtered = allItems.filter((item) => {
+      const folderMatched = activeFolder === "全部收藏" || item.folder === activeFolder;
+      const typeMatched = resourceType === "全部" || item.type === resourceType;
+      const sourceMatched = source === "全部" || item.source === source;
+      const tagMatched = tag === "全部" || item.tags.includes(tag);
+      const queryMatched = !keyword || itemSearchText(item).includes(keyword);
+      return folderMatched && typeMatched && sourceMatched && tagMatched && queryMatched;
     });
-  }, [activeType, difficulty, query]);
-  const showGeneratedResources = activeType === "全部" || activeType === "资源生成";
-  const showExternalResources = activeType !== "资源生成";
-  const totalVisibleCount = (showGeneratedResources ? generatedVisibleResources.length : 0) + (showExternalResources ? visibleResources.length : 0);
-
-  function toggleSaved(id: string) {
-    setSavedIds((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
+    return filtered.sort((a, b) => {
+      const direction = sortOrder === "降序" ? -1 : 1;
+      if (sortMode === "标题") return a.title.localeCompare(b.title, "zh-CN") * direction;
+      return (new Date(a.collectedAt).getTime() - new Date(b.collectedAt).getTime()) * direction;
     });
+  }, [activeFolder, allItems, query, resourceType, sortMode, sortOrder, source, tag]);
+
+  const totalPages = Math.max(1, Math.ceil(visibleItems.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const pagedItems = useMemo(() => {
+    const start = (safeCurrentPage - 1) * pageSize;
+    return visibleItems.slice(start, start + pageSize);
+  }, [pageSize, safeCurrentPage, visibleItems]);
+  const paginationMarkers = useMemo(() => pageMarkers(safeCurrentPage, totalPages), [safeCurrentPage, totalPages]);
+  const totalStorageGb = Math.max(1.2, allItems.length * 0.18).toFixed(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeFolder, query, resourceType, sortMode, sortOrder, source, tag]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
+
+  useEffect(() => {
+    setJumpPage(String(safeCurrentPage));
+  }, [safeCurrentPage]);
+
+  function resetFilters() {
+    setActiveFolder("全部收藏");
+    setResourceType("全部");
+    setSource("全部");
+    setTag("全部");
+    setSortMode("收藏时间");
+    setSortOrder("降序");
+    setQuery("");
+    setCurrentPage(1);
+    setActionNotice("筛选条件已清空。");
+  }
+
+  function goToPage(page: number) {
+    setCurrentPage(Math.min(Math.max(page, 1), totalPages));
+  }
+
+  function submitJumpPage() {
+    const parsed = Number.parseInt(jumpPage, 10);
+    if (Number.isNaN(parsed)) {
+      setJumpPage(String(safeCurrentPage));
+      return;
+    }
+    goToPage(parsed);
+  }
+
+  function moveResource(item: ResourceListItem, folder: ResourceFolder) {
+    if (folder === "全部收藏") return;
+    if (item.kind === "generated") {
+      setActionNotice("AI 生成资源的移动接口暂未接入，当前保持在知识卡片分类中。");
+      return;
+    }
+    setFolderOverrides((current) => ({ ...current, [item.id]: folder }));
+    setActionNotice(`已临时移动到“${folder}”，后端分类保存接口接入后会持久化。`);
+  }
+
+  async function copyResourceLink(item: ResourceListItem) {
+    const text = item.kind === "external" ? item.url : `${window.location.origin}/self-study/library?resource=${encodeURIComponent(item.id)}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      setActionNotice("资源链接已复制。");
+    } catch {
+      setActionNotice("复制接口不可用，请在打开资源后从浏览器地址栏复制。");
+    }
+  }
+
+  function openExternalResource(item: ExternalResourceItem) {
+    window.open(item.url, "_blank", "noopener,noreferrer");
   }
 
   async function downloadGeneratedResource(resource: GeneratedResource) {
@@ -262,184 +428,284 @@ export default function StudentResourceCenter() {
   return (
     <div className="student-resource-page">
       <header className="student-resource-header">
-        <h1>资源中心</h1>
-        <p>搜索和发现优质学习资源，助力高效学习</p>
+        <div>
+          <h1>资源中心</h1>
+          <p>管理你收藏的外部资源与生成内容，便于整理、查找与复习。</p>
+        </div>
+        <section className="student-resource-summary" aria-label="资源统计">
+          <span>共收纳 <b>{allItems.length}</b> 个资源</span>
+          <small>占用空间 {totalStorageGb} GB</small>
+        </section>
       </header>
 
       <section className="student-resource-search" aria-label="资源搜索">
         <label>
           <Search size={18} />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="输入关键词查找学习资料，如：Python函数、数据结构、爬虫、机器学习等" />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索我的收藏资源（支持标题、描述、标签、来源）" />
         </label>
-        <button type="button">搜索</button>
+        <button type="button" onClick={() => setActionNotice("搜索已按当前关键词刷新。")}>搜索</button>
+        <button type="button" className="student-resource-advanced" onClick={() => setAdvancedOpen((current) => !current)}>
+          <Settings2 size={16} />
+          高级搜索
+        </button>
       </section>
 
-      <section className="student-resource-hot" aria-label="热门搜索">
-        <strong>热门搜索：</strong>
-        {hotSearches.map((item) => (
-          <button type="button" key={item} onClick={() => setQuery(item)}>
-            {item}
-          </button>
-        ))}
-      </section>
+      {advancedOpen ? (
+        <section className="student-resource-advanced-panel" aria-label="高级搜索条件">
+          <span>高级搜索后端接口暂未接入，当前先复用本页筛选条件。</span>
+          <button type="button" onClick={() => setQuery("机器学习")}>机器学习</button>
+          <button type="button" onClick={() => setQuery("Python")}>Python</button>
+          <button type="button" onClick={() => setQuery("Transformer")}>Transformer</button>
+        </section>
+      ) : null}
 
       <div className="student-resource-layout">
-        <aside className="student-resource-types" aria-label="资源类型">
-          <h2>资源类型</h2>
-          {resourceTypes.map((item) => (
-            <button
-              type="button"
-              key={item.label}
-              className={activeType === item.label ? "active" : ""}
-              onClick={() => setActiveType(item.label)}
-            >
-              <span>{item.label}</span>
-              <b>{item.count}</b>
-            </button>
-          ))}
+        <aside className="student-resource-types" aria-label="资源分类">
+          <section>
+            <header>
+              <h2>我的资源</h2>
+              <div>
+                <button type="button" aria-label="新增资源" onClick={() => setActionNotice("新增外部资源接口暂未接入，入口已预留。")}>
+                  <Folder size={16} />
+                </button>
+                <button type="button" aria-label="分类设置" onClick={() => setActionNotice("分类设置接口暂未接入，入口已预留。")}>
+                  <Settings2 size={16} />
+                </button>
+              </div>
+            </header>
+            {folderCounts.map((item) => (
+              <button
+                type="button"
+                key={item.folder}
+                className={activeFolder === item.folder ? "active" : ""}
+                onClick={() => setActiveFolder(item.folder)}
+              >
+                <span>
+                  {item.folder === "已归档" ? <FolderArchive size={16} /> : <Folder size={16} />}
+                  {item.folder}
+                </span>
+                <b>{item.count}</b>
+              </button>
+            ))}
+          </section>
+
+          <section className="student-resource-tag-panel">
+            <header>
+              <h2>标签</h2>
+              <button type="button" aria-label="新增标签" onClick={() => setActionNotice("新增标签接口暂未接入，入口已预留。")}>
+                <Tag size={15} />
+              </button>
+            </header>
+            {tagCounts.map((item) => (
+              <button key={item.label} type="button" className={tag === item.label ? "active" : ""} onClick={() => setTag(item.label)}>
+                <span>{item.label}</span>
+                <b>{item.count}</b>
+              </button>
+            ))}
+          </section>
         </aside>
 
         <main className="student-resource-results">
           <section className="student-resource-filters" aria-label="筛选条件">
-            <div>
-              <h2>难度等级</h2>
-              <div className="student-resource-segments">
-                {difficultyOptions.map((item) => (
-                  <button type="button" key={item} className={difficulty === item ? "active" : ""} onClick={() => setDifficulty(item)}>
-                    {item}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="student-resource-time">
-              <h2>时间范围</h2>
-              <button type="button">
-                不限时间
-                <ChevronDown size={16} />
+            <FilterSelect label="资源类型" value={resourceType} options={resourceTypeOptions} onChange={(value) => setResourceType(value as "全部" | ResourceType)} />
+            <FilterSelect label="标签" value={tag} options={allTags} onChange={setTag} />
+            <FilterSelect label="来源" value={source} options={sourceOptions} onChange={(value) => setSource(value as ResourceSource)} />
+            <FilterSelect label="时间" value={sortMode} options={sortModeOptions} onChange={(value) => setSortMode(value as SortMode)} />
+            <FilterSelect label="排序" value={sortOrder} options={sortOrderOptions} onChange={(value) => setSortOrder(value as SortOrder)} />
+            <div className="student-resource-view-toggle" aria-label="视图切换">
+              <button type="button" className={viewMode === "grid" ? "active" : ""} aria-label="网格视图" onClick={() => setViewMode("grid")}>
+                <Grid2X2 size={17} />
+              </button>
+              <button type="button" className={viewMode === "list" ? "active" : ""} aria-label="列表视图" onClick={() => setViewMode("list")}>
+                <List size={18} />
               </button>
             </div>
-            <button type="button" className="student-resource-clear" onClick={() => {
-              setActiveType("全部");
-              setDifficulty("全部");
-              setQuery("");
-            }}>
-              <RefreshCw size={16} />
-              清空筛选
-            </button>
           </section>
 
-          <div className="student-resource-count">找到 {totalVisibleCount} 条相关结果</div>
+          {generatedError ? <p className="student-resource-notice error">{generatedError}</p> : null}
+          {actionNotice ? <p className="student-resource-notice">{actionNotice}</p> : null}
 
-          {showGeneratedResources ? (
-            <section className="student-generated-resources" aria-label="AI 生成资源">
-              <header>
-                <div>
-                  <h2>资源生成</h2>
-                  <p>从 AI 助学中加入资源中心的学习产物，可在这里预览、打开和导出</p>
-                </div>
-                <span>{generatedVisibleResources.length} 个资源</span>
-              </header>
-              {generatedError ? <p className="student-generated-error">{generatedError}</p> : null}
-              {generatedVisibleResources.length ? (
-                <div className="student-generated-grid">
-                  {generatedVisibleResources.map((resource) => {
-                    const metric = generatedResourceMetric(resource);
-                    return (
-                      <article className="student-generated-card" key={resource.id}>
-                        <button type="button" className="student-generated-thumb" onClick={() => setPreviewResource(resource)} aria-label={`预览 ${resource.title}`}>
-                          {generatedResourceIcon(resource)}
-                          <strong>{metric.value}</strong>
-                          <span>{metric.label}</span>
-                        </button>
-                        <div className="student-generated-body">
-                          <h3>{resource.title}</h3>
-                          <p>{resource.summary}</p>
-                          <div className="student-generated-tags">
-                            <span><BookmarkCheck size={14} /> 已加入资源中心</span>
-                            <span>{resource.resource_type_label ?? resource.resource_type}</span>
-                            <span>{resource.knowledge_point || "自主学习"}</span>
-                            <span>{resource.file_format}</span>
-                            <span>引用 {(resource.citations ?? []).length} 条</span>
-                          </div>
-                        </div>
-                        <div className="student-generated-actions">
-                          <button type="button" className="primary" onClick={() => setPreviewResource(resource)}>
-                            <Eye size={16} />
-                            预览
-                          </button>
-                          <button type="button" onClick={() => downloadGeneratedResource(resource)} disabled={!resource.download_available}>
-                            <Download size={16} />
-                            导出
-                          </button>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="student-generated-empty">还没有加入资源中心的 AI 生成资源。可以在 AI 助学中生成学习产物后点击书签保存。</p>
-              )}
-            </section>
-          ) : null}
+          <section className={`student-resource-grid ${viewMode === "list" ? "list" : ""}`} aria-label="资源列表">
+            {visibleItems.length ? pagedItems.map((item) => (
+              <article className={`student-resource-card ${item.kind}`} key={`${item.kind}-${item.id}`}>
+                <button
+                  type="button"
+                  className={`student-resource-thumb ${item.kind === "external" ? item.tone : "generated"}`}
+                  onClick={() => item.kind === "external" ? setPreviewExternal(item) : setPreviewResource(item.resource)}
+                  aria-label={`预览 ${item.title}`}
+                >
+                  <span>{item.kind === "external" ? externalResourceIcon(item) : generatedResourceIcon(item.resource)}</span>
+                  {item.kind === "generated" ? (
+                    <em>{generatedResourceMetric(item.resource).value}{generatedResourceMetric(item.resource).label}</em>
+                  ) : null}
+                </button>
 
-          {showExternalResources ? (
-            <section className="student-resource-grid" aria-label="资源列表">
-              {visibleResources.map((item) => (
-                <article className="student-resource-card" key={item.id}>
-                  <div className={`student-resource-thumb ${item.imageTone}`}>
-                    <span>{resourceIcon(item.type)}</span>
-                    {item.duration ? <em>{item.duration}</em> : null}
-                  </div>
-                  <div className="student-resource-card-body">
-                    <header>
+                <div className="student-resource-card-body">
+                  <header>
+                    <div>
                       <h2>{item.title}</h2>
-                      <button type="button" onClick={() => toggleSaved(item.id)} aria-label={`${savedIds.has(item.id) ? "取消收藏" : "收藏"} ${item.title}`}>
-                        <span>{savedIds.has(item.id) ? "已收藏" : "收藏"}</span>
-                        <Star size={17} fill={savedIds.has(item.id) ? "currentColor" : "none"} />
-                      </button>
-                    </header>
-                    <div className="student-resource-author">
-                      <span><UserRound size={14} /> {item.author}</span>
-                      <span>{item.platform === "GitHub" ? <Github size={14} /> : <GraduationCap size={14} />} {item.platform}</span>
+                      <p>{item.summary}</p>
                     </div>
-                    <p>{item.summary}</p>
-                    <div className="student-resource-tags">
-                      {item.tags.map((tag) => <span key={tag}>{tag}</span>)}
-                    </div>
-                    <footer>
-                      <span><Eye size={14} /> {item.views}</span>
-                      <span><ThumbsUp size={14} /> {item.likes}</span>
-                      <span><CalendarDays size={14} /> {item.date}</span>
-                    </footer>
+                  </header>
+                  <div className="student-resource-tags">
+                    {item.tags.map((itemTag) => <span key={itemTag}>{itemTag}</span>)}
                   </div>
-                </article>
-              ))}
-            </section>
-          ) : null}
+                  <div className="student-resource-meta">
+                    <span>{item.kind === "external" && item.domain.includes("github") ? <Github size={14} /> : <GraduationCap size={14} />} {item.domain}</span>
+                    <span><CalendarDays size={14} /> 收藏于 {formatDate(item.collectedAt)}</span>
+                    <span><Archive size={14} /> {item.folder}</span>
+                  </div>
+                  <div className="student-resource-actions">
+                    {item.kind === "external" ? (
+                      <button type="button" className="primary" onClick={() => openExternalResource(item)}>
+                        打开原文 <ExternalLink size={15} />
+                      </button>
+                    ) : (
+                      <button type="button" className="primary" onClick={() => setPreviewResource(item.resource)}>
+                        <Eye size={15} /> 预览
+                      </button>
+                    )}
+                    {item.kind === "external" ? (
+                      <button type="button" onClick={() => setPreviewExternal(item)}>
+                        <Eye size={15} /> 预览
+                      </button>
+                    ) : (
+                      <button type="button" onClick={() => downloadGeneratedResource(item.resource)} disabled={!item.resource.download_available}>
+                        <Download size={15} /> 导出
+                      </button>
+                    )}
+                    <label className="student-resource-move">
+                      <MoveRight size={15} />
+                      <select value={item.folder} onChange={(event) => moveResource(item, event.target.value as ResourceFolder)} aria-label={`移动 ${item.title}`}>
+                        {folderOptions.filter((folder) => folder !== "全部收藏").map((folder) => (
+                          <option key={folder} value={folder}>{folder}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <button type="button" className="icon" aria-label={`更多操作 ${item.title}`} onClick={() => copyResourceLink(item)}>
+                      <MoreVertical size={17} />
+                    </button>
+                  </div>
+                </div>
+              </article>
+            )) : (
+              <article className="student-resource-empty">
+                <LibraryBig size={28} />
+                <h2>没有匹配的资源</h2>
+                <p>可以调整关键词、资源类型或标签筛选。外部资源新增和高级搜索接口接入后会在这里继续补齐。</p>
+                <button type="button" onClick={resetFilters}>清空筛选</button>
+              </article>
+            )}
+          </section>
 
           <footer className="student-resource-pagination">
-            <span>共 {totalVisibleCount} 条</span>
-            <div>
-              <button type="button" aria-label="上一页"><ChevronLeft size={16} /></button>
-              <button type="button" className="active">1</button>
-              <button type="button">2</button>
-              <button type="button">3</button>
-              <span>...</span>
-              <button type="button">13</button>
-              <button type="button" aria-label="下一页"><ChevronRight size={16} /></button>
-            </div>
-            <button type="button" className="student-resource-page-size">
-              10 条/页
+            <span className="student-resource-total">共 {visibleItems.length} 条</span>
+            <button type="button" aria-label="上一页" disabled={safeCurrentPage <= 1} onClick={() => goToPage(safeCurrentPage - 1)}><ChevronLeft size={16} /></button>
+            {paginationMarkers.map((marker) => (
+              typeof marker === "number" ? (
+                <button
+                  type="button"
+                  key={marker}
+                  className={safeCurrentPage === marker ? "active" : ""}
+                  aria-current={safeCurrentPage === marker ? "page" : undefined}
+                  onClick={() => goToPage(marker)}
+                >
+                  {marker}
+                </button>
+              ) : (
+                <span key={marker} className="student-resource-page-ellipsis">...</span>
+              )
+            ))}
+            <button type="button" aria-label="下一页" disabled={safeCurrentPage >= totalPages} onClick={() => goToPage(safeCurrentPage + 1)}><ChevronRight size={16} /></button>
+            <label className="student-resource-page-size">
+              每页显示：
+              <select value={pageSize} onChange={(event) => {
+                setPageSize(Number(event.target.value));
+                setCurrentPage(1);
+              }}>
+                {pageSizeOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
               <ChevronDown size={15} />
-            </button>
+            </label>
+            <label className="student-resource-jump">
+              跳至
+              <input
+                value={jumpPage}
+                inputMode="numeric"
+                aria-label="跳转页码"
+                onChange={(event) => setJumpPage(event.target.value.replace(/\D/g, ""))}
+                onBlur={submitJumpPage}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") submitJumpPage();
+                }}
+              />
+              / {totalPages} 页
+            </label>
           </footer>
         </main>
       </div>
+
+      {previewExternal ? (
+        <div className="student-resource-preview" role="dialog" aria-modal="true" aria-label="外部资源预览">
+          <button type="button" className="student-resource-preview-mask" aria-label="关闭预览" onClick={() => setPreviewExternal(null)} />
+          <section>
+            <header>
+              <div>
+                <small>{previewExternal.type} · {previewExternal.domain}</small>
+                <h2>{previewExternal.title}</h2>
+              </div>
+              <button type="button" aria-label="关闭预览" onClick={() => setPreviewExternal(null)}>×</button>
+            </header>
+            <p>{previewExternal.summary}</p>
+            <div className="student-resource-tags">
+              {previewExternal.tags.map((item) => <span key={item}>{item}</span>)}
+            </div>
+            <footer>
+              <button type="button" className="primary" onClick={() => openExternalResource(previewExternal)}>
+                打开原文 <ExternalLink size={15} />
+              </button>
+              <button type="button" onClick={() => copyResourceLink(previewExternal)}>
+                <Copy size={15} /> 复制链接
+              </button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
+
       <GeneratedResourcePreviewModal
         resource={previewResource}
         onClose={() => setPreviewResource(null)}
         onDownload={downloadGeneratedResource}
       />
     </div>
+  );
+}
+
+function FilterSelect({
+  label,
+  value,
+  options,
+  onChange
+}: {
+  label: string;
+  value: string;
+  options: string[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="student-resource-filter-select">
+      <span>{label}</span>
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
+        {options.map((option) => <option key={option} value={option}>{option}</option>)}
+      </select>
+    </label>
+  );
+}
+
+function CodePythonMark() {
+  return (
+    <strong className="student-python-mark" aria-hidden="true">
+      Py
+    </strong>
   );
 }

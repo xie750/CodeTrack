@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import * as echarts from "echarts";
 import type { EChartsOption } from "echarts";
@@ -7,17 +7,24 @@ import {
   BookOpen,
   CheckCircle2,
   CircleDot,
+  Download,
   FileText,
+  GitBranchPlus,
   Layers3,
   Loader2,
   MessageSquareText,
   Network,
   NotebookPen,
+  Pencil,
+  Plus,
   RefreshCw,
   Route,
+  Save,
   Sparkles,
   Target,
-  TriangleAlert,
+  Trash2,
+  Upload,
+  X,
 } from "lucide-react";
 import { api, apiCache, StudentKnowledgeGraph, StudentKnowledgeGraphEdge, StudentKnowledgeGraphNode } from "../api";
 
@@ -27,6 +34,22 @@ type KnowledgeMapProps = {
 };
 
 type Selection = { kind: "node" | "edge"; id: string } | null;
+
+type NodeDraft = {
+  label: string;
+  type: string;
+  description: string;
+  difficulty: number;
+};
+
+const selfStudyGraphStorageKey = "codetrack.selfStudyKnowledgeGraph.v1";
+
+const defaultNodeDraft: NodeDraft = {
+  label: "",
+  type: "知识点",
+  description: "",
+  difficulty: 2,
+};
 
 const nodeTypeColors: Record<string, string> = {
   知识点: "#2563eb",
@@ -75,6 +98,7 @@ function fileSize(bytes: number) {
 }
 
 function statusLabel(status: string) {
+  if (status === "draft") return "本地草稿";
   return status === "published" ? "已发布" : status;
 }
 
@@ -89,6 +113,75 @@ function edgeTitle(edge: StudentKnowledgeGraphEdge, nodesById: Map<string, Stude
   const source = nodesById.get(edge.source)?.label ?? edge.source;
   const target = nodesById.get(edge.target)?.label ?? edge.target;
   return `${source} -> ${target}`;
+}
+
+function createEmptySelfStudyGraph(): StudentKnowledgeGraph {
+  const now = new Date().toISOString();
+  return {
+    id: "self_study_graph_local",
+    teaching_assignment_id: "self-study",
+    course_id: "self-study",
+    course_name: "自主学习",
+    class_id: "personal",
+    teacher_id: "",
+    teacher_name: "学生自定义",
+    title: "我的自学知识图谱",
+    description: "学生个人创建和维护的自学知识图谱。",
+    status: "draft",
+    target_classes: [],
+    source_files: [],
+    source_summary: "自学图谱由学生自行创建、导入和维护，不影响教师发布的课程知识图谱。",
+    node_count: 0,
+    edge_count: 0,
+    nodes: [],
+    edges: [],
+    created_at: now,
+    updated_at: now,
+    published_at: null,
+  };
+}
+
+function withGraphCounts(graph: StudentKnowledgeGraph): StudentKnowledgeGraph {
+  return {
+    ...graph,
+    node_count: graph.nodes.length,
+    edge_count: graph.edges.length,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function readSelfStudyGraph(): StudentKnowledgeGraph {
+  if (typeof window === "undefined") return createEmptySelfStudyGraph();
+  const saved = window.localStorage.getItem(selfStudyGraphStorageKey);
+  if (!saved) return createEmptySelfStudyGraph();
+  try {
+    const parsed = JSON.parse(saved) as StudentKnowledgeGraph;
+    if (!Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) {
+      return createEmptySelfStudyGraph();
+    }
+    return withGraphCounts({
+      ...createEmptySelfStudyGraph(),
+      ...parsed,
+      id: parsed.id || "self_study_graph_local",
+      status: parsed.status || "draft",
+      nodes: parsed.nodes,
+      edges: parsed.edges,
+      source_files: Array.isArray(parsed.source_files) ? parsed.source_files : [],
+      target_classes: Array.isArray(parsed.target_classes) ? parsed.target_classes : [],
+    });
+  } catch {
+    return createEmptySelfStudyGraph();
+  }
+}
+
+function nodeToDraft(node: StudentKnowledgeGraphNode | null): NodeDraft {
+  if (!node) return defaultNodeDraft;
+  return {
+    label: node.label,
+    type: node.type || "知识点",
+    description: node.description || "",
+    difficulty: clampDifficulty(node.difficulty),
+  };
 }
 
 function patchZoomedPointerEvent(event: Event) {
@@ -238,14 +331,23 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
   const navigate = useNavigate();
   const chartContainerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const isSelfStudy = scope === "self-study";
   const [graph, setGraph] = useState<StudentKnowledgeGraph | null>(() => (
-    courseId ? apiCache.peekStudentKnowledgeGraph(courseId) : null
+    isSelfStudy ? readSelfStudyGraph() : (courseId ? apiCache.peekStudentKnowledgeGraph(courseId) : null)
   ));
-  const [loading, setLoading] = useState(!graph);
+  const [loading, setLoading] = useState(!isSelfStudy && !graph);
   const [message, setMessage] = useState<string | null>(null);
   const [selection, setSelection] = useState<Selection>(null);
+  const [nodeEditor, setNodeEditor] = useState<{ mode: "create" | "edit"; values: NodeDraft } | null>(null);
 
   useEffect(() => {
+    if (isSelfStudy) {
+      setGraph((current) => current ?? readSelfStudyGraph());
+      setLoading(false);
+      setMessage(null);
+      return undefined;
+    }
     if (!courseId) return undefined;
     let alive = true;
     setLoading(!graph);
@@ -267,7 +369,12 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
     return () => {
       alive = false;
     };
-  }, [courseId]);
+  }, [courseId, isSelfStudy]);
+
+  useEffect(() => {
+    if (!isSelfStudy || !graph || typeof window === "undefined") return;
+    window.localStorage.setItem(selfStudyGraphStorageKey, JSON.stringify(withGraphCounts(graph)));
+  }, [graph, isSelfStudy]);
 
   const nodesById = useMemo(() => new Map((graph?.nodes ?? []).map((node) => [node.id, node])), [graph]);
   const selectedNode = selection?.kind === "node" ? nodesById.get(selection.id) ?? null : null;
@@ -317,10 +424,11 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
     };
   }, []);
 
-  const title = scope === "course" ? "课程知识图谱" : "自学知识图谱";
+  const title = isSelfStudy ? "自学知识图谱" : "课程知识图谱";
   const displayCourseName = graph?.course_name || courseName || "当前课程";
   const activeNode = selectedNode ?? graph?.nodes[0] ?? null;
   const selectedTone = stateTone(activeNode?.difficulty);
+  const hasNodes = Boolean(graph?.nodes.length);
 
   function selectEdge(edge: StudentKnowledgeGraphEdge) {
     setSelection({ kind: "edge", id: edge.id });
@@ -330,32 +438,168 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
     navigate("/self-study", { state: { knowledgePoint: activeNode?.label, fromCourseId: courseId } });
   }
 
+  function openCreateNode() {
+    setNodeEditor({ mode: "create", values: defaultNodeDraft });
+  }
+
+  function openEditNode(node: StudentKnowledgeGraphNode) {
+    setNodeEditor({ mode: "edit", values: nodeToDraft(node) });
+  }
+
+  function updateNodeDraft(field: keyof NodeDraft, value: string | number) {
+    setNodeEditor((current) => (
+      current ? { ...current, values: { ...current.values, [field]: value } } : current
+    ));
+  }
+
+  function saveNodeDraft() {
+    if (!nodeEditor || !isSelfStudy) return;
+    const label = nodeEditor.values.label.trim() || "未命名知识点";
+    const description = nodeEditor.values.description.trim();
+    const difficulty = clampDifficulty(Number(nodeEditor.values.difficulty));
+    setGraph((current) => {
+      const base = current ?? createEmptySelfStudyGraph();
+      if (nodeEditor.mode === "edit" && selectedNode) {
+        return withGraphCounts({
+          ...base,
+          nodes: base.nodes.map((node) => (
+            node.id === selectedNode.id
+              ? {
+                  ...node,
+                  label,
+                  type: nodeEditor.values.type,
+                  description,
+                  difficulty,
+                  color: nodeTypeColors[nodeEditor.values.type] || node.color || "#2563eb",
+                }
+              : node
+          )),
+        });
+      }
+      const node: StudentKnowledgeGraphNode = {
+        id: `self_node_${Date.now()}`,
+        label,
+        type: nodeEditor.values.type,
+        description,
+        difficulty,
+        x: 120 + (base.nodes.length % 4) * 160,
+        y: 120 + Math.floor(base.nodes.length / 4) * 130,
+        color: nodeTypeColors[nodeEditor.values.type] || "#2563eb",
+        source: "custom",
+      };
+      setSelection({ kind: "node", id: node.id });
+      return withGraphCounts({ ...base, nodes: [...base.nodes, node] });
+    });
+    setNodeEditor(null);
+    setMessage("自学图谱已更新。");
+  }
+
+  function deleteActiveNode() {
+    if (!isSelfStudy || !selectedNode) return;
+    setGraph((current) => {
+      const base = current ?? createEmptySelfStudyGraph();
+      return withGraphCounts({
+        ...base,
+        nodes: base.nodes.filter((node) => node.id !== selectedNode.id),
+        edges: base.edges.filter((edge) => edge.source !== selectedNode.id && edge.target !== selectedNode.id),
+      });
+    });
+    setSelection(null);
+    setNodeEditor(null);
+    setMessage("节点已删除，相关关系也已同步移除。");
+  }
+
+  function exportSelfStudyGraph() {
+    if (!graph || !isSelfStudy) return;
+    const blob = new Blob([JSON.stringify(withGraphCounts(graph), null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "self-study-knowledge-map.json";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function importSelfStudyGraph(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !isSelfStudy) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result)) as Partial<StudentKnowledgeGraph>;
+        if (!Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) {
+          throw new Error("invalid graph");
+        }
+        const imported = withGraphCounts({
+          ...createEmptySelfStudyGraph(),
+          ...parsed,
+          status: "draft",
+          teacher_name: "学生自定义",
+          course_name: "自主学习",
+          nodes: parsed.nodes,
+          edges: parsed.edges,
+          source_files: [],
+          source_summary: parsed.source_summary || "从本地 JSON 导入的学生自学知识图谱。",
+          published_at: null,
+        });
+        setGraph(imported);
+        setSelection(imported.nodes[0] ? { kind: "node", id: imported.nodes[0].id } : null);
+        setMessage("图谱已导入，可继续编辑节点。");
+      } catch {
+        setMessage("导入失败：请选择包含 nodes 和 edges 的知识图谱 JSON 文件。");
+      }
+    };
+    reader.readAsText(file);
+  }
+
   return (
     <div className="student-map-page student-graph-page">
       <header className="student-map-head student-graph-head">
         <div>
           <h1>{title}</h1>
           <p>
-            {graph
+            {isSelfStudy
+              ? "这是你的个人自学图谱，可自行创建节点、编辑内容、导入导出，不影响教师下发的课程图谱。"
+              : graph
               ? `${graph.teacher_name} 发布给 ${graph.target_classes.join("、") || "当前班级"} 的唯一课程图谱。`
               : "读取教师发布给当前班级的课程知识图谱。"}
           </p>
         </div>
-        <button type="button" disabled={!graph} onClick={actionToSelfStudy}>
-          <Route size={17} />
-          生成学习路径
-        </button>
+        {isSelfStudy ? (
+          <div className="student-graph-head-actions">
+            <button type="button" onClick={() => importInputRef.current?.click()}>
+              <Upload size={17} />
+              导入图谱
+            </button>
+            <button type="button" onClick={openCreateNode}>
+              <Plus size={17} />
+              新建节点
+            </button>
+            <input ref={importInputRef} type="file" accept="application/json,.json" hidden onChange={importSelfStudyGraph} />
+          </div>
+        ) : (
+          <button type="button" disabled={!graph} onClick={actionToSelfStudy}>
+            <Route size={17} />
+            生成学习路径
+          </button>
+        )}
       </header>
 
       {message ? <p className="student-data-message">{message}</p> : null}
 
       <section className="student-graph-stats">
-        {[
+        {(isSelfStudy ? [
+          { label: "节点", value: graph?.node_count ?? 0, sub: hasNodes ? "学生自建结构" : "尚未创建", icon: <Network size={23} />, tone: "blue" },
+          { label: "关系", value: graph?.edge_count ?? 0, sub: "可导入或后续编辑", icon: <Layers3 size={23} />, tone: "green" },
+          { label: "状态", value: hasNodes ? "本地草稿" : "空白图谱", sub: formatDate(graph?.updated_at ?? null), icon: <CheckCircle2 size={23} />, tone: "purple" },
+          { label: "来源", value: "个人", sub: "学生自定义", icon: <FileText size={23} />, tone: "orange" },
+        ] : [
           { label: "节点", value: graph?.node_count ?? 0, sub: "知识结构", icon: <Network size={23} />, tone: "blue" },
           { label: "关系", value: graph?.edge_count ?? 0, sub: "前驱/后继/相关", icon: <Layers3 size={23} />, tone: "green" },
           { label: "状态", value: graph ? statusLabel(graph.status) : "读取中", sub: formatDate(graph?.published_at ?? null), icon: <CheckCircle2 size={23} />, tone: "purple" },
           { label: "来源", value: graph?.source_files.length ?? 0, sub: "课程资料", icon: <FileText size={23} />, tone: "orange" },
-        ].map((item) => (
+        ]).map((item) => (
           <article className={`course-dashboard-stat ${item.tone}`} key={item.label}>
             <span>{item.icon}</span>
             <div>
@@ -375,10 +619,24 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
                 <span key={type}><i style={{ background: color }} />{type}</span>
               ))}
             </div>
-            <button type="button" disabled={!graph} onClick={() => chartRef.current?.resize()}>
-              <RefreshCw size={15} />
-              重置视图
-            </button>
+            <div className="student-graph-toolbar-actions">
+              {isSelfStudy ? (
+                <>
+                  <button type="button" onClick={openCreateNode}>
+                    <Plus size={15} />
+                    新建节点
+                  </button>
+                  <button type="button" disabled={!graph} onClick={exportSelfStudyGraph}>
+                    <Download size={15} />
+                    导出
+                  </button>
+                </>
+              ) : null}
+              <button type="button" disabled={!graph || !hasNodes} onClick={() => chartRef.current?.resize()}>
+                <RefreshCw size={15} />
+                重置视图
+              </button>
+            </div>
           </div>
 
           <div className="student-graph-canvas-shell">
@@ -388,8 +646,35 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
                 <strong>正在读取知识图谱</strong>
                 <p>系统会按当前学生所在班级和课程匹配唯一图谱。</p>
               </div>
-            ) : graph && graph.nodes.length ? (
+            ) : graph && hasNodes ? (
               <div className="student-graph-canvas" ref={chartContainerRef} aria-label={`${displayCourseName} 知识图谱`} />
+            ) : isSelfStudy ? (
+              <div className="student-graph-empty student-graph-start-state">
+                <div className="student-graph-empty-visual">
+                  <span><Network size={24} /></span>
+                  <i />
+                  <span><GitBranchPlus size={22} /></span>
+                  <i />
+                  <span><BookOpen size={22} /></span>
+                </div>
+                <strong>开始搭建你的自学知识图谱</strong>
+                <p>当前还没有节点。你可以先创建一个知识点，也可以导入已有 JSON 图谱，后续再补充关系和学习资料。</p>
+                <div className="student-graph-empty-actions">
+                  <button type="button" onClick={openCreateNode}>
+                    <Plus size={15} />
+                    创建第一个节点
+                  </button>
+                  <button type="button" onClick={() => importInputRef.current?.click()}>
+                    <Upload size={15} />
+                    导入图谱
+                  </button>
+                </div>
+                <div className="student-graph-empty-tips">
+                  <span>个人可编辑</span>
+                  <span>可导入导出</span>
+                  <span>与课程图谱隔离</span>
+                </div>
+              </div>
             ) : (
               <div className="student-graph-empty">
                 <Network size={26} />
@@ -402,7 +687,48 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
 
         <aside className="student-map-side student-graph-side">
           <section className="student-panel student-graph-inspector">
-            <h2>{selectedEdge ? "关系详情" : "知识点详情"}</h2>
+            <h2>{nodeEditor ? (nodeEditor.mode === "create" ? "新建节点" : "编辑节点") : selectedEdge ? "关系详情" : "知识点详情"}</h2>
+            {nodeEditor ? (
+              <div className="student-graph-editor">
+                <label>
+                  节点名称
+                  <input
+                    value={nodeEditor.values.label}
+                    onChange={(event) => updateNodeDraft("label", event.target.value)}
+                    placeholder="例如：梯度下降"
+                  />
+                </label>
+                <label>
+                  节点类型
+                  <select value={nodeEditor.values.type} onChange={(event) => updateNodeDraft("type", event.target.value)}>
+                    {Object.keys(nodeTypeColors).map((type) => <option key={type} value={type}>{type}</option>)}
+                  </select>
+                </label>
+                <label>
+                  难度
+                  <input
+                    type="number"
+                    min={1}
+                    max={5}
+                    value={nodeEditor.values.difficulty}
+                    onChange={(event) => updateNodeDraft("difficulty", Number(event.target.value))}
+                  />
+                </label>
+                <label>
+                  说明
+                  <textarea
+                    value={nodeEditor.values.description}
+                    onChange={(event) => updateNodeDraft("description", event.target.value)}
+                    placeholder="写下你对这个知识点的理解、来源或待解决问题"
+                    rows={4}
+                  />
+                </label>
+                <div className="student-graph-editor-actions">
+                  <button type="button" onClick={saveNodeDraft}><Save size={15} />保存</button>
+                  <button type="button" onClick={() => setNodeEditor(null)}><X size={15} />取消</button>
+                </div>
+              </div>
+            ) : null}
             {activeNode || selectedEdge ? (
               selectedEdge ? (
                 <div className="student-graph-detail">
@@ -420,18 +746,31 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
                   <div className="student-graph-meta">
                     <span>类型 <strong>{activeNode.type}</strong></span>
                     <span>难度 <strong>{clampDifficulty(activeNode.difficulty)} / 5</strong></span>
-                    <span>来源 <strong>{activeNode.source === "ai" ? "AI 草稿" : "教师自定义"}</strong></span>
+                    <span>来源 <strong>{activeNode.source === "ai" ? "AI 草稿" : isSelfStudy ? "学生自定义" : "教师自定义"}</strong></span>
                   </div>
                   <div className="student-graph-actions">
-                    <button type="button" onClick={actionToSelfStudy}><Sparkles size={15} />生成讲解</button>
-                    <button type="button" onClick={actionToSelfStudy}><Target size={15} />生成练习</button>
-                    <button type="button"><NotebookPen size={15} />保存笔记</button>
-                    <button type="button"><MessageSquareText size={15} />向 AI 提问</button>
+                    {isSelfStudy ? (
+                      <>
+                        <button type="button" onClick={() => openEditNode(activeNode)}><Pencil size={15} />编辑节点</button>
+                        <button type="button" onClick={deleteActiveNode}><Trash2 size={15} />删除节点</button>
+                        <button type="button" onClick={exportSelfStudyGraph}><Download size={15} />导出图谱</button>
+                        <button type="button"><MessageSquareText size={15} />向 AI 提问</button>
+                      </>
+                    ) : (
+                      <>
+                        <button type="button" onClick={actionToSelfStudy}><Sparkles size={15} />生成讲解</button>
+                        <button type="button" onClick={actionToSelfStudy}><Target size={15} />生成练习</button>
+                        <button type="button"><NotebookPen size={15} />保存笔记</button>
+                        <button type="button"><MessageSquareText size={15} />向 AI 提问</button>
+                      </>
+                    )}
                   </div>
                 </>
               ) : null
             ) : (
-              <p className="student-panel-copy">点击图谱中的节点或关系后，这里会显示学习详情。</p>
+              <p className="student-panel-copy">
+                {isSelfStudy ? "创建或导入节点后，可以在这里编辑节点说明、难度和来源。" : "点击图谱中的节点或关系后，这里会显示学习详情。"}
+              </p>
             )}
           </section>
 
@@ -444,7 +783,9 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
                 <RelationGroup title="相关知识" edges={peerEdges} nodesById={nodesById} currentId={activeNode.id} onSelect={selectEdge} />
               </div>
             ) : (
-              <div className="empty-panel compact">选择一个知识点查看关联关系。</div>
+              <div className="empty-panel compact">
+                {isSelfStudy ? "创建节点后可继续补充关联关系；后端接口就绪后可同步保存。" : "选择一个知识点查看关联关系。"}
+              </div>
             )}
           </section>
 
@@ -470,7 +811,9 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
                 </article>
               ))}
               {!loading && graph && !graph.source_files.length ? (
-                <div className="empty-panel compact">暂无来源文件。</div>
+                <div className="empty-panel compact">
+                  {isSelfStudy ? "自学图谱暂无来源文件，后续可接入资料库或导入来源。" : "暂无来源文件。"}
+                </div>
               ) : null}
             </div>
           </section>
