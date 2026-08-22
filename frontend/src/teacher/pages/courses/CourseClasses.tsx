@@ -1,5 +1,6 @@
 import { BookOpen, Boxes, ChevronLeft, ChevronRight, Database, FileBox, GraduationCap, Layers, MoreVertical, Plus, Search, Settings, ShieldCheck } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 const courses = [
   { title: "数据结构与程序设计基础", status: "进行中", term: "2024-2025春季学期", major: "计算机科学与技术", classes: 6, progress: 60, nextTask: "实验3：栈与队列的应用", deadline: "05-28 23:59", visual: "cube" },
@@ -24,6 +25,7 @@ const tips = [
 ];
 
 export default function CourseClasses() {
+  const navigate = useNavigate();
   const [keyword, setKeyword] = useState("");
   const [term, setTerm] = useState("2024-2025春季学期");
   const [major, setMajor] = useState("全部专业");
@@ -38,6 +40,29 @@ export default function CourseClasses() {
       return matchKeyword && matchTerm && matchMajor && matchStatus;
     });
   }, [keyword, term, major, status]);
+
+  function openCourse(courseTitle: string) {
+    navigate("/teacher/courses/syllabus", { state: { courseTitle } });
+  }
+
+  function resetFilters() {
+    setKeyword("");
+    setTerm("全部学期");
+    setMajor("全部专业");
+    setStatus("全部状态");
+  }
+
+  function handleQuickTip(title: string) {
+    if (title === "课程模板推荐") {
+      navigate("/teacher/courses/syllabus");
+      return;
+    }
+    if (title === "批量导入资源") {
+      navigate("/teacher/resources");
+      return;
+    }
+    navigate("/teacher/settings");
+  }
 
   return (
     <div className="teacher-courses-v2">
@@ -71,12 +96,24 @@ export default function CourseClasses() {
             <option>筹备中</option>
             <option>已归档</option>
           </select>
-          <button type="button" className="teacher-new-course"><Plus size={22} />新建课程</button>
+          <button type="button" className="teacher-new-course" onClick={() => navigate("/teacher/courses/syllabus")}><Plus size={22} />新建课程</button>
         </div>
 
         <section className="teacher-course-grid-v2" aria-label="我的课程列表">
           {filteredCourses.map((course) => (
-            <article className="teacher-course-card-v2 my-course" key={course.title}>
+            <article
+              className="teacher-course-card-v2 my-course"
+              key={course.title}
+              role="button"
+              tabIndex={0}
+              onClick={() => openCourse(course.title)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  openCourse(course.title);
+                }
+              }}
+            >
               <span className={`course-status ${course.status === "筹备中" ? "preparing" : course.status === "已归档" ? "archived" : ""}`}>{course.status}</span>
               <CourseVisual type={course.visual} />
               <h3>{course.title}</h3>
@@ -92,9 +129,9 @@ export default function CourseClasses() {
                 <dd>{course.nextTask}<span>{course.status === "已归档" ? course.deadline : `截止 ${course.deadline}`}</span></dd>
               </dl>
               <footer>
-                <button type="button">{course.status === "已归档" ? "查看课程" : "进入课程"}</button>
-                <button type="button">管理课程</button>
-                <button type="button" aria-label={`更多 ${course.title}`}><MoreVertical size={18} /></button>
+                <button type="button" onClick={(event) => { event.stopPropagation(); openCourse(course.title); }}>{course.status === "已归档" ? "查看课程" : "进入课程"}</button>
+                <button type="button" onClick={(event) => { event.stopPropagation(); openCourse(course.title); }}>管理课程</button>
+                <button type="button" aria-label={`更多 ${course.title}`} onClick={(event) => event.stopPropagation()}><MoreVertical size={18} /></button>
               </footer>
             </article>
           ))}
@@ -103,11 +140,11 @@ export default function CourseClasses() {
         <section className="teacher-draft-panel">
           <header>
             <h2>最近草稿 / 已归档课程</h2>
-            <button type="button">查看全部</button>
+            <button type="button" onClick={() => setStatus("已归档")}>查看全部</button>
           </header>
           <div>
-            <article><span>已归档</span><strong>离散数学</strong><small>2024-2024秋季学期</small><em>已归档 2024-12-25</em><button>查看</button><button><MoreVertical size={16} /></button></article>
-            <article><span className="draft">草稿</span><strong>人工智能导论</strong><small>2024-2025春季学期</small><em>草稿 5月16日</em><button>继续编辑</button><button><MoreVertical size={16} /></button></article>
+            <article><span>已归档</span><strong>离散数学</strong><small>2024-2024秋季学期</small><em>已归档 2024-12-25</em><button type="button" onClick={() => openCourse("离散数学")}>查看</button><button type="button" aria-label="更多 离散数学"><MoreVertical size={16} /></button></article>
+            <article><span className="draft">草稿</span><strong>人工智能导论</strong><small>2024-2025春季学期</small><em>草稿 5月16日</em><button type="button" onClick={() => navigate("/teacher/courses/syllabus", { state: { courseTitle: "人工智能导论", mode: "draft" } })}>继续编辑</button><button type="button" aria-label="更多 人工智能导论"><MoreVertical size={16} /></button></article>
           </div>
         </section>
       </section>
@@ -116,7 +153,7 @@ export default function CourseClasses() {
         <section className="teacher-panel-v2">
           <header className="teacher-panel-head-v2">
             <h2>课程总览</h2>
-            <button type="button">查看全部</button>
+            <button type="button" onClick={resetFilters}>查看全部</button>
           </header>
           <div className="course-overview-grid">
             {statCards.map((card) => (
@@ -133,7 +170,18 @@ export default function CourseClasses() {
         <section className="teacher-panel-v2 quick-tip-panel">
           <h2>快速提示</h2>
           {tips.map((tip) => (
-            <article key={tip.title}>
+            <article
+              key={tip.title}
+              role="button"
+              tabIndex={0}
+              onClick={() => handleQuickTip(tip.title)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  handleQuickTip(tip.title);
+                }
+              }}
+            >
               <span className={`teacher-soft-icon ${tip.tone}`}>{tip.icon}</span>
               <div>
                 <strong>{tip.title}</strong>
@@ -142,7 +190,7 @@ export default function CourseClasses() {
               <ChevronRight size={22} />
             </article>
           ))}
-          <button type="button">去设置</button>
+          <button type="button" onClick={() => navigate("/teacher/settings")}>去设置</button>
         </section>
 
         <section className="teacher-panel-v2 sticky-note-panel">

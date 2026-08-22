@@ -299,7 +299,7 @@ function TeacherAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
               </NavLink>
             ))}
           </nav>
-          <button className="teacher-ai-entry" type="button">
+          <button className="teacher-ai-entry" type="button" onClick={() => navigate("/teacher/ai-review")}>
             <span aria-hidden="true">AI</span>
             <strong>AI 助教</strong>
             <small>智能备课与答疑</small>

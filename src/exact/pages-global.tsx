@@ -306,6 +306,7 @@ export function ExactCourses({ courses, onReload, onCourse, onNavigate }: Course
   })
 
   const visibleCourses = shown.slice((page - 1) * 6, page * 6)
+  const firstAvailableCourse = courses.find((course) => course.status !== 'archived') || courses[0]
 
   useEffect(() => {
     setPage(1)
@@ -316,6 +317,19 @@ export function ExactCourses({ courses, onReload, onCourse, onNavigate }: Course
     setAcademicYear('all')
     setMajor('all')
     setStatusFilter('all')
+  }
+
+  const openCourse = (course: ApiCourse, target: ExactView = 'workspace') => {
+    onCourse(course.id)
+    onNavigate(target)
+  }
+
+  const openFirstCourse = (target: ExactView, fallbackText: string) => {
+    if (!firstAvailableCourse) {
+      messageApi.info(fallbackText)
+      return
+    }
+    openCourse(firstAvailableCourse, target)
   }
 
   const updateCourseStatus = (course: ApiCourse, status: 'preparing' | 'archived') => {
@@ -393,6 +407,12 @@ export function ExactCourses({ courses, onReload, onCourse, onNavigate }: Course
     }
   }
 
+  const quickTips: Array<[string, string, () => void]> = [
+    ['课程模板推荐', '参考优质课程模板，快速搭建课程框架', () => onNavigate('create-course')],
+    ['批量导入资源', '一次性导入课件、题库等教学资源', () => openFirstCourse('materials', '请先创建一门课程，再导入教学资源')],
+    ['课程公开设置', '设置课程可见范围与访问权限', () => openFirstCourse('course-settings', '请先创建一门课程，再配置公开范围')],
+  ]
+
   return <div className="exact-page exact-courses">
     {contextHolder}
     <div className="exact-page-title"><div><Title level={2}>我的课程</Title><Text type="secondary">管理您的全部课程，进入课程工作空间继续开展教学。</Text></div></div>
@@ -406,7 +426,18 @@ export function ExactCourses({ courses, onReload, onCourse, onNavigate }: Course
           <Button type="primary" icon={<Plus size={15} />} onClick={() => onNavigate('create-course')}>新建课程</Button>
         </div>
 
-        <div className="exact-course-grid">{visibleCourses.map((course, index) => <article key={course.id}>
+        <div className="exact-course-grid">{visibleCourses.map((course, index) => <article
+          key={course.id}
+          role="button"
+          tabIndex={0}
+          onClick={() => openCourse(course)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              openCourse(course)
+            }
+          }}
+        >
           <div className="course-art"><img src={'/ui-assets/' + courseAssets[index % courseAssets.length]} alt="" /></div>
           <div className="course-copy">
             <div className="course-card-heading"><Title level={4}>{course.name}</Title><Tag color={courseStatusColors[course.status]}>{courseStatusLabels[course.status] || course.status}</Tag></div>
@@ -415,7 +446,7 @@ export function ExactCourses({ courses, onReload, onCourse, onNavigate }: Course
             <div className="course-stats"><span><Users size={14} />{course.classes} 个班级</span><span><GraduationCap size={14} />{course.students} 名学生</span><span><ClipboardCheck size={14} />{course.task_count} 个任务</span></div>
             <div className="course-progress-label"><span>课程进度</span><b>{course.progress || 0}%</b></div>
             <Progress percent={course.progress || 0} showInfo={false} size="small" strokeColor="#43b81a" />
-            <div className="course-card-actions"><Button icon={<ArrowRight size={15} />} type="primary" size="small" onClick={() => { onCourse(course.id); onNavigate('workspace') }}>进入课程</Button><Button icon={<Settings2 size={15} />} size="small" onClick={() => { onCourse(course.id); onNavigate('course-settings') }}>管理课程</Button><Dropdown trigger={['click']} menu={courseMenu(course)}><Button type="text" size="small" aria-label={course.name + '更多操作'} icon={<MoreVertical size={16} />} /></Dropdown></div>
+            <div className="course-card-actions"><Button icon={<ArrowRight size={15} />} type="primary" size="small" onClick={(event) => { event.stopPropagation(); openCourse(course) }}>进入课程</Button><Button icon={<Settings2 size={15} />} size="small" onClick={(event) => { event.stopPropagation(); openCourse(course, 'course-settings') }}>管理课程</Button><Dropdown trigger={['click']} menu={courseMenu(course)}><Button type="text" size="small" aria-label={course.name + '更多操作'} icon={<MoreVertical size={16} />} onClick={(event) => event.stopPropagation()} /></Dropdown></div>
           </div>
         </article>)}
         {!shown.length && <div className="exact-empty-courses"><BookOpen size={24} /><strong>没有符合条件的课程</strong><small>调整筛选条件后再试</small><Button size="small" onClick={resetFilters}>清除筛选</Button></div>}</div>
@@ -435,7 +466,7 @@ export function ExactCourses({ courses, onReload, onCourse, onNavigate }: Course
               <Tag>已归档</Tag>
               <div><strong>{course.name}</strong><small>{course.term}</small></div>
               <small>归档于 {formatCourseDate(course.updated_at)}</small>
-              <Button size="small" onClick={() => { onCourse(course.id); onNavigate('workspace') }}>查看</Button>
+              <Button size="small" onClick={() => openCourse(course)}>查看</Button>
               <Dropdown trigger={['click']} menu={courseMenu(course)}><Button type="text" aria-label={course.name + '归档操作'} icon={<MoreVertical size={16} />} /></Dropdown>
             </div>)}
             {!draft && !archivedCourses.length && <div className="course-draft-empty">暂无课程草稿或已归档课程</div>}
@@ -445,7 +476,7 @@ export function ExactCourses({ courses, onReload, onCourse, onNavigate }: Course
 
       <aside>
         <div className="exact-block"><div className="exact-block-title"><strong>课程总览</strong><Button type="link" onClick={resetFilters}>查看全部 <ChevronRight size={13} /></Button></div><div className="exact-overview-grid"><span><BookOpen size={17} /><strong>{courses.length}</strong><small>课程总数</small></span><span><ClipboardCheck size={17} /><strong>{courses.filter((item) => item.status === 'active').length}</strong><small>进行中课程</small></span><span><CalendarDays size={17} /><strong>{courses.filter((item) => item.term.includes('2024-2025')).length}</strong><small>本学期课程</small></span><span><FileText size={17} /><strong>{courses.filter((item) => item.status === 'preparing').length}</strong><small>筹备中课程</small></span></div></div>
-        <div className="exact-block exact-tips"><div className="exact-block-title"><strong>快速提示</strong></div>{[['课程模板推荐','参考优质课程模板，快速搭建课程框架'],['批量导入资源','一次性导入课件、题库等教学资源'],['课程公开设置','设置课程可见范围与访问权限']].map((item,index) => <button key={item[0]}><span className={'tip-icon i' + index}><Lightbulb size={16} /></span><div><strong>{item[0]}</strong><small>{item[1]}</small></div><ChevronRight size={14} /></button>)}</div>
+        <div className="exact-block exact-tips"><div className="exact-block-title"><strong>快速提示</strong></div>{quickTips.map(([title, description, action], index) => <button type="button" key={title} onClick={action}><span className={'tip-icon i' + index}><Lightbulb size={16} /></span><div><strong>{title}</strong><small>{description}</small></div><ChevronRight size={14} /></button>)}</div>
         <div className="exact-block exact-usage-tip">
           <div className="exact-block-title"><strong>使用小贴士</strong></div>
           <div className="usage-tip-content"><div><strong>{usageTips[tipIndex][1]}</strong><p>{usageTips[tipIndex][0]}</p></div><span><GraduationCap size={42} /></span></div>
