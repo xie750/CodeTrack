@@ -1,0 +1,8 @@
+Error: The following dependencies are imported but could not be resolved:
+
+  [36mzustand[39m [37m[2m(imported by D:/shy/CodeTrack/frontend/src/admin/stores/useAppStore.ts)[22m[39m
+
+Are they installed?
+    at file:///D:/shy/CodeTrack/frontend/node_modules/vite/dist/node/chunks/dep-Dm0c1Wj2.js:14849:15
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async file:///D:/shy/CodeTrack/frontend/node_modules/vite/dist/node/chunks/dep-Dm0c1Wj2.js:47144:28

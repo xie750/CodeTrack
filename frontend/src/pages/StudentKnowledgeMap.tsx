@@ -6,6 +6,7 @@ import {
   ArrowRight,
   BookOpen,
   CheckCircle2,
+  ChevronDown,
   CircleDot,
   Download,
   FileText,
@@ -42,6 +43,15 @@ type NodeDraft = {
   difficulty: number;
 };
 
+type RelationType = "前驱" | "后继" | "相关";
+
+type InspectorTab = "knowledge" | "resources" | "questions";
+
+type PendingRelation = {
+  type: RelationType;
+  sourceNodeId: string;
+};
+
 const selfStudyGraphStorageKey = "codetrack.selfStudyKnowledgeGraph.v1";
 
 const defaultNodeDraft: NodeDraft = {
@@ -65,6 +75,14 @@ const relationStyles: Record<string, { color: string; width: number; type?: "sol
   后继: { color: "#67E8F9", width: 1.2, type: "solid" },
   相关: { color: "#93C5FD", width: 1.2, type: "dashed" },
 };
+
+const relationTypes: RelationType[] = ["前驱", "后继", "相关"];
+
+const inspectorTabs: { key: InspectorTab; label: string }[] = [
+  { key: "knowledge", label: "知识" },
+  { key: "resources", label: "资源" },
+  { key: "questions", label: "题目" },
+];
 
 function clampDifficulty(value: number) {
   return Math.max(1, Math.min(5, Number.isFinite(value) ? value : 2));
@@ -211,6 +229,7 @@ function patchZoomedPointerEvent(event: Event) {
 function buildChartOption(
   graph: StudentKnowledgeGraph,
   selection: Selection,
+  pendingRelation: PendingRelation | null,
 ): EChartsOption {
   const selectedId = selection?.id;
   const option = {
@@ -245,6 +264,7 @@ function buildChartOption(
         data: graph.nodes.map((node) => {
           const color = node.color || nodeTypeColors[node.type] || "#2563eb";
           const selected = selectedId === node.id;
+          const relationSource = pendingRelation?.sourceNodeId === node.id;
           return {
             id: node.id,
             name: node.label,
@@ -255,10 +275,10 @@ function buildChartOption(
             symbolSize: symbolSize(node.difficulty),
             itemStyle: {
               color: "#fff",
-              borderColor: selected ? "#2563eb" : color,
-              borderWidth: selected ? 4 : 1.5,
-              shadowBlur: selected ? 16 : 8,
-              shadowColor: selected ? "rgba(37,99,235,.28)" : `${color}33`,
+              borderColor: relationSource ? "#f59e0b" : selected ? "#2563eb" : color,
+              borderWidth: relationSource ? 4 : selected ? 4 : 1.5,
+              shadowBlur: relationSource ? 18 : selected ? 16 : 8,
+              shadowColor: relationSource ? "rgba(245,158,11,.3)" : selected ? "rgba(37,99,235,.28)" : `${color}33`,
             },
             label: {
               show: true,
@@ -288,6 +308,18 @@ function buildChartOption(
               type: base.type ?? "solid",
               opacity: selected ? 0.96 : 0.78,
               curveness: 0.15,
+            },
+            label: {
+              show: selected,
+              formatter: edge.label || edge.type,
+              color: "#1f3762",
+              fontSize: 11,
+              fontWeight: 700,
+              backgroundColor: "rgba(255,255,255,.86)",
+              borderColor: "#dbeafe",
+              borderWidth: 1,
+              borderRadius: 5,
+              padding: [3, 6],
             },
           };
         }),
@@ -340,6 +372,20 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
   const [message, setMessage] = useState<string | null>(null);
   const [selection, setSelection] = useState<Selection>(null);
   const [nodeEditor, setNodeEditor] = useState<{ mode: "create" | "edit"; values: NodeDraft } | null>(null);
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>("knowledge");
+  const [relationMenuOpen, setRelationMenuOpen] = useState(false);
+  const [pendingRelation, setPendingRelation] = useState<PendingRelation | null>(null);
+
+  function disposeChart(clearDom = false) {
+    const chart = chartRef.current;
+    if (!chart) return;
+    const dom = chart.getDom();
+    chart.dispose();
+    chartRef.current = null;
+    if (clearDom && dom instanceof HTMLElement) {
+      dom.replaceChildren();
+    }
+  }
 
   useEffect(() => {
     if (isSelfStudy) {
@@ -379,6 +425,10 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
   const nodesById = useMemo(() => new Map((graph?.nodes ?? []).map((node) => [node.id, node])), [graph]);
   const selectedNode = selection?.kind === "node" ? nodesById.get(selection.id) ?? null : null;
   const selectedEdge = selection?.kind === "edge" ? graph?.edges.find((edge) => edge.id === selection.id) ?? null : null;
+  const hasNodes = Boolean(graph?.nodes.length);
+  const relationTargets = useMemo(() => (
+    selectedNode ? (graph?.nodes ?? []).filter((node) => node.id !== selectedNode.id) : []
+  ), [graph, selectedNode]);
   const relatedEdges = useMemo(() => {
     if (!graph || !selectedNode) return [];
     return graph.edges.filter((edge) => edge.source === selectedNode.id || edge.target === selectedNode.id);
@@ -388,19 +438,29 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
   const peerEdges = relatedEdges.filter((edge) => edge.type === "相关");
 
   useEffect(() => {
-    if (!chartContainerRef.current || !graph || loading) return undefined;
+    if (loading || !graph || !hasNodes) {
+      disposeChart(true);
+      return undefined;
+    }
+    if (!chartContainerRef.current) return undefined;
     const container = chartContainerRef.current;
     const chart = chartRef.current ?? echarts.init(container, undefined, { renderer: "canvas" });
     chartRef.current = chart;
-    chart.setOption(buildChartOption(graph, selection), true);
+    chart.setOption(buildChartOption(graph, selection, pendingRelation), true);
 
     const handleClick = (params: any) => {
       if (params.dataType === "node" && params.data?.id) {
-        setSelection({ kind: "node", id: params.data.id });
+        if (pendingRelation) {
+          createRelationToTarget(params.data.id);
+          return;
+        }
+        selectNode(params.data.id);
         return;
       }
       if (params.dataType === "edge" && params.data?.id) {
         setSelection({ kind: "edge", id: params.data.id });
+        setNodeEditor(null);
+        setRelationMenuOpen(false);
       }
     };
     chart.off("click");
@@ -415,22 +475,33 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
       chart.off("click", handleClick);
       eventTypes.forEach((type) => container.removeEventListener(type, patchZoomedPointerEvent, { capture: true }));
     };
-  }, [graph, loading, selection]);
+  }, [graph, hasNodes, loading, pendingRelation, selection]);
 
   useEffect(() => {
     return () => {
-      chartRef.current?.dispose();
-      chartRef.current = null;
+      disposeChart();
     };
   }, []);
 
   const title = isSelfStudy ? "自学知识图谱" : "课程知识图谱";
   const displayCourseName = graph?.course_name || courseName || "当前课程";
+  const edgeSourceNode = selectedEdge ? nodesById.get(selectedEdge.source) ?? null : null;
+  const edgeTargetNode = selectedEdge ? nodesById.get(selectedEdge.target) ?? null : null;
   const activeNode = selectedNode ?? graph?.nodes[0] ?? null;
   const selectedTone = stateTone(activeNode?.difficulty);
-  const hasNodes = Boolean(graph?.nodes.length);
+
+  function selectNode(nodeId: string) {
+    setSelection({ kind: "node", id: nodeId });
+    setNodeEditor(null);
+    setPendingRelation(null);
+    setRelationMenuOpen(false);
+    setInspectorTab("knowledge");
+  }
 
   function selectEdge(edge: StudentKnowledgeGraphEdge) {
+    setPendingRelation(null);
+    setRelationMenuOpen(false);
+    setNodeEditor(null);
     setSelection({ kind: "edge", id: edge.id });
   }
 
@@ -439,11 +510,37 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
   }
 
   function openCreateNode() {
-    setNodeEditor({ mode: "create", values: defaultNodeDraft });
+    if (!isSelfStudy) return;
+    setGraph((current) => {
+      const base = current ?? createEmptySelfStudyGraph();
+      const nextIndex = base.nodes.length + 1;
+      const label = base.nodes.some((node) => node.label === "自定义节点") ? `自定义节点 ${nextIndex}` : "自定义节点";
+      const node: StudentKnowledgeGraphNode = {
+        id: `self_node_${Date.now()}`,
+        label,
+        type: "知识点",
+        description: "",
+        difficulty: 2,
+        x: 120 + (base.nodes.length % 4) * 160,
+        y: 120 + Math.floor(base.nodes.length / 4) * 130,
+        color: nodeTypeColors.知识点,
+        source: "custom",
+      };
+      setSelection({ kind: "node", id: node.id });
+      setInspectorTab("knowledge");
+      return withGraphCounts({ ...base, nodes: [...base.nodes, node] });
+    });
+    setNodeEditor(null);
+    setPendingRelation(null);
+    setRelationMenuOpen(false);
+    setMessage("已添加自定义节点，可在右侧继续调整。");
   }
 
   function openEditNode(node: StudentKnowledgeGraphNode) {
+    setSelection({ kind: "node", id: node.id });
     setNodeEditor({ mode: "edit", values: nodeToDraft(node) });
+    setPendingRelation(null);
+    setRelationMenuOpen(false);
   }
 
   function updateNodeDraft(field: keyof NodeDraft, value: string | number) {
@@ -459,7 +556,7 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
     const difficulty = clampDifficulty(Number(nodeEditor.values.difficulty));
     setGraph((current) => {
       const base = current ?? createEmptySelfStudyGraph();
-      if (nodeEditor.mode === "edit" && selectedNode) {
+      if (selectedNode) {
         return withGraphCounts({
           ...base,
           nodes: base.nodes.map((node) => (
@@ -476,21 +573,11 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
           )),
         });
       }
-      const node: StudentKnowledgeGraphNode = {
-        id: `self_node_${Date.now()}`,
-        label,
-        type: nodeEditor.values.type,
-        description,
-        difficulty,
-        x: 120 + (base.nodes.length % 4) * 160,
-        y: 120 + Math.floor(base.nodes.length / 4) * 130,
-        color: nodeTypeColors[nodeEditor.values.type] || "#2563eb",
-        source: "custom",
-      };
-      setSelection({ kind: "node", id: node.id });
-      return withGraphCounts({ ...base, nodes: [...base.nodes, node] });
+      return base;
     });
     setNodeEditor(null);
+    setPendingRelation(null);
+    setRelationMenuOpen(false);
     setMessage("自学图谱已更新。");
   }
 
@@ -498,15 +585,86 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
     if (!isSelfStudy || !selectedNode) return;
     setGraph((current) => {
       const base = current ?? createEmptySelfStudyGraph();
+      const nextNodes = base.nodes.filter((node) => node.id !== selectedNode.id);
+      setSelection(nextNodes[0] ? { kind: "node", id: nextNodes[0].id } : null);
       return withGraphCounts({
         ...base,
-        nodes: base.nodes.filter((node) => node.id !== selectedNode.id),
+        nodes: nextNodes,
         edges: base.edges.filter((edge) => edge.source !== selectedNode.id && edge.target !== selectedNode.id),
       });
     });
-    setSelection(null);
     setNodeEditor(null);
+    setPendingRelation(null);
+    setRelationMenuOpen(false);
     setMessage("节点已删除，相关关系也已同步移除。");
+  }
+
+  function openCreateRelation(type: RelationType) {
+    if (!isSelfStudy || !selectedNode) return;
+    if (!graph || !relationTargets.length) {
+      setMessage("至少需要两个节点后才能创建关联关系。");
+      return;
+    }
+    setPendingRelation({ type, sourceNodeId: selectedNode.id });
+    setRelationMenuOpen(false);
+    setNodeEditor(null);
+    setMessage(`正在添加${type}关系，请在图中点击目标节点。`);
+  }
+
+  function createRelationToTarget(targetNodeId: string) {
+    if (!isSelfStudy || !graph || !pendingRelation) return;
+    const sourceNode = nodesById.get(pendingRelation.sourceNodeId);
+    const targetNode = nodesById.get(targetNodeId);
+    if (!sourceNode || !targetNode) {
+      setPendingRelation(null);
+      setMessage("当前活动节点不存在，请重新选择节点后再添加关系。");
+      return;
+    }
+    if (sourceNode.id === targetNode.id) {
+      setMessage("不能把节点关联到自己，请选择另一个节点。");
+      return;
+    }
+    const edgeSource = pendingRelation.type === "前驱" ? targetNode.id : sourceNode.id;
+    const edgeTarget = pendingRelation.type === "前驱" ? sourceNode.id : targetNode.id;
+    const duplicate = graph.edges.find((edge) => edge.source === edgeSource && edge.target === edgeTarget && edge.type === pendingRelation.type);
+    if (duplicate) {
+      setSelection({ kind: "edge", id: duplicate.id });
+      setPendingRelation(null);
+      setMessage("这条关系已经存在，已帮你选中。");
+      return;
+    }
+    const edge: StudentKnowledgeGraphEdge = {
+      id: `self_edge_${Date.now()}`,
+      source: edgeSource,
+      target: edgeTarget,
+      type: pendingRelation.type,
+      label: pendingRelation.type,
+    };
+    setGraph((current) => {
+      const base = current ?? createEmptySelfStudyGraph();
+      return withGraphCounts({ ...base, edges: [...base.edges, edge] });
+    });
+    setNodeEditor(null);
+    setSelection({ kind: "node", id: sourceNode.id });
+    setInspectorTab("knowledge");
+    setPendingRelation(null);
+    setMessage(`${pendingRelation.type}关系已添加。`);
+  }
+
+  function deleteSelectedEdge() {
+    if (!isSelfStudy || !selectedEdge) return;
+    const fallbackNodeId = selectedEdge.source;
+    setGraph((current) => {
+      const base = current ?? createEmptySelfStudyGraph();
+      return withGraphCounts({
+        ...base,
+        edges: base.edges.filter((edge) => edge.id !== selectedEdge.id),
+      });
+    });
+    setSelection(nodesById.has(fallbackNodeId) ? { kind: "node", id: fallbackNodeId } : null);
+    setPendingRelation(null);
+    setRelationMenuOpen(false);
+    setMessage("关系已删除。");
   }
 
   function exportSelfStudyGraph() {
@@ -572,10 +730,6 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
               <Upload size={17} />
               导入图谱
             </button>
-            <button type="button" onClick={openCreateNode}>
-              <Plus size={17} />
-              新建节点
-            </button>
             <input ref={importInputRef} type="file" accept="application/json,.json" hidden onChange={importSelfStudyGraph} />
           </div>
         ) : (
@@ -626,6 +780,40 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
                     <Plus size={15} />
                     新建节点
                   </button>
+                  <div className="student-graph-dropdown">
+                    <button
+                      type="button"
+                      className={pendingRelation ? "active" : ""}
+                      disabled={!selectedNode || relationTargets.length === 0}
+                      aria-haspopup="menu"
+                      aria-expanded={relationMenuOpen}
+                      onClick={() => setRelationMenuOpen((open) => !open)}
+                    >
+                      <GitBranchPlus size={15} />
+                      添加关系
+                      <ChevronDown size={14} />
+                    </button>
+                    {relationMenuOpen ? (
+                      <div className="student-graph-dropdown-menu" role="menu">
+                        {relationTypes.map((type) => (
+                          <button key={type} type="button" role="menuitem" onClick={() => openCreateRelation(type)}>
+                            <span>{type}</span>
+                            <small>
+                              {type === "前驱"
+                                ? "点选当前节点的前置知识"
+                                : type === "后继"
+                                ? "点选当前节点的后续知识"
+                                : "点选可共同复习的知识"}
+                            </small>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                  <button type="button" disabled={!selectedNode && !selectedEdge} onClick={selectedEdge ? deleteSelectedEdge : deleteActiveNode}>
+                    <Trash2 size={15} />
+                    {selectedEdge ? "删除关系" : "删除节点"}
+                  </button>
                   <button type="button" disabled={!graph} onClick={exportSelfStudyGraph}>
                     <Download size={15} />
                     导出
@@ -640,16 +828,23 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
           </div>
 
           <div className="student-graph-canvas-shell">
+            {pendingRelation && selectedNode ? (
+              <div className="student-graph-linking-state">
+                <span><GitBranchPlus size={15} /> 正在添加{pendingRelation.type}关系</span>
+                <strong>活动节点：{selectedNode.label}</strong>
+                <button type="button" onClick={() => setPendingRelation(null)}>取消</button>
+              </div>
+            ) : null}
             {loading ? (
-              <div className="student-graph-empty">
+              <div key="graph-loading" className="student-graph-empty">
                 <Loader2 size={24} />
                 <strong>正在读取知识图谱</strong>
                 <p>系统会按当前学生所在班级和课程匹配唯一图谱。</p>
               </div>
             ) : graph && hasNodes ? (
-              <div className="student-graph-canvas" ref={chartContainerRef} aria-label={`${displayCourseName} 知识图谱`} />
+              <div key="graph-canvas" className="student-graph-canvas" ref={chartContainerRef} aria-label={`${displayCourseName} 知识图谱`} />
             ) : isSelfStudy ? (
-              <div className="student-graph-empty student-graph-start-state">
+              <div key="self-study-empty" className="student-graph-empty student-graph-start-state">
                 <div className="student-graph-empty-visual">
                   <span><Network size={24} /></span>
                   <i />
@@ -676,7 +871,7 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
                 </div>
               </div>
             ) : (
-              <div className="student-graph-empty">
+              <div key="course-empty" className="student-graph-empty">
                 <Network size={26} />
                 <strong>还没有图谱内容</strong>
                 <p>教师发布到当前班级后，学生端会在这里显示课程图谱。</p>
@@ -687,135 +882,200 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
 
         <aside className="student-map-side student-graph-side">
           <section className="student-panel student-graph-inspector">
-            <h2>{nodeEditor ? (nodeEditor.mode === "create" ? "新建节点" : "编辑节点") : selectedEdge ? "关系详情" : "知识点详情"}</h2>
-            {nodeEditor ? (
-              <div className="student-graph-editor">
-                <label>
-                  节点名称
-                  <input
-                    value={nodeEditor.values.label}
-                    onChange={(event) => updateNodeDraft("label", event.target.value)}
-                    placeholder="例如：梯度下降"
-                  />
-                </label>
-                <label>
-                  节点类型
-                  <select value={nodeEditor.values.type} onChange={(event) => updateNodeDraft("type", event.target.value)}>
-                    {Object.keys(nodeTypeColors).map((type) => <option key={type} value={type}>{type}</option>)}
-                  </select>
-                </label>
-                <label>
-                  难度
-                  <input
-                    type="number"
-                    min={1}
-                    max={5}
-                    value={nodeEditor.values.difficulty}
-                    onChange={(event) => updateNodeDraft("difficulty", Number(event.target.value))}
-                  />
-                </label>
-                <label>
-                  说明
-                  <textarea
-                    value={nodeEditor.values.description}
-                    onChange={(event) => updateNodeDraft("description", event.target.value)}
-                    placeholder="写下你对这个知识点的理解、来源或待解决问题"
-                    rows={4}
-                  />
-                </label>
-                <div className="student-graph-editor-actions">
-                  <button type="button" onClick={saveNodeDraft}><Save size={15} />保存</button>
-                  <button type="button" onClick={() => setNodeEditor(null)}><X size={15} />取消</button>
-                </div>
-              </div>
-            ) : null}
-            {activeNode || selectedEdge ? (
-              selectedEdge ? (
-                <div className="student-graph-detail">
+            {selectedEdge ? (
+              <>
+                <div className="student-graph-node-head">
                   <span className="teacher-soft-icon blue"><ArrowRight size={20} /></span>
-                  <strong>{selectedEdge.type}</strong>
-                  <p>{edgeTitle(selectedEdge, nodesById)}</p>
+                  <div className="student-graph-node-title">
+                    <h2>关系详情</h2>
+                    <p>{selectedEdge.type} · {edgeTitle(selectedEdge, nodesById)}</p>
+                  </div>
                 </div>
-              ) : activeNode ? (
-                <>
-                  <div className="student-graph-detail">
-                    <span className={`teacher-soft-icon ${selectedTone}`}><BookOpen size={20} /></span>
-                    <strong>{activeNode.label}</strong>
-                    <p>{activeNode.description || "暂无说明。"}</p>
+                <div className="student-graph-edge-flow">
+                  <button type="button" onClick={() => edgeSourceNode && selectNode(edgeSourceNode.id)} disabled={!edgeSourceNode}>
+                    <span>起点</span>
+                    <strong>{edgeSourceNode?.label ?? selectedEdge.source}</strong>
+                  </button>
+                  <ArrowRight size={18} />
+                  <button type="button" onClick={() => edgeTargetNode && selectNode(edgeTargetNode.id)} disabled={!edgeTargetNode}>
+                    <span>终点</span>
+                    <strong>{edgeTargetNode?.label ?? selectedEdge.target}</strong>
+                  </button>
+                </div>
+                <div className="student-graph-definition">
+                  <strong>关系定义</strong>
+                  <p>{selectedEdge.label || selectedEdge.type}</p>
+                </div>
+              </>
+            ) : activeNode ? (
+              <>
+                <div className="student-graph-node-head">
+                  <span className={`teacher-soft-icon ${selectedTone}`}><BookOpen size={20} /></span>
+                  <div className="student-graph-node-title">
+                    <h2>{activeNode.label}</h2>
+                    <p>{activeNode.type} · {activeNode.source === "ai" ? "AI 草稿" : isSelfStudy ? "学生自定义" : "教师自定义"}</p>
                   </div>
-                  <div className="student-graph-meta">
-                    <span>类型 <strong>{activeNode.type}</strong></span>
-                    <span>难度 <strong>{clampDifficulty(activeNode.difficulty)} / 5</strong></span>
-                    <span>来源 <strong>{activeNode.source === "ai" ? "AI 草稿" : isSelfStudy ? "学生自定义" : "教师自定义"}</strong></span>
+                  {isSelfStudy ? (
+                    <button type="button" className="student-graph-icon-button" aria-label="编辑节点" onClick={() => openEditNode(activeNode)}>
+                      <Pencil size={16} />
+                    </button>
+                  ) : null}
+                </div>
+
+                {nodeEditor ? (
+                  <div className="student-graph-editor">
+                    <label>
+                      节点名称
+                      <input
+                        value={nodeEditor.values.label}
+                        onChange={(event) => updateNodeDraft("label", event.target.value)}
+                        placeholder="例如：梯度下降"
+                      />
+                    </label>
+                    <label>
+                      节点类型
+                      <select value={nodeEditor.values.type} onChange={(event) => updateNodeDraft("type", event.target.value)}>
+                        {Object.keys(nodeTypeColors).map((type) => <option key={type} value={type}>{type}</option>)}
+                      </select>
+                    </label>
+                    <label>
+                      难度
+                      <input
+                        type="number"
+                        min={1}
+                        max={5}
+                        value={nodeEditor.values.difficulty}
+                        onChange={(event) => updateNodeDraft("difficulty", Number(event.target.value))}
+                      />
+                    </label>
+                    <label>
+                      说明
+                      <textarea
+                        value={nodeEditor.values.description}
+                        onChange={(event) => updateNodeDraft("description", event.target.value)}
+                        placeholder="写下你对这个知识点的理解、来源或待解决问题"
+                        rows={4}
+                      />
+                    </label>
+                    <div className="student-graph-editor-actions">
+                      <button type="button" onClick={saveNodeDraft}><Save size={15} />保存</button>
+                      <button type="button" onClick={() => setNodeEditor(null)}><X size={15} />取消</button>
+                    </div>
                   </div>
-                  <div className="student-graph-actions">
-                    {isSelfStudy ? (
-                      <>
-                        <button type="button" onClick={() => openEditNode(activeNode)}><Pencil size={15} />编辑节点</button>
-                        <button type="button" onClick={deleteActiveNode}><Trash2 size={15} />删除节点</button>
-                        <button type="button" onClick={exportSelfStudyGraph}><Download size={15} />导出图谱</button>
-                        <button type="button"><MessageSquareText size={15} />向 AI 提问</button>
-                      </>
-                    ) : (
-                      <>
-                        <button type="button" onClick={actionToSelfStudy}><Sparkles size={15} />生成讲解</button>
-                        <button type="button" onClick={actionToSelfStudy}><Target size={15} />生成练习</button>
-                        <button type="button"><NotebookPen size={15} />保存笔记</button>
-                        <button type="button"><MessageSquareText size={15} />向 AI 提问</button>
-                      </>
-                    )}
-                  </div>
-                </>
-              ) : null
+                ) : (
+                  <>
+                    <div className="student-graph-inspector-tabs" role="tablist" aria-label="节点详情">
+                      {inspectorTabs.map((tab) => (
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={inspectorTab === tab.key}
+                          className={inspectorTab === tab.key ? "active" : ""}
+                          key={tab.key}
+                          onClick={() => setInspectorTab(tab.key)}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="student-graph-tab-body">
+                      {inspectorTab === "knowledge" ? (
+                        <>
+                          <div className="student-graph-relation-summary">
+                            <span><em>前驱</em><strong>{prereqEdges.length}</strong></span>
+                            <span><em>后继</em><strong>{nextEdges.length}</strong></span>
+                            <span><em>相关</em><strong>{peerEdges.length}</strong></span>
+                          </div>
+                          <div className="student-graph-section-label">关联节点</div>
+                          <div className="student-graph-relations">
+                            <RelationGroup title="前驱知识" edges={prereqEdges} nodesById={nodesById} currentId={activeNode.id} onSelect={selectEdge} />
+                            <RelationGroup title="后继知识" edges={nextEdges} nodesById={nodesById} currentId={activeNode.id} onSelect={selectEdge} />
+                            <RelationGroup title="相关知识" edges={peerEdges} nodesById={nodesById} currentId={activeNode.id} onSelect={selectEdge} />
+                            {isSelfStudy && relationTargets.length === 0 ? (
+                              <div className="empty-panel compact">再新建一个节点后，就可以为当前节点添加前驱、后继或相关关系。</div>
+                            ) : null}
+                          </div>
+                          <div className="student-graph-section-label">属性</div>
+                          <div className="student-graph-meta">
+                            <span>类型 <strong>{activeNode.type}</strong></span>
+                            <span>难度 <strong>{clampDifficulty(activeNode.difficulty)} / 5</strong></span>
+                            <span>来源 <strong>{activeNode.source === "ai" ? "AI 草稿" : isSelfStudy ? "学生自定义" : "教师自定义"}</strong></span>
+                          </div>
+                          <div className="student-graph-section-label">定义</div>
+                          <div className="student-graph-definition">
+                            <p>{activeNode.description || "暂无定义，可点击标题旁的编辑按钮补充说明。"}</p>
+                          </div>
+                        </>
+                      ) : null}
+
+                      {inspectorTab === "resources" ? (
+                        <>
+                          {graph?.source_summary ? (
+                            <div className="map-advice">
+                              <span className="teacher-soft-icon green"><CircleDot size={20} /></span>
+                              <div>
+                                <strong>资料摘要</strong>
+                                <p>{graph.source_summary}</p>
+                              </div>
+                            </div>
+                          ) : null}
+                          <div className="map-source-list student-graph-resource-list">
+                            {(graph?.source_files ?? []).map((source) => (
+                              <article key={source.filename}>
+                                <span className="blue"><FileText size={16} /></span>
+                                <div>
+                                  <strong>{source.filename}</strong>
+                                  <p>{fileSize(source.size_bytes)} · {source.mime_type}</p>
+                                </div>
+                              </article>
+                            ))}
+                            {!loading && graph && !graph.source_files.length ? (
+                              <div className="empty-panel compact">
+                                {isSelfStudy ? "自学图谱暂无来源文件，后续可接入资料库或导入来源。" : "暂无来源文件。"}
+                              </div>
+                            ) : null}
+                          </div>
+                        </>
+                      ) : null}
+
+                      {inspectorTab === "questions" ? (
+                        <div className="student-graph-question-list">
+                          <article>
+                            <span><Target size={16} /></span>
+                            <div>
+                              <strong>生成练习</strong>
+                              <p>围绕当前活动节点生成巩固题和追问。</p>
+                            </div>
+                            <button type="button" onClick={actionToSelfStudy}>开始</button>
+                          </article>
+                          <article>
+                            <span><Sparkles size={16} /></span>
+                            <div>
+                              <strong>生成讲解</strong>
+                              <p>把节点定义、前驱和后继整合成学习材料。</p>
+                            </div>
+                            <button type="button" onClick={actionToSelfStudy}>生成</button>
+                          </article>
+                          <article>
+                            <span><MessageSquareText size={16} /></span>
+                            <div>
+                              <strong>向 AI 提问</strong>
+                              <p>带着当前节点上下文进入助学问答。</p>
+                            </div>
+                            <button type="button">提问</button>
+                          </article>
+                        </div>
+                      ) : null}
+                    </div>
+                  </>
+                )}
+              </>
             ) : (
               <p className="student-panel-copy">
                 {isSelfStudy ? "创建或导入节点后，可以在这里编辑节点说明、难度和来源。" : "点击图谱中的节点或关系后，这里会显示学习详情。"}
               </p>
             )}
-          </section>
-
-          <section className="student-panel">
-            <h2>关联节点</h2>
-            {activeNode ? (
-              <div className="student-graph-relations">
-                <RelationGroup title="前驱知识" edges={prereqEdges} nodesById={nodesById} currentId={activeNode.id} onSelect={selectEdge} />
-                <RelationGroup title="后继知识" edges={nextEdges} nodesById={nodesById} currentId={activeNode.id} onSelect={selectEdge} />
-                <RelationGroup title="相关知识" edges={peerEdges} nodesById={nodesById} currentId={activeNode.id} onSelect={selectEdge} />
-              </div>
-            ) : (
-              <div className="empty-panel compact">
-                {isSelfStudy ? "创建节点后可继续补充关联关系；后端接口就绪后可同步保存。" : "选择一个知识点查看关联关系。"}
-              </div>
-            )}
-          </section>
-
-          <section className="student-panel">
-            <h2>来源资料</h2>
-            {graph?.source_summary ? (
-              <div className="map-advice">
-                <span className="teacher-soft-icon green"><CircleDot size={20} /></span>
-                <div>
-                  <strong>资料摘要</strong>
-                  <p>{graph.source_summary}</p>
-                </div>
-              </div>
-            ) : null}
-            <div className="map-source-list">
-              {(graph?.source_files ?? []).map((source) => (
-                <article key={source.filename}>
-                  <span className="blue"><FileText size={16} /></span>
-                  <div>
-                    <strong>{source.filename}</strong>
-                    <p>{fileSize(source.size_bytes)} · {source.mime_type}</p>
-                  </div>
-                </article>
-              ))}
-              {!loading && graph && !graph.source_files.length ? (
-                <div className="empty-panel compact">
-                  {isSelfStudy ? "自学图谱暂无来源文件，后续可接入资料库或导入来源。" : "暂无来源文件。"}
-                </div>
-              ) : null}
-            </div>
           </section>
         </aside>
       </section>
