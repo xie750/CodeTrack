@@ -12,6 +12,7 @@ import QuestionWorkspace from "./pages/QuestionWorkspace";
 import SelfStudyHub from "./pages/SelfStudyHub";
 import LoginPage from "./pages/LoginPage";
 import AICompanion from "./components/AICompanion";
+import AdminApp from "./admin/App";
 import Dashboard from "./teacher/pages/Dashboard";
 import CourseClasses from "./teacher/pages/courses/CourseClasses";
 import CourseSyllabus from "./teacher/pages/courses/CourseSyllabus";
@@ -33,6 +34,8 @@ import StrategyOptimization from "./teacher/pages/improvement/StrategyOptimizati
 import TaskAdjustment from "./teacher/pages/improvement/TaskAdjustment";
 import EffectEvaluation from "./teacher/pages/improvement/EffectEvaluation";
 import { TeacherEntryPortal, TeacherResearchShowcase } from "./teacher/pages/TeacherPortal";
+import TeacherDevelopApp from "./teacherDevelop/exact/ExactApp";
+import { setCurrentUser as setTeacherDevelopUser } from "./teacherDevelop/api";
 import { api, apiCache } from "./api";
 import { clearAccessToken, getAccessToken, type AuthUser } from "./authSession";
 
@@ -243,6 +246,20 @@ const teacherNavItems = [
   { key: "/teacher/courses", label: "我的课程", icon: <BookOpen size={22} strokeWidth={2.1} /> },
   { key: "/teacher/settings", label: "个人设置", icon: <Settings size={22} strokeWidth={2.1} /> },
 ];
+
+function TeacherDevelopRoute({ authUser, onLogout }: { authUser: AuthUser; onLogout: () => void }) {
+  useEffect(() => {
+    setTeacherDevelopUser("teacher-01", authUser.display_name || "王老师");
+  }, [authUser.display_name]);
+
+  return (
+    <TeacherDevelopApp
+      loggedIn
+      onLogin={(userId, name) => setTeacherDevelopUser(userId, name)}
+      onLogout={onLogout}
+    />
+  );
+}
 
 function TeacherAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogout: () => void }) {
   const navigate = useNavigate();
@@ -470,13 +487,14 @@ export default function App() {
         <div className="auth-loading">正在恢复登录状态...</div>
       ) : (
         <Routes>
+          <Route path="admin/*" element={<AdminApp />} />
           <Route
             path="/login"
             element={authUser ? <Navigate to={homePathForRole(authUser.role)} replace /> : <LoginPage onLogin={(user) => setAuthUser(user)} />}
           />
           <Route
             path="/teacher/*"
-            element={authUser?.role === "TEACHER" ? <TeacherAppContent authUser={authUser} onLogout={handleLogout} /> : <Navigate to={authUser ? homePathForRole(authUser.role) : "/login"} replace />}
+            element={authUser?.role === "TEACHER" ? <TeacherDevelopRoute authUser={authUser} onLogout={handleLogout} /> : <Navigate to={authUser ? homePathForRole(authUser.role) : "/login"} replace />}
           />
           <Route
             path="/*"

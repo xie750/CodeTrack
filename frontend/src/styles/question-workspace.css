@@ -2252,13 +2252,118 @@
   background: #f5f7fb;
 }
 
+.student-graph-toolbar-actions button.active {
+  color: #9a5b00;
+  border-color: #fed7aa;
+  background: #fff7ed;
+}
+
+.student-graph-dropdown {
+  position: relative;
+  display: inline-flex;
+}
+
+.student-graph-dropdown-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 188px;
+  padding: 8px;
+  display: grid;
+  gap: 4px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.14);
+}
+
+.student-graph-toolbar-actions .student-graph-dropdown-menu button,
+.student-graph-toolbar-actions .student-graph-dropdown-menu button:first-child {
+  min-height: 48px;
+  width: 100%;
+  padding: 7px 9px;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 2px;
+  border: 0;
+  border-radius: 7px;
+  color: #172033;
+  background: transparent;
+  text-align: left;
+}
+
+.student-graph-toolbar-actions .student-graph-dropdown-menu button:hover {
+  background: #f1f7ff;
+}
+
+.student-graph-dropdown-menu span {
+  color: #172033;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.student-graph-dropdown-menu small {
+  color: #69778d;
+  font-size: 11px;
+  line-height: 1.35;
+  font-weight: 800;
+}
+
 .student-graph-canvas-shell {
+  position: relative;
   min-height: 600px;
   padding: 12px;
   background:
     linear-gradient(#e9f0f8 1px, transparent 1px) 0 0 / 32px 32px,
     linear-gradient(90deg, #e9f0f8 1px, transparent 1px) 0 0 / 32px 32px,
     #f5f8fc;
+}
+
+.student-graph-linking-state {
+  position: absolute;
+  z-index: 5;
+  top: 24px;
+  left: 24px;
+  right: 24px;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  color: #8a4b0b;
+  background: rgba(255, 251, 235, 0.94);
+  box-shadow: 0 12px 26px rgba(146, 64, 14, 0.1);
+}
+
+.student-graph-linking-state span,
+.student-graph-linking-state strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.student-graph-linking-state strong {
+  color: #172033;
+}
+
+.student-graph-linking-state button {
+  margin-left: auto;
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid #fdba74;
+  border-radius: 7px;
+  color: #9a3412;
+  background: #ffffff;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
 }
 
 .student-graph-canvas {
@@ -2385,6 +2490,13 @@
 
 .student-graph-inspector {
   min-height: 250px;
+}
+
+.student-panel-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .student-graph-detail {

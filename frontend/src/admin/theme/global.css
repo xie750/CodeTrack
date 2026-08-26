@@ -1,0 +1,479 @@
+/* ==========================================================================
+   CodeTrack 管理员端 · 全局设计 Token 与基础样式
+   Style Anchor：现代 · 专业 · 克制 · 数据驱动
+   铁律：信息层级重、主次对比重；装饰线条轻、颜色用量轻
+   全站只允许三档圆角 / 四档文字 / 一套中性色阶 / 一层极淡阴影
+   ========================================================================== */
+
+:root {
+  /* ===== 主色（品牌 / 操作 / 强调）===== */
+  --primary: #4A90D9;
+  --primary-hover: #5DA3E5;
+  --primary-active: #3678C0;
+  --primary-deep: #2D68A8;
+  --primary-bg: #E8F1FF;
+  --primary-border: #B8D4F5;
+
+  /* ===== 中性色阶（文字 / 背景 / 边框 / 分割线，视觉总量 ≥85%）===== */
+  --n-0: #FFFFFF; /* 卡片 / 头部底 */
+  --n-1: #FAFBFC; /* 侧边栏底 */
+  --n-2: #F4F7FC; /* 页面底 */
+  --n-3: #F0F2F5; /* 表头 / 次级填充底 */
+  --n-4: #E8EDF2; /* 边框 / 分割线 */
+  --n-5: #C4CDD5; /* 弱边框 / 禁用描边 */
+  --n-6: #A0B2C6; /* 占位 / 辅助文字 */
+  --n-7: #5A6B7C; /* 次要文字 */
+  --n-8: #1D2C3C; /* 主要文字 */
+
+  /* ===== 功能色（仅用于：状态徽标 / 提示条 / 图表维度 / 预警标识）
+     红=危险 橙=警告 绿=成功 紫=图表维度 */
+  --c-info: #A0B2C6;
+  --c-success: #5DC59F;
+  --c-warning: #FFB54A;
+  --c-danger: #F56C6C;
+  --c-purple: #A78BFA;
+
+  --c-info-bg: #F4F7FC;
+  --c-success-bg: #EDFAF5;
+  --c-warning-bg: #FFF9F0;
+  --c-danger-bg: #FEF2F2;
+  --c-purple-bg: #F6F0FF;
+
+  /* ===== 间距（4px 基准，全站常用 8/12/16/24/32）===== */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* ===== 圆角（全站仅此三档）===== */
+  --radius-card: 16px;
+  --radius-btn: 8px;
+  --radius-tag: 16px;
+
+  /* ===== 文字四档（只允许新增例外）===== */
+  --font-page-title: 22px; /* 大标题（页面名）：半粗 */
+  --font-block-title: 16px; /* 区块标题（卡片名）：中等 */
+  --font-body: 14px; /* 正文 / 表格 */
+  --font-caption: 12px; /* 辅助 / 时间 / 标签 */
+  --lh-title: 1.4;
+  --lh-body: 1.6;
+
+  /* ===== 阴影（仅一层极淡，hover 略加深）===== */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.06);
+  --shadow-pop: 0 8px 28px rgba(0, 0, 0, 0.10);
+
+  /* ===== 布局尺寸 ===== */
+  --header-height: 60px;
+  --sider-width: 232px;
+  --sider-width-collapsed: 64px;
+  --content-padding: 24px;
+}
+
+/* ================= 基础 ================= */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  font-size: var(--font-body);
+  line-height: var(--lh-body);
+  background: var(--n-2);
+  color: var(--n-8);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--primary);
+}
+
+/* ================= 滚动条 ================= */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--n-5);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--n-6);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ================= 卡片容器（统一浅阴影 + 极浅描边悬浮模式）================= */
+/* B 端冷调：纯白卡片 + 1px 极浅描边 + 淡阴影，视觉克制专业 */
+/* 用 top/right/bottom/left 拆开，避免 border 简写覆盖内联 borderLeft */
+.ant-card {
+  border-top: 1px solid var(--n-3);
+  border-right: 1px solid var(--n-3);
+  border-bottom: 1px solid var(--n-3);
+  border-left: 1px solid var(--n-3);
+}
+.hover-card {
+  transition: box-shadow 0.25s ease;
+  box-shadow: var(--shadow-card);
+}
+.hover-card:hover {
+  box-shadow: var(--shadow-card-hover);
+}
+
+/* ================= 页面四段式结构 =================
+   段① 页面头部（PageHeader）  段② 筛选区  段③ 内容卡片  段④ 分页/底部 */
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+.page-title {
+  font-size: var(--font-page-title);
+  font-weight: 600;
+  line-height: var(--lh-title);
+  color: var(--n-8);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.page-desc {
+  color: var(--n-6);
+  font-size: var(--font-body);
+  line-height: var(--lh-body);
+  margin-top: 2px;
+}
+
+/* 区块标题（卡片名） */
+.block-title {
+  font-size: var(--font-block-title);
+  font-weight: 500;
+  line-height: var(--lh-title);
+  color: var(--n-8);
+}
+
+/* 筛选区 */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+/* 页面内区块分组标题 */
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 20px 0 var(--space-3);
+}
+.section-head b {
+  font-size: var(--font-block-title);
+  font-weight: 600;
+  color: var(--n-8);
+}
+.section-head span {
+  font-size: var(--font-caption);
+  color: var(--n-6);
+}
+
+/* ================= 数据卡片 ================= */
+.stat-value {
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--n-8);
+  font-variant-numeric: tabular-nums;
+}
+.stat-label {
+  font-size: var(--font-caption);
+  color: var(--n-6);
+  font-weight: 500;
+}
+.trend-up {
+  color: var(--c-success);
+  font-weight: 600;
+}
+.trend-down {
+  color: var(--c-danger);
+  font-weight: 600;
+}
+
+/* ================= AI 元素（主色渐变仅限 AI 标识）================= */
+.ai-gradient-text {
+  background: linear-gradient(135deg, var(--primary), #5DA3E5);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.ai-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: var(--radius-tag);
+  font-size: var(--font-caption);
+  font-weight: 600;
+  background: var(--primary-bg);
+  color: var(--primary-deep);
+}
+
+/* ================= 通用工具 ================= */
+.flex {
+  display: flex;
+}
+.flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.gap8 {
+  gap: 8px;
+}
+.gap16 {
+  gap: 16px;
+}
+.mt16 {
+  margin-top: 16px;
+}
+.mb16 {
+  margin-bottom: 16px;
+}
+
+/* ================= Monaco ================= */
+.monaco-shell {
+  border: 1px solid var(--n-4);
+  border-radius: var(--radius-btn);
+  overflow: hidden;
+}
+
+/* ================= 应用壳：左栏固定 + 右内容独占滚动（经典双栏）================= */
+.app-shell {
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ================= 浅色导航（Sidebar）================= */
+.app-sider {
+  background: var(--n-1);
+  border-right: 1px solid var(--n-4);
+}
+.sider-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: var(--header-height);
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--n-4);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.sider-brand-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-btn);
+  background: linear-gradient(135deg, var(--primary), #5DA3E5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+.sider-brand-name {
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 1.2;
+  color: var(--n-8);
+}
+.sider-brand-sub {
+  font-size: var(--font-caption);
+  color: var(--n-6);
+}
+.sider-footer {
+  border-top: 1px solid var(--n-4);
+  padding: var(--space-3) var(--space-4);
+}
+.sider-account {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  border-radius: var(--radius-btn);
+  transition: background 0.2s ease;
+}
+.sider-account:hover {
+  background: var(--n-3);
+}
+.sider-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  margin-top: var(--space-2);
+}
+.sider-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-btn);
+  background: transparent;
+  color: var(--n-7);
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.sider-action-btn:hover {
+  background: var(--primary-bg);
+  color: var(--primary);
+}
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nav-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--n-5);
+  margin-right: var(--space-2);
+}
+.nav-item-label {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ================= 顶栏（Header）================= */
+.app-header {
+  height: var(--header-height);
+  background: var(--n-0);
+  border-bottom: 1px solid var(--n-4);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 0 32px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-right: var(--space-4);
+}
+.header-brand-name {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--n-8);
+  white-space: nowrap;
+}
+
+/* 顶栏全局搜索 */
+.header-search {
+  flex: 1;
+  max-width: 440px;
+}
+
+/* AI 状态徽标 */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-tag);
+  font-size: var(--font-caption);
+  font-weight: 500;
+  color: var(--n-7);
+  background: var(--n-3);
+  border: 1px solid var(--n-4);
+}
+.status-pill .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--c-success);
+  box-shadow: 0 0 0 3px var(--c-success-bg);
+}
+
+/* 面包屑 */
+.app-breadcrumb {
+  margin-bottom: var(--space-4);
+  display: flex;
+  align-items: center;
+}
+
+/* 主内容工作区 */
+.app-content {
+  padding: var(--content-padding);
+  overflow: auto;
+}
+
+/* 顶栏用户区 */
+.header-user {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  padding: 4px var(--space-2);
+  border-radius: var(--radius-btn);
+  transition: background 0.2s ease;
+}
+.header-user:hover {
+  background: var(--n-3);
+}
+
+/* 通知中心条目 */
+.todo-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 8px var(--space-3);
+  margin: 2px 0;
+  border-radius: var(--radius-btn);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.todo-row:hover {
+  background: var(--primary-bg);
+}
+.todo-row:hover > span:nth-child(2) {
+  color: var(--primary);
+}
+
+/* ================= 预警卡片（左侧彩色边框，功能色场景）================= */
+.alert-card {
+  border-radius: var(--radius-card);
+  border-left: 4px solid var(--n-4);
+  transition: box-shadow 0.25s ease;
+  box-shadow: var(--shadow-card);
+}
+.alert-card:hover {
+  box-shadow: var(--shadow-card-hover);
+}
+
+/* ================= 个人中心 Drawer ================= */
+.edit-row:hover {
+  border-color: var(--primary-border) !important;
+  background: var(--primary-bg) !important;
+}
