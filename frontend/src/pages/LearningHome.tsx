@@ -4,6 +4,7 @@ import { api, apiCache, LearningContext, StudentProfile, StudentTaskCard } from 
 import type { TaskOpenTarget } from "../App";
 import heroArt from "../assets/ui-home/hero-art.png";
 import robotImg from "../assets/ui-home/robot-img.png";
+import { StudentInlineNotice, StudentState, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
 
 type PageProps = {
   onNavigate: (page: string) => void;
@@ -37,6 +38,8 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
   const [profile, setProfile] = useState<StudentProfile | null>(cachedProfile);
   const [pageStatus, setPageStatus] = useState<"loading" | "ready" | "error">(cachedContext ? "ready" : "loading");
   const [loadMessage, setLoadMessage] = useState<string | null>(null);
+  const [loadDetail, setLoadDetail] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -49,6 +52,7 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
         setProfile(null);
       }
       setLoadMessage(null);
+      setLoadDetail(null);
 
       try {
         const data = await api.getLearningContext();
@@ -69,15 +73,23 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
             ? "部分学习数据暂时没有读取成功，页面已按当前接口结果显示。"
             : null
         );
+        setLoadDetail(
+          taskResult.status === "rejected"
+            ? studentErrorDetail(taskResult.reason)
+            : profileResult.status === "rejected"
+              ? studentErrorDetail(profileResult.reason)
+              : null
+        );
         setPageStatus("ready");
-      } catch {
+      } catch (err) {
         if (!alive) return;
         if (!hasVisibleData) {
           setContext(null);
           setTasks([]);
           setProfile(null);
         }
-        setLoadMessage("学习首页数据加载失败，请稍后刷新。");
+        setLoadMessage(studentErrorMessage(err, "学习首页数据加载失败，请稍后刷新。"));
+        setLoadDetail(studentErrorDetail(err));
         setPageStatus(hasVisibleData ? "ready" : "error");
       }
     }
@@ -86,7 +98,7 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
     return () => {
       alive = false;
     };
-  }, []);
+  }, [reloadKey]);
 
   const todayTasks = useMemo(() => {
     return tasks.slice(0, 3).map((task, index) => ({
@@ -163,6 +175,24 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
           </div>
           <img className="hero-art" src={heroArt} alt="学生使用电脑学习" />
         </section>
+
+        {pageStatus === "error" ? (
+          <StudentState
+            kind="unavailable"
+            title="学习首页数据暂不可用"
+            description="当前没有读到课程任务、学习画像或推荐数据。请先确认后端服务已经启动，或稍后刷新重试。"
+            detail={loadDetail ?? loadMessage}
+            actions={[{ label: "重新加载", variant: "primary", onClick: () => setReloadKey((value) => value + 1) }]}
+          />
+        ) : loadMessage ? (
+          <StudentInlineNotice
+            kind="degraded"
+            title="部分学习数据暂未同步"
+            description={loadMessage}
+            detail={loadDetail}
+            actions={[{ label: "重试", variant: "primary", onClick: () => setReloadKey((value) => value + 1) }]}
+          />
+        ) : null}
 
         <section className="home-card home-section tasks-section">
           <div className="home-card-header">

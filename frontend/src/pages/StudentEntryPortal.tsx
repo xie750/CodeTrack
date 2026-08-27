@@ -3,6 +3,7 @@ import { ArrowRight, BookOpenCheck, CalendarClock, CheckCircle2, FlaskConical, L
 import { useNavigate } from "react-router-dom";
 import { api, apiCache, type LearningContext, type StudentTaskCard } from "../api";
 import type { AuthUser } from "../authSession";
+import { StudentInlineNotice, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
 
 export type StudentEntryTheme = "starmap" | "cloud";
 
@@ -279,6 +280,8 @@ function CourseDrawer({ open, onClose }: { open: boolean; onClose: () => void })
   const [tasks, setTasks] = useState<StudentTaskCard[]>(cachedTasks ?? []);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [messageDetail, setMessageDetail] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -287,14 +290,17 @@ function CourseDrawer({ open, onClose }: { open: boolean; onClose: () => void })
     async function loadCourses() {
       setLoading(!context);
       setMessage(null);
+      setMessageDetail(null);
       try {
         const data = await api.getLearningContext();
         const taskData = await api.listStudentTasks();
         if (!alive) return;
         setContext(data);
         setTasks(taskData);
-      } catch {
-        if (alive) setMessage("课程数据加载失败，请稍后重试。");
+      } catch (err) {
+        if (!alive) return;
+        setMessage(studentErrorMessage(err, "课程数据加载失败，请稍后重试。"));
+        setMessageDetail(studentErrorDetail(err));
       } finally {
         if (alive) setLoading(false);
       }
@@ -304,7 +310,7 @@ function CourseDrawer({ open, onClose }: { open: boolean; onClose: () => void })
     return () => {
       alive = false;
     };
-  }, [open]);
+  }, [open, reloadKey]);
 
   const courseCards = useMemo(() => {
     return (context?.courses ?? []).map((course) => {
@@ -340,7 +346,15 @@ function CourseDrawer({ open, onClose }: { open: boolean; onClose: () => void })
           </button>
         </header>
 
-        {message ? <p className="student-course-drawer-message">{message}</p> : null}
+        {message ? (
+          <StudentInlineNotice
+            kind="unavailable"
+            title="课程列表暂不可用"
+            description={message}
+            detail={messageDetail}
+            actions={[{ label: "重试", variant: "primary", onClick: () => setReloadKey((value) => value + 1) }]}
+          />
+        ) : null}
 
         <section className="student-course-drawer-list">
           {loading ? (

@@ -28,6 +28,7 @@ import {
 import { api, apiCache, LearningContext, StudentProfile, StudentTaskCard } from "../api";
 import type { TaskOpenTarget } from "../App";
 import StudentRouteBreadcrumb from "../components/StudentRouteBreadcrumb";
+import { StudentInlineNotice, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
 import CourseTasks from "./CourseTasks";
 import LearningProfile from "./LearningProfile";
 import LearningLibrary from "./LearningLibrary";
@@ -195,6 +196,8 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
   const [profile, setProfile] = useState<StudentProfile | null>(cachedProfile);
   const [loading, setLoading] = useState(!cachedContext || !cachedTasks);
   const [message, setMessage] = useState<string | null>(null);
+  const [messageDetail, setMessageDetail] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -202,6 +205,7 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
     async function loadCourse() {
       setLoading(!context || !tasks.length);
       setMessage(null);
+      setMessageDetail(null);
       try {
         const data = await api.getLearningContext();
         const [taskData, profileData] = await Promise.all([
@@ -212,8 +216,10 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
         setContext(data);
         setTasks(taskData);
         setProfile(profileData);
-      } catch {
-        if (alive) setMessage("课程工作台数据加载失败，请稍后刷新。");
+      } catch (err) {
+        if (!alive) return;
+        setMessage(studentErrorMessage(err, "课程工作台数据加载失败，请稍后刷新。"));
+        setMessageDetail(studentErrorDetail(err));
       } finally {
         if (alive) setLoading(false);
       }
@@ -223,7 +229,7 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
     return () => {
       alive = false;
     };
-  }, [courseId]);
+  }, [courseId, reloadKey]);
 
   const course = context?.courses.find((item) => item.course_id === courseId);
   const activeTask = tasks.find((task) => task.status !== "COMPLETED") ?? tasks[0];
@@ -280,7 +286,15 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
         </button>
       </header>
 
-      {message ? <p className="student-data-message">{message}</p> : null}
+      {message ? (
+        <StudentInlineNotice
+          kind="degraded"
+          title="课程工作台暂未完整同步"
+          description={message}
+          detail={messageDetail}
+          actions={[{ label: "重试", variant: "primary", onClick: () => setReloadKey((value) => value + 1) }]}
+        />
+      ) : null}
 
       <section className="course-dashboard-stats">
         {stats.map((item) => (

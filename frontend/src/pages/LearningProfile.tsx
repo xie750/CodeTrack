@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { api, LearningContext, StudentProfile } from "../api";
 import heroArt from "../assets/ui-home/hero-art.png";
+import { StudentState, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
 
 const knowledgeIcons = [<Medal size={19} />, <FunctionSquare size={19} />, <Triangle size={19} />, <RefreshCw size={19} />, <NotebookTabs size={19} />, <Sparkles size={19} />];
 const knowledgeColors = ["blue", "green", "blue", "purple", "green", "orange"];
@@ -222,12 +223,15 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
   const [contextLoading, setContextLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [aiAdviceRequested, setAiAdviceRequested] = useState(false);
 
   useEffect(() => {
     let alive = true;
     setContextLoading(true);
     setError(null);
+    setErrorDetail(null);
     setContext(null);
     setProfile(null);
     api.getLearningContext().then((data) => {
@@ -237,36 +241,39 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
         ? initialCourseId
         : data.courses[0]?.course_id ?? "";
       setSelectedCourseId(preferredCourse);
-    }).catch(() => {
+    }).catch((err) => {
       if (!alive) return;
-      setError("学习画像上下文加载失败，请稍后刷新。");
+      setError(studentErrorMessage(err, "学习画像上下文加载失败，请稍后刷新。"));
+      setErrorDetail(studentErrorDetail(err));
     }).finally(() => {
       if (alive) setContextLoading(false);
     });
     return () => {
       alive = false;
     };
-  }, [initialCourseId]);
+  }, [initialCourseId, reloadKey]);
 
   useEffect(() => {
     if (!selectedCourseId) return;
     let alive = true;
     setProfileLoading(true);
     setError(null);
+    setErrorDetail(null);
     setProfile(null);
     api.getStudentProfile(selectedCourseId).then((data) => {
       if (alive) setProfile(data);
-    }).catch(() => {
+    }).catch((err) => {
       if (!alive) return;
       setProfile(null);
-      setError("当前课程画像数据加载失败，请稍后刷新。");
+      setError(studentErrorMessage(err, "当前课程画像数据加载失败，请稍后刷新。"));
+      setErrorDetail(studentErrorDetail(err));
     }).finally(() => {
       if (alive) setProfileLoading(false);
     });
     return () => {
       alive = false;
     };
-  }, [selectedCourseId]);
+  }, [selectedCourseId, reloadKey]);
 
   const currentCourse = useMemo(
     () => context?.courses.find((course) => course.course_id === selectedCourseId),
@@ -297,10 +304,14 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
   if (error || !context || !profile) {
     return (
       <div className="profile-page">
-        <section className="profile-card profile-pad">
-          <h2>学习画像暂不可用</h2>
-          <p className="profile-empty-copy">{error ?? "当前账号还没有可展示的课程画像数据。"}</p>
-        </section>
+        <StudentState
+          kind={error ? "unavailable" : "empty"}
+          title="学习画像暂不可用"
+          description={error ?? "当前账号还没有可展示的课程画像数据。完成课程任务或保存学习资料后，画像会逐步生成。"}
+          detail={errorDetail}
+          actions={error ? [{ label: "重新加载", variant: "primary", onClick: () => setReloadKey((value) => value + 1) }] : []}
+          className="profile-card profile-pad"
+        />
       </div>
     );
   }

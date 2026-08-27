@@ -390,6 +390,10 @@ export type GeneratedResource = {
       ppt_master_request_path?: string | null;
       ppt_master_project_id?: string | null;
       ppt_master_export_path?: string | null;
+      preview_available?: boolean;
+      preview_format?: string;
+      preview_url?: string | null;
+      preview_error?: string;
       renderer_config_error?: string;
       [key: string]: unknown;
     };
@@ -399,6 +403,8 @@ export type GeneratedResource = {
   slide_count: number;
   item_count: number;
   download_available?: boolean;
+  preview_available?: boolean;
+  preview_url?: string | null;
   saved_to_resource_center: boolean;
   created_at: string | null;
   updated_at: string | null;
@@ -1099,6 +1105,8 @@ export const api = {
   },
   generatedResourceDownloadUrl: (resourceId: string) =>
     `/api/v1/student/resources/${encodeURIComponent(resourceId)}/download`,
+  generatedResourcePreviewUrl: (resourceId: string) =>
+    `/api/v1/student/resources/${encodeURIComponent(resourceId)}/preview`,
   getPptRendererConfig: () =>
     request<PptRendererConfig>("/api/v1/student/resources/ppt/renderers"),
   submitCode: async (taskId: string, language: string, sourceCode: string) => {

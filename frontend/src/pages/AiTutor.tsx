@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Drawer } from "antd";
+import { Drawer } from "antd";
 import {
   Bookmark,
   BookOpen,
@@ -35,6 +35,13 @@ import {
 } from "../api";
 import robotImg from "../assets/ui-home/ai-tutor-bot.png";
 import GeneratedResourcePreviewModal from "../components/GeneratedResourcePreviewModal";
+import {
+  StudentImageFallback,
+  StudentInlineNotice,
+  StudentState,
+  studentErrorDetail,
+  studentErrorMessage
+} from "../components/StudentState";
 
 type HistoryGroup = "今天" | "昨天" | "更早";
 
@@ -363,6 +370,7 @@ export default function AiTutor() {
   const [loadingContext, setLoadingContext] = useState(true);
   const [loadingSession, setLoadingSession] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [historyQuery, setHistoryQuery] = useState("");
@@ -385,6 +393,7 @@ export default function AiTutor() {
   const courseId = profile?.course.id ?? context?.courses[0]?.course_id;
   const courseName = profile?.course.name ?? context?.courses[0]?.course_name ?? "机器学习";
   const frequentError = profile?.frequent_errors[0]?.label ?? "只验证普通用例";
+  const contextUnavailable = Boolean(error && !loadingContext && !context && !profile && !turns.length);
 
   const filteredSessions = useMemo(() => {
     const keyword = historyQuery.trim().toLowerCase();
@@ -397,6 +406,7 @@ export default function AiTutor() {
     let alive = true;
     setLoadingContext(true);
     setError(null);
+    setErrorDetail(null);
     api.getLearningContext().then((data) => {
       if (!alive) return;
       setContext(data);
@@ -407,14 +417,17 @@ export default function AiTutor() {
       }
       api.getStudentProfile(nextCourseId).then((profileData) => {
         if (alive) setProfile(profileData);
-      }).catch(() => {
-        if (alive) setError("学习画像暂时不可用，AI 助学导师会先使用课程知识库回答。");
+      }).catch((err) => {
+        if (!alive) return;
+        setError("学习画像暂时不可用，AI 助学导师会先使用课程知识库回答。");
+        setErrorDetail(studentErrorDetail(err));
       }).finally(() => {
         if (alive) setLoadingContext(false);
       });
-    }).catch(() => {
+    }).catch((err) => {
       if (!alive) return;
-      setError("AI 助学上下文加载失败，请稍后刷新。");
+      setError(studentErrorMessage(err, "AI 助学上下文加载失败，请稍后刷新。"));
+      setErrorDetail(studentErrorDetail(err));
       setLoadingContext(false);
     });
     return () => {
@@ -435,8 +448,9 @@ export default function AiTutor() {
       if (items[0]) {
         loadSession(items[0].id);
       }
-    }).catch(() => {
+    }).catch((err) => {
       setError("历史会话加载失败，当前可以先发起新的 AI 助学对话。");
+      setErrorDetail(studentErrorDetail(err));
     });
   }, [courseId]);
 
@@ -456,6 +470,7 @@ export default function AiTutor() {
       await refreshSessions(detail.session.course_id ?? courseId);
     } catch (err) {
       setError(errorMessage(err));
+      setErrorDetail(studentErrorDetail(err));
     } finally {
       setLoadingSession(false);
     }
@@ -465,6 +480,7 @@ export default function AiTutor() {
     if (creatingSession) return;
     setCreatingSession(true);
     setError(null);
+    setErrorDetail(null);
     setCurrentSessionId(null);
     setTurns([]);
     setDraft("");
@@ -476,6 +492,7 @@ export default function AiTutor() {
     } catch (err) {
       setHistoryOpen(false);
       setError(errorMessage(err));
+      setErrorDetail(studentErrorDetail(err));
     } finally {
       setCreatingSession(false);
     }
@@ -493,6 +510,7 @@ export default function AiTutor() {
       }
     } catch (err) {
       setError(errorMessage(err));
+      setErrorDetail(studentErrorDetail(err));
     } finally {
       setDeletingSessionId(null);
     }
@@ -526,6 +544,8 @@ export default function AiTutor() {
 
     setDraft("");
     setSending(true);
+    setError(null);
+    setErrorDetail(null);
     setTurns((current) => [...current, userTurn, pendingTurn]);
     try {
       await api.streamStudentAiChat(
@@ -578,6 +598,7 @@ export default function AiTutor() {
       );
       await refreshSessions();
     } catch (err) {
+      setErrorDetail(studentErrorDetail(err));
       setTurns((current) => current.map((turn) => (
         turn.id === pendingId
           ? {
@@ -617,6 +638,7 @@ export default function AiTutor() {
     setDraft("");
     setSending(true);
     setError(null);
+    setErrorDetail(null);
     setTurns((current) => [...current, userTurn, pendingTurn]);
     try {
       const result = await api.generateResource(resourceType, message, courseId, currentSessionId);
@@ -630,6 +652,7 @@ export default function AiTutor() {
       )));
       await refreshSessions(result.session.course_id ?? courseId);
     } catch (err) {
+      setErrorDetail(studentErrorDetail(err));
       setTurns((current) => current.map((turn) => (
         turn.id === pendingId
           ? {
@@ -661,6 +684,7 @@ export default function AiTutor() {
       if (previewResource?.id === resource.id) setPreviewResource(saved);
     } catch (err) {
       setError(errorMessage(err));
+      setErrorDetail(studentErrorDetail(err));
       setTurns((current) => current.map((turn) => (
         turn.resource?.id === resource.id ? { ...turn, resourceSaving: false } : turn
       )));
@@ -671,7 +695,7 @@ export default function AiTutor() {
     <div className={`ai-workspace-page${turns.length ? " ai-has-chat" : " ai-empty-chat"}`}>
       <header className="ai-workspace-header">
         <div className="ai-workspace-title">
-          <img src={robotImg} alt="" />
+          <StudentImageFallback src={robotImg} alt="AI 助学导师" decorative />
           <div>
             <span>AI 助学 / 自主学习导师</span>
             <h1>和 AI 助学导师持续追问、生成资料、沉淀学习证据</h1>
@@ -684,17 +708,36 @@ export default function AiTutor() {
         </button>
       </header>
 
-      {error ? <Alert className="ai-workspace-alert" type="warning" message={error} showIcon /> : null}
+      {error && !contextUnavailable ? (
+        <StudentInlineNotice
+          className="ai-workspace-alert"
+          kind="degraded"
+          title="部分 AI 上下文暂不可用"
+          description={error}
+          detail={errorDetail}
+          actions={[{ label: "刷新重试", variant: "primary", onClick: () => window.location.reload() }]}
+        />
+      ) : null}
 
       <main className="ai-learning-workspace" aria-label="AI Learning Workspace">
         <AiThreadOutline turns={turns} />
         <div className="ai-thread" ref={threadRef}>
           {loadingSession ? <div className="ai-chat-loading">正在恢复历史会话...</div> : null}
-          {!loadingSession && !turns.length ? (
+          {!loadingSession && contextUnavailable ? (
+            <StudentState
+              kind="unavailable"
+              title="AI 助学上下文暂不可用"
+              description="当前没有读到课程、画像或历史会话数据。你可以刷新重试；如果正在本地开发，请先确认后端服务已经启动。"
+              detail={errorDetail ?? error}
+              actions={[{ label: "刷新重试", variant: "primary", onClick: () => window.location.reload() }]}
+              className="ai-context-state"
+            />
+          ) : null}
+          {!loadingSession && !contextUnavailable && !turns.length ? (
             <section className="ai-empty-state" aria-label="AI 助学初始页">
               <div className="ai-empty-visual">
                 <span />
-                <img src={robotImg} alt="" />
+                <StudentImageFallback src={robotImg} alt="AI 助学导师" decorative />
               </div>
               <h2>你的 AI 学习伙伴，随时为你助力</h2>
               <p>提出问题，获取思路，生成资料，深入探索知识</p>
@@ -719,7 +762,7 @@ export default function AiTutor() {
             ) : (
               <article className="ai-turn ai-turn-assistant" key={turn.id} data-ai-turn-id={turn.id}>
                 <div className="ai-assistant-avatar" aria-hidden="true">
-                  <img src={robotImg} alt="" />
+                  <StudentImageFallback src={robotImg} alt="AI 助学导师" decorative />
                 </div>
                 <div className={`ai-answer-flow${turn.error ? " ai-answer-flow-error" : ""}`}>
                   <header>

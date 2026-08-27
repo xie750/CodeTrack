@@ -19,6 +19,7 @@ import {
 import { api, QuestionItem, QuestionWorkspace as QuestionWorkspaceData, SubmitQuestionResult } from "../api";
 import StudentRouteBreadcrumb from "../components/StudentRouteBreadcrumb";
 import avatarImg from "../assets/ui-home/avatar.png";
+import { StudentState, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
 
 type PageProps = {
   assignmentId: string;
@@ -87,6 +88,7 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const questionRefs = useRef<Array<HTMLElement | null>>([]);
 
@@ -94,6 +96,7 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
     let alive = true;
     setLoading(true);
     setError(null);
+    setErrorDetail(null);
     api
       .getQuestionWorkspace(assignmentId)
       .then((data) => {
@@ -121,8 +124,10 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
           });
         }
       })
-      .catch(() => {
-        if (alive) setError("题目任务加载失败，请返回任务列表后重试。");
+      .catch((err) => {
+        if (!alive) return;
+        setError(studentErrorMessage(err, "题目任务加载失败，请返回任务列表后重试。"));
+        setErrorDetail(studentErrorDetail(err));
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -176,8 +181,9 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
     try {
       await api.saveQuestionAnswers(workspace.assignment.assignment_id, toAnswerPayload(answers));
       setSaveMessage("草稿已保存");
-    } catch {
+    } catch (err) {
       setSaveMessage("草稿保存失败");
+      setErrorDetail(studentErrorDetail(err));
     } finally {
       setSaving(false);
     }
@@ -207,8 +213,9 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
         questions: submittedResult.questions
       } : current);
       setSaveMessage("已交卷，学习画像已更新");
-    } catch {
+    } catch (err) {
       setSaveMessage("提交失败，请稍后重试");
+      setErrorDetail(studentErrorDetail(err));
     } finally {
       setSubmitting(false);
     }
@@ -243,11 +250,14 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
         </main>
       ) : error || !workspace || !activeQuestion ? (
         <main className="question-page">
-          <section className="question-card question-empty">
-            <h1>题目暂不可用</h1>
-            <p>{error ?? "没有读取到当前题目任务。"}</p>
-            <button className="program-back" type="button" onClick={onBack}><ArrowLeft size={16} /> 返回班级任务</button>
-          </section>
+          <StudentState
+            kind="unavailable"
+            title="题目暂不可用"
+            description={error ?? "没有读取到当前题目任务。"}
+            detail={errorDetail}
+            actions={[{ label: "返回班级任务", onClick: onBack, icon: <ArrowLeft size={15} /> }]}
+            className="question-card question-empty"
+          />
         </main>
       ) : (
         <main className="question-page">

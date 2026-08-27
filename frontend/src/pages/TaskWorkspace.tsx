@@ -28,6 +28,7 @@ import {
 import { api, LearningContext, TaskDetail, VersionResult, Diagnosis, Hint } from "../api";
 import StudentRouteBreadcrumb from "../components/StudentRouteBreadcrumb";
 import avatarImg from "../assets/ui-home/avatar.png";
+import { StudentState, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
 
 type PageProps = {
   taskId: string;
@@ -213,6 +214,7 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
   const [context, setContext] = useState<LearningContext | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [aiCollapsed, setAiCollapsed] = useState(false);
   const [layout, setLayout] = useState<WorkspaceLayout>(() => readWorkspaceLayout());
   const [metrics, setMetrics] = useState<WorkspaceMetrics | null>(null);
@@ -234,6 +236,7 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
     let alive = true;
     setLoading(true);
     setError(null);
+    setErrorDetail(null);
     setTask(null);
     setLatestResult(null);
     setDiagnosis(null);
@@ -254,7 +257,8 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
           setRunState("IDLE");
           setRunMessage("等待提交");
         } else {
-          setError("任务详情加载失败，请返回任务列表后重试。");
+          setError(studentErrorMessage(taskResult.reason, "任务详情加载失败，请返回任务列表后重试。"));
+          setErrorDetail(studentErrorDetail(taskResult.reason));
         }
         if (contextResult.status === "fulfilled") {
           setContext(contextResult.value);
@@ -318,6 +322,7 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
         if (!cancelled) {
           setRunState("ERROR");
           setRunMessage(caught instanceof Error ? caught.message : "执行状态读取失败");
+          setErrorDetail(studentErrorDetail(caught));
           setActiveExecutionId(null);
         }
       }
@@ -453,6 +458,7 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
     } catch (caught) {
       setRunState("ERROR");
       setRunMessage(caught instanceof Error ? caught.message : "提交失败");
+      setErrorDetail(studentErrorDetail(caught));
     }
   }
 
@@ -466,6 +472,7 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
       setHints((current) => current.some((item) => item.level === hint.level) ? current : [...current, hint]);
     } catch (caught) {
       setRunMessage(caught instanceof Error ? caught.message : "提示暂不可用");
+      setErrorDetail(studentErrorDetail(caught));
     }
   }
 
@@ -570,11 +577,14 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
             </section>
           </>
         ) : error || !task ? (
-          <section className="program-card program-problem">
-            <h2>任务暂不可用</h2>
-            <p>{error ?? "没有读取到当前任务详情。"}</p>
-            <button className="program-back" type="button" onClick={onBack}><ArrowLeft size={16} /> 返回班级任务</button>
-          </section>
+          <StudentState
+            kind="unavailable"
+            title="任务暂不可用"
+            description={error ?? "没有读取到当前任务详情。"}
+            detail={errorDetail}
+            actions={[{ label: "返回班级任务", onClick: onBack, icon: <ArrowLeft size={15} /> }]}
+            className="program-card program-problem"
+          />
         ) : (
           <>
             <section className="program-head">

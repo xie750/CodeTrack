@@ -146,6 +146,227 @@ button:disabled {
   line-height: 1.7;
 }
 
+.student-state {
+  min-height: 168px;
+  padding: 28px;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 14px;
+  border: 1px solid #dbe6f4;
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 251, 255, 0.96)),
+    linear-gradient(135deg, rgba(23, 108, 245, 0.06), rgba(31, 182, 166, 0.06));
+  color: #17243b;
+  text-align: center;
+  box-shadow: 0 12px 28px rgba(27, 63, 116, 0.06);
+}
+
+.student-state.compact {
+  min-height: auto;
+  padding: 14px 16px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  justify-items: stretch;
+  align-items: center;
+  align-content: center;
+  gap: 12px;
+  text-align: left;
+  box-shadow: none;
+}
+
+.student-state-icon {
+  width: 48px;
+  height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: #176cf5;
+  background: #edf6ff;
+}
+
+.student-state.compact .student-state-icon {
+  width: 34px;
+  height: 34px;
+}
+
+.student-state-loading .student-state-icon svg {
+  animation: student-state-spin 1s linear infinite;
+}
+
+.student-state-empty .student-state-icon {
+  color: #64748b;
+  background: #f1f5f9;
+}
+
+.student-state-degraded .student-state-icon {
+  color: #ad6800;
+  background: #fff7e6;
+}
+
+.student-state-unavailable .student-state-icon,
+.student-state-actionFailed .student-state-icon {
+  color: #b42318;
+  background: #fff1f0;
+}
+
+.student-state-forbidden .student-state-icon {
+  color: #7c3aed;
+  background: #f5f3ff;
+}
+
+.student-state-copy {
+  min-width: 0;
+}
+
+.student-state h2 {
+  margin: 0;
+  color: #14233d;
+  font-size: 18px;
+  line-height: 1.35;
+  font-weight: 950;
+  letter-spacing: 0;
+}
+
+.student-state.compact h2 {
+  font-size: 14px;
+}
+
+.student-state p {
+  max-width: 620px;
+  margin: 8px auto 0;
+  color: #607086;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.72;
+}
+
+.student-state.compact p {
+  max-width: none;
+  margin: 3px 0 0;
+  line-height: 1.55;
+}
+
+.student-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.student-state.compact .student-state-actions {
+  justify-content: flex-end;
+}
+
+.student-state-actions button,
+.student-state-actions a,
+.student-state-detail button {
+  min-height: 36px;
+  padding: 0 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid #d7e3f2;
+  border-radius: 7px;
+  color: #29405f;
+  background: #ffffff;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: border-color 160ms var(--motion-soft), background 160ms var(--motion-soft), color 160ms var(--motion-soft), transform 160ms var(--motion-soft);
+}
+
+.student-state-actions button:hover,
+.student-state-actions a:hover,
+.student-state-detail button:hover {
+  transform: translateY(-1px);
+  border-color: #9bc2f7;
+  color: #176cf5;
+  background: #f4f8ff;
+}
+
+.student-state-actions .primary {
+  border-color: #176cf5;
+  color: #ffffff;
+  background: #176cf5;
+}
+
+.student-state-actions .primary:hover {
+  border-color: #0f5bd7;
+  color: #ffffff;
+  background: #0f5bd7;
+}
+
+.student-state-detail {
+  width: min(100%, 680px);
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.student-state.compact .student-state-detail {
+  grid-column: 1 / -1;
+  width: 100%;
+  justify-items: start;
+}
+
+.student-state-detail pre {
+  width: 100%;
+  max-height: 120px;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid #dbe6f4;
+  border-radius: 8px;
+  color: #52627a;
+  background: #f8fbff;
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: left;
+  white-space: pre-wrap;
+}
+
+.student-state-inline {
+  margin: 10px 0;
+}
+
+.student-image-safe {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.student-image-safe > img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.student-image-safe-fallback {
+  width: 100%;
+  height: 100%;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #cfe0f3;
+  border-radius: 8px;
+  color: #176cf5;
+  background: linear-gradient(180deg, #ffffff, #eef6ff);
+}
+
+@keyframes student-state-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .page-lead h2,
 .task-card h4,
 .ant-card h4 {

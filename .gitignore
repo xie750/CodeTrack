@@ -4,6 +4,9 @@ __pycache__/
 .codex-merge-*/
 
 *.db
+*.db.bak-*
+backend-*.log
+frontend-vite-*.log
 
 frontend/node_modules/
 frontend/dist/

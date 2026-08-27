@@ -53,6 +53,14 @@ class Settings(BaseSettings):
     ppt_master_home: str | None = Field(default=None)
     ppt_master_workspace_dir: str | None = Field(default=None)
     ppt_master_timeout_seconds: int = Field(default=300)
+    # Local lightweight PPT preview renderer. When LibreOffice is available,
+    # generated PPTX files are converted to PDF for browser preview.
+    ppt_preview_enabled: bool = Field(default=True)
+    # auto: local PowerPoint on Windows when available, then LibreOffice.
+    # Other values: powerpoint, libreoffice.
+    ppt_preview_renderer: str = Field(default="auto")
+    libreoffice_command: str | None = Field(default=None)
+    ppt_preview_timeout_seconds: int = Field(default=90)
 
     redis_url: str = Field(default="redis://localhost:6379/0")
     s3_endpoint: str = Field(default="http://localhost:9000")
