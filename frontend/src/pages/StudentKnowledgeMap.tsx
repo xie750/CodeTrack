@@ -15,7 +15,6 @@ import {
   Loader2,
   MessageSquareText,
   Network,
-  NotebookPen,
   Pencil,
   Plus,
   RefreshCw,
@@ -436,6 +435,16 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
   const prereqEdges = relatedEdges.filter((edge) => edge.target === selectedNode?.id && edge.type === "前驱");
   const nextEdges = relatedEdges.filter((edge) => edge.source === selectedNode?.id && edge.type === "后继");
   const peerEdges = relatedEdges.filter((edge) => edge.type === "相关");
+
+  useEffect(() => {
+    if (!graph?.nodes.length) {
+      if (selection) setSelection(null);
+      return;
+    }
+    if (selection?.kind === "node" && nodesById.has(selection.id)) return;
+    if (selection?.kind === "edge" && graph.edges.some((edge) => edge.id === selection.id)) return;
+    setSelection({ kind: "node", id: graph.nodes[0].id });
+  }, [graph, nodesById, selection]);
 
   useEffect(() => {
     if (loading || !graph || !hasNodes) {
