@@ -4,10 +4,19 @@ from fastapi.testclient import TestClient
 
 from backend.app.core.config import get_settings
 from backend.app.main import app
+from backend.app.services import student_resources
 from backend.app.services.presenton_client import _generation_body
 
 
 STUDENT = {"X-Demo-User-Id": "user_student_001"}
+
+
+@pytest.fixture(autouse=True)
+def disable_real_ppt_preview(monkeypatch):
+    monkeypatch.setenv("CODETRACK_PPT_PREVIEW_ENABLED", "false")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 def test_student_can_generate_save_and_download_ppt_resource(monkeypatch):
@@ -144,6 +153,103 @@ print("ppt master done")
         assert metadata["renderer"] == "ppt_master"
         assert metadata["renderer_requested"] == "ppt_master"
         assert metadata["ppt_master_project_id"] == "pm_001"
+
+
+def test_ppt_generation_exposes_pdf_preview_when_available(monkeypatch, tmp_path):
+    monkeypatch.setenv("CODETRACK_MODEL_API_KEY", "")
+    monkeypatch.setenv("CODETRACK_MODEL_NAME", "")
+    monkeypatch.setenv("CODETRACK_MODEL_GATEWAY_URL", "")
+    monkeypatch.setenv("CODETRACK_PPT_RENDERER", "local")
+    monkeypatch.setenv("CODETRACK_RESOURCE_STORAGE_DIR", str(tmp_path / "resources"))
+    get_settings.cache_clear()
+
+    def fake_pdf_preview(resource_id, pptx_path, file_format):
+        preview_path = tmp_path / "resources" / "generated" / "previews" / resource_id / f"{resource_id}.pdf"
+        preview_path.parent.mkdir(parents=True, exist_ok=True)
+        preview_path.write_bytes(b"%PDF-1.4\n" + b"preview" * 80)
+        return {
+            "preview_renderer": "libreoffice_pdf",
+            "preview_format": "PDF",
+            "preview_available": True,
+            "preview_path": str(preview_path),
+            "preview_media_type": "application/pdf",
+        }
+
+    monkeypatch.setattr(student_resources, "_render_ppt_pdf_preview", fake_pdf_preview)
+
+    with TestClient(app) as client:
+        generated = client.post(
+            "/api/v1/student/resources/ppt/generate",
+            headers=STUDENT,
+            json={"course_id": "course_ds_001", "message": "帮我生成关于队列的讲解 PPT"},
+        )
+        assert generated.status_code == 200
+        resource = generated.json()["data"]["resource"]
+        assert resource["preview_available"] is True
+        assert resource["preview_url"] == f"/api/v1/student/resources/{resource['id']}/preview"
+        assert resource["render_payload"]["metadata"]["preview_url"] == resource["preview_url"]
+
+        preview = client.get(resource["preview_url"], headers=STUDENT)
+        assert preview.status_code == 200
+        assert preview.headers["content-type"] == "application/pdf"
+        assert preview.content.startswith(b"%PDF-1.4")
+
+
+def test_ppt_pdf_preview_soft_falls_back_without_libreoffice(monkeypatch, tmp_path):
+    monkeypatch.setenv("CODETRACK_PPT_PREVIEW_ENABLED", "true")
+    monkeypatch.setenv("CODETRACK_PPT_PREVIEW_RENDERER", "libreoffice")
+    get_settings.cache_clear()
+    pptx_path = tmp_path / "sample.pptx"
+    pptx_path.write_bytes(b"pptx" * 100)
+    monkeypatch.setattr(student_resources, "_resolve_libreoffice_command", lambda settings: None)
+
+    metadata = student_resources._render_ppt_pdf_preview("res_preview_missing", str(pptx_path), "PPTX")
+
+    assert metadata["preview_renderer"] == "libreoffice_pdf"
+    assert metadata["preview_format"] == "PDF"
+    assert metadata.get("preview_available") is not True
+    assert "LibreOffice" in metadata["preview_error"]
+
+
+def test_preview_endpoint_generates_missing_ppt_preview_on_demand(monkeypatch, tmp_path):
+    monkeypatch.setenv("CODETRACK_MODEL_API_KEY", "")
+    monkeypatch.setenv("CODETRACK_MODEL_NAME", "")
+    monkeypatch.setenv("CODETRACK_MODEL_GATEWAY_URL", "")
+    monkeypatch.setenv("CODETRACK_PPT_RENDERER", "local")
+    monkeypatch.setenv("CODETRACK_PPT_PREVIEW_ENABLED", "false")
+    monkeypatch.setenv("CODETRACK_RESOURCE_STORAGE_DIR", str(tmp_path / "resources"))
+    get_settings.cache_clear()
+
+    with TestClient(app) as client:
+        generated = client.post(
+            "/api/v1/student/resources/ppt/generate",
+            headers=STUDENT,
+            json={"course_id": "course_ds_001", "message": "帮我生成关于二叉树的讲解 PPT"},
+        )
+        assert generated.status_code == 200
+        resource = generated.json()["data"]["resource"]
+        assert resource["preview_available"] is False
+
+        def fake_pdf_preview(resource_id, pptx_path, file_format):
+            preview_path = tmp_path / "resources" / "generated" / "previews" / resource_id / f"{resource_id}.pdf"
+            preview_path.parent.mkdir(parents=True, exist_ok=True)
+            preview_path.write_bytes(b"%PDF-1.4\n" + b"on-demand" * 80)
+            return {
+                "preview_renderer": "powerpoint_pdf",
+                "preview_format": "PDF",
+                "preview_available": True,
+                "preview_path": str(preview_path),
+                "preview_media_type": "application/pdf",
+            }
+
+        monkeypatch.setenv("CODETRACK_PPT_PREVIEW_ENABLED", "true")
+        get_settings.cache_clear()
+        monkeypatch.setattr(student_resources, "_render_ppt_pdf_preview", fake_pdf_preview)
+
+        preview = client.get(f"/api/v1/student/resources/{resource['id']}/preview", headers=STUDENT)
+        assert preview.status_code == 200
+        assert preview.headers["content-type"] == "application/pdf"
+        assert preview.content.startswith(b"%PDF-1.4")
 
 
 def test_student_can_read_ppt_renderer_config(monkeypatch):

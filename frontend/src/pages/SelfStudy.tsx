@@ -21,6 +21,7 @@ import {
   TrendingUp
 } from "lucide-react";
 import { api, StudentProfile } from "../api";
+import { StudentInlineNotice, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
 
 type TaskState = "done" | "active" | "pending";
 
@@ -102,9 +103,14 @@ function taskStateLabel(state: TaskState) {
 export default function SelfStudy() {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<StudentProfile | null>(null);
+  const [profileMessage, setProfileMessage] = useState<string | null>(null);
+  const [profileDetail, setProfileDetail] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let alive = true;
+    setProfileMessage(null);
+    setProfileDetail(null);
     api.getLearningContext()
       .then((context) => {
         const courseId = context.courses[0]?.course_id;
@@ -113,11 +119,16 @@ export default function SelfStudy() {
       .then((data) => {
         if (alive && data) setProfile(data);
       })
-      .catch(() => undefined);
+      .catch((err) => {
+        if (!alive) return;
+        setProfile(null);
+        setProfileMessage(studentErrorMessage(err, "学习画像暂未同步，当前使用默认自学建议。"));
+        setProfileDetail(studentErrorDetail(err));
+      });
     return () => {
       alive = false;
     };
-  }, []);
+  }, [reloadKey]);
 
   const weakPoint = profile?.knowledge_states.find((item) => item.state === "WEAK") ?? profile?.knowledge_states[0];
   const progress = clamp(profile?.overview.overall_progress ?? 68);
@@ -156,6 +167,16 @@ export default function SelfStudy() {
           </div>
         </div>
       </section>
+
+      {profileMessage ? (
+        <StudentInlineNotice
+          kind="degraded"
+          title="当前展示默认自学建议"
+          description={profileMessage}
+          detail={profileDetail}
+          actions={[{ label: "重试同步", variant: "primary", onClick: () => setReloadKey((value) => value + 1) }]}
+        />
+      ) : null}
 
       <section className="study-home-grid">
         <main className="study-home-main">

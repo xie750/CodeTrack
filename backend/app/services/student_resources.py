@@ -1,5 +1,8 @@
 import json
+import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any, TypedDict
 from urllib.parse import urljoin
@@ -443,6 +446,215 @@ def _render_pptx(resource_id: str, title: str, slides: list[dict[str, Any]], cit
 
     prs.save(path)
     return str(path)
+
+
+def _resolve_libreoffice_command(settings: Any) -> str | None:
+    configured = str(getattr(settings, "libreoffice_command", "") or "").strip()
+    if configured:
+        return configured
+    for candidate in ("soffice", "libreoffice"):
+        found = shutil.which(candidate)
+        if found:
+            return found
+    return None
+
+
+def _preview_base_metadata(renderer: str) -> dict[str, Any]:
+    return {
+        "preview_renderer": renderer,
+        "preview_format": "PDF",
+    }
+
+
+def _preview_output_dir(resource_id: str) -> Path:
+    return (Path(get_settings().resource_storage_dir) / "generated" / "previews" / resource_id).resolve()
+
+
+def _power_shell_literal(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _render_ppt_pdf_preview_with_powerpoint(resource_id: str, source_path: Path, timeout_seconds: int) -> dict[str, Any]:
+    metadata = _preview_base_metadata("powerpoint_pdf")
+    if os.name != "nt":
+        metadata["preview_error"] = "本机 PowerPoint 预览仅支持 Windows 环境。"
+        return metadata
+
+    power_shell = shutil.which("powershell") or shutil.which("pwsh")
+    if not power_shell:
+        metadata["preview_error"] = "未找到 PowerShell，无法调用本机 PowerPoint 生成预览。"
+        return metadata
+
+    preview_dir = _preview_output_dir(resource_id)
+    preview_dir.mkdir(parents=True, exist_ok=True)
+    pdf_path = preview_dir / f"{source_path.stem}.pdf"
+    if pdf_path.exists():
+        pdf_path.unlink()
+
+    script = f"""
+$ErrorActionPreference = 'Stop'
+$inputPath = {_power_shell_literal(str(source_path))}
+$outputPath = {_power_shell_literal(str(pdf_path))}
+$ppt = $null
+$presentation = $null
+try {{
+  $ppt = New-Object -ComObject PowerPoint.Application
+  $presentation = $ppt.Presentations.Open($inputPath, $true, $false, $false)
+  $presentation.SaveAs($outputPath, 32)
+}} finally {{
+  if ($presentation -ne $null) {{
+    $presentation.Close() | Out-Null
+    [System.Runtime.InteropServices.Marshal]::ReleaseComObject($presentation) | Out-Null
+  }}
+  if ($ppt -ne $null) {{
+    $ppt.Quit() | Out-Null
+    [System.Runtime.InteropServices.Marshal]::ReleaseComObject($ppt) | Out-Null
+  }}
+  [GC]::Collect()
+  [GC]::WaitForPendingFinalizers()
+}}
+""".strip()
+    try:
+        completed = subprocess.run(
+            [power_shell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
+            cwd=str(preview_dir),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=min(timeout_seconds, 15),
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        metadata["preview_error"] = f"PowerPoint 预览转换失败：{exc}"
+        return metadata
+
+    if completed.returncode != 0 or not pdf_path.exists() or pdf_path.stat().st_size < 100:
+        detail = (completed.stderr or completed.stdout or "未生成 PDF 文件").strip()[-500:]
+        metadata["preview_error"] = f"PowerPoint 预览转换失败：{detail}"
+        return metadata
+
+    metadata.update(
+        {
+            "preview_available": True,
+            "preview_path": str(pdf_path),
+            "preview_media_type": "application/pdf",
+        }
+    )
+    return metadata
+
+
+def _render_ppt_pdf_preview_with_libreoffice(resource_id: str, source_path: Path, timeout_seconds: int) -> dict[str, Any]:
+    settings = get_settings()
+    metadata = _preview_base_metadata("libreoffice_pdf")
+
+    command = _resolve_libreoffice_command(settings)
+    if not command:
+        metadata["preview_error"] = "未找到 LibreOffice/soffice 命令，无法生成真实 PDF 预览。"
+        return metadata
+
+    preview_dir = _preview_output_dir(resource_id)
+    preview_dir.mkdir(parents=True, exist_ok=True)
+    expected_path = preview_dir / f"{source_path.stem}.pdf"
+    if expected_path.exists():
+        expected_path.unlink()
+
+    args = [
+        command,
+        "--headless",
+        "--invisible",
+        "--nologo",
+        "--nofirststartwizard",
+        "--convert-to",
+        "pdf",
+        "--outdir",
+        str(preview_dir),
+        str(source_path),
+    ]
+    try:
+        completed = subprocess.run(
+            args,
+            cwd=str(preview_dir),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout_seconds,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        metadata["preview_error"] = f"LibreOffice 预览转换失败：{exc}"
+        return metadata
+
+    pdf_path = expected_path if expected_path.exists() else None
+    if not pdf_path:
+        candidates = sorted(preview_dir.glob("*.pdf"), key=lambda item: item.stat().st_mtime, reverse=True)
+        pdf_path = candidates[0] if candidates else None
+    if completed.returncode != 0 or not pdf_path or not pdf_path.exists() or pdf_path.stat().st_size < 100:
+        detail = (completed.stderr or completed.stdout or "未生成 PDF 文件").strip()[-500:]
+        metadata["preview_error"] = f"LibreOffice 预览转换失败：{detail}"
+        return metadata
+
+    metadata.update(
+        {
+            "preview_available": True,
+            "preview_path": str(pdf_path),
+            "preview_media_type": "application/pdf",
+        }
+    )
+    return metadata
+
+
+def _render_ppt_pdf_preview(resource_id: str, pptx_path: str, file_format: str) -> dict[str, Any]:
+    settings = get_settings()
+    metadata = _preview_base_metadata("local_pdf")
+    timeout_seconds = max(10, int(getattr(settings, "ppt_preview_timeout_seconds", 90) or 90))
+    mode = str(getattr(settings, "ppt_preview_renderer", "auto") or "auto").strip().lower()
+    aliases = {
+        "": "auto",
+        "office": "powerpoint",
+        "powerpoint_pdf": "powerpoint",
+        "libreoffice_pdf": "libreoffice",
+        "soffice": "libreoffice",
+    }
+    mode = aliases.get(mode, mode)
+
+    if not bool(getattr(settings, "ppt_preview_enabled", True)):
+        metadata["preview_error"] = "PPT PDF 预览已关闭。"
+        return metadata
+    if file_format.upper() != "PPTX":
+        metadata["preview_error"] = f"当前文件格式 {file_format} 不支持 PPT 预览转换。"
+        return metadata
+
+    source_path = Path(pptx_path).resolve()
+    if not source_path.exists():
+        metadata["preview_error"] = "PPTX 文件不存在，无法生成预览。"
+        return metadata
+
+    renderers = []
+    if mode == "powerpoint":
+        renderers = [_render_ppt_pdf_preview_with_powerpoint]
+    elif mode == "libreoffice":
+        renderers = [_render_ppt_pdf_preview_with_libreoffice]
+    else:
+        renderers = [_render_ppt_pdf_preview_with_powerpoint, _render_ppt_pdf_preview_with_libreoffice]
+
+    errors: list[str] = []
+    last_result: dict[str, Any] | None = None
+    for renderer in renderers:
+        result = renderer(resource_id, source_path, timeout_seconds)
+        last_result = result
+        if result.get("preview_available"):
+            return result
+        if result.get("preview_error"):
+            errors.append(str(result["preview_error"]))
+
+    if last_result:
+        metadata.update({key: value for key, value in last_result.items() if key.startswith("preview_")})
+    metadata["preview_error"] = "；".join(errors) or "未生成真实 PDF 预览。"
+    return metadata
 
 
 def _ppt_renderer_mode(settings: Any) -> str:
@@ -1029,6 +1241,48 @@ def resource_media_type(resource: StudentGeneratedResource) -> str:
     return format_map.get((resource.file_format or "").upper(), "application/octet-stream")
 
 
+def resource_preview_path(resource: StudentGeneratedResource) -> str | None:
+    render_payload = _json_loads(resource.render_payload_json, {})
+    if not isinstance(render_payload, dict):
+        return None
+    metadata = render_payload.get("metadata")
+    if not isinstance(metadata, dict):
+        return None
+    raw_path = metadata.get("preview_path")
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        return None
+    path = Path(raw_path).resolve()
+    preview_root = (Path(get_settings().resource_storage_dir) / "generated" / "previews").resolve()
+    try:
+        path.relative_to(preview_root)
+    except ValueError:
+        return None
+    if not path.exists() or path.suffix.lower() != ".pdf":
+        return None
+    return str(path)
+
+
+def ensure_resource_preview(resource: StudentGeneratedResource) -> str | None:
+    existing = resource_preview_path(resource)
+    if existing:
+        return existing
+    if resource.resource_type != "PPT" or not resource.file_path:
+        return None
+
+    preview_metadata = _render_ppt_pdf_preview(resource.id, resource.file_path, resource.file_format)
+    render_payload = _json_loads(resource.render_payload_json, {})
+    if not isinstance(render_payload, dict):
+        render_payload = {}
+    metadata = render_payload.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+    metadata.update(preview_metadata)
+    render_payload["metadata"] = metadata
+    resource.render_payload_json = _json_dumps(render_payload)
+    resource.updated_at = utc_now()
+    return resource_preview_path(resource)
+
+
 def _serialize_resource(resource: StudentGeneratedResource) -> dict[str, Any]:
     render_payload = _json_loads(resource.render_payload_json, {})
     citations = _json_loads(resource.citations_json, [])
@@ -1049,6 +1303,14 @@ def _serialize_resource(resource: StudentGeneratedResource) -> dict[str, Any]:
             slides_from_presenton = fetch_presenton_slides_sync(str(metadata["presenton_presentation_id"]), settings)
             if slides_from_presenton:
                 render_payload["presenton_slides"] = slides_from_presenton
+    if isinstance(metadata, dict):
+        preview_path = resource_preview_path(resource)
+        if preview_path:
+            metadata["preview_available"] = True
+            metadata["preview_url"] = f"/api/v1/student/resources/{resource.id}/preview"
+            metadata["preview_format"] = "PDF"
+            render_payload["metadata"] = metadata
+    preview_path = resource_preview_path(resource)
     slides = render_payload.get("slides", [])
     sections = render_payload.get("sections", [])
     nodes = render_payload.get("nodes", [])
@@ -1077,6 +1339,8 @@ def _serialize_resource(resource: StudentGeneratedResource) -> dict[str, Any]:
         "slide_count": len(slides) if isinstance(slides, list) else 0,
         "item_count": item_count,
         "download_available": bool(resource.file_path),
+        "preview_available": bool(preview_path),
+        "preview_url": f"/api/v1/student/resources/{resource.id}/preview" if preview_path else None,
         "saved_to_resource_center": resource.saved_to_resource_center,
         "created_at": iso(resource.created_at),
         "updated_at": iso(resource.updated_at),
@@ -1190,6 +1454,22 @@ async def _content_node(db: Session, course: Course, state: PptResourceState) ->
 async def _render_node(db: Session, state: PptResourceState) -> PptResourceState:
     resource_id = _new_id("res")
     path, file_format, render_metadata = await _render_ppt_resource_file(db, state, resource_id)
+    preview_metadata = _render_ppt_pdf_preview(resource_id, path, file_format)
+    render_metadata.update(preview_metadata)
+    record_step(
+        db,
+        state["run"],
+        step_name="render_ppt_pdf_preview",
+        step_order=6,
+        status="SUCCEEDED" if preview_metadata.get("preview_available") else "FAILED",
+        output_summary={
+            "resource_id": resource_id,
+            "preview_format": preview_metadata.get("preview_format"),
+            "preview_available": bool(preview_metadata.get("preview_available")),
+            "fallback": not bool(preview_metadata.get("preview_available")),
+            "reason": preview_metadata.get("preview_error"),
+        },
+    )
     resource = StudentGeneratedResource(
         id=resource_id,
         student_id=state["student_id"],
@@ -1223,7 +1503,7 @@ async def _render_node(db: Session, state: PptResourceState) -> PptResourceState
         db,
         state["run"],
         step_name="persist_ppt_resource",
-        step_order=7,
+        step_order=8,
         output_summary={"resource_id": resource_id, "file_format": file_format, "renderer": render_metadata.get("renderer")},
     )
     return state

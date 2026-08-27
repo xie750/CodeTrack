@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Modal } from "antd";
 import { ChevronLeft, ChevronRight, Download, ExternalLink } from "lucide-react";
-import type { GeneratedResource } from "../api";
+import { api, type GeneratedResource } from "../api";
+import { authHeaders } from "../authSession";
 
 type GeneratedResourcePreviewModalProps = {
   resource: GeneratedResource | null;
@@ -38,6 +39,8 @@ export default function GeneratedResourcePreviewModal({
   onDownload
 }: GeneratedResourcePreviewModalProps) {
   const [activeItem, setActiveItem] = useState(0);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState("");
+  const [pdfPreviewStatus, setPdfPreviewStatus] = useState<"idle" | "loading" | "ready" | "failed">("idle");
   const navItems = useMemo(() => navItemsFor(resource), [resource]);
   const payload = resource?.render_payload;
   const presentonSlides = payload?.presenton_slides ?? [];
@@ -49,10 +52,46 @@ export default function GeneratedResourcePreviewModal({
   const segments = payload?.segments ?? [];
   const citationMap = new Map((resource?.citations ?? []).map((item) => [item.source_id, item]));
   const editUrl = typeof payload?.metadata?.presenton_edit_url === "string" ? payload.metadata.presenton_edit_url : "";
+  const shouldUsePdfPreview = resource?.resource_type === "PPT";
+  const showPdfPreview = Boolean(shouldUsePdfPreview) && pdfPreviewStatus !== "failed";
+  const showPdfPreviewUnavailable = Boolean(shouldUsePdfPreview) && pdfPreviewStatus === "failed";
 
   useEffect(() => {
     setActiveItem(0);
   }, [resource?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl = "";
+
+    if (!resource?.id || resource.resource_type !== "PPT") {
+      setPdfPreviewUrl("");
+      setPdfPreviewStatus("idle");
+      return undefined;
+    }
+
+    setPdfPreviewUrl("");
+    setPdfPreviewStatus("loading");
+    fetch(api.generatedResourcePreviewUrl(resource.id), { headers: authHeaders() })
+      .then((response) => {
+        if (!response.ok) throw new Error(`preview request failed: ${response.status}`);
+        return response.blob();
+      })
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setPdfPreviewUrl(objectUrl);
+        setPdfPreviewStatus("ready");
+      })
+      .catch(() => {
+        if (!cancelled) setPdfPreviewStatus("failed");
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [resource?.id, resource?.resource_type]);
 
   const activeIndex = Math.min(activeItem, Math.max(navItems.length - 1, 0));
   const activePresentonSlide = presentonSlides[activeIndex];
@@ -95,12 +134,32 @@ export default function GeneratedResourcePreviewModal({
             ))}
           </aside>
           <main className="ai-resource-stage">
-            <div className="ai-ppt-viewer">
-              <button type="button" className="ai-ppt-arrow left" aria-label="上一页" onClick={() => moveSlide(-1)} disabled={activeIndex <= 0}>
-                <ChevronLeft size={20} />
-              </button>
+            <div className={`ai-ppt-viewer${shouldUsePdfPreview ? " pdf" : ""}`}>
+              {!shouldUsePdfPreview ? (
+                <button type="button" className="ai-ppt-arrow left" aria-label="上一页" onClick={() => moveSlide(-1)} disabled={activeIndex <= 0}>
+                  <ChevronLeft size={20} />
+                </button>
+              ) : null}
               <div className="ai-ppt-canvas-shell">
-                {activePresentonSlide ? (
+                {showPdfPreview ? (
+                  <section className="ai-ppt-pdf-preview">
+                    {pdfPreviewStatus === "ready" && pdfPreviewUrl ? (
+                      <iframe src={pdfPreviewUrl} title={`${resource.title} PDF 预览`} />
+                    ) : (
+                      <div>
+                        <strong>正在加载 PDF 预览</strong>
+                        <p>预览由最终 PPTX 文件转换生成。</p>
+                      </div>
+                    )}
+                  </section>
+                ) : showPdfPreviewUnavailable ? (
+                  <section className="ai-ppt-pdf-preview unavailable">
+                    <div>
+                      <strong>真实预览还没有生成</strong>
+                      <p>当前未检测到本机 PowerPoint 或 LibreOffice 转换结果。为了避免错版预览，这里不再展示旧版 HTML 幻灯片。</p>
+                    </div>
+                  </section>
+                ) : activePresentonSlide ? (
                   <section className={`ai-ppt-canvas presenton ${safeSlideTone(activeIndex)}`}>
                     <div className="ai-ppt-corner top" />
                     <div className="ai-ppt-corner bottom" />
@@ -206,12 +265,14 @@ export default function GeneratedResourcePreviewModal({
                   </section>
                 ) : null}
               </div>
-              <button type="button" className="ai-ppt-arrow right" aria-label="下一页" onClick={() => moveSlide(1)} disabled={activeIndex >= navItems.length - 1}>
-                <ChevronRight size={20} />
-              </button>
+              {!shouldUsePdfPreview ? (
+                <button type="button" className="ai-ppt-arrow right" aria-label="下一页" onClick={() => moveSlide(1)} disabled={activeIndex >= navItems.length - 1}>
+                  <ChevronRight size={20} />
+                </button>
+              ) : null}
             </div>
             <section className="ai-resource-preview-meta">
-              <span>{activeIndex + 1}/{Math.max(navItems.length, 1)}</span>
+              <span>{shouldUsePdfPreview ? "PDF 预览" : `${activeIndex + 1}/${Math.max(navItems.length, 1)}`}</span>
               <span>AI 生成</span>
               <span>置信度 {Math.round(resource.confidence * 100)}%</span>
               {activeCitationIds.map((sourceId) => {

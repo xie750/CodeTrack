@@ -33,6 +33,7 @@ import {
 import { api, type GeneratedResource } from "../api";
 import { authHeaders } from "../authSession";
 import GeneratedResourcePreviewModal from "../components/GeneratedResourcePreviewModal";
+import { StudentInlineNotice, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
 
 type ResourceType = "官方文档" | "外部文章" | "视频教程" | "工具网站" | "知识卡片" | "AI 生成";
 type ResourceFolder = "全部收藏" | "课程资料" | "外部文章" | "视频教程" | "工具网站" | "知识卡片" | "已归档";
@@ -273,23 +274,29 @@ export default function StudentResourceCenter() {
   const [folderOverrides, setFolderOverrides] = useState<Record<string, ResourceFolder>>({});
   const [generatedResources, setGeneratedResources] = useState<GeneratedResource[]>([]);
   const [generatedError, setGeneratedError] = useState<string | null>(null);
+  const [generatedErrorDetail, setGeneratedErrorDetail] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [previewResource, setPreviewResource] = useState<GeneratedResource | null>(null);
   const [previewExternal, setPreviewExternal] = useState<ExternalResourceItem | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
+    setGeneratedError(null);
+    setGeneratedErrorDetail(null);
     api.listGeneratedResources()
       .then((result) => {
         if (alive) setGeneratedResources(Array.isArray(result.items) ? result.items : []);
       })
-      .catch(() => {
-        if (alive) setGeneratedError("AI 生成资源接口暂时不可用，当前先展示外部资源占位数据。");
+      .catch((err) => {
+        if (!alive) return;
+        setGeneratedError(studentErrorMessage(err, "AI 生成资源接口暂时不可用，当前先展示外部资源占位数据。"));
+        setGeneratedErrorDetail(studentErrorDetail(err));
       });
     return () => {
       alive = false;
     };
-  }, []);
+  }, [reloadKey]);
 
   const generatedItems = useMemo(() => generatedResources.map(generatedToResource), [generatedResources]);
 
@@ -407,22 +414,28 @@ export default function StudentResourceCenter() {
   }
 
   async function downloadGeneratedResource(resource: GeneratedResource) {
-    const response = await fetch(api.generatedResourceDownloadUrl(resource.id), {
-      headers: authHeaders()
-    });
-    if (!response.ok) {
-      setGeneratedError("资源导出失败，请稍后再试。");
-      return;
+    try {
+      const response = await fetch(api.generatedResourceDownloadUrl(resource.id), {
+        headers: authHeaders()
+      });
+      if (!response.ok) {
+        setGeneratedError("资源导出失败，请稍后再试。");
+        setGeneratedErrorDetail(`HTTP ${response.status} ${response.statusText}`);
+        return;
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${resource.title}.${(resource.file_format || "PPTX").toLowerCase()}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setGeneratedError(studentErrorMessage(err, "资源导出失败，请稍后再试。"));
+      setGeneratedErrorDetail(studentErrorDetail(err));
     }
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${resource.title}.${(resource.file_format || "PPTX").toLowerCase()}`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
   }
 
   return (
@@ -522,7 +535,15 @@ export default function StudentResourceCenter() {
             </div>
           </section>
 
-          {generatedError ? <p className="student-resource-notice error">{generatedError}</p> : null}
+          {generatedError ? (
+            <StudentInlineNotice
+              kind="degraded"
+              title="AI 生成资源暂未完整同步"
+              description={generatedError}
+              detail={generatedErrorDetail}
+              actions={[{ label: "重试", variant: "primary", onClick: () => setReloadKey((value) => value + 1) }]}
+            />
+          ) : null}
           {actionNotice ? <p className="student-resource-notice">{actionNotice}</p> : null}
 
           <section className={`student-resource-grid ${viewMode === "list" ? "list" : ""}`} aria-label="资源列表">

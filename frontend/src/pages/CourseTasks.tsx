@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { api, apiCache, LearningContext, StudentTaskCard } from "../api";
 import type { TaskOpenTarget } from "../App";
+import { StudentInlineNotice, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
 
 type PageProps = {
   onOpenWorkspace: (target?: TaskOpenTarget | string) => void;
@@ -165,6 +166,8 @@ export default function CourseTasks({ onOpenWorkspace, courseId, embedded = fals
   const [loadingContext, setLoadingContext] = useState(!cachedContext);
   const [loadingTasks, setLoadingTasks] = useState(!cachedTasks);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("ALL");
@@ -195,9 +198,10 @@ export default function CourseTasks({ onOpenWorkspace, courseId, embedded = fals
           if (selectedCourse) setSelectedTab(selectedCourse.course_name);
         }
       })
-      .catch(() => {
+      .catch((err) => {
         if (!alive) return;
-        setError("班级课程数据加载失败，当前显示为空状态。");
+        setError(studentErrorMessage(err, "班级课程数据加载失败，当前显示为空状态。"));
+        setErrorDetail(studentErrorDetail(err));
       })
       .finally(() => {
         if (alive) setLoadingContext(false);
@@ -205,7 +209,7 @@ export default function CourseTasks({ onOpenWorkspace, courseId, embedded = fals
     return () => {
       alive = false;
     };
-  }, [courseId]);
+  }, [courseId, reloadKey]);
 
   useEffect(() => {
     if (!courseId || !context) return;
@@ -221,16 +225,18 @@ export default function CourseTasks({ onOpenWorkspace, courseId, embedded = fals
     const cachedTaskData = apiCache.peekStudentTasks(selectedCourseId);
     setLoadingTasks(!cachedTaskData);
     setError(null);
+    setErrorDetail(null);
     setTasks(cachedTaskData ?? []);
     api
       .listStudentTasks(selectedCourseId)
       .then((data) => {
         if (alive) setTasks(data);
       })
-      .catch(() => {
+      .catch((err) => {
         if (!alive) return;
         setTasks([]);
-        setError("任务数据加载失败，请稍后刷新。");
+        setError(studentErrorMessage(err, "任务数据加载失败，请稍后刷新。"));
+        setErrorDetail(studentErrorDetail(err));
       })
       .finally(() => {
         if (alive) setLoadingTasks(false);
@@ -238,7 +244,7 @@ export default function CourseTasks({ onOpenWorkspace, courseId, embedded = fals
     return () => {
       alive = false;
     };
-  }, [context, selectedTab, courseId]);
+  }, [context, selectedTab, courseId, reloadKey]);
 
   const loading = loadingContext || loadingTasks;
   const courseTabs = useMemo(() => ["全部课程", ...(context?.courses.map((course) => course.course_name) ?? [])], [context]);
@@ -387,7 +393,15 @@ export default function CourseTasks({ onOpenWorkspace, courseId, embedded = fals
         ))}
       </section>
 
-      {error ? <p className="class-data-message">{error}</p> : null}
+      {error ? (
+        <StudentInlineNotice
+          kind="degraded"
+          title="课程任务暂未完整同步"
+          description={error}
+          detail={errorDetail}
+          actions={[{ label: "重试", variant: "primary", onClick: () => setReloadKey((value) => value + 1) }]}
+        />
+      ) : null}
 
       {loading ? (
         <CourseTaskLoading />

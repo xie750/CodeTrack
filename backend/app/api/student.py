@@ -42,12 +42,14 @@ from backend.app.services.question_workflow import (
     submit_question_answers,
 )
 from backend.app.services.student_resources import (
+    ensure_resource_preview,
     generate_learning_resource,
     generate_ppt_resource,
     get_generated_resource,
     list_saved_generated_resources,
     ppt_renderer_config_payload,
     resource_media_type,
+    resource_preview_path,
     save_generated_resource,
 )
 
@@ -608,6 +610,26 @@ def student_download_generated_resource(
         resource.file_path,
         filename=filename,
         media_type=resource_media_type(resource),
+    )
+
+
+@router.get("/resources/{resource_id}/preview")
+def student_preview_generated_resource(
+    resource_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    resource = get_generated_resource(db, student_id=user.id, resource_id=resource_id)
+    preview_path = resource_preview_path(resource) or ensure_resource_preview(resource)
+    if not preview_path:
+        raise ApiError(404, "RESOURCE_PREVIEW_NOT_READY", "资源预览暂未生成。")
+    db.add(resource)
+    db.commit()
+    return FileResponse(
+        preview_path,
+        filename=f"{resource.title}.pdf",
+        media_type="application/pdf",
     )
 
 
