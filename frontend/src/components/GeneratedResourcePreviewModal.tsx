@@ -119,21 +119,23 @@ export default function GeneratedResourcePreviewModal({
       onCancel={onClose}
       footer={null}
       centered
-      width={1180}
-      className="ai-resource-preview-modal"
+      width={shouldUsePdfPreview ? 1120 : 1180}
+      className={`ai-resource-preview-modal${shouldUsePdfPreview ? " ai-resource-preview-modal-pdf" : ""}`}
       title={resource ? `${resource.title} · 预览` : ""}
     >
       {resource ? (
-        <div className="ai-resource-preview">
-          <aside className="ai-resource-slide-nav" aria-label="资源目录">
-            {navItems.map((title, index) => (
-              <button type="button" key={`${resource.id}_${index}`} className={index === activeIndex ? "active" : ""} onClick={() => setActiveItem(index)}>
-                <span>{index + 1}</span>
-                <strong>{title}</strong>
-              </button>
-            ))}
-          </aside>
-          <main className="ai-resource-stage">
+        <div className={`ai-resource-preview${shouldUsePdfPreview ? " pdf-preview" : ""}`}>
+          {!shouldUsePdfPreview ? (
+            <aside className="ai-resource-slide-nav" aria-label="资源目录">
+              {navItems.map((title, index) => (
+                <button type="button" key={`${resource.id}_${index}`} className={index === activeIndex ? "active" : ""} onClick={() => setActiveItem(index)}>
+                  <span>{index + 1}</span>
+                  <strong>{title}</strong>
+                </button>
+              ))}
+            </aside>
+          ) : null}
+          <main className={`ai-resource-stage${shouldUsePdfPreview ? " pdf-stage" : ""}`}>
             <div className={`ai-ppt-viewer${shouldUsePdfPreview ? " pdf" : ""}`}>
               {!shouldUsePdfPreview ? (
                 <button type="button" className="ai-ppt-arrow left" aria-label="上一页" onClick={() => moveSlide(-1)} disabled={activeIndex <= 0}>
