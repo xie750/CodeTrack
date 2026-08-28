@@ -21,7 +21,7 @@ const globalPaths: Record<string, ExactView> = {
 
 const courseViews = new Set<ExactView>([
   'workspace', 'content', 'classes', 'invite', 'tasks', 'materials', 'graph',
-  'monitor', 'grading', 'analytics', 'reviews',
+  'monitor', 'grading', 'analytics', 'ai-assistant', 'reviews',
   'course-settings',
 ])
 

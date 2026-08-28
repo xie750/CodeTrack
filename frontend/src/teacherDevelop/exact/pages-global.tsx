@@ -248,7 +248,7 @@ export function ExactDashboard({ courseId, classId, courses, onCourse, onNavigat
           <div className="exact-dashboard-courses">{courses.filter((course) => course.status !== 'archived').slice(0, 6).map((course, index) => <article key={course.id}>
             <div className="exact-course-art"><img src={'/ui-assets/' + courseAssets[index % courseAssets.length]} alt="" /></div>
             <div className="dashboard-course-heading"><strong>{course.name}</strong><Tag color={courseStatusColors[course.status]}>{courseStatusLabels[course.status] || course.status}</Tag></div>
-            <small>{course.term} · {course.classes || 0} 个班级 · {course.students || 0} 名学生</small><Progress percent={course.progress || 0} strokeColor="#43b81a" size="small" />
+            <small>{course.term} · {course.classes || 0} 个班级 · {course.students || 0} 名学生</small><Progress percent={course.progress || 0} strokeColor="#1677ff" size="small" />
             <div><Button icon={<ArrowRight size={15} />} type="primary" size="small" onClick={() => { onCourse(course.id); onNavigate('workspace') }}>进入课程</Button><Button icon={<Settings2 size={15} />} type="text" size="small" onClick={() => { onCourse(course.id); onNavigate('course-settings') }}>管理课程</Button><Dropdown trigger={['click']} menu={dashboardCourseMenu(course)}><Button aria-label={`${course.name}更多操作`} icon={<MoreVertical size={16} />} type="text" size="small" /></Dropdown></div>
           </article>)}{!courses.some((course) => course.status !== 'archived') && <div className="exact-empty-courses"><BookOpen size={24} /><strong>还没有进行中的课程</strong><small>创建课程后会自动显示在这里</small></div>}</div>
         </div>
@@ -488,7 +488,7 @@ export function ExactCourses({ courses, onReload, onCourse, onNavigate }: Course
             <p>{course.description || '尚未填写课程简介'}</p>
             <div className="course-stats"><span><Users size={14} />{course.classes} 个班级</span><span><GraduationCap size={14} />{course.students} 名学生</span><span><ClipboardCheck size={14} />{course.task_count} 个任务</span></div>
             <div className="course-progress-label"><span>课程进度</span><b>{course.progress || 0}%</b></div>
-            <Progress percent={course.progress || 0} showInfo={false} size="small" strokeColor="#43b81a" />
+            <Progress percent={course.progress || 0} showInfo={false} size="small" strokeColor="#1677ff" />
             <div className="course-card-actions"><Button icon={<ArrowRight size={15} />} type="primary" size="small" onClick={(event) => { event.stopPropagation(); openCourse(course) }}>进入课程</Button><Button icon={<Settings2 size={15} />} size="small" onClick={(event) => { event.stopPropagation(); openCourse(course, 'course-settings') }}>管理课程</Button><Dropdown trigger={['click']} menu={courseMenu(course)}><Button type="text" size="small" aria-label={course.name + '更多操作'} icon={<MoreVertical size={16} />} onClick={(event) => event.stopPropagation()} /></Dropdown></div>
           </div>
         </article>)}

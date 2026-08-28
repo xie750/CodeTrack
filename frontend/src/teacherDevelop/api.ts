@@ -282,6 +282,160 @@ export interface ApiDiscussion {
   replies: ApiDiscussionReply[]
 }
 
+export interface ApiTeacherAiCitation {
+  id: string
+  label: string
+  kind: string
+  record_count: number
+}
+
+export interface ApiTeacherAiChatResponse {
+  id: string
+  role: 'assistant'
+  content: string
+  confidence: number
+  citations: ApiTeacherAiCitation[]
+  suggested_actions: string[]
+  data_gaps: string[]
+  model: {
+    provider: string
+    name: string
+    prompt_version: string
+    duration_ms: number | null
+    token_prompt: number | null
+    token_completion: number | null
+  }
+  context: {
+    scope: {
+      course_id: string
+      course_name: string
+      class_id: string | null
+      class_name: string | null
+    }
+    analytics_summary: {
+      students: number
+      assigned_tasks: number
+      average_score: number | null
+      risk_students: number
+      attention_students: number
+      pending_ai_reviews: number
+    }
+    sources: ApiTeacherAiCitation[]
+    generated_at: string
+  }
+  session?: ApiTeacherAiSession
+  user_message_id?: string
+  assistant_message_id?: string
+}
+
+export interface ApiTeacherAiHistoryMessage {
+  role: 'assistant' | 'teacher'
+  content: string
+}
+
+export interface ApiTeacherAiSession {
+  id: string
+  teacher_id: string
+  course_id: string
+  class_id: string | null
+  title: string
+  summary: string
+  status: string
+  message_count: number
+  created_at: string | null
+  updated_at: string | null
+  last_message_at: string | null
+}
+
+export interface ApiTeacherAiStoredMessage {
+  id: string
+  session_id: string
+  role: 'assistant' | 'teacher' | string
+  content: string
+  status: string
+  metadata: Partial<ApiTeacherAiChatResponse> & {
+    confidence?: number
+    citations?: ApiTeacherAiCitation[]
+    suggested_actions?: string[]
+    data_gaps?: string[]
+    model_provider?: string
+    model_name?: string
+    error?: { code: string; message: string; details: Record<string, unknown> }
+  }
+  created_at: string | null
+}
+
+export interface ApiTeacherAiSessionDetail {
+  session: ApiTeacherAiSession
+  messages: ApiTeacherAiStoredMessage[]
+}
+
+export type ApiTeacherAiStreamEvent =
+  | { event: 'session'; data: { session: ApiTeacherAiSession; user_message: ApiTeacherAiStoredMessage } }
+  | { event: 'assistant_start'; data: { session_id: string } }
+  | { event: 'delta'; data: { content: string } }
+  | { event: 'final'; data: ApiTeacherAiChatResponse & { session?: ApiTeacherAiSession; assistant_message_id?: string } }
+  | { event: 'error'; data: { code: string; message: string; details: Record<string, unknown> } }
+
+function parseTeacherSseFrame(frame: string): ApiTeacherAiStreamEvent | null {
+  const lines = frame.split(/\r?\n/)
+  const eventLine = lines.find((line) => line.startsWith('event:'))
+  const dataLines = lines.filter((line) => line.startsWith('data:'))
+  const event = eventLine?.slice('event:'.length).trim()
+  const dataText = dataLines.map((line) => line.slice('data:'.length).trimStart()).join('\n')
+  if (!event || !dataText) return null
+  return { event, data: JSON.parse(dataText) } as ApiTeacherAiStreamEvent
+}
+
+async function streamTeacherAiChat(
+  body: {
+    course_id: string
+    class_id: string | null
+    session_id?: string | null
+    message: string
+    history: ApiTeacherAiHistoryMessage[]
+  },
+  onEvent: (event: ApiTeacherAiStreamEvent) => void,
+) {
+  const response = await fetch(TEACHER_API_BASE + '/teacher/ai-assistant/chat/stream', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-User-Id': _currentUserId,
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (!response.ok || !response.body) {
+    const payload = await response.json().catch(() => ({}))
+    throw new ApiError(payload.detail || response.statusText || '真实模型请求失败', response.status)
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder('utf-8')
+  let buffer = ''
+  while (true) {
+    const { value, done } = await reader.read()
+    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done })
+    const frames = buffer.split(/\n\n/)
+    buffer = frames.pop() ?? ''
+    for (const frame of frames) {
+      const parsed = parseTeacherSseFrame(frame.trim())
+      if (parsed) onEvent(parsed)
+    }
+    if (done) break
+  }
+  const tail = parseTeacherSseFrame(buffer.trim())
+  if (tail) onEvent(tail)
+}
+
+function teacherAiSessionsUrl(courseId: string, classId?: string | null, query?: string) {
+  const params = new URLSearchParams({ course_id: courseId })
+  if (classId) params.set('class_id', classId)
+  if (query?.trim()) params.set('q', query.trim())
+  return '/teacher/ai-assistant/sessions?' + params.toString()
+}
+
 async function uploadMaterial(courseId: string, file: File, chapterLabel = '未分类', visibility = 'teacher') {
   const body = new FormData()
   body.append('course_id', courseId)
@@ -390,5 +544,16 @@ export const api = {
   reviews: () => request<ApiReview[]>('/teacher/ai-reviews'),
   reviewAction: (reviewId: string, body: unknown) => request<any>('/teacher/ai-reviews/' + reviewId + '/action', { method: 'POST', body: JSON.stringify(body) }),
   analytics: (courseId: string, classId: string) => request<any>('/teacher/analytics/overview?course_id=' + courseId + '&class_id=' + classId),
+  teacherAiChat: (body: { course_id: string; class_id: string | null; session_id?: string | null; message: string; history: ApiTeacherAiHistoryMessage[] }) =>
+    request<ApiTeacherAiChatResponse>('/teacher/ai-assistant/chat', { method: 'POST', body: JSON.stringify(body) }),
+  streamTeacherAiChat,
+  listTeacherAiSessions: (courseId: string, classId?: string | null, query?: string) =>
+    request<ApiTeacherAiSession[]>(teacherAiSessionsUrl(courseId, classId, query)),
+  createTeacherAiSession: (body: { course_id: string; class_id?: string | null; first_message?: string; title?: string }) =>
+    request<ApiTeacherAiSession>('/teacher/ai-assistant/sessions', { method: 'POST', body: JSON.stringify(body) }),
+  getTeacherAiSession: (sessionId: string) =>
+    request<ApiTeacherAiSessionDetail>('/teacher/ai-assistant/sessions/' + encodeURIComponent(sessionId)),
+  deleteTeacherAiSession: (sessionId: string) =>
+    request<{ id: string; deleted: boolean }>('/teacher/ai-assistant/sessions/' + encodeURIComponent(sessionId), { method: 'DELETE' }),
   markNotification: (notificationId: string) => request<any>('/teacher/notifications/' + notificationId, { method: 'PATCH', body: JSON.stringify({ read: true }) }),
 }
