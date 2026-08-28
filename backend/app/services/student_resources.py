@@ -85,10 +85,12 @@ class PptResourceState(TypedDict, total=False):
     sources: list[KnowledgeSource]
     citations: list[dict[str, Any]]
     slides: list[dict[str, Any]]
+    presenton_slides: list[dict[str, Any]]
     title: str
     summary: str
     confidence: float
     file_path: str
+    model_content_fallback_error: str
     resource: StudentGeneratedResource
     run: AgentRun
 
@@ -176,6 +178,71 @@ def _relevance(query: str, source: KnowledgeSource) -> float:
     return sum(1 for term in terms if term.lower() in content) / max(len(terms), 1)
 
 
+def _cleanup_topic(raw: str) -> str:
+    topic = re.sub(r"\s+", " ", raw).strip(" ：:，,。.；;、")
+    topic = re.sub(r"^(帮我|请|生成|整理|制作|做一个|做一份|输出|围绕|关于)+", "", topic, flags=re.IGNORECASE)
+    topic = topic.strip(" ：:，,。.；;、")
+    suffix_pattern = r"(相关|有关)?的?(PPTX?|pptx?|幻灯片|演示文稿|教学讲解|学习资源|复习资料|讲解|资料|资源)$"
+    while True:
+        cleaned = re.sub(suffix_pattern, "", topic, flags=re.IGNORECASE).strip(" ：:，,。.；;、")
+        cleaned = re.sub(r"(相关|有关)的?$", "", cleaned, flags=re.IGNORECASE).strip(" ：:，,。.；;、")
+        if cleaned == topic:
+            break
+        topic = cleaned
+    topic = re.sub(r"\s+", " ", topic).strip(" ：:，,。.；;、")
+    return topic[:40]
+
+
+def _extract_requested_topic(message: str) -> str | None:
+    text = message.strip()
+    patterns = [
+        r"(?:关于|围绕)(.+?)(?:的)?(?:PPT|ppt|幻灯片|演示文稿|讲解|资料|资源|$)",
+        r"(?:生成|制作|整理|做一份|做一个)(.+?)(?:相关|有关|的)?(?:PPT|ppt|幻灯片|演示文稿|资料|资源|$)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if not match:
+            continue
+        topic = _cleanup_topic(match.group(1))
+        if topic:
+            return topic
+
+    topic = _cleanup_topic(text)
+    if topic and len(topic) <= 24:
+        return topic
+    return None
+
+
+def _normalize_topic_text(text: str) -> str:
+    return "".join(re.findall(r"[A-Za-z0-9]+|[\u4e00-\u9fff]+", text.lower()))
+
+
+def _assert_slides_match_topic(title: str, summary: str, slides: list[dict[str, Any]], knowledge_point: str) -> None:
+    topic = _normalize_topic_text(knowledge_point)
+    if not topic or knowledge_point == "自主学习主题":
+        return
+    content = _normalize_topic_text(
+        " ".join(
+            [
+                title,
+                summary,
+                *[
+                    " ".join(
+                        [
+                            str(slide.get("title", "")),
+                            str(slide.get("subtitle", "")),
+                            " ".join(str(item) for item in slide.get("bullets", [])),
+                        ]
+                    )
+                    for slide in slides
+                ],
+            ]
+        )
+    )
+    if topic not in content:
+        raise ValueError(f"model slides do not match requested topic: {knowledge_point}")
+
+
 def _citation(source: KnowledgeSource) -> dict[str, Any]:
     return {
         "source_id": source.id,
@@ -211,10 +278,17 @@ def _load_sources(db: Session, course_id: str, message: str) -> list[KnowledgeSo
     )
     scored = [(source, _relevance(message, source)) for source in all_sources]
     matched = [source for source, score in sorted(scored, key=lambda item: item[1], reverse=True) if score > 0]
-    return (matched or all_sources)[:MAX_SOURCE_COUNT]
+    if matched:
+        return matched[:MAX_SOURCE_COUNT]
+    if _terms(message) or _extract_requested_topic(message):
+        return []
+    return all_sources[:MAX_SOURCE_COUNT]
 
 
 def _guess_knowledge_point(message: str, sources: list[KnowledgeSource]) -> str:
+    requested_topic = _extract_requested_topic(message)
+    if requested_topic:
+        return requested_topic
     candidates = ["队列", "栈与队列", "循环队列", "链表", "二叉树", "机器学习", "Python"]
     for item in candidates:
         if item in message:
@@ -226,57 +300,93 @@ def _guess_knowledge_point(message: str, sources: list[KnowledgeSource]) -> str:
     return "自主学习主题"
 
 
+def _profile_focus(profile: dict[str, Any] | None) -> dict[str, list[str]]:
+    if not isinstance(profile, dict):
+        return {"weak_points": [], "frequent_errors": [], "recommendations": []}
+    weak_points: list[str] = []
+    for item in profile.get("knowledge_states", []):
+        if not isinstance(item, dict):
+            continue
+        point = str(item.get("knowledge_point", "")).strip()
+        state = str(item.get("state", "")).upper()
+        mastery = item.get("mastery_score")
+        is_weak = state in {"WEAK", "AT_RISK", "NEEDS_REVIEW"} or (isinstance(mastery, (int, float)) and mastery < 0.7)
+        if point and is_weak:
+            weak_points.append(point)
+
+    frequent_errors = [
+        str(item.get("label") or item.get("error_type") or "").strip()
+        for item in profile.get("frequent_errors", [])
+        if isinstance(item, dict) and str(item.get("label") or item.get("error_type") or "").strip()
+    ]
+    recommendations = [
+        str(item.get("title") or item.get("suggested_action") or "").strip()
+        for item in profile.get("recommendations", [])
+        if isinstance(item, dict) and str(item.get("title") or item.get("suggested_action") or "").strip()
+    ]
+    return {
+        "weak_points": weak_points[:3],
+        "frequent_errors": frequent_errors[:3],
+        "recommendations": recommendations[:2],
+    }
+
+
 def _fallback_slides(
     *,
     message: str,
     course: Course,
     knowledge_point: str,
     sources: list[KnowledgeSource],
+    profile: dict[str, Any] | None = None,
 ) -> tuple[str, str, list[dict[str, Any]]]:
     title = f"{knowledge_point}讲解 PPT"
     source_ids = [source.id for source in sources[:3]]
-    source_summary = sources[0].summary if sources else f"围绕{knowledge_point}生成学习讲解。"
+    source_summary = sources[0].summary if sources else f"当前课程知识库未命中“{knowledge_point}”的直接引用，本页按用户请求生成通用学习框架。"
+    focus = _profile_focus(profile)
+    weak_text = "、".join(focus["weak_points"]) if focus["weak_points"] else "先按用户目标建立基础理解"
+    error_text = "、".join(focus["frequent_errors"]) if focus["frequent_errors"] else "概念混淆、步骤遗漏、缺少自测"
+    recommendation_text = "；".join(focus["recommendations"]) if focus["recommendations"] else f"完成后生成一组{knowledge_point}练习题做巩固"
     slides = [
         {
             "title": title,
             "subtitle": f"{course.name} · 自主学习资源",
-            "bullets": [f"学习目标：理解{knowledge_point}的核心概念", "资源类型：AI 生成演示文稿", "使用方式：预览后可加入资源中心"],
-            "speaker_notes": "开场说明本资源用于自主学习复习，不替代课堂讲义。",
+            "bullets": [f"用户请求：{message}", f"学习目标：围绕{knowledge_point}形成可讲解、可练习、可复习的内容", "使用方式：预览后可加入资源中心并继续生成练习"],
+            "speaker_notes": "开场先复述学生的实际请求，确认本资源服务于当前问题而不是固定模板。",
             "citation_ids": source_ids[:1],
             "layout": "cover",
         },
         {
-            "title": f"{knowledge_point}的核心概念",
-            "bullets": [source_summary, "关注数据进入、处理和离开的顺序", "把抽象概念和实际场景联系起来理解"],
-            "speaker_notes": "先用生活中的排队场景降低理解门槛，再过渡到专业术语。",
+            "title": f"{knowledge_point}的核心内容",
+            "bullets": [source_summary, f"先回答“{knowledge_point}是什么、解决什么问题、怎么使用”", "把概念、示例和最小可运行片段放在同一条学习线上"],
+            "speaker_notes": "如果知识库没有直接资料，讲解要明确这是按用户请求生成的通用学习内容，避免伪造课程引用。",
             "citation_ids": source_ids[:2],
             "layout": "content",
         },
         {
-            "title": "关键操作与状态变化",
-            "bullets": ["明确操作入口和出口", "跟踪关键指针或状态变量", "每一步都要维护结构不变式"],
-            "speaker_notes": "引导学生用表格或手动画图追踪状态变化。",
+            "title": "按用户目标拆成学习路径",
+            "bullets": [f"先梳理{knowledge_point}的基础规则和关键词", "再用 2 到 3 个小例子解释使用场景", "最后用练习题检查是否真的会迁移应用"],
+            "speaker_notes": "这一页把学生的一句话需求拆成可执行学习步骤，避免只生成泛泛介绍。",
             "citation_ids": source_ids[:2],
             "layout": "content",
         },
         {
-            "title": "常见错误与边界情况",
-            "bullets": ["忽略空结构或满结构", "更新顺序错误导致状态不一致", "只验证普通用例，没有覆盖边界输入"],
-            "speaker_notes": "强调边界测试是数据结构实现中最容易暴露问题的部分。",
+            "title": "结合学习画像的关注点",
+            "bullets": [f"薄弱点参考：{weak_text}", f"常见错因参考：{error_text}", f"讲解{knowledge_point}时优先补足这些理解断点"],
+            "speaker_notes": "画像只作为个性化适配依据，不把学生标签化；如果画像缺失，就按用户当前请求给出学习支架。",
             "citation_ids": source_ids[1:3] or source_ids[:1],
             "layout": "content",
         },
         {
-            "title": "课堂练习建议",
-            "bullets": ["先画出状态变化过程", "再写出关键操作伪过程", "最后用 3 到 5 个边界用例自测"],
-            "speaker_notes": "这页用于把讲解转成学生下一步行动。",
+            "title": "练习与自测设计",
+            "bullets": [f"围绕{knowledge_point}设计基础识记题、代码阅读题和小任务", "每个练习都标注考查维度：概念、应用、易错点", "练习后把不确定点回填到 AI 对话继续追问"],
+            "speaker_notes": "这一页用于把 PPT 从展示材料变成学习闭环的一部分。",
             "citation_ids": source_ids[:2],
             "layout": "content",
         },
         {
             "title": "学习总结",
-            "bullets": [f"{knowledge_point}要同时理解规则和实现细节", "遇到错误时优先检查边界状态", "建议保存本资源并继续生成配套练习"],
-            "speaker_notes": "收束重点，并引导学生加入资源中心后继续复习。",
+            "bullets": [f"本 PPT 应始终围绕用户请求：{message}", f"下一步建议：{recommendation_text}", "保存资源后可继续生成笔记、卡片或练习题"],
+            "speaker_notes": "收束重点，并引导学生把本次生成结果沉淀到资料库。",
             "citation_ids": source_ids[:1],
             "layout": "summary",
         },
@@ -327,17 +437,32 @@ async def _generate_model_slides(
     settings = get_settings()
     if not settings.model_api_key or not settings.model_name:
         return None
+    focus = _profile_focus(profile)
     payload = {
         "course": {"id": course.id, "name": course.name},
         "student_request": message,
+        "request_contract": {
+            "requested_topic": knowledge_point,
+            "priority": [
+                "必须优先满足 student_request 中的用户显式主题和目标。",
+                "course 只提供当前学习环境，不能覆盖或替换用户显式主题。",
+                "learner_profile 只用于个性化讲解顺序、薄弱点提醒和练习设计。",
+                "knowledge_sources 只在与 requested_topic 直接相关时引用；不相关时 citation_ids 返回空数组。",
+            ],
+            "profile_focus": focus,
+        },
         "knowledge_point": knowledge_point,
         "learner_profile": profile,
         "knowledge_sources": [_source_payload(source) for source in sources],
         "task": "生成一个可在浏览器预览并可导出为 PPTX 的完整中文教学演示文稿结构。",
         "requirements": [
+            f"整份 PPT 必须围绕“{knowledge_point}”展开，标题、摘要或首页要点必须能看出该主题。",
+            "首页要明确回应 student_request，而不是生成课程默认模板。",
+            "结合 learner_profile 中的薄弱知识点、常见错因和推荐项安排讲解重点；没有画像时说明按当前请求组织。",
             "不是大纲，每页必须有标题、要点和讲稿提示。",
             "每页要点适合直接渲染成幻灯片。",
-            "只能引用 knowledge_sources 中存在的 source_id。",
+            "只能引用 knowledge_sources 中存在且与本页内容直接相关的 source_id。",
+            "如果 knowledge_sources 为空或与主题不相关，所有 citation_ids 必须为空数组。",
             "不要生成虚构教材、论文或链接。",
         ],
         "output_schema": {
@@ -360,7 +485,9 @@ async def _generate_model_slides(
         base_url=settings.model_api_base_url,
         timeout=35,
     )
-    return _validate_model_slides(result.data, allowed)
+    title, summary, slides = _validate_model_slides(result.data, allowed)
+    _assert_slides_match_topic(title, summary, slides, knowledge_point)
+    return title, summary, slides
 
 
 def _add_text_box(slide, left, top, width, height, text: str, font_size, color, bold: bool = False):
@@ -1463,6 +1590,7 @@ async def _content_node(db: Session, course: Course, state: PptResourceState) ->
             course=course,
             knowledge_point=state["knowledge_point"],
             sources=sources,
+            profile=state.get("profile"),
         )
     title, summary, slides = model_result
     citations = [_citation(source) for source in sources]

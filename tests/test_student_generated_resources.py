@@ -1,5 +1,6 @@
 import pytest
 import sys
+from types import SimpleNamespace
 from fastapi.testclient import TestClient
 
 from backend.app.core.config import get_settings
@@ -54,6 +55,120 @@ def test_student_can_generate_save_and_download_ppt_resource(monkeypatch):
         assert downloaded.status_code == 200
         assert downloaded.headers["content-type"] == "application/vnd.openxmlformats-officedocument.presentationml.presentation"
         assert len(downloaded.content) > 1000
+
+
+def test_ppt_generation_prioritizes_explicit_student_topic_over_course_fallback(monkeypatch):
+    monkeypatch.setenv("CODETRACK_MODEL_API_KEY", "")
+    monkeypatch.setenv("CODETRACK_MODEL_NAME", "")
+    monkeypatch.setenv("CODETRACK_MODEL_GATEWAY_URL", "")
+    monkeypatch.setenv("CODETRACK_PPT_RENDERER", "local")
+    get_settings.cache_clear()
+
+    with TestClient(app) as client:
+        generated = client.post(
+            "/api/v1/student/resources/ppt/generate",
+            headers=STUDENT,
+            json={"course_id": "course_arch_001", "message": "生成Java基础语法相关的PPT"},
+        )
+
+    assert generated.status_code == 200
+    resource = generated.json()["data"]["resource"]
+    slide_text = " ".join(
+        [slide["title"] + " " + " ".join(slide.get("bullets", [])) for slide in resource["render_payload"]["slides"]]
+    )
+    assert resource["knowledge_point"] == "Java基础语法"
+    assert "Java基础语法" in resource["title"]
+    assert "Java基础语法" in slide_text
+    assert resource["citations"] == []
+
+
+def test_requested_topic_extraction_keeps_discipline_terms():
+    assert student_resources._extract_requested_topic("生成机器学习相关的PPT") == "机器学习"
+    assert student_resources._extract_requested_topic("帮我生成关于队列的讲解 PPT") == "队列"
+
+
+def test_model_ppt_generation_receives_student_request_contract(monkeypatch):
+    monkeypatch.setenv("CODETRACK_MODEL_API_KEY", "sk-test")
+    monkeypatch.setenv("CODETRACK_MODEL_NAME", "test-model")
+    monkeypatch.setenv("CODETRACK_MODEL_API_BASE_URL", "https://model.test/v1")
+    monkeypatch.setenv("CODETRACK_MODEL_GATEWAY_URL", "")
+    monkeypatch.setenv("CODETRACK_PPT_RENDERER", "local")
+    captured: dict[str, object] = {}
+
+    async def fake_chat_json(messages, **kwargs):
+        captured["messages"] = messages
+        captured["kwargs"] = kwargs
+        return SimpleNamespace(
+            data={
+                "title": "Java基础语法讲解 PPT",
+                "summary": "围绕 Java基础语法 生成面向学生的讲解材料。",
+                "slides": [
+                    {"title": "Java基础语法", "bullets": ["变量、类型与表达式"], "citation_ids": []},
+                    {"title": "语句结构", "bullets": ["条件、循环与方法调用"], "citation_ids": []},
+                    {"title": "易错点", "bullets": ["类型转换和作用域"], "citation_ids": []},
+                    {"title": "练习设计", "bullets": ["用小程序巩固 Java基础语法"], "citation_ids": []},
+                ],
+            }
+        )
+
+    monkeypatch.setattr(student_resources, "chat_json", fake_chat_json)
+    get_settings.cache_clear()
+
+    with TestClient(app) as client:
+        generated = client.post(
+            "/api/v1/student/resources/ppt/generate",
+            headers=STUDENT,
+            json={"course_id": "course_arch_001", "message": "生成Java基础语法相关的PPT"},
+        )
+
+    assert generated.status_code == 200
+    payload = student_resources._json_loads(captured["messages"][1]["content"], {})
+    assert payload["student_request"] == "生成Java基础语法相关的PPT"
+    assert payload["request_contract"]["requested_topic"] == "Java基础语法"
+    assert "用户显式主题" in payload["request_contract"]["priority"][0]
+    assert payload["knowledge_sources"] == []
+    resource = generated.json()["data"]["resource"]
+    assert resource["knowledge_point"] == "Java基础语法"
+    assert resource["citations"] == []
+
+
+def test_model_ppt_generation_rejects_off_topic_model_output(monkeypatch):
+    monkeypatch.setenv("CODETRACK_MODEL_API_KEY", "sk-test")
+    monkeypatch.setenv("CODETRACK_MODEL_NAME", "test-model")
+    monkeypatch.setenv("CODETRACK_MODEL_API_BASE_URL", "https://model.test/v1")
+    monkeypatch.setenv("CODETRACK_MODEL_GATEWAY_URL", "")
+    monkeypatch.setenv("CODETRACK_PPT_RENDERER", "local")
+
+    async def fake_chat_json(messages, **kwargs):
+        return SimpleNamespace(
+            data={
+                "title": "过拟合与正则化讲解 PPT",
+                "summary": "围绕机器学习中的过拟合与正则化生成。",
+                "slides": [
+                    {"title": "过拟合", "bullets": ["训练集和测试集表现差异"], "citation_ids": []},
+                    {"title": "正则化", "bullets": ["约束模型复杂度"], "citation_ids": []},
+                    {"title": "验证集", "bullets": ["用于调参"], "citation_ids": []},
+                    {"title": "总结", "bullets": ["避免过拟合"], "citation_ids": []},
+                ],
+            }
+        )
+
+    monkeypatch.setattr(student_resources, "chat_json", fake_chat_json)
+    get_settings.cache_clear()
+
+    with TestClient(app) as client:
+        generated = client.post(
+            "/api/v1/student/resources/ppt/generate",
+            headers=STUDENT,
+            json={"course_id": "course_arch_001", "message": "生成Java基础语法相关的PPT"},
+        )
+
+    assert generated.status_code == 200
+    resource = generated.json()["data"]["resource"]
+    assert resource["knowledge_point"] == "Java基础语法"
+    assert "Java基础语法" in resource["title"]
+    assert resource["render_payload"]["metadata"]["model_content_fallback"] is True
+    assert "model slides do not match requested topic" in resource["render_payload"]["metadata"]["model_content_fallback_error"]
 
 
 def test_ppt_generation_uses_presenton_when_configured(monkeypatch, tmp_path):
