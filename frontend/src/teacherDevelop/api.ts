@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_TEACHER_API_BASE || 'http://127.0.0.1:8001/api/v1'
+export const TEACHER_API_BASE = import.meta.env.VITE_TEACHER_API_BASE || '/api/v1'
 
 let _currentUserId = 'teacher-01'
 let _currentUserName = '王老师'
@@ -30,7 +30,7 @@ async function request<T>(
   options: RequestInit = {},
   userId?: string,
 ): Promise<T> {
-  const response = await fetch(API_BASE + path, {
+  const response = await fetch(TEACHER_API_BASE + path, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -288,7 +288,7 @@ async function uploadMaterial(courseId: string, file: File, chapterLabel = '未�
   body.append('chapter_label', chapterLabel)
   body.append('visibility', visibility)
   body.append('file', file)
-  const response = await fetch(API_BASE + '/teacher/materials/upload', {
+  const response = await fetch(TEACHER_API_BASE + '/teacher/materials/upload', {
     method: 'POST',
     headers: { 'X-User-Id': _currentUserId },
     body,
@@ -304,7 +304,7 @@ async function createTeacherGraphFromFiles(files: File[], fields: { title: strin
   body.append('title', fields.title)
   body.append('description', fields.description)
   body.append('target_classes', fields.target_classes)
-  const response = await fetch(API_BASE + '/teacher/knowledge-graphs/from-files', {
+  const response = await fetch(TEACHER_API_BASE + '/teacher/knowledge-graphs/from-files', {
     method: 'POST',
     headers: { 'X-User-Id': _currentUserId },
     body,

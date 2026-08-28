@@ -112,7 +112,7 @@ public:
 
 
 LINKED_LIST_DELETE_SPEC = ProgrammingSpec(
-    runner_profile="linked_list_delete_transform_v1",
+    runner_profile="legacy_linked_list_delete_v1",
     supported_languages=["CPP"],
     default_language="CPP",
     function_signature="deleteAt(values, position) -> values",

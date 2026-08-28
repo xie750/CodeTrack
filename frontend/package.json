@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0",
+    "dev": "node ../scripts/dev.mjs",
+    "dev:frontend": "node ../scripts/dev.mjs --frontend-only",
+    "dev:backend": "node ../scripts/dev.mjs --backend-only",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "evidence:screenshots": "node scripts/capture-evidence.mjs"

@@ -390,6 +390,10 @@ export type GeneratedResource = {
       ppt_master_request_path?: string | null;
       ppt_master_project_id?: string | null;
       ppt_master_export_path?: string | null;
+      ppt_master_implementation?: string | null;
+      ppt_master_official_converter_error?: string | null;
+      model_content_fallback?: boolean;
+      model_content_fallback_error?: string;
       preview_available?: boolean;
       preview_format?: string;
       preview_url?: string | null;
@@ -426,6 +430,7 @@ export type PptRendererConfig = {
   available: {
     presenton: boolean;
     ppt_master: boolean;
+    ppt_master_bridge?: boolean;
     local_pptx: boolean;
   };
   fallback: boolean;
@@ -819,6 +824,7 @@ function userFacingApiMessage(status: number, code?: string, message?: string) {
   if (code === "AUTH_LOGIN_REQUIRED" || code === "AUTH_LOGIN_FAILED") return message || "账号或密码不正确。";
   if (code === "AUTH_TOKEN_EXPIRED") return message || "登录状态已过期，请重新登录。";
   if (code?.startsWith("AUTH_") || status === 401) return message || "登录状态需要确认，请重新登录。";
+  if (code?.endsWith("_NOT_INSTALLED")) return message || "运行依赖尚未安装，请检查后端环境。";
   if (status === 403) return message || "当前账号没有访问该资源的权限。";
   if (status >= 500) return "后端服务暂时不可用，请稍后重试。";
   return message || "请求没有完成，请稍后重试。";

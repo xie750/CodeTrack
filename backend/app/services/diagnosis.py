@@ -84,7 +84,7 @@ def create_diagnosis_for_version(db: Session, version: SubmissionVersion) -> Dia
     existing = db.scalar(select(Diagnosis).where(Diagnosis.submission_version_id == version.id))
     if existing is not None:
         return existing
-    if version.execution is None or version.execution.status != "SUCCEEDED":
+    if version.execution is None or version.execution.status not in {"SUCCEEDED", "ANALYZING"}:
         return None
 
     failed_results = [result for result in version.execution.test_results if result.status == "FAILED"]

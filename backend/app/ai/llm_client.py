@@ -117,6 +117,28 @@ def openai_usage(body: dict[str, Any]) -> tuple[int | None, int | None]:
     )
 
 
+def _http_error_detail(response: httpx.Response) -> str:
+    base = f"HTTP {response.status_code}"
+    try:
+        payload = response.json()
+    except ValueError:
+        text = response.text.strip()
+        return f"{base}: {text[:500]}" if text else base
+
+    if not isinstance(payload, dict):
+        return base
+    error = payload.get("error")
+    if isinstance(error, dict):
+        code = error.get("code") or error.get("type")
+        message = error.get("message")
+        parts = [str(item) for item in (code, message) if item]
+        request_id = payload.get("request_id") or payload.get("id")
+        if request_id:
+            parts.append(f"request_id={request_id}")
+        return f"{base}: {' | '.join(parts)}" if parts else base
+    return f"{base}: {json.dumps(payload, ensure_ascii=False)[:500]}"
+
+
 async def _send_once(
     url: str,
     *,
@@ -133,7 +155,7 @@ async def _send_once(
         raise LLMHTTPError(
             "模型返回非 2xx",
             status_code=exc.response.status_code,
-            detail=str(exc),
+            detail=_http_error_detail(exc.response),
         ) from exc
     except httpx.HTTPError as exc:
         raise LLMHTTPError("模型请求传输失败", detail=str(exc)) from exc
