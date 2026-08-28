@@ -232,13 +232,13 @@ export function ExactWorkspace(props: CommonProps) {
     else materialCounts[0] += 1
   })
   const materialStats = [
-    { label: '课程资料', value: materialCounts[0], color: '#2fa817' },
-    { label: '实验资料', value: materialCounts[1], color: '#75c94f' },
-    { label: '拓展资料', value: materialCounts[2], color: '#a8d99a' },
-    { label: '其他资料', value: materialCounts[3], color: '#cbd1cc' },
+    { label: '课程资料', value: materialCounts[0], color: '#1677ff' },
+    { label: '实验资料', value: materialCounts[1], color: '#06b6d4' },
+    { label: '拓展资料', value: materialCounts[2], color: '#6366f1' },
+    { label: '其他资料', value: materialCounts[3], color: '#94a3b8' },
   ]
   const materialTotal = materialStats.reduce((sum, item) => sum + item.value, 0)
-  const materialChart = materialTotal ? materialStats : [{ label: '暂无资料', value: 1, color: '#e6ebe5' }]
+  const materialChart = materialTotal ? materialStats : [{ label: '暂无资料', value: 1, color: '#e2e8f0' }]
   const activeDiscussions = discussions.filter((item) => item.status === 'published')
   const historyDiscussions = discussions.filter((item) => item.status === 'ended')
   const draftDiscussions = discussions.filter((item) => item.status === 'draft')

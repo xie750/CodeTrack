@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -50,6 +50,45 @@ class CourseDraft(Base):
     teacher_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True)
     payload_json: Mapped[str] = mapped_column(Text, default="{}")
     saved_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+
+class TeacherAiSession(Base):
+    __tablename__ = "teacher_ai_sessions"
+    __table_args__ = (
+        Index("ix_teacher_ai_sessions_teacher_updated", "teacher_id", "updated_at"),
+        Index("ix_teacher_ai_sessions_teacher_course", "teacher_id", "course_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    teacher_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id", ondelete="CASCADE"), index=True)
+    class_id: Mapped[str | None] = mapped_column(ForeignKey("class_groups.id", ondelete="SET NULL"), index=True)
+    title: Mapped[str] = mapped_column(String(160))
+    summary: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(20), default="ACTIVE", index=True)
+    message_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+    last_message_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    messages: Mapped[list[TeacherAiMessage]] = relationship(back_populates="session", cascade="all, delete-orphan")
+
+
+class TeacherAiMessage(Base):
+    __tablename__ = "teacher_ai_messages"
+    __table_args__ = (Index("ix_teacher_ai_messages_session_created", "session_id", "created_at"),)
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    session_id: Mapped[str] = mapped_column(ForeignKey("teacher_ai_sessions.id", ondelete="CASCADE"), index=True)
+    teacher_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id", ondelete="CASCADE"), index=True)
+    role: Mapped[str] = mapped_column(String(20))
+    content: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20), default="SUCCEEDED")
+    metadata_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+    session: Mapped[TeacherAiSession] = relationship(back_populates="messages")
 
 
 class Course(Base):

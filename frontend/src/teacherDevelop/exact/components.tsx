@@ -25,6 +25,7 @@ export type ExactView =
   | 'monitor'
   | 'grading'
   | 'analytics'
+  | 'ai-assistant'
   | 'reviews'
   | 'discussion'
   | 'course-settings'
@@ -76,6 +77,7 @@ const courseItems: Array<[ExactView, string, ReactNode]> = [
   ['materials', '资料管理', <FileText size={17} />],
   ['graph', '课程知识图谱', <Network size={17} />],
   ['analytics', '学情分析', <LineChart size={17} />],
+  ['ai-assistant', 'AI 助教', <Bot size={17} />],
   ['discussion', '课堂讨论', <MessageSquareText size={17} />],
 ]
 
@@ -120,9 +122,6 @@ export function ExactShell(props: ShellProps) {
       {props.courseMode && <button className="exact-back-courses" onClick={() => props.onNavigate('courses')}>
         <ArrowLeft size={16} /><span>返回我的课程</span>
       </button>}
-      <button className="exact-ai-entry" onClick={() => props.onNavigate('reviews')}>
-        <span><Bot size={19} /></span><div><strong>AI 助教</strong><small>智能教学与备课辅助</small></div><ChevronDown size={14} />
-      </button>
     </aside>
     <div className={'exact-main view-' + props.view}>
       {props.children}

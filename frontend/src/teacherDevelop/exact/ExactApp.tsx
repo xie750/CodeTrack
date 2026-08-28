@@ -14,6 +14,7 @@ import { ExactTasksV2 } from './ExactTasksV2'
 import { ExactMaterialsV2 } from './ExactMaterialsV2'
 import { ExactGraphV2 } from './ExactGraphV2'
 import { ExactCourseContent } from './ExactCourseContent'
+import { ExactTeacherAiAssistant } from './ExactTeacherAiAssistant'
 import { matchTeacherRoute, teacherPath } from '../routes/routeConfig'
 import './exact.css'
 
@@ -21,7 +22,7 @@ const { Text } = Typography
 
 const courseOnlyViews: ExactView[] = [
   'workspace', 'content', 'classes', 'invite', 'tasks', 'materials', 'graph',
-  'monitor', 'grading', 'analytics', 'reviews', 'discussion', 'course-settings',
+  'monitor', 'grading', 'analytics', 'ai-assistant', 'reviews', 'discussion', 'course-settings',
 ]
 
 export default function ExactApp({ loggedIn, onLogin, onLogout }: { loggedIn: boolean; onLogin: (userId: string, name: string) => void; onLogout: () => void }) {
@@ -177,6 +178,7 @@ export default function ExactApp({ loggedIn, onLogin, onLogout }: { loggedIn: bo
     <Route path="courses/:courseId/monitor" element={<ExactMonitor courseId={courseId} classId={classId} onNavigate={navigate} notify={notify} />} />
     <Route path="courses/:courseId/grading" element={<ExactGrading courseId={courseId} classId={classId} onNavigate={navigate} notify={notify} />} />
     <Route path="courses/:courseId/analytics" element={analyticsPage} />
+    <Route path="courses/:courseId/ai-assistant" element={<ExactTeacherAiAssistant courseId={courseId} classId={classId} courses={bootstrap.courses} classes={classes} onNavigate={navigate} />} />
     <Route path="courses/:courseId/reviews" element={<ExactReviews courseId={courseId} classId={classId} onNavigate={navigate} notify={notify} />} />
     <Route path="courses/:courseId/course-settings" element={<ExactCourseSettings {...common} />} />
     <Route path="*" element={<Navigate to="/teacher/dashboard" replace />} />

@@ -57,6 +57,7 @@ from .material_ops import router as material_ops_router
 from .class_seed_patch import ensure_class_prototype_data, prototype_class_metrics
 from .chapter_content_seed import ensure_chapter_content_seed
 from .task_ai import router as task_ai_router
+from .teacher_ai import router as teacher_ai_router
 from .task_grade_seed import ensure_task_grade_fixture
 from .material_folder_ops import router as material_folder_router
 from .material_folder_seed import ensure_default_material_folders
@@ -149,6 +150,7 @@ app.include_router(uploads_router)
 app.include_router(class_ops_router)
 app.include_router(material_ops_router)
 app.include_router(task_ai_router)
+app.include_router(teacher_ai_router)
 app.include_router(material_folder_router)
 app.include_router(graph_ops_router)
 app.include_router(discussion_ops_router)
