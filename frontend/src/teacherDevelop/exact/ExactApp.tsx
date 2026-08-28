@@ -4,7 +4,7 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-
 import { useRef } from 'react'
 import { CheckCircle2, CircleAlert } from 'lucide-react'
 
-import { api, type ApiCourse, type BootstrapData } from '../api'
+import { api, TEACHER_API_BASE, type ApiCourse, type BootstrapData } from '../api'
 import { ExactShell, PageLoader, type ExactView } from './components'
 import { ExactCreateCourse, ExactCourses, ExactDashboard, ExactPortal } from './pages-global'
 import { ExactCourseSettings, ExactInvite, ExactWorkspace } from './pages-course'
@@ -136,7 +136,7 @@ export default function ExactApp({ loggedIn, onLogin, onLogout }: { loggedIn: bo
       <CircleAlert size={36} />
       <h2>无法连接教学后端</h2>
       <p>{error}</p>
-      <code>http://127.0.0.1:8001/api/v1/health</code>
+      <code>{TEACHER_API_BASE}/health</code>
       <Button type="primary" onClick={() => void load()}>重新连接</Button>
     </div>
   }

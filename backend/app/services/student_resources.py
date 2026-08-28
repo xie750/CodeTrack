@@ -11,6 +11,7 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.app.ai.errors import LLMError
 from backend.app.ai.llm_client import chat_json
 from backend.app.ai.run_recorder import finish_run, new_run_id, record_step, start_run
 from backend.app.ai.schemas import AgentRunContext
@@ -523,7 +524,7 @@ try {{
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=min(timeout_seconds, 15),
+            timeout=timeout_seconds,
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
@@ -674,13 +675,25 @@ def ppt_renderer_config_payload() -> dict[str, Any]:
     settings = get_settings()
     mode = _ppt_renderer_mode(settings)
     presenton_ready = presenton_configured(settings)
-    ppt_master_ready = ppt_master_configured(settings)
+    ppt_master_bridge_ready = ppt_master_configured(settings)
     ppt_master_home = Path(settings.ppt_master_home).resolve() if settings.ppt_master_home else None
     ppt_master_skill_dir = ppt_master_home / "skills" / "ppt-master" if ppt_master_home else None
+    ppt_master_official_ready = bool(
+        ppt_master_bridge_ready
+        and ppt_master_home
+        and ppt_master_home.exists()
+        and ppt_master_skill_dir
+        and (ppt_master_skill_dir / "scripts" / "svg_to_pptx.py").exists()
+    )
     if mode == "presenton":
         active = "presenton" if presenton_ready else "local_pptx"
     elif mode == "ppt_master":
-        active = "ppt_master" if ppt_master_ready else "local_pptx"
+        if ppt_master_official_ready:
+            active = "ppt_master"
+        elif ppt_master_bridge_ready:
+            active = "ppt_master_bridge"
+        else:
+            active = "local_pptx"
     elif mode == "local":
         active = "local_pptx"
     elif mode == "auto":
@@ -692,7 +705,8 @@ def ppt_renderer_config_payload() -> dict[str, Any]:
         "active": active,
         "available": {
             "presenton": presenton_ready,
-            "ppt_master": ppt_master_ready,
+            "ppt_master": ppt_master_official_ready,
+            "ppt_master_bridge": ppt_master_bridge_ready,
             "local_pptx": True,
         },
         "ppt_master": {
@@ -700,6 +714,9 @@ def ppt_renderer_config_payload() -> dict[str, Any]:
             "home_configured": bool(settings.ppt_master_home),
             "home_exists": bool(ppt_master_home and ppt_master_home.exists()),
             "skill_dir_exists": bool(ppt_master_skill_dir and ppt_master_skill_dir.exists()),
+            "official_converter_exists": bool(
+                ppt_master_skill_dir and (ppt_master_skill_dir / "scripts" / "svg_to_pptx.py").exists()
+            ),
         },
         "fallback": active == "local_pptx" and mode not in {"local", "auto"},
     }
@@ -1408,8 +1425,21 @@ async def _content_node(db: Session, course: Course, state: PptResourceState) ->
             profile=state.get("profile"),
             sources=sources,
         )
+    except LLMError as exc:
+        model_result = None
+        reason = exc.detail or str(exc)
+        state["model_content_fallback_error"] = reason
+        record_step(
+            db,
+            state["run"],
+            step_name="model_content_generation",
+            step_order=3,
+            status="FAILED",
+            output_summary={"fallback": True, "reason": reason[:240], "llm_error_code": exc.code},
+        )
     except Exception as exc:
         model_result = None
+        state["model_content_fallback_error"] = str(exc)
         record_step(
             db,
             state["run"],
@@ -1454,6 +1484,13 @@ async def _content_node(db: Session, course: Course, state: PptResourceState) ->
 async def _render_node(db: Session, state: PptResourceState) -> PptResourceState:
     resource_id = _new_id("res")
     path, file_format, render_metadata = await _render_ppt_resource_file(db, state, resource_id)
+    if state.get("model_content_fallback_error"):
+        render_metadata.update(
+            {
+                "model_content_fallback": True,
+                "model_content_fallback_error": state["model_content_fallback_error"],
+            }
+        )
     preview_metadata = _render_ppt_pdf_preview(resource_id, path, file_format)
     render_metadata.update(preview_metadata)
     record_step(

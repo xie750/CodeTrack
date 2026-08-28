@@ -23,6 +23,7 @@ import {
   X
 } from "lucide-react";
 import {
+  ApiRequestError,
   api,
   type GeneratedResource,
   type GeneratedResourceType,
@@ -108,13 +109,30 @@ function splitAnswer(content: string) {
     .filter(Boolean);
 }
 
-function errorMessage(error: unknown) {
-  const message = error instanceof Error ? error.message : "AI 助学导师暂时不可用，请稍后再试。";
-  if (message.includes("AI_MODEL_NOT_CONFIGURED")) {
+function modelRequestErrorMessage(code?: string, message?: string, details?: Record<string, unknown>) {
+  const detailText = typeof details?.llm_error_detail === "string" ? details.llm_error_detail : "";
+  if (code === "AI_MODEL_NOT_CONFIGURED") {
     return "AI 模型配置还不完整。请检查后端 .env 中的 CODETRACK_MODEL_API_KEY、CODETRACK_MODEL_NAME，以及可选的 CODETRACK_MODEL_API_BASE_URL。";
   }
+  if (code === "AI_MODEL_REQUEST_FAILED") {
+    if (detailText.includes("Arrearage")) {
+      return "AI 模型账号额度或计费状态异常，DashScope 返回 Arrearage。请检查阿里云百炼/模型服务是否欠费、额度耗尽或账号状态不可用。";
+    }
+    return message || "AI 模型请求失败，可能是密钥、模型名、接口地址、账号额度或网络连接异常。请检查后端日志后再试。";
+  }
+  return message || "AI 助学导师暂时不可用，请稍后再试。";
+}
+
+function errorMessage(error: unknown) {
+  if (error instanceof ApiRequestError) {
+    return modelRequestErrorMessage(error.code, error.message, error.details);
+  }
+  const message = error instanceof Error ? error.message : "AI 助学导师暂时不可用，请稍后再试。";
+  if (message.includes("AI_MODEL_NOT_CONFIGURED")) {
+    return modelRequestErrorMessage("AI_MODEL_NOT_CONFIGURED");
+  }
   if (message.includes("AI_MODEL_REQUEST_FAILED")) {
-    return "AI 模型请求失败，可能是密钥、模型名、接口地址或网络连接异常。请检查后端日志后再试。";
+    return modelRequestErrorMessage("AI_MODEL_REQUEST_FAILED");
   }
   return message;
 }
@@ -180,7 +198,27 @@ function resourceToTurn(id: string, resource: GeneratedResource): AiChatTurn {
   const modelName = generatedResourceModelName(resource);
   const presentonError = resource.render_payload.metadata?.presenton_error;
   const pptMasterError = resource.render_payload.metadata?.ppt_master_error;
+  const pptMasterOfficialConverterError = resource.render_payload.metadata?.ppt_master_official_converter_error;
   const rendererConfigError = resource.render_payload.metadata?.renderer_config_error;
+  const modelContentFallbackError = resource.render_payload.metadata?.model_content_fallback_error;
+  const previewError = resource.render_payload.metadata?.preview_error;
+  const notes = [
+    modelContentFallbackError
+      ? `模型内容生成未成功，已使用规则模板兜底。原因：${modelContentFallbackError}`
+      : null,
+    presentonError
+      ? `Presenton 暂未生成成功，已自动回退到本地 PPTX 渲染器。原因：${presentonError}`
+      : pptMasterError
+        ? `PPT Master 暂未生成成功，已自动回退到本地 PPTX 渲染器。原因：${pptMasterError}`
+        : pptMasterOfficialConverterError
+          ? `PPT Master 官方转换器暂不可用，桥接器已使用内置 PPTX 渲染完成。原因：${pptMasterOfficialConverterError}`
+          : rendererConfigError
+            ? `PPT 渲染器配置暂不可用，已自动回退到本地 PPTX 渲染器。原因：${rendererConfigError}`
+            : null,
+    previewError && !resource.preview_available
+      ? `PPTX 文件可下载，但 PDF 预览暂不可用。原因：${previewError}`
+      : null
+  ].filter(Boolean);
   return {
     id,
     role: "assistant",
@@ -191,13 +229,9 @@ function resourceToTurn(id: string, resource: GeneratedResource): AiChatTurn {
     suggestedActions: ["加入资源中心", "打开预览"],
     profileUsed: true,
     sourceUsed: Boolean(resource.citations.length),
-    safetyNote: presentonError
-      ? `Presenton 暂未生成成功，已自动回退到本地 PPTX 渲染器。原因：${presentonError}`
-      : pptMasterError
-        ? `PPT Master 暂未生成成功，已自动回退到本地 PPTX 渲染器。原因：${pptMasterError}`
-        : rendererConfigError
-          ? `PPT 渲染器配置暂不可用，已自动回退到本地 PPTX 渲染器。原因：${rendererConfigError}`
-          : "AI 生成资源已基于课程资料进行引用校验，建议结合课堂讲义复核关键概念。",
+    safetyNote: notes.length
+      ? notes.join(" ")
+      : "AI 生成资源已基于课程资料进行引用校验，建议结合课堂讲义复核关键概念。",
     modelName,
     resource
   };
@@ -205,7 +239,9 @@ function resourceToTurn(id: string, resource: GeneratedResource): AiChatTurn {
 
 function generatedResourceModelName(resource: GeneratedResource) {
   const renderer = resource.render_payload.metadata?.renderer;
+  const implementation = resource.render_payload.metadata?.ppt_master_implementation;
   if (renderer === "presenton") return "LangGraph + Presenton";
+  if (renderer === "ppt_master" && implementation === "codetrack_ppt_master_bridge_fallback") return "LangGraph + PPT Master Bridge";
   if (renderer === "ppt_master") return "LangGraph + PPT Master";
   if (renderer === "local_pptx") return "LangGraph + python-pptx";
   if (resource.resource_type === "PPT") return "LangGraph + PPT renderer";
@@ -586,7 +622,7 @@ export default function AiTutor() {
               turn.id === pendingId
                 ? {
                     ...turn,
-                    content: errorMessage(new Error(`${streamEvent.data.code}: ${streamEvent.data.message}`)),
+                    content: modelRequestErrorMessage(streamEvent.data.code, streamEvent.data.message, streamEvent.data.details),
                     loading: false,
                     error: true,
                     suggestedActions: ["检查配置", "稍后重试"]

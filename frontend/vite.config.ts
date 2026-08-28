@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import { fileURLToPath, URL } from "node:url";
 
 const backendTarget = process.env.VITE_BACKEND_TARGET ?? "http://127.0.0.1:8000";
+const teacherBackendTarget = process.env.VITE_TEACHER_BACKEND_TARGET ?? "http://127.0.0.1:8001";
 
 export default defineConfig({
   plugins: [react()],
@@ -18,6 +19,22 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      "/api/v1/health": {
+        target: teacherBackendTarget,
+        changeOrigin: true
+      },
+      "/api/v1/teacher": {
+        target: teacherBackendTarget,
+        changeOrigin: true
+      },
+      "/api/v1/material-files": {
+        target: teacherBackendTarget,
+        changeOrigin: true
+      },
+      "/api/v1/classes": {
+        target: teacherBackendTarget,
+        changeOrigin: true
+      },
       "/api": backendTarget,
       "/health": backendTarget,
       "/ready": backendTarget

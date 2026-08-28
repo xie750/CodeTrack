@@ -854,6 +854,13 @@ def build_ai_tutor_metadata_messages(payload: dict[str, Any], answer: str) -> li
     ]
 
 
+def _llm_error_details(exc: LLMError, run_id: str) -> dict[str, Any]:
+    details: dict[str, Any] = {"llm_error_code": exc.code, "agent_run_id": run_id}
+    if exc.detail:
+        details["llm_error_detail"] = exc.detail
+    return details
+
+
 async def generate_student_ai_reply(
     db: Session,
     *,
@@ -977,7 +984,7 @@ async def generate_student_ai_reply(
             502,
             "AI_MODEL_REQUEST_FAILED",
             "AI 模型请求失败，请稍后再试。",
-            details={"llm_error_code": exc.code, "agent_run_id": run.id},
+            details=_llm_error_details(exc, run.id),
         ) from exc
 
     result: dict[str, Any] = llm_result.data
@@ -1141,7 +1148,7 @@ async def stream_student_ai_reply(
             502,
             "AI_MODEL_REQUEST_FAILED",
             "AI 模型请求失败，请稍后再试。",
-            details={"llm_error_code": exc.code, "agent_run_id": run.id},
+            details=_llm_error_details(exc, run.id),
         ) from exc
     except ValueError as exc:
         finish_run(
