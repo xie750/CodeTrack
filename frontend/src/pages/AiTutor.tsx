@@ -371,14 +371,29 @@ function GeneratedResourceCard({
 }) {
   const metric = resourceMetric(resource);
   const presentonSlide = resource.render_payload.presenton_slides?.[0];
+  const isDocument = resource.resource_type === "DOCUMENT";
+  const documentHeadings = (resource.render_payload.sections ?? []).slice(0, 3).map((section) => section.heading);
   return (
     <div className="ai-resource-card-shell">
       <button type="button" className="ai-resource-card-main" onClick={onPreview}>
-        <span className={`ai-resource-thumb-preview${presentonSlide ? " presenton" : ""}`}>
+        <span className={`ai-resource-thumb-preview${presentonSlide ? " presenton" : ""}${isDocument ? " document" : ""}`}>
           <i />
-          {presentonSlide?.image_url ? <img src={presentonSlide.image_url} alt="" /> : null}
-          <strong>{resourcePreviewTitle(resource)}</strong>
-          <small>{resourcePreviewSubtitle(resource)} · {resource.file_format}</small>
+          {isDocument ? (
+            <span className="ai-resource-doc-thumb" aria-hidden="true">
+              <b>{resource.title}</b>
+              {documentHeadings.map((heading) => (
+                <em key={heading}>{heading}</em>
+              ))}
+              <span />
+              <span />
+            </span>
+          ) : (
+            <>
+              {presentonSlide?.image_url ? <img src={presentonSlide.image_url} alt="" /> : null}
+              <strong>{resourcePreviewTitle(resource)}</strong>
+              <small>{resourcePreviewSubtitle(resource)} · {resource.file_format}</small>
+            </>
+          )}
         </span>
         <span className="ai-resource-card-copy">
           <b>{resource.title}</b>

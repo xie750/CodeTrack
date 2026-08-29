@@ -88,6 +88,7 @@ def test_requested_topic_extraction_keeps_discipline_terms():
     assert student_resources._extract_requested_topic("生成机器学习相关的PPT") == "机器学习"
     assert student_resources._extract_requested_topic("帮我生成关于队列的讲解 PPT") == "队列"
     assert student_resources._extract_requested_topic("帮我把链表删除节点整理成适合复习的思维导图") == "链表删除节点"
+    assert student_resources._extract_requested_topic("生成队列的学习文档") == "队列"
 
 
 def test_model_ppt_generation_receives_student_request_contract(monkeypatch):
@@ -439,6 +440,16 @@ def test_student_can_generate_save_and_download_generic_resources(monkeypatch, r
         assert resource["status"] == "READY"
         assert resource["item_count"] >= 1
         assert resource["render_payload"][payload_key]
+        if resource_type == "DOCUMENT":
+            markdown = resource["render_payload"]["markdown"]
+            assert markdown.startswith("# ")
+            assert "## 用户需求拆解" in markdown
+            assert "## 必须掌握的规则" in markdown
+            assert "## 10 分钟自检任务" in markdown
+            assert "| 模块 | 必须掌握什么 | 判断自己会不会 |" in markdown
+            assert "## 引用来源" in markdown
+            assert resource["render_payload"]["metadata"]["render_kernel"] == "react-markdown"
+            assert resource["render_payload"]["metadata"]["document_style"] == "study-handout"
         assert resource["citations"]
         assert resource["download_available"] is True
         assert resource["saved_to_resource_center"] is False

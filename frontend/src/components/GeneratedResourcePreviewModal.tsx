@@ -3,6 +3,8 @@ import { Modal } from "antd";
 import { ChevronLeft, ChevronRight, Download, ExternalLink } from "lucide-react";
 import MindElixir, { type MindElixirData, type NodeObj } from "mind-elixir";
 import "mind-elixir/style.css";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { api, type GeneratedResource } from "../api";
 import { authHeaders } from "../authSession";
 
@@ -33,6 +35,28 @@ function navItemsFor(resource: GeneratedResource | null) {
 
 function safeSlideTone(index: number) {
   return ["blue", "mint", "amber", "indigo"][index % 4];
+}
+
+function documentMarkdownFor(resource: GeneratedResource) {
+  const payload = resource.render_payload;
+  if (typeof payload.markdown === "string" && payload.markdown.trim()) {
+    return payload.markdown;
+  }
+
+  const lines = [`# ${resource.title}`, ""];
+  for (const section of payload.sections ?? []) {
+    lines.push(`## ${section.heading}`, "");
+    for (const paragraph of section.paragraphs ?? []) {
+      if (paragraph.trim()) lines.push(paragraph.trim(), "");
+    }
+  }
+  if (resource.citations.length) {
+    lines.push("## 引用来源", "");
+    for (const citation of resource.citations.slice(0, 5)) {
+      lines.push(`- ${citation.title}：${citation.summary}`);
+    }
+  }
+  return lines.join("\n").trim() + "\n";
 }
 
 function mindMapNodeId(node: { id?: string; node_id?: string }) {
@@ -306,6 +330,17 @@ function MindElixirPreview({
   return <div className="ai-mindmap-kernel" ref={containerRef} aria-label={`${resource.title} 思维导图`} />;
 }
 
+function DocumentMarkdownPreview({ resource }: { resource: GeneratedResource }) {
+  const markdown = useMemo(() => documentMarkdownFor(resource), [resource]);
+  return (
+    <section className="ai-preview-document ai-preview-document-kernel">
+      <article className="ai-document-page">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdown}</ReactMarkdown>
+      </article>
+    </section>
+  );
+}
+
 export default function GeneratedResourcePreviewModal({
   resource,
   onClose,
@@ -328,6 +363,7 @@ export default function GeneratedResourcePreviewModal({
   const editUrl = typeof payload?.metadata?.presenton_edit_url === "string" ? payload.metadata.presenton_edit_url : "";
   const shouldUsePdfPreview = resource?.resource_type === "PPT";
   const shouldUseMindMapPreview = resource?.resource_type === "MIND_MAP";
+  const shouldUseDocumentPreview = resource?.resource_type === "DOCUMENT";
   const showPdfPreview = Boolean(shouldUsePdfPreview) && pdfPreviewStatus !== "failed";
   const showPdfPreviewUnavailable = Boolean(shouldUsePdfPreview) && pdfPreviewStatus === "failed";
 
@@ -382,7 +418,9 @@ export default function GeneratedResourcePreviewModal({
     nodes.find((node) => mindMapNodeId(node) === activeMindMapNodeId) ??
     (activeIndex > 0 ? mindMapBranches[Math.max(0, Math.min(activeIndex - 1, Math.max(mindMapBranches.length - 1, 0)))] : mindMapRoot) ??
     mindMapRoot;
+  const documentCitationIds = Array.from(new Set(sections.flatMap((section) => section.citation_ids ?? [])));
   const activeCitationIds =
+    shouldUseDocumentPreview ? documentCitationIds :
     activeSlide?.citation_ids ??
     activeSection?.citation_ids ??
     activeQuestion?.citation_ids ??
@@ -402,13 +440,13 @@ export default function GeneratedResourcePreviewModal({
       onCancel={onClose}
       footer={null}
       centered
-      width={shouldUsePdfPreview ? 1120 : 1180}
-      className={`ai-resource-preview-modal${shouldUsePdfPreview ? " ai-resource-preview-modal-pdf" : ""}${shouldUseMindMapPreview ? " ai-resource-preview-modal-mindmap" : ""}`}
+      width={shouldUsePdfPreview || shouldUseDocumentPreview ? 1120 : 1180}
+      className={`ai-resource-preview-modal${shouldUsePdfPreview ? " ai-resource-preview-modal-pdf" : ""}${shouldUseMindMapPreview ? " ai-resource-preview-modal-mindmap" : ""}${shouldUseDocumentPreview ? " ai-resource-preview-modal-document" : ""}`}
       title={resource ? `${resource.title} · 预览` : ""}
     >
       {resource ? (
-        <div className={`ai-resource-preview${shouldUsePdfPreview ? " pdf-preview" : ""}${shouldUseMindMapPreview ? " mindmap-preview" : ""}`}>
-          {!shouldUsePdfPreview && !shouldUseMindMapPreview ? (
+        <div className={`ai-resource-preview${shouldUsePdfPreview ? " pdf-preview" : ""}${shouldUseMindMapPreview ? " mindmap-preview" : ""}${shouldUseDocumentPreview ? " document-preview" : ""}`}>
+          {!shouldUsePdfPreview && !shouldUseMindMapPreview && !shouldUseDocumentPreview ? (
             <aside className="ai-resource-slide-nav" aria-label="资源目录">
               {navItems.map((title, index) => (
                 <button type="button" key={`${resource.id}_${index}`} className={index === activeIndex ? "active" : ""} onClick={() => setActiveItem(index)}>
@@ -418,9 +456,9 @@ export default function GeneratedResourcePreviewModal({
               ))}
             </aside>
           ) : null}
-          <main className={`ai-resource-stage${shouldUsePdfPreview ? " pdf-stage" : ""}${shouldUseMindMapPreview ? " mindmap-stage" : ""}`}>
-            <div className={`ai-ppt-viewer${shouldUsePdfPreview ? " pdf" : ""}${shouldUseMindMapPreview ? " mindmap" : ""}`}>
-              {!shouldUsePdfPreview && !shouldUseMindMapPreview ? (
+          <main className={`ai-resource-stage${shouldUsePdfPreview ? " pdf-stage" : ""}${shouldUseMindMapPreview ? " mindmap-stage" : ""}${shouldUseDocumentPreview ? " document-stage" : ""}`}>
+            <div className={`ai-ppt-viewer${shouldUsePdfPreview ? " pdf" : ""}${shouldUseMindMapPreview ? " mindmap" : ""}${shouldUseDocumentPreview ? " document" : ""}`}>
+              {!shouldUsePdfPreview && !shouldUseMindMapPreview && !shouldUseDocumentPreview ? (
                 <button type="button" className="ai-ppt-arrow left" aria-label="上一页" onClick={() => moveSlide(-1)} disabled={activeIndex <= 0}>
                   <ChevronLeft size={20} />
                 </button>
@@ -486,14 +524,8 @@ export default function GeneratedResourcePreviewModal({
                       </footer>
                     ) : null}
                   </section>
-                ) : activeSection ? (
-                  <section className="ai-preview-document">
-                    <small>{resource.knowledge_point || "自主学习资源"}</small>
-                    <h2>{activeSection.heading}</h2>
-                    {activeSection.paragraphs.map((paragraph, index) => (
-                      <p key={`${activeSection.heading}_${index}`}>{paragraph}</p>
-                    ))}
-                  </section>
+                ) : shouldUseDocumentPreview ? (
+                  <DocumentMarkdownPreview resource={resource} />
                 ) : nodes.length ? (
                   <section className="ai-preview-mindmap ai-preview-mindmap-kernel">
                     <MindElixirPreview
@@ -573,7 +605,7 @@ export default function GeneratedResourcePreviewModal({
                   </section>
                 ) : null}
               </div>
-              {!shouldUsePdfPreview && !shouldUseMindMapPreview ? (
+              {!shouldUsePdfPreview && !shouldUseMindMapPreview && !shouldUseDocumentPreview ? (
                 <button type="button" className="ai-ppt-arrow right" aria-label="下一页" onClick={() => moveSlide(1)} disabled={activeIndex >= navItems.length - 1}>
                   <ChevronRight size={20} />
                 </button>
@@ -581,7 +613,9 @@ export default function GeneratedResourcePreviewModal({
             </div>
             <section className="ai-resource-preview-meta">
               <span>
-                {shouldUseMindMapPreview
+                {shouldUseDocumentPreview
+                  ? `文档 · ${sections.length} 节`
+                  : shouldUseMindMapPreview
                   ? `思维导图 · ${nodes.length} 个节点`
                   : shouldUsePdfPreview
                     ? "PDF 预览"
