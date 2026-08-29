@@ -48,7 +48,7 @@ from build_database_enterprise_document import (
 OUTPUT_DIR = ROOT / "artifacts" / "deliverables"
 ASSET_DIR = ROOT / "artifacts" / "teacher-student-backend-assets"
 OUTPUT_PATH = OUTPUT_DIR / "CodeTrack教师端与学生端协同后端接入设计说明_企业版.docx"
-DB_PATH = ROOT / "codetrack.db"
+DB_PATH = ROOT / "teacher_backend" / "codetrack.db"
 
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 ASSET_DIR.mkdir(parents=True, exist_ok=True)

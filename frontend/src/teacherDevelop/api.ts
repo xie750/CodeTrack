@@ -1,4 +1,7 @@
+import { authHeaders } from '../authSession'
+
 export const TEACHER_API_BASE = import.meta.env.VITE_TEACHER_API_BASE || '/api/v1'
+const UNIFIED_TASK_API_BASE = '/api/unified'
 
 let _currentUserId = 'teacher-01'
 let _currentUserName = '王老师'
@@ -19,8 +22,13 @@ export function getCurrentUserName() {
 export class ApiError extends Error {
   status: number
 
-  constructor(message: string, status: number) {
-    super(message)
+  constructor(message: unknown, status: number) {
+    const normalizedMessage = Array.isArray(message)
+      ? message.map((item: any) => typeof item === 'string' ? item : item?.msg || item?.message || JSON.stringify(item)).join('; ')
+      : message && typeof message === 'object'
+        ? (message as any).message || JSON.stringify(message)
+        : String(message || 'Request failed')
+    super(normalizedMessage)
     this.status = status
   }
 }
@@ -40,8 +48,152 @@ async function request<T>(
   })
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) {
-    throw new ApiError(payload.detail || '璇锋眰澶辫触', response.status)
+    throw new ApiError(payload.error?.message || payload.detail || '请求失败', response.status)
   }
+  return payload.data as T
+}
+
+const unifiedCourseIds: Record<string, string> = {
+  'course-ds': 'course_ds_001',
+}
+
+const unifiedClassIds: Record<string, string> = {
+  'class-se1': 'class_se_001',
+}
+
+const legacyClassIds: Record<string, string> = Object.fromEntries(
+  Object.entries(unifiedClassIds).map(([legacyId, unifiedId]) => [unifiedId, legacyId]),
+)
+
+function unifiedUserId(userId: string) {
+  if (userId === 'teacher-01') return 'user_teacher_001'
+  if (userId === 'teacher-02') return 'user_teacher_002'
+  return userId
+}
+
+function unifiedCourseId(courseId: string) {
+  return unifiedCourseIds[courseId] || courseId
+}
+
+function unifiedClassId(classId: string) {
+  return unifiedClassIds[classId] || classId
+}
+
+function legacyTaskStatus(contentStatus: string, rawStatus: string) {
+  if (contentStatus === 'PUBLISHED') return 'published'
+  if (contentStatus === 'CLOSED') return 'closed'
+  if (rawStatus === 'DRAFT') return 'draft'
+  return 'scheduled'
+}
+
+function unifiedTaskToLegacy(row: any): ApiTask {
+  const publication = row.publications?.find((item: any) => item.class_id === 'class_se_001') || row.publications?.[0]
+  const testCaseCount = Math.max(row.required_test_case_count || row.test_case_count || 0, 1)
+  return {
+    id: row.task_id,
+    course_id: 'course-ds',
+    class_id: legacyClassIds[publication?.class_id] || null,
+    title: row.title,
+    type: row.workspace_type === 'CODING' ? 'programming' : 'quiz',
+    chapter: row.learning_objectives?.[0] || '链表',
+    description: row.description || '',
+    starter_code: row.interface_spec || '',
+    status: legacyTaskStatus(row.content_status, row.raw_status),
+    difficulty: '进阶',
+    total_score: 100,
+    created_at: publication?.published_at || undefined,
+    publish_at: publication?.published_at || null,
+    due_at: publication?.deadline || '2026-12-30T23:59:00',
+    submitted: row.submitted_count || 0,
+    total: row.roster_total || 0,
+    completion: row.completion_rate ? row.completion_rate * 100 : 0,
+    test_cases: Array.from({ length: testCaseCount }, (_, index) => ({
+      id: `${row.task_id}-case-${index + 1}`,
+      name: `测试用例 ${index + 1}`,
+      hidden: index >= (row.public_test_case_count || 0),
+      weight: Math.round(100 / testCaseCount),
+    })),
+  }
+}
+
+function createUnifiedTaskPayload(body: any) {
+  const taskType = body.type || 'programming'
+  const isCoding = taskType === 'programming' || taskType === 'project'
+  const chapter = Array.isArray(body.chapter_label) ? body.chapter_label : [body.chapter_label || '链表']
+  const testCases = Array.isArray(body.test_cases) ? body.test_cases : []
+  const outputSummary = (value: unknown) => {
+    if (typeof value === 'string') return value
+    if (value == null) return ''
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return String(value)
+    }
+  }
+  return {
+    course_id: unifiedCourseId(body.course_id),
+    title: body.title || '未命名任务',
+    description: body.description || '请完成本次课程任务。',
+    workspace_type: isCoding ? 'CODING' : 'QUESTION_SET',
+    language: 'CPP',
+    interface_spec: body.starter_code || 'ListNode* deleteAt(ListNode* head, int position);',
+    learning_objectives: chapter,
+    capability_ids: ['cap_linked_list_boundary'],
+    test_cases: isCoding
+      ? (testCases.length ? testCases : [{ name: '基础用例', input_data: {}, expected_output: null }]).map((item: any) => ({
+          name: item.name || '测试用例',
+          visibility: item.hidden ? 'HIDDEN' : 'PUBLIC',
+          input_data: item.input_data || {},
+          expected_output: item.expected_output ?? null,
+          expected_output_summary: outputSummary(item.expected_output),
+          error_tag: 'UNKNOWN_OR_LOW_CONFIDENCE',
+        }))
+      : [],
+    questions: isCoding ? [] : [{
+      question_type: taskType === 'true_false' ? 'TRUE_FALSE' : taskType === 'multiple_choice' ? 'MULTIPLE_CHOICE' : 'SINGLE_CHOICE',
+      stem: body.description || body.title || '请完成本题。',
+      analysis: '',
+      knowledge_points: chapter,
+      difficulty: 'BASIC',
+      score: body.total_score || 100,
+      options: [
+        { label: 'A', content: '正确', is_correct: true },
+        { label: 'B', content: '错误', is_correct: false },
+      ],
+    }],
+  }
+}
+
+function unifiedCreatedTaskToLegacy(data: any, body: any): ApiTask {
+  return unifiedTaskToLegacy({
+    task_id: data.task_id,
+    title: data.title || body.title,
+    description: body.description || '',
+    workspace_type: data.workspace_type || (body.type === 'programming' ? 'CODING' : 'QUESTION_SET'),
+    raw_status: data.status || 'OPEN',
+    content_status: 'READY',
+    learning_objectives: Array.isArray(body.chapter_label) ? body.chapter_label : [body.chapter_label || '链表'],
+    publications: [],
+    test_case_count: Array.isArray(body.test_cases) ? body.test_cases.length : 0,
+  })
+}
+
+function isUnifiedTaskId(taskId: string) {
+  return taskId.includes('_')
+}
+
+async function unifiedTaskRequest<T>(path: string, options: RequestInit = {}) {
+  const tokenHeaders = authHeaders()
+  const response = await fetch(UNIFIED_TASK_API_BASE + path, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(Object.keys(tokenHeaders).length ? tokenHeaders : { 'X-Demo-User-Id': unifiedUserId(_currentUserId) }),
+      ...options.headers,
+    },
+  })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) throw new ApiError(payload.error?.message || payload.detail || '任务请求失败', response.status)
   return payload.data as T
 }
 
@@ -500,10 +652,46 @@ export const api = {
   createChapter: (courseId: string, body: unknown) => request<ApiChapter>('/teacher/courses/' + courseId + '/chapters', { method: 'POST', body: JSON.stringify(body) }),
   updateChapter: (chapterId: string, body: unknown) => request<ApiChapter>('/teacher/chapters/' + chapterId, { method: 'PATCH', body: JSON.stringify(body) }),
   createKnowledgePoint: (body: unknown) => request<any>('/teacher/knowledge-points', { method: 'POST', body: JSON.stringify(body) }),
-  tasks: (courseId: string) => request<ApiTask[]>('/teacher/tasks?course_id=' + courseId),
-  aiTaskDraft: (body: unknown) => request<any>('/teacher/tasks/ai-draft', { method: 'POST', body: JSON.stringify(body) }),
-  createTask: (body: unknown) => request<ApiTask>('/teacher/tasks', { method: 'POST', body: JSON.stringify(body) }),
-  publishTask: (taskId: string, body: unknown) => request<ApiTask>('/teacher/tasks/' + taskId + '/publish', { method: 'POST', body: JSON.stringify(body) }),
+  tasks: async (courseId: string) => {
+    if (!unifiedCourseIds[courseId]) return request<ApiTask[]>('/teacher/tasks?course_id=' + courseId)
+    const query = `?course_id=${encodeURIComponent(unifiedCourseId(courseId))}&class_id=${encodeURIComponent(unifiedClassId('class-se1'))}&page_size=100`
+    const payload = await unifiedTaskRequest<{ items: any[] }>(`/teacher/tasks${query}`)
+    return payload.items.map(unifiedTaskToLegacy)
+  },
+  aiTaskDraft: async (body: any) => {
+    if (!unifiedCourseIds[body?.course_id]) {
+      return request<any>('/teacher/tasks/ai-draft', { method: 'POST', body: JSON.stringify(body) })
+    }
+    const prompt = String(body?.prompt || '')
+    const isQuiz = /选择|判断|填空|题组|quiz/i.test(prompt)
+    return {
+      id: '',
+      title: isQuiz ? '链表边界条件诊断题组' : '单链表指定位置节点删除',
+      type: isQuiz ? 'single_choice' : 'programming',
+      chapter: ['链表', '链表删除'],
+      description: isQuiz
+        ? '围绕人工智能 1 班近期任务中的链表边界条件问题，完成本组诊断题。'
+        : '给定单链表和目标位置，删除指定位置节点并返回新的链表头结点，注意空链表、头结点和越界位置处理。',
+    }
+  },
+  createTask: async (body: any) => {
+    if (!unifiedCourseIds[body.course_id]) return request<ApiTask>('/teacher/tasks', { method: 'POST', body: JSON.stringify(body) })
+    const payload = await unifiedTaskRequest<any>('/teacher/tasks', { method: 'POST', body: JSON.stringify(createUnifiedTaskPayload(body)) })
+    return unifiedCreatedTaskToLegacy(payload, body)
+  },
+  publishTask: async (taskId: string, body: any) => {
+    if (!isUnifiedTaskId(taskId)) return request<ApiTask>('/teacher/tasks/' + taskId + '/publish', { method: 'POST', body: JSON.stringify(body) })
+    const payload = await unifiedTaskRequest<any>('/teacher/tasks/' + taskId + '/publish', {
+      method: 'POST',
+      body: JSON.stringify({
+        class_ids: [unifiedClassId(body.class_id || 'class-se1')],
+        assignment_mode: 'PRACTICE',
+        allow_hint_level_3: true,
+        deadline: body.due_at || null,
+      }),
+    })
+    return payload
+  },
   trashMaterial: (materialId: string) => request<ApiMaterial>('/teacher/materials/' + materialId, { method: 'DELETE' }),
   restoreMaterial: (materialId: string) => request<ApiMaterial>('/teacher/materials/' + materialId + '/restore', { method: 'POST' }),
   trashMaterials: (courseId: string) => request<ApiMaterial[]>('/teacher/materials/trash?course_id=' + courseId),
@@ -536,11 +724,21 @@ export const api = {
   createDiscussion: (body: { course_id: string; class_id: string; title: string; content: string; publish: boolean }) => request<ApiDiscussion>('/teacher/discussions', { method: 'POST', body: JSON.stringify(body) }),
   publishDiscussion: (discussionId: string) => request<ApiDiscussion>('/teacher/discussions/' + discussionId + '/publish', { method: 'POST' }),
   endDiscussion: (discussionId: string) => request<ApiDiscussion>('/teacher/discussions/' + discussionId + '/end', { method: 'POST' }),
-  submissions: (taskId: string) => request<ApiSubmission[]>('/teacher/submissions?task_id=' + taskId),
-  submission: (submissionId: string) => request<ApiSubmission>('/teacher/submissions/' + submissionId),
-  saveGrade: (submissionId: string, body: unknown) => request<any>('/teacher/submissions/' + submissionId + '/grade', { method: 'PUT', body: JSON.stringify(body) }),
-  publishGrade: (submissionId: string) => request<any>('/teacher/submissions/' + submissionId + '/grade/publish', { method: 'POST' }),
-  feedback: (submissionId: string, body: unknown) => request<any>('/teacher/submissions/' + submissionId + '/feedback', { method: 'POST', body: JSON.stringify(body) }),
+  submissions: (taskId: string) => isUnifiedTaskId(taskId)
+    ? unifiedTaskRequest<ApiSubmission[]>('/teacher/submissions?task_id=' + encodeURIComponent(taskId))
+    : request<ApiSubmission[]>('/teacher/submissions?task_id=' + taskId),
+  submission: (submissionId: string) => isUnifiedTaskId(submissionId)
+    ? unifiedTaskRequest<ApiSubmission>('/teacher/submissions/' + encodeURIComponent(submissionId))
+    : request<ApiSubmission>('/teacher/submissions/' + submissionId),
+  saveGrade: (submissionId: string, body: unknown) => isUnifiedTaskId(submissionId)
+    ? unifiedTaskRequest<any>('/teacher/submissions/' + encodeURIComponent(submissionId) + '/grade', { method: 'PUT', body: JSON.stringify(body) })
+    : request<any>('/teacher/submissions/' + submissionId + '/grade', { method: 'PUT', body: JSON.stringify(body) }),
+  publishGrade: (submissionId: string) => isUnifiedTaskId(submissionId)
+    ? unifiedTaskRequest<any>('/teacher/submissions/' + encodeURIComponent(submissionId) + '/grade/publish', { method: 'POST' })
+    : request<any>('/teacher/submissions/' + submissionId + '/grade/publish', { method: 'POST' }),
+  feedback: (submissionId: string, body: unknown) => isUnifiedTaskId(submissionId)
+    ? unifiedTaskRequest<any>('/teacher/submissions/' + encodeURIComponent(submissionId) + '/feedback', { method: 'POST', body: JSON.stringify(body) })
+    : request<any>('/teacher/submissions/' + submissionId + '/feedback', { method: 'POST', body: JSON.stringify(body) }),
   reviews: () => request<ApiReview[]>('/teacher/ai-reviews'),
   reviewAction: (reviewId: string, body: unknown) => request<any>('/teacher/ai-reviews/' + reviewId + '/action', { method: 'POST', body: JSON.stringify(body) }),
   analytics: (courseId: string, classId: string) => request<any>('/teacher/analytics/overview?course_id=' + courseId + '&class_id=' + classId),

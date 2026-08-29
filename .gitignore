@@ -1,12 +1,21 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
-.codex-merge-*/
 
+# 本地 Codex 工作目录与验收截图
+.codex-merge-*/
+.codex-artifacts/
+tmp-*.png
+tmp-*.jpg
+tmp-*.jpeg
+
+# 本地数据库与运行日志
 *.db
+*.db-*
 *.db.bak-*
-backend-*.log
-frontend-vite-*.log
+*.sqlite
+*.sqlite3
+*.log
 
 frontend/node_modules/
 frontend/dist/
@@ -18,8 +27,6 @@ dist/
 *.tsbuildinfo
 .pnpm-store/
 
-backend-uvicorn-generated-resources*.log
-frontend-vite-generated-resources*.log
 tools/ppt-master*/
 # 资料中心端到端校验脚本的截图产物
 frontend/.resource-check/

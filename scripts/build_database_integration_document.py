@@ -17,7 +17,7 @@ from docx.shared import Inches, Pt, RGBColor
 
 
 ROOT = Path(r"E:\teacher")
-DB_PATH = ROOT / "codetrack.db"
+DB_PATH = ROOT / "teacher_backend" / "codetrack.db"
 OUTPUT_DIR = ROOT / "artifacts" / "deliverables"
 OUTPUT_PATH = OUTPUT_DIR / "CodeTrack教师端数据库内容与前端接入说明.docx"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -532,7 +532,7 @@ def add_document(doc, connection, tables, counts, schemas, meta):
         ("前端数据层", "src/api.ts", "统一附加 X-User-Id，请求 /api/v1 接口"),
         ("服务层", "FastAPI", "鉴权、课程归属校验、业务校验、审计"),
         ("持久化层", "SQLAlchemy", "ORM 模型、事务提交、外键关系"),
-        ("数据库", "codetrack.db / SQLite", "保存课程、教学活动及教师前端状态"),
+        ("数据库", "teacher_backend/codetrack.db / SQLite", "保存课程、教学活动及教师前端状态"),
     ], [1300, 2400, 5660], font_size=9.2)
     doc.add_heading("1.2 持久化边界", level=2)
     add_table(doc, ["保存到数据库", "仍保留在浏览器"], [
@@ -644,7 +644,7 @@ def add_document(doc, connection, tables, counts, schemas, meta):
     add_bullet(doc, "应用启动还会执行 Base.metadata.create_all 和兼容种子，旧数据库可增量补齐缺失表与演示教师数据。")
     doc.add_heading("8.3 SQLite 备份", level=2)
     add_bullet(doc, "备份前停止后端写入，或使用 SQLite 在线备份 API，避免只复制主文件而遗漏 WAL 内容。")
-    add_bullet(doc, "最小备份对象：codetrack.db；如存在 codetrack.db-wal / codetrack.db-shm，应在一致性快照中一并处理。")
+    add_bullet(doc, "最小备份对象：teacher_backend/codetrack.db；如存在同目录下的 codetrack.db-wal / codetrack.db-shm，应在一致性快照中一并处理。")
     add_bullet(doc, "恢复前先保留当前数据库副本，再校验表数量、外键和核心行数。")
 
     doc.add_heading("9. 安全与隐私", level=1)

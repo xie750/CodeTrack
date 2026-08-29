@@ -23,6 +23,7 @@
 
 import json
 from datetime import datetime
+from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Query
@@ -35,6 +36,7 @@ from backend.app.core.database import get_db
 from backend.app.core.security import current_user, require_role
 from backend.app.models import (
     AdministrativeClass,
+    Capability,
     Course,
     Question,
     QuestionOption,
@@ -143,6 +145,18 @@ class QuestionPayload(BaseModel):
         return self
 
 
+class TestCasePayload(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    visibility: str = "PUBLIC"
+    input_data: Any = Field(default_factory=dict)
+    expected_output: Any = None
+    expected_output_summary: str = ""
+    hidden_failure_summary: str | None = None
+    error_tag: str = "UNKNOWN_OR_LOW_CONFIDENCE"
+    capability_id: str | None = None
+    required: bool = True
+
+
 class TeacherTaskCreateRequest(BaseModel):
     course_id: str
     title: str = Field(min_length=1, max_length=160)
@@ -153,6 +167,7 @@ class TeacherTaskCreateRequest(BaseModel):
     learning_objectives: list[str] = Field(default_factory=list)
     capability_ids: list[str] = Field(default_factory=list)
     questions: list[QuestionPayload] = Field(default_factory=list)
+    test_cases: list[TestCasePayload] = Field(default_factory=list)
 
 
 class TeacherTaskPublishRequest(BaseModel):
@@ -243,6 +258,37 @@ def _add_questions(db: Session, task_id: str, questions: list[QuestionPayload]) 
             )
 
 
+def _add_test_cases(db: Session, task: Task, test_cases: list[TestCasePayload]) -> None:
+    capability_ids = _json_list(task.capability_ids)
+    fallback_capability_id = capability_ids[0] if capability_ids else "cap_linked_list_boundary"
+    for case_index, case in enumerate(test_cases, start=1):
+        visibility = case.visibility.upper()
+        if visibility not in {"PUBLIC", "HIDDEN"}:
+            raise ApiError(422, "TEST_CASE_VISIBILITY_INVALID", "测试用例可见性只能是 PUBLIC 或 HIDDEN")
+        capability_id = case.capability_id or fallback_capability_id
+        if db.get(Capability, capability_id) is None:
+            raise ApiError(422, "CAPABILITY_NOT_FOUND", f"能力不存在：{capability_id}")
+        expected_summary = case.expected_output_summary.strip() or json.dumps(
+            case.expected_output, ensure_ascii=False
+        )
+        db.add(
+            TestCase(
+                id=_new_id("tc"),
+                task_id=task.id,
+                name=case.name.strip(),
+                visibility=visibility,
+                input_data=json.dumps(case.input_data, ensure_ascii=False),
+                expected_output=json.dumps(case.expected_output, ensure_ascii=False),
+                expected_output_summary=expected_summary,
+                hidden_failure_summary=case.hidden_failure_summary,
+                error_tag=case.error_tag,
+                capability_id=capability_id,
+                required=case.required,
+                sort_order=case_index,
+            )
+        )
+
+
 def _publish_task(
     db: Session,
     task: Task,
@@ -331,6 +377,8 @@ def create_teacher_task(
         raise ApiError(422, "TASK_TYPE_UNSUPPORTED", "当前只支持创建客观题任务和编程任务")
     if workspace_type == "QUESTION_SET" and not payload.questions:
         raise ApiError(422, "QUESTION_SET_EMPTY", "客观题任务至少需要一道题目")
+    if workspace_type == "CODING" and not payload.test_cases:
+        raise ApiError(422, "CODING_TEST_CASE_EMPTY", "编程任务至少需要一个测试用例")
 
     task = Task(
         id=_new_id("task"),
@@ -348,6 +396,8 @@ def create_teacher_task(
     db.flush()
     if workspace_type == "QUESTION_SET":
         _add_questions(db, task.id, payload.questions)
+    else:
+        _add_test_cases(db, task, payload.test_cases)
     db.commit()
     return ok(
         {

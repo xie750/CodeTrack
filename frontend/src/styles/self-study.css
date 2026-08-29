@@ -3729,6 +3729,12 @@ button.student-generated-thumb:hover {
   background: #eef3f8;
 }
 
+.ai-resource-preview.podcast-preview {
+  height: min(78vh, 760px);
+  grid-template-columns: minmax(0, 1fr);
+  background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
+}
+
 .ai-resource-presenton-preview {
   height: min(78vh, 760px);
   display: grid;
@@ -3849,6 +3855,12 @@ button.student-generated-thumb:hover {
   padding: 18px 22px;
 }
 
+.ai-resource-stage.podcast-stage {
+  min-height: 0;
+  height: 100%;
+  padding: 22px 28px 18px;
+}
+
 .ai-ppt-viewer {
   min-width: 0;
   min-height: 0;
@@ -3880,6 +3892,14 @@ button.student-generated-thumb:hover {
   align-self: stretch;
 }
 
+.ai-ppt-viewer.podcast {
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  grid-template-columns: minmax(0, 1fr);
+  align-self: stretch;
+}
+
 .ai-ppt-viewer.mindmap .ai-ppt-canvas-shell {
   min-height: 0;
   height: 100%;
@@ -3888,6 +3908,13 @@ button.student-generated-thumb:hover {
 }
 
 .ai-ppt-viewer.document .ai-ppt-canvas-shell {
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  place-items: stretch;
+}
+
+.ai-ppt-viewer.podcast .ai-ppt-canvas-shell {
   min-height: 0;
   height: 100%;
   overflow: hidden;
@@ -4715,17 +4742,253 @@ button.student-generated-thumb:hover {
   align-content: start;
 }
 
-.ai-preview-podcast {
+.ai-preview-podcast-player {
   display: grid;
-  align-content: center;
+  align-content: stretch;
+  gap: 18px;
+  overflow: hidden;
 }
 
-.ai-preview-podcast p {
-  max-width: 720px;
-  padding: 18px;
+.ai-preview-podcast-player header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.ai-preview-podcast-player header p {
+  max-width: 680px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: #52627a;
+  background: transparent;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.ai-podcast-runtime {
+  min-width: 120px;
+  padding: 13px 14px;
+  display: grid;
+  justify-items: start;
+  gap: 5px;
+  border: 1px solid #dbe8fb;
+  border-radius: 8px;
+  color: #1d5fc2;
+  background: #f4f8ff;
+}
+
+.ai-podcast-runtime strong {
+  color: #17243b;
+  font-size: 16px;
+  font-weight: 950;
+}
+
+.ai-podcast-runtime span {
+  color: #66748a;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.ai-podcast-player-bar {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #dbe7f5;
+  border-radius: 8px;
+  background: #f7fbff;
+}
+
+.ai-podcast-player-bar button {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 13px;
+  border: 1px solid #d5e3f6;
+  border-radius: 7px;
+  color: #2d405e;
+  background: #ffffff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.ai-podcast-player-bar button.primary {
+  border-color: #176cf5;
+  color: #ffffff;
+  background: #176cf5;
+}
+
+.ai-podcast-player-bar button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.ai-podcast-player-bar > span {
+  margin-left: auto;
+  color: #52627a;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.ai-podcast-body {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ai-podcast-segment-tabs {
+  min-width: 0;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 1px 8px;
+}
+
+.ai-podcast-segment-tabs button {
+  flex: 1 0 150px;
+  min-width: 0;
+  min-height: 52px;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 8px;
+  align-items: center;
+  padding: 9px 10px;
+  border: 1px solid #dce5f0;
+  border-radius: 8px;
+  color: #26364f;
+  background: rgba(255, 255, 255, 0.86);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ai-podcast-segment-tabs button.active {
+  border-color: #176cf5;
+  background: #eef6ff;
+  box-shadow: 0 0 0 3px rgba(23, 108, 245, 0.09);
+}
+
+.ai-podcast-segment-tabs button > span {
+  grid-row: 1 / span 2;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  color: #176cf5;
+  background: #eef6ff;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.ai-podcast-segment-tabs strong,
+.ai-podcast-segment-tabs small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-podcast-segment-tabs strong {
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.ai-podcast-segment-tabs small {
+  color: #66748a;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.ai-podcast-transcript-card {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 22px 24px;
+  display: grid;
+  align-content: start;
+  gap: 14px;
   border: 1px solid #e1e9f4;
   border-radius: 8px;
-  background: #fbfdff;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(31, 63, 105, 0.06);
+}
+
+.ai-podcast-transcript-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ai-podcast-transcript-heading > span {
+  flex: 0 0 auto;
+  color: #66748a;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.ai-podcast-transcript-card p {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: #26364f;
+  background: transparent;
+  font-size: 16px;
+  line-height: 1.9;
+  font-weight: 760;
+}
+
+.ai-podcast-transcript-card blockquote {
+  margin: 0;
+  padding: 12px 14px;
+  border-left: 4px solid #10a37f;
+  border-radius: 7px;
+  color: #275c50;
+  background: #edf9f5;
+  font-size: 13px;
+  line-height: 1.65;
+  font-weight: 850;
+}
+
+.ai-podcast-transcript-card footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.ai-podcast-transcript-card footer span,
+.ai-podcast-notice {
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 0 8px;
+  border: 1px solid #dbe7f5;
+  border-radius: 7px;
+  color: #40506a;
+  background: #f8fbff;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.ai-podcast-notice {
+  min-height: 34px;
+  margin: 0;
+  padding: 0 11px;
+  color: #147a42;
+  border-color: #bfe6cf;
+  background: #f1fbf5;
 }
 
 .ai-preview-presenton-slide {
@@ -4889,6 +5152,25 @@ button.student-generated-thumb:hover {
 
   .ai-empty-prompts {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ai-podcast-player-bar > span {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .ai-preview-podcast-player header,
+  .ai-podcast-transcript-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .ai-podcast-runtime {
+    width: 100%;
+  }
+
+  .ai-podcast-segment-tabs button {
+    flex-basis: 168px;
   }
 
   .ai-user-bubble {

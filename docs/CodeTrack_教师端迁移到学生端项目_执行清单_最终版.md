@@ -1671,7 +1671,7 @@ XinSaiChuangYi/Frame/frontend/src/components/MainLayout.tsx
 不得复制教师端：
 
 - `.env`
-- `codetrack.db`
+   - `teacher_backend/codetrack.db`
 - Alembic migrations
 - `init_db.py`
 - 用户、课程、任务、提交和成绩模型

@@ -24,6 +24,7 @@ import {
   MoreVertical,
   MoveRight,
   Network,
+  Podcast,
   Presentation,
   Search,
   Settings2,
@@ -181,6 +182,7 @@ function generatedResourceIcon(resource: GeneratedResource) {
   if (resource.resource_type === "PPT") return <Presentation size={24} />;
   if (resource.resource_type === "MIND_MAP") return <Waypoints size={24} />;
   if (resource.resource_type === "PRACTICE_SET") return <FileQuestion size={24} />;
+  if (resource.resource_type === "PODCAST_SCRIPT") return <Podcast size={24} />;
   if (resource.resource_type === "KNOWLEDGE_CARD") return <LibraryBig size={24} />;
   return <FileText size={24} />;
 }
@@ -189,6 +191,7 @@ function generatedResourceMetric(resource: GeneratedResource) {
   if (resource.resource_type === "PPT") return { value: resource.slide_count || resource.item_count, label: "页 PPT" };
   if (resource.resource_type === "MIND_MAP") return { value: resource.item_count, label: "个节点" };
   if (resource.resource_type === "PRACTICE_SET") return { value: resource.item_count, label: "道练习" };
+  if (resource.resource_type === "PODCAST_SCRIPT") return { value: resource.item_count, label: "段播客" };
   if (resource.resource_type === "KNOWLEDGE_CARD") return { value: resource.item_count, label: "张卡片" };
   return { value: resource.item_count || 1, label: "节内容" };
 }
@@ -590,6 +593,10 @@ export default function StudentResourceCenter() {
                     ) : item.resource.resource_type === "PRACTICE_SET" ? (
                       <button type="button" className="primary" onClick={() => openGeneratedPractice(item.resource)}>
                         <FileQuestion size={15} /> 开始练习
+                      </button>
+                    ) : item.resource.resource_type === "PODCAST_SCRIPT" ? (
+                      <button type="button" className="primary" onClick={() => setPreviewResource(item.resource)}>
+                        <Podcast size={15} /> 播放播客
                       </button>
                     ) : (
                       <button type="button" className="primary" onClick={() => setPreviewResource(item.resource)}>

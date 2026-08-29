@@ -1693,43 +1693,67 @@ def _fallback_podcast_script(
     course: Course,
     knowledge_point: str,
     sources: list[KnowledgeSource],
+    profile: dict[str, Any] | None = None,
 ) -> tuple[str, str, dict[str, Any], int]:
     source_ids = _common_source_ids(sources)
-    title = f"{knowledge_point}播客讲解稿"
+    focus = _profile_focus(profile)
+    weak_text = "、".join(focus["weak_points"]) if focus["weak_points"] else knowledge_point
+    error_text = "、".join(focus["frequent_errors"]) if focus["frequent_errors"] else "只记结论、不画过程、不检查边界"
+    recommendation_text = "；".join(focus["recommendations"]) if focus["recommendations"] else "听完后做一组同主题练习，检查自己能否迁移应用"
+    source_summary = sources[0].summary if sources else f"当前课程知识库未命中“{knowledge_point}”的直接资料，本播客按学习主题组织通用讲解。"
+    title = f"{knowledge_point}学习播客"
     segments = [
         {
             "speaker": "主持人",
-            "label": "开场",
-            "text": f"今天我们用一段短讲，梳理{course.name}里的{knowledge_point}。问题来自：{message}。",
+            "label": "学习目标",
+            "voice": "host",
+            "text": f"今天我们用一段短播客，围绕{course.name}里的{knowledge_point}建立清晰理解。你这次的目标是：{message}。听的时候先抓三件事：它解决什么问题，关键规则是什么，哪里最容易错。",
+            "takeaway": "先明确本次音频服务于一个具体学习目标。",
             "citation_ids": source_ids[:1],
         },
         {
             "speaker": "讲解者",
-            "label": "概念",
-            "text": f"先抓住主线：{knowledge_point}不是孤立术语，要和操作规则、状态变化、边界情况一起理解。",
+            "label": "核心概念",
+            "voice": "tutor",
+            "text": f"先抓住主线：{knowledge_point}不是孤立术语，它要和规则、状态变化、输入输出约定一起理解。课程资料里的关键提醒是：{source_summary} 所以学习时不要只背定义，要能说出每一步为什么成立。",
+            "takeaway": f"用“规则、状态、约定”三件事理解{knowledge_point}。",
             "citation_ids": source_ids[:2],
         },
         {
             "speaker": "主持人",
-            "label": "追问",
-            "text": "那学生最容易卡在哪里？",
+            "label": "画像追问",
+            "voice": "host",
+            "text": f"结合你的学习画像，我们要特别留意：{weak_text}。如果你听到这里觉得概念懂了，可以暂停一下，试着自己举一个最小例子，检查是不是能完整走一遍过程。",
+            "takeaway": "把音频讲解和个人薄弱点连接起来。",
             "citation_ids": [],
         },
         {
             "speaker": "讲解者",
             "label": "易错点",
-            "text": "常见卡点是只记住普通情况，没有检查空结构、满结构、最小规模和连续操作后的状态。",
+            "voice": "tutor",
+            "text": f"这一类内容常见卡点是：{error_text}。更稳的学习方法是先写出普通情况，再单独检查空输入、最小规模、连续操作和异常分支。只要某一步状态说不清，代码或选择题里就很容易选错。",
+            "takeaway": "用边界和连续过程检查自己是不是真的掌握。",
             "citation_ids": source_ids[1:3] or source_ids[:1],
         },
         {
-            "speaker": "主持人",
-            "label": "行动",
-            "text": "听完之后，建议先画一个小例子的状态变化，再生成配套练习检验自己。",
+            "speaker": "讲解者",
+            "label": "行动建议",
+            "voice": "tutor",
+            "text": f"听完后建议马上做一个小动作：用三句话复述{knowledge_point}，再完成一组配套练习。下一步可以这样安排：{recommendation_text}。如果练习结果不稳定，再回到这一段重新听易错提醒。",
+            "takeaway": "播客结束后要落到练习和复盘，不把“听过”当成“掌握”。",
             "citation_ids": source_ids[:1],
         },
     ]
-    summary = f"围绕“{message}”生成 {len(segments)} 段双人播客讲解稿。"
-    return title, summary, {"segments": segments}, len(segments)
+    summary = f"围绕“{message}”生成 {len(segments)} 段双人学习播客，可在资源中心播放并沉淀学习记录。"
+    return title, summary, {
+        "segments": segments,
+        "metadata": {
+            "playback_mode": "browser_speech_synthesis",
+            "estimated_duration_seconds": min(420, max(150, sum(len(segment["text"]) for segment in segments) // 3)),
+            "recommended_next_actions": ["播放播客", "生成配套练习", "保存学习笔记"],
+            "profile_focus": focus,
+        },
+    }, len(segments)
 
 
 def _fallback_resource_payload(
@@ -1739,6 +1763,7 @@ def _fallback_resource_payload(
     course: Course,
     knowledge_point: str,
     sources: list[KnowledgeSource],
+    profile: dict[str, Any] | None = None,
 ) -> tuple[str, str, dict[str, Any], int]:
     if resource_type == "DOCUMENT":
         return _fallback_document(message=message, course=course, knowledge_point=knowledge_point, sources=sources)
@@ -1749,7 +1774,7 @@ def _fallback_resource_payload(
     if resource_type == "KNOWLEDGE_CARD":
         return _fallback_knowledge_card(message=message, knowledge_point=knowledge_point, sources=sources)
     if resource_type == "PODCAST_SCRIPT":
-        return _fallback_podcast_script(message=message, course=course, knowledge_point=knowledge_point, sources=sources)
+        return _fallback_podcast_script(message=message, course=course, knowledge_point=knowledge_point, sources=sources, profile=profile)
     raise ApiError(400, "UNSUPPORTED_RESOURCE_TYPE", "暂不支持该资源类型。", details={"resource_type": resource_type})
 
 
@@ -2301,6 +2326,7 @@ def _generic_content_node(db: Session, course: Course, state: GenericResourceSta
         course=course,
         knowledge_point=state["knowledge_point"],
         sources=sources,
+        profile=state.get("profile"),
     )
     citations = [_citation(source) for source in sources]
     if state["resource_type"] == "DOCUMENT":
@@ -3252,6 +3278,124 @@ def submit_generated_practice(
             for question in questions
         ],
         "profile_signal": profile_signal,
+    }
+
+
+def record_generated_podcast_listened(
+    db: Session,
+    *,
+    user: User,
+    class_id: str,
+    resource_id: str,
+    completed_segment_count: int | None = None,
+) -> dict[str, Any]:
+    resource = get_generated_resource(db, student_id=user.id, resource_id=resource_id)
+    if resource.resource_type != "PODCAST_SCRIPT":
+        raise ApiError(400, "RESOURCE_NOT_PODCAST", "当前资源不是播客。")
+    if not resource.saved_to_resource_center:
+        raise ApiError(409, "RESOURCE_NOT_SAVED", "请先将播客加入资源中心，再播放。")
+
+    payload = _json_loads(resource.render_payload_json, {})
+    segments = payload.get("segments", []) if isinstance(payload, dict) else []
+    total_segments = len(segments) if isinstance(segments, list) else 0
+    listened_segments = max(0, min(completed_segment_count or total_segments, total_segments or completed_segment_count or 0))
+    completion_ratio = round(listened_segments / max(total_segments, 1), 2)
+    points = [resource.knowledge_point] if resource.knowledge_point else []
+    now = utc_now()
+
+    state = None
+    if resource.knowledge_point:
+        state = db.scalar(
+            select(LearnerKnowledgeState).where(
+                LearnerKnowledgeState.student_id == user.id,
+                LearnerKnowledgeState.course_id == resource.course_id,
+                LearnerKnowledgeState.knowledge_point == resource.knowledge_point,
+            )
+        )
+        evidence_text = f"听完资源中心播客《{resource.title}》。"
+        if state is None:
+            state = LearnerKnowledgeState(
+                student_id=user.id,
+                course_id=resource.course_id,
+                knowledge_point=resource.knowledge_point,
+                mastery_score=58 if completion_ratio >= 0.8 else 45,
+                state="NEEDS_REVIEW",
+                evidence_count=1,
+                last_evidence=evidence_text,
+                updated_at=now,
+            )
+            db.add(state)
+        else:
+            nudge = 4 if completion_ratio >= 0.8 else 2
+            state.mastery_score = round(min(100, state.mastery_score + nudge), 1)
+            state.state = _mastery_state(state.mastery_score)
+            state.evidence_count += 1
+            state.last_evidence = evidence_text
+            state.updated_at = now
+
+    db.add(
+        LearnerEvent(
+            id=_new_id("event"),
+            student_id=user.id,
+            course_id=resource.course_id,
+            class_id=class_id,
+            event_type="PODCAST_LISTENED",
+            knowledge_points=_json_dumps(points),
+            payload=_json_dumps(
+                {
+                    "resource_id": resource.id,
+                    "resource_title": resource.title,
+                    "completed_segment_count": listened_segments,
+                    "total_segment_count": total_segments,
+                    "completion_ratio": completion_ratio,
+                    "source": "resource_center_podcast",
+                    "profile_policy": "lightweight_listening_signal",
+                }
+            ),
+            created_at=now,
+        )
+    )
+
+    profile = db.scalar(
+        select(LearnerProfileSnapshot).where(
+            LearnerProfileSnapshot.student_id == user.id,
+            LearnerProfileSnapshot.course_id == resource.course_id,
+        )
+    )
+    if profile is None:
+        profile = LearnerProfileSnapshot(
+            id=f"profile_{user.id}_{resource.course_id}",
+            student_id=user.id,
+            course_id=resource.course_id,
+            class_id=class_id,
+            summary_text="已开始基于播客学习记录生成学习画像。",
+        )
+        db.add(profile)
+    profile.summary_text = f"已听完播客《{resource.title}》，系统记录为学习过程证据。"
+    profile.recommendation_text = f"建议围绕 {resource.knowledge_point or '当前主题'} 完成一组练习，用作掌握度验证。"
+    if state is not None:
+        knowledge_states = list(
+            db.scalars(
+                select(LearnerKnowledgeState).where(
+                    LearnerKnowledgeState.student_id == user.id,
+                    LearnerKnowledgeState.course_id == resource.course_id,
+                )
+            ).all()
+        )
+        profile.overall_progress = round(sum(item.mastery_score for item in knowledge_states) / max(len(knowledge_states), 1), 1)
+    profile.updated_at = now
+    db.commit()
+    return {
+        "resource_id": resource.id,
+        "event_type": "PODCAST_LISTENED",
+        "completion_ratio": completion_ratio,
+        "profile_signal": {
+            "overall_progress": profile.overall_progress,
+            "logic_error_rate": profile.logic_error_rate,
+            "recent_task_completion": profile.recent_task_completion,
+            "summary": profile.summary_text,
+            "recommendation": profile.recommendation_text,
+        },
     }
 
 

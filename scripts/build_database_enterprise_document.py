@@ -191,7 +191,7 @@ def build_architecture_diagram():
         ((410, 170, 690, 430), "前端数据层", "src/api.ts\n统一请求封装", "#F4F6F5"),
         ((770, 170, 1030, 430), "应用服务", "FastAPI\n鉴权与业务校验", "#EDF8EA"),
         ((1110, 170, 1370, 430), "持久化层", "SQLAlchemy\n事务与模型", "#F4F6F5"),
-        ((1410, 170, 1570, 430), "数据库", "SQLite\ncodetrack.db", "#EDF8EA"),
+        ((1410, 170, 1570, 430), "数据库", "SQLite\nteacher_backend/codetrack.db", "#EDF8EA"),
     ]
     for box, title, detail, fill in boxes:
         rounded_box(draw, box, title, detail, fill)
@@ -345,7 +345,7 @@ def add_enterprise_content(doc, connection, tables, counts, schemas, meta, bulle
         "teacher_backend/app/models.py、schemas.py、frontend_persistence.py、main.py。",
         "src/api.ts、src/exact/pages-global.tsx、pages-course.tsx、pages-flow.tsx。",
         "backend/alembic/versions/20260814_0006_frontend_persistence.py。",
-        "codetrack.db 实时 PRAGMA 表结构、约束与行数快照。",
+        "teacher_backend/codetrack.db 实时 PRAGMA 表结构、约束与行数快照。",
     ]:
         add_list_item(doc, item, bullet_id)
 
@@ -365,7 +365,7 @@ def add_enterprise_content(doc, connection, tables, counts, schemas, meta, bulle
     doc.add_heading("2.3 部署拓扑", level=2)
     add_para(doc, "当前为单机本地开发拓扑：浏览器与 Vite 前端连接本机 FastAPI，后端直接访问同一工作区内 SQLite 文件。该拓扑适合原型、演示和单机联调，不适合多实例高并发生产部署。")
     add_table(doc, ["环境", "前端", "后端", "数据库", "状态"], [
-        ("本地开发", "127.0.0.1:5173", "127.0.0.1:8001", "本地 codetrack.db", "已实现"),
+        ("本地开发", "127.0.0.1:5173", "127.0.0.1:8001", "本地 teacher_backend/codetrack.db", "已实现"),
         ("集成测试", "建议独立构建产物", "建议独立进程/容器", "独立测试库", "待标准化"),
         ("生产", "静态资源/CDN 或 Web 服务", "反向代理后的多进程服务", "建议 PostgreSQL 或受控 SQLite 单实例", "待设计"),
     ], [1400, 2100, 2300, 2300, 1260], font_size=8.5)
@@ -597,7 +597,7 @@ def add_enterprise_content(doc, connection, tables, counts, schemas, meta, bulle
     doc.add_heading("9.1 配置项", level=2)
     add_table(doc, ["配置", "当前默认", "用途", "生产要求"], [
         ("VITE_API_BASE", "/api/v1", "前端 API 前缀", "环境注入"),
-        ("CODETRACK_DATABASE_URL", "sqlite:///codetrack.db", "数据库连接", "秘密/配置平台管理"),
+        ("CODETRACK_DATABASE_URL", "sqlite:///./teacher_backend/codetrack.db", "数据库连接", "秘密/配置平台管理"),
         ("后端端口", "8001", "FastAPI 监听", "反向代理后仅内网开放"),
         ("前端端口", "5173", "Vite 开发服务", "生产不使用开发服务"),
         ("PBKDF2_ITERATIONS", "代码常量 120000", "密码计算成本", "配置化并评估升级"),

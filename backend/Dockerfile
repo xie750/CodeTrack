@@ -11,7 +11,7 @@ RUN pip install --no-cache-dir -r /app/backend/requirements.txt
 COPY backend /app/backend
 COPY sandbox /app/sandbox
 COPY scripts /app/scripts
-COPY alembic.ini /app/alembic.ini
+COPY backend/alembic.ini /app/alembic.ini
 
 CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 

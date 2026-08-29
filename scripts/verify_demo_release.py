@@ -78,13 +78,13 @@ def check_screenshot_evidence() -> tuple[bool, dict]:
 
 
 def check_clean_migration_seed() -> tuple[bool, dict]:
-    db_path = ROOT / "codetrack_release_check.db"
+    db_path = ROOT / "backend" / "codetrack_release_check.db"
     if db_path.exists():
         db_path.unlink()
     env = dict(**{k: v for k, v in dict().items()})
-    command_prefix = "$env:CODETRACK_DATABASE_URL='sqlite:///./codetrack_release_check.db'; "
+    command_prefix = "$env:CODETRACK_DATABASE_URL='sqlite:///./backend/codetrack_release_check.db'; "
     ok_migrate, migrate_output = run_command(
-        ["powershell", "-NoProfile", "-Command", command_prefix + "python -m alembic upgrade head"],
+        ["powershell", "-NoProfile", "-Command", command_prefix + "python -m alembic -c backend/alembic.ini upgrade head"],
         timeout=120,
     )
     ok_seed, seed_output = run_command(

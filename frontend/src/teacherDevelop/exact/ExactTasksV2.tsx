@@ -92,7 +92,7 @@ export function ExactTasksV2(props: Props) {
     window.setTimeout(() => setFocusedTaskId(''), 3200)
   }, [tasks])
 
-  const courseClasses = useMemo(() => props.classes.filter((item) => item.course_id === props.courseId), [props.classes, props.courseId])
+  const courseClasses = useMemo(() => props.classes.filter((item) => item.course_id === props.courseId && item.id === props.classId), [props.classes, props.courseId, props.classId])
   const typeOptions = useMemo(() => [
     { value: 'all', label: '任务类型　全部' },
     ...Array.from(new Set(tasks.map((item) => item.type).filter(Boolean))).map((value) => ({ value, label: taskTypeLabel(value) })),
@@ -139,19 +139,20 @@ export function ExactTasksV2(props: Props) {
     const values = form.getFieldsValue()
     const task = await api.createTask({
       course_id: props.courseId,
-      class_id: props.classId,
+      class_id: null,
       title: values.title || '单链表指定位置节点删除',
       type: values.type || 'programming',
-      chapter_label: values.chapter || '第3章 函数结构',
+      chapter_label: Array.isArray(values.chapter) ? values.chapter[0] || '第3章 函数结构' : values.chapter || '第3章 函数结构',
       description: values.description || '给定单链表和头结点，删除指定位置节点并返回链表头结点。',
       starter_code: values.starter_code || 'ListNode* removeAt(ListNode* head, int index) {\n  return head;\n}',
       difficulty: values.difficulty || '进阶',
+      total_score: 100,
       due_at: values.due_at || '2026-12-30T23:59:00',
       allow_hints: true,
       test_cases: [
-        { name: '基础用例', hidden: false, weight: 30 },
-        { name: '边界用例', hidden: false, weight: 30 },
-        { name: '隐藏用例', hidden: true, weight: 40 },
+        { name: '基础用例', input_data: 'values=[1,2,3], position=1', expected_output: '[1,3]', hidden: false, weight: 30 },
+        { name: '边界用例', input_data: 'values=[], position=0', expected_output: '[]', hidden: false, weight: 30 },
+        { name: '隐藏用例', input_data: 'values=[1,2,3], position=2', expected_output: '[1,2]', hidden: true, weight: 40 },
       ],
     })
     setDraftId(task.id)
@@ -216,10 +217,12 @@ export function ExactTasksV2(props: Props) {
         starter_code: task.starter_code,
         difficulty: task.difficulty,
         total_score: task.total_score,
-        due_at: task.due_at,
+        due_at: task.due_at || '2026-12-30T23:59:00',
         allow_hints: true,
         test_cases: task.test_cases.map((item) => ({
           name: item.name,
+          input_data: '',
+          expected_output: '',
           hidden: item.hidden,
           weight: item.weight,
         })),
@@ -253,7 +256,9 @@ export function ExactTasksV2(props: Props) {
         class_id: props.classId,
         prompt: aiPrompt,
       })
-      setDraftId(result.id)
+      // The legacy AI draft endpoint still writes to the old teacher database.
+      // Let the unified task create call persist the edited draft on publish.
+      setDraftId('')
       form.setFieldsValue({
         title: result.title,
         type: result.type,
@@ -375,7 +380,7 @@ export function ExactTasksV2(props: Props) {
           </>}
           {step === 2 && <>
             <Form.Item label="截止时间" name="due_at"><Input /></Form.Item>
-            <Form.Item label="下发班级"><Select mode="multiple" defaultValue={[props.classId]} options={props.classes.map((item) => ({ value: item.id, label: item.name }))} /></Form.Item>
+            <Form.Item label="下发班级"><Select mode="multiple" defaultValue={[props.classId]} options={courseClasses.map((item) => ({ value: item.id, label: item.name }))} /></Form.Item>
             <Form.Item label="提示开放级别"><Select defaultValue="3" options={[{ value: '3', label: '3 级提示（逐步引导）' }]} /></Form.Item>
             <Checkbox defaultChecked>允许学生在截止时间后查看题目与代码</Checkbox>
           </>}

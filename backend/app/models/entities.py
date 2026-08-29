@@ -608,6 +608,46 @@ class Submission(Base):
     versions: Mapped[list["SubmissionVersion"]] = relationship(order_by="SubmissionVersion.version_no")
 
 
+class Grade(Base):
+    """教师对一次学生提交的评分记录。"""
+
+    __tablename__ = "grades"
+    __table_args__ = (UniqueConstraint("submission_id", name="uq_grade_submission"),)
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    submission_id: Mapped[str] = mapped_column(ForeignKey("submissions.id"), nullable=False)
+    teacher_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    comment: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    dimensions_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="DRAFT")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    submission: Mapped[Submission] = relationship()
+    teacher: Mapped[User] = relationship()
+
+
+class TeacherFeedback(Base):
+    """教师发给学生的任务反馈。"""
+
+    __tablename__ = "teacher_feedback"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    submission_id: Mapped[str] = mapped_column(ForeignKey("submissions.id"), nullable=False)
+    teacher_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="DRAFT")
+    student_visible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    submission: Mapped[Submission] = relationship()
+    teacher: Mapped[User] = relationship()
+
+
 class StudentTaskProgress(Base):
     __tablename__ = "student_task_progress"
     __table_args__ = (

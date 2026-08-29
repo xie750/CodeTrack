@@ -1,6 +1,12 @@
 from functools import lru_cache
+from pathlib import Path
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+DEFAULT_DATABASE_URL = f"sqlite:///{(BACKEND_DIR / 'codetrack_dev.db').as_posix()}"
 
 
 class Settings(BaseSettings):
@@ -10,7 +16,7 @@ class Settings(BaseSettings):
         protected_namespaces=("settings_",),
     )
 
-    database_url: str = Field(default="sqlite:///./codetrack_dev.db")
+    database_url: str = Field(default=DEFAULT_DATABASE_URL)
     demo_user_id: str = Field(default="user_student_001")
     sandbox_timeout_seconds: int = Field(default=3)
     sandbox_service_url: str | None = Field(default=None)

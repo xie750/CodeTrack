@@ -91,7 +91,7 @@ def ensure_class_filter_columns() -> None:
         if "grade" not in columns:
             connection.execute(text("ALTER TABLE class_groups ADD COLUMN grade VARCHAR(40) NOT NULL DEFAULT '2024级'"))
         if "major" not in columns:
-            connection.execute(text("ALTER TABLE class_groups ADD COLUMN major VARCHAR(120) NOT NULL DEFAULT '软件工程'"))
+            connection.execute(text("ALTER TABLE class_groups ADD COLUMN major VARCHAR(120) NOT NULL DEFAULT '人工智能'"))
 
 
 def ensure_grade_dimension_column() -> None:

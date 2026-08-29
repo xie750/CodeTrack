@@ -28,7 +28,7 @@ interface Props {
 
 const classIcons = [Code2, Braces, Terminal, Code2, Database]
 const commonGrades = ['2023级', '2024级', '2025级', '2026级']
-const commonMajors = ['软件工程', '计算机科学与技术', '人工智能', '数据科学与大数据技术', '网络工程']
+const commonMajors = ['人工智能']
 
 function statusView(status: string) {
   if (status === 'active') return { text: '进行中', color: 'green', dot: 'green' }
@@ -268,7 +268,7 @@ export function ExactClassesV2(props: Props) {
     </Drawer>
 
     <Modal title="新建教学班" open={createOpen} onCancel={() => setCreateOpen(false)} onOk={createClass} confirmLoading={saving} okText="创建班级">
-      <Form form={form} layout="vertical" initialValues={{ mentor: '王老师', grade: '2024级', major: '软件工程', status: 'active' }}><Form.Item label="班级名称" name="name" rules={[{ required: true, message: '请输入班级名称' }]}><Input placeholder="例如：软件工程4班" /></Form.Item><Form.Item label="年级" name="grade" rules={[{ required: true, message: '请选择年级' }]}><Select placeholder="请选择年级" options={createGradeOptions} suffixIcon={<ChevronDown size={14} />} /></Form.Item><Form.Item label="专业方向" name="major" rules={[{ required: true, message: '请选择专业方向' }]}><Select showSearch optionFilterProp="label" placeholder="请选择专业方向" options={createMajorOptions} suffixIcon={<ChevronDown size={14} />} /></Form.Item><Form.Item label="班级状态" name="status"><Select options={[{ value: 'active', label: '进行中' }, { value: 'pending', label: '未开始' }, { value: 'closed', label: '已结束' }]} /></Form.Item><Form.Item label="上课安排" name="schedule"><Input placeholder="例如：周二 3-4 节" /></Form.Item><Form.Item label="任课教师" name="mentor"><Input /></Form.Item></Form>
+      <Form form={form} layout="vertical" initialValues={{ mentor: '王老师', grade: '2024级', major: '人工智能', status: 'active' }}><Form.Item label="班级名称" name="name" rules={[{ required: true, message: '请输入班级名称' }]}><Input placeholder="例如：人工智能4班" /></Form.Item><Form.Item label="年级" name="grade" rules={[{ required: true, message: '请选择年级' }]}><Select placeholder="请选择年级" options={createGradeOptions} suffixIcon={<ChevronDown size={14} />} /></Form.Item><Form.Item label="专业方向" name="major" rules={[{ required: true, message: '请选择专业方向' }]}><Select showSearch optionFilterProp="label" placeholder="请选择专业方向" options={createMajorOptions} suffixIcon={<ChevronDown size={14} />} /></Form.Item><Form.Item label="班级状态" name="status"><Select options={[{ value: 'active', label: '进行中' }, { value: 'pending', label: '未开始' }, { value: 'closed', label: '已结束' }]} /></Form.Item><Form.Item label="上课安排" name="schedule"><Input placeholder="例如：周二 3-4 节" /></Form.Item><Form.Item label="任课教师" name="mentor"><Input /></Form.Item></Form>
     </Modal>
   </div>
 }

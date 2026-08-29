@@ -41,7 +41,7 @@ class ClassCreate(BaseModel):
     course_id: str
     name: str = Field(min_length=2, max_length=120)
     grade: str = Field(default="2024级", min_length=2, max_length=40)
-    major: str = Field(default="软件工程", min_length=2, max_length=120)
+    major: str = Field(default="人工智能", min_length=2, max_length=120)
     schedule: str = ""
     mentor: str = ""
     status: str = Field(default="active", pattern="^(active|closed|pending)$")

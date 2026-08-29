@@ -35,6 +35,11 @@ export default defineConfig({
         target: teacherBackendTarget,
         changeOrigin: true
       },
+      "/api/unified": {
+        target: backendTarget,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/unified/, "/api/v1")
+      },
       "/api": backendTarget,
       "/health": backendTarget,
       "/ready": backendTarget

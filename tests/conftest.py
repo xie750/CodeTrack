@@ -1,7 +1,8 @@
 import os
 from pathlib import Path
 
-os.environ["CODETRACK_DATABASE_URL"] = "sqlite:///./codetrack_test.db"
+TEST_DB = Path(__file__).resolve().parents[1] / "backend" / "codetrack_test.db"
+os.environ["CODETRACK_DATABASE_URL"] = f"sqlite:///{TEST_DB.as_posix()}"
 os.environ["CODETRACK_SANDBOX_TIMEOUT_SECONDS"] = "3"
 os.environ["CODETRACK_SANDBOX_SERVICE_URL"] = ""
 os.environ["CODETRACK_RAG_STORAGE_BACKEND"] = "local"
@@ -23,6 +24,5 @@ if not os.environ.get("CODETRACK_CXX"):
 
 
 def pytest_sessionstart(session):
-    db_path = Path("codetrack_test.db")
-    if db_path.exists():
-        db_path.unlink()
+    if TEST_DB.exists():
+        TEST_DB.unlink()

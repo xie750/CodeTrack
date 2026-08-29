@@ -734,6 +734,56 @@ html.workspace-resizing-y * {
   white-space: nowrap;
 }
 
+.program-teacher-feedback {
+  margin-top: 14px;
+  padding: 18px;
+}
+
+.program-teacher-feedback header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.program-teacher-feedback header span {
+  color: #1a9b70;
+  font-size: 11px;
+}
+
+.teacher-grade-summary {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: baseline;
+  gap: 3px;
+}
+
+.teacher-grade-summary > strong {
+  color: #176cf5;
+  font-size: 26px;
+}
+
+.teacher-grade-summary > span {
+  color: #7a8ba5;
+  font-size: 12px;
+}
+
+.teacher-grade-summary p,
+.teacher-feedback-item {
+  grid-column: 1 / -1;
+  margin: 5px 0 0;
+  color: #536783;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.teacher-feedback-item {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #edf1f6;
+}
+
 .program-result th,
 .program-history th {
   color: #253149;
