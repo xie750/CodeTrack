@@ -4493,6 +4493,29 @@ button { cursor: pointer; }
   height: 38px;
 }
 
+.exact-user-menu {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 3px 0 6px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--teacher-text);
+  background: transparent;
+  cursor: pointer;
+}
+
+.exact-user-menu:hover,
+.exact-user-menu:focus-visible {
+  background: #f3f7fd;
+  outline: none;
+}
+
+.exact-user-menu .ant-typography {
+  margin: 0;
+}
+
 .exact-back-dashboard.ant-btn,
 .exact-shell .exact-back-dashboard.ant-btn {
   min-height: 38px;
@@ -5480,382 +5503,6 @@ button { cursor: pointer; }
   }
 }
 
-/* Teacher inner workspace final pass: keep the portal/login untouched. */
-.exact-shell .view-workspace .workspace-heading,
-.exact-shell .workspace-heading,
-.exact-shell .view-workspace .workspace-board > .workspace-panel {
-  border: 1px solid var(--teacher-border);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, .92);
-  box-shadow: var(--teacher-shadow);
-}
-
-.exact-shell .view-workspace .workspace-heading {
-  min-height: 104px;
-  margin-bottom: 14px;
-}
-
-.exact-shell .view-workspace .workspace-board > .workspace-panel {
-  padding: 16px;
-}
-
-.exact-shell .view-workspace .workspace-metrics button {
-  border-color: #dce5f1;
-  border-radius: 8px;
-  background: #f8fbff;
-}
-
-.exact-shell .view-workspace .workspace-metrics button > span {
-  color: var(--teacher-primary);
-  background: #eaf3ff;
-}
-
-.exact-main.view-ai-assistant {
-  min-height: 100vh;
-  overflow: auto;
-  background: var(--teacher-bg);
-}
-
-.exact-main.view-ai-assistant .teacher-ai-workspace-page {
-  width: min(100%, 1480px);
-  max-width: 1480px;
-  min-height: calc(100vh - var(--teacher-topbar-height));
-  margin: 0 auto;
-  padding: 18px 22px 30px;
-  color: var(--teacher-text);
-  background: transparent;
-}
-
-.exact-shell .teacher-ai-workspace-page::before,
-.exact-shell .teacher-ai-learning-workspace::before,
-.exact-shell .teacher-ai-learning-workspace::after,
-.exact-shell .teacher-ai-thread-outline::before,
-.exact-shell .teacher-ai-empty-visual span,
-.exact-shell .teacher-ai-empty-visual span::before,
-.exact-shell .teacher-ai-empty-visual span::after {
-  display: none;
-}
-
-.exact-shell .teacher-ai-workspace-header {
-  min-height: 104px;
-  margin: 0 0 14px;
-  padding: 16px 18px;
-  border: 1px solid var(--teacher-border);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, .92);
-  box-shadow: var(--teacher-shadow);
-}
-
-.exact-shell .teacher-ai-workspace-title {
-  gap: 12px;
-}
-
-.exact-shell .teacher-ai-workspace-title img {
-  width: 54px;
-  height: 54px;
-  border: 1px solid #d8f2ee;
-  border-radius: 8px;
-  background: #f0fbf9;
-  box-shadow: none;
-  filter: none;
-}
-
-.exact-shell .teacher-ai-workspace-title span {
-  color: var(--teacher-primary);
-  font-size: 12px;
-  letter-spacing: 0;
-  font-weight: 900;
-}
-
-.exact-shell .teacher-ai-workspace-title h1 {
-  margin: 2px 0 6px;
-  color: var(--teacher-heading);
-  font-size: 24px;
-  line-height: 1.25;
-  font-weight: 900;
-}
-
-.exact-shell .teacher-ai-workspace-title p {
-  color: var(--teacher-muted);
-  font-size: 13px;
-}
-
-.exact-shell .teacher-ai-toolbar,
-.exact-shell .teacher-ai-answer-actions,
-.exact-shell .teacher-ai-prompt-row,
-.exact-shell .teacher-ai-composer-surface > div {
-  gap: 8px;
-}
-
-.exact-shell .teacher-ai-history-entry,
-.exact-shell .teacher-ai-empty-prompts button,
-.exact-shell .teacher-ai-answer-actions button,
-.exact-shell .teacher-ai-prompt-row button,
-.exact-shell .teacher-ai-composer-surface button {
-  min-height: 36px;
-  border: 1px solid #dce5f1;
-  border-radius: 8px;
-  color: #40506a;
-  background: #ffffff;
-  box-shadow: none;
-  font-size: 12px;
-  font-weight: 850;
-}
-
-.exact-shell .teacher-ai-history-entry:hover,
-.exact-shell .teacher-ai-empty-prompts button:hover,
-.exact-shell .teacher-ai-answer-actions button:hover,
-.exact-shell .teacher-ai-prompt-row button:hover,
-.exact-shell .teacher-ai-composer-surface button:hover {
-  border-color: #aecaef;
-  color: var(--teacher-primary);
-  background: #f8fbff;
-}
-
-.exact-shell .teacher-ai-learning-workspace {
-  height: auto;
-  min-height: calc(100vh - 210px);
-  display: grid;
-  grid-template-columns: 76px minmax(0, 1fr);
-  grid-template-rows: auto auto;
-  align-items: start;
-  gap: 14px;
-  padding: 0;
-  background: transparent;
-}
-
-.exact-shell .teacher-ai-empty-chat .teacher-ai-learning-workspace {
-  grid-template-columns: 1fr;
-}
-
-.exact-shell .teacher-ai-empty-chat .teacher-ai-thread-outline {
-  display: none;
-}
-
-.exact-shell .teacher-ai-thread-outline {
-  position: sticky;
-  top: calc(var(--teacher-topbar-height) + 18px);
-  min-height: 0;
-  height: calc(100vh - var(--teacher-topbar-height) - 52px);
-  padding: 12px 8px;
-  border: 1px solid var(--teacher-border);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, .88);
-  box-shadow: var(--teacher-shadow);
-}
-
-.exact-shell .teacher-ai-thread-dot i {
-  border-radius: 8px;
-  background: #eaf3ff;
-  box-shadow: none;
-}
-
-.exact-shell .teacher-ai-thread {
-  width: 100%;
-  height: auto;
-  min-height: 360px;
-  margin: 0;
-  padding: 18px;
-  border: 1px solid var(--teacher-border);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, .92);
-  box-shadow: var(--teacher-shadow);
-}
-
-.exact-shell .teacher-ai-empty-chat .teacher-ai-thread {
-  min-height: 280px;
-  padding: 20px;
-  display: block;
-  place-items: initial;
-  align-content: start;
-  overflow: visible;
-}
-
-.exact-shell .teacher-ai-empty-state {
-  width: 100%;
-  max-width: 860px;
-  min-height: 250px;
-  margin: 0 auto;
-  padding: 18px 20px;
-  display: grid;
-  place-items: center;
-  text-align: center;
-}
-
-.exact-shell .teacher-ai-empty-chat .teacher-ai-learning-workspace {
-  height: auto;
-  min-height: 0;
-  grid-template-rows: auto auto;
-  align-content: start;
-}
-
-.exact-shell .teacher-ai-empty-visual {
-  width: 64px;
-  height: 64px;
-  margin: 0 0 14px;
-  display: grid;
-  place-items: center;
-  border: 1px solid #d8f2ee;
-  border-radius: 8px;
-  background: #f0fbf9;
-}
-
-.exact-shell .teacher-ai-empty-visual img {
-  position: static;
-  width: 54px;
-  height: 54px;
-  transform: none;
-  filter: none;
-}
-
-.exact-shell .teacher-ai-empty-state h2 {
-  margin: 0;
-  color: var(--teacher-heading);
-  font-size: 24px;
-  line-height: 1.28;
-  font-weight: 900;
-}
-
-.exact-shell .teacher-ai-empty-state p {
-  max-width: 620px;
-  margin: 10px 0 0;
-  color: var(--teacher-muted);
-  font-size: 13px;
-  line-height: 1.7;
-}
-
-.exact-shell .teacher-ai-empty-prompts {
-  width: 100%;
-  max-width: 640px;
-  margin-top: 22px;
-  gap: 10px;
-}
-
-.exact-shell .teacher-ai-empty-prompts button,
-.exact-shell .teacher-ai-prompt-row button {
-  min-width: 116px;
-  justify-content: center;
-}
-
-.exact-shell .teacher-ai-turn {
-  margin-bottom: 20px;
-}
-
-.exact-shell .teacher-ai-user-bubble,
-.exact-shell .teacher-ai-answer-flow {
-  border-radius: 8px;
-}
-
-.exact-shell .teacher-ai-user-bubble {
-  color: #0b2c6f;
-  background: #eaf3ff;
-}
-
-.exact-shell .teacher-ai-answer-flow {
-  border: 1px solid var(--teacher-border);
-  background: #ffffff;
-  box-shadow: none;
-}
-
-.exact-shell .teacher-ai-run-summary article {
-  border-radius: 8px;
-  border-color: #dce5f1;
-  background: #f8fbff;
-}
-
-.exact-shell .teacher-ai-answer-flow h2 {
-  color: var(--teacher-heading);
-  font-size: 15px;
-}
-
-.exact-shell .teacher-ai-answer-flow p {
-  color: #31405a;
-  font-size: 14px;
-}
-
-.exact-shell .teacher-ai-answer-meta span,
-.exact-shell .teacher-ai-citation-line {
-  border-color: #dce5f1;
-  border-radius: 8px;
-  background: #f8fbff;
-}
-
-.exact-shell .teacher-ai-composer {
-  position: sticky;
-  bottom: 16px;
-  margin-top: 14px;
-  padding: 14px;
-  border: 1px solid var(--teacher-border);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, .94);
-  box-shadow: var(--teacher-shadow);
-}
-
-.exact-shell .teacher-ai-empty-chat .teacher-ai-composer {
-  width: min(100%, 960px);
-  margin: 14px auto 0;
-  transform: none;
-}
-
-.exact-shell .teacher-ai-composer-surface {
-  border: 1px solid #dce5f1;
-  border-radius: 8px;
-  background: #ffffff;
-  box-shadow: none;
-}
-
-.exact-shell .teacher-ai-composer-surface:focus-within {
-  border-color: #aecaef;
-  box-shadow: 0 0 0 3px rgba(23, 108, 245, .10);
-}
-
-.exact-shell .teacher-ai-composer-surface textarea {
-  color: var(--teacher-heading);
-}
-
-.exact-shell .teacher-ai-composer-surface .teacher-ai-send {
-  border-color: var(--teacher-primary);
-  color: #ffffff;
-  background: var(--teacher-primary);
-}
-
-.exact-shell .teacher-ai-readable-strip {
-  color: var(--teacher-muted);
-  background: transparent;
-}
-
-@media (max-width: 1180px) {
-  .exact-shell .teacher-ai-learning-workspace {
-    grid-template-columns: 1fr;
-  }
-
-  .exact-shell .teacher-ai-thread-outline {
-    display: none;
-  }
-}
-
-@media (max-width: 760px) {
-  .exact-main.view-ai-assistant .teacher-ai-workspace-page {
-    padding: 14px 10px 24px;
-  }
-
-  .exact-shell .teacher-ai-workspace-header,
-  .exact-shell .teacher-ai-empty-state {
-    align-items: flex-start;
-    text-align: left;
-  }
-
-  .exact-shell .teacher-ai-workspace-title h1,
-  .exact-shell .teacher-ai-empty-state h2 {
-    font-size: 21px;
-  }
-
-  .exact-shell .teacher-ai-empty-prompts,
-  .exact-shell .teacher-ai-prompt-row {
-    grid-template-columns: 1fr;
-  }
-}
-
 /* Teacher internal color normalization: blue SaaS theme, not the old green demo theme. */
 .exact-shell {
   --teacher-primary: #1677ff;
@@ -5868,32 +5515,26 @@ button { cursor: pointer; }
   --teacher-success-border: #bcd7ff;
 }
 
-.exact-shell .exact-logo > span,
-.exact-shell:has(.view-ai-assistant) .exact-logo > span {
+.exact-shell .exact-logo > span {
   color: #ffffff !important;
   background: linear-gradient(135deg, #4f8cff 0%, #1677ff 52%, #06b6d4 100%) !important;
   box-shadow: 0 8px 18px rgba(22, 119, 255, .22) !important;
 }
 
 .exact-shell .exact-logo > span::before,
-.exact-shell .exact-logo > span::after,
-.exact-shell:has(.view-ai-assistant) .exact-logo > span::before,
-.exact-shell:has(.view-ai-assistant) .exact-logo > span::after {
+.exact-shell .exact-logo > span::after {
   border-color: rgba(255, 255, 255, .95) !important;
 }
 
-.exact-shell .exact-logo strong,
-.exact-shell:has(.view-ai-assistant) .exact-logo strong {
+.exact-shell .exact-logo strong {
   color: var(--teacher-heading) !important;
 }
 
-.exact-shell .exact-logo small,
-.exact-shell:has(.view-ai-assistant) .exact-logo small {
+.exact-shell .exact-logo small {
   color: #64748b !important;
 }
 
-.exact-shell .exact-avatar,
-.exact-shell:has(.view-ai-assistant) .exact-avatar {
+.exact-shell .exact-avatar {
   color: #0f63d9 !important;
   border: 1px solid #bcd7ff !important;
   background: #eaf3ff !important;
@@ -5966,9 +5607,7 @@ button { cursor: pointer; }
 .exact-shell .ai-toggle-line > svg,
 .exact-shell .draft-status,
 .exact-shell .class-v2-chart-grid em,
-.exact-shell .trusted-source svg,
-.exact-shell .teacher-ai-empty-prompts svg,
-.exact-shell .teacher-ai-prompt-row button svg {
+.exact-shell .trusted-source svg {
   color: var(--teacher-primary) !important;
 }
 
@@ -6004,10 +5643,7 @@ button { cursor: pointer; }
 .exact-shell .task-list-icon,
 .exact-shell .generate-courseware > span,
 .exact-shell .task-v2-icon,
-.exact-shell .workspace-quick-panel .quick-icon,
-.exact-shell .teacher-ai-empty-visual,
-.exact-shell .teacher-ai-workspace-title img,
-.exact-shell .teacher-ai-assistant-avatar {
+.exact-shell .workspace-quick-panel .quick-icon {
   color: var(--teacher-primary) !important;
   border-color: #cfe1f8 !important;
   background: linear-gradient(135deg, #eef6ff 0%, #ecfeff 100%) !important;
@@ -6062,10 +5698,4 @@ button { cursor: pointer; }
 .exact-shell .class-banner img,
 .exact-shell .materials-heading img {
   filter: hue-rotate(86deg) saturate(.78) brightness(1.03);
-}
-
-.exact-shell .teacher-ai-workspace-title img,
-.exact-shell .teacher-ai-empty-visual img,
-.exact-shell .teacher-ai-assistant-avatar img {
-  filter: none !important;
 }

@@ -78,7 +78,6 @@ const courseItems: Array<[ExactView, string, ReactNode]> = [
   ['graph', '课程知识图谱', <Network size={17} />],
   ['analytics', '学情分析', <LineChart size={17} />],
   ['ai-assistant', 'AI 助教', <Bot size={17} />],
-  ['discussion', '课堂讨论', <MessageSquareText size={17} />],
 ]
 
 function SideButton(props: {
@@ -95,6 +94,21 @@ function SideButton(props: {
 export function ExactShell(props: ShellProps) {
   const items = props.courseMode ? courseItems : globalItems
   const currentCourse = props.courses.find((item) => item.id === props.courseId)
+  const userMenuItems = [
+    ...(props.courseMode ? [{
+      key: 'discussion',
+      icon: <MessageSquareText size={14} />,
+      label: '课堂讨论',
+      onClick: () => props.onNavigate('discussion'),
+    }, { type: 'divider' as const }] : []),
+    ...(props.onLogout ? [{
+      key: 'logout',
+      icon: <LogOut size={14} />,
+      label: '退出登录',
+      onClick: props.onLogout,
+    }] : []),
+  ]
+
   return <div className="exact-shell">
     <header className="exact-topbar">
       <div className="exact-logo"><span>&lt;/&gt;</span><strong>CodeTrack</strong><small>Teacher</small></div>
@@ -104,10 +118,13 @@ export function ExactShell(props: ShellProps) {
           <Badge count={props.notificationCount} size="small"><Button type="text" icon={<Bell size={18} />} onClick={props.onNotifications} /></Badge>
         </Tooltip>
         {props.view !== 'dashboard' && <Button className="exact-back-dashboard" icon={<Home size={15} />} onClick={() => props.onNavigate('dashboard')}>回到工作台首页</Button>}
-        <Avatar size={27} className="exact-avatar">{getCurrentUserName().slice(0, 1)}</Avatar>
-        <Text strong>{getCurrentUserName()}</Text>
-        {props.onLogout && <Dropdown menu={{ items: [{ key: 'logout', icon: <LogOut size={14} />, label: '退出登录', onClick: props.onLogout }] }} trigger={['click']}><ChevronDown size={14} style={{ cursor: 'pointer' }} /></Dropdown>}
-        {!props.onLogout && <ChevronDown size={14} />}
+        <Dropdown menu={{ items: userMenuItems }} trigger={['click']} placement="bottomRight">
+          <button type="button" className="exact-user-menu">
+            <Avatar size={27} className="exact-avatar">{getCurrentUserName().slice(0, 1)}</Avatar>
+            <Text strong>{getCurrentUserName()}</Text>
+            <ChevronDown size={14} />
+          </button>
+        </Dropdown>
       </div>
     </header>
     <aside className={'exact-sidebar ' + (props.courseMode ? 'course-mode' : '')}>

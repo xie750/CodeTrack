@@ -362,10 +362,6 @@ export function ExactTeacherAiAssistant({
           <History size={17} />
           历史会话
         </button>
-        <button type="button" className="teacher-ai-history-entry" onClick={startNewSession} disabled={isSending || sessionLoading}>
-          <MessageSquarePlus size={17} />
-          新建会话
-        </button>
       </div>
     </header>
 

@@ -301,15 +301,26 @@ export type GeneratedResourceSection = {
 
 export type GeneratedResourceNode = {
   id: string;
+  node_id?: string;
+  parent_id?: string | null;
   label: string;
+  title?: string;
   level: number;
+  depth?: number;
   summary?: string;
+  node_type?: string;
+  knowledge_points?: string[];
   citation_ids?: string[];
+  citations?: string[];
+  confidence?: number;
 };
 
 export type GeneratedResourceEdge = {
   source: string;
   target: string;
+  source_node_id?: string;
+  target_node_id?: string;
+  relationship_type?: string;
   label?: string;
 };
 

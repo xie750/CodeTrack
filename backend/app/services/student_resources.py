@@ -49,8 +49,10 @@ except Exception:  # pragma: no cover - optional dependency fallback
 
 WORKFLOW_TYPE = "student_ppt_resource_generation"
 GENERIC_WORKFLOW_TYPE = "student_resource_generation"
+MIND_MAP_WORKFLOW_TYPE = "student_mind_map_resource_generation"
 PROMPT_VERSION = "student_ppt_resource_v0.1"
 GENERIC_PROMPT_VERSION = "student_resource_v0.2"
+MIND_MAP_PROMPT_VERSION = "student_mind_map_resource_v0.1"
 MAX_SOURCE_COUNT = 5
 MAX_SOURCE_CHARS = 900
 
@@ -114,6 +116,32 @@ class GenericResourceState(TypedDict, total=False):
     file_path: str
     file_format: str
     item_count: int
+    resource: StudentGeneratedResource
+    run: AgentRun
+
+
+class MindMapResourceState(TypedDict, total=False):
+    run_id: str
+    student_id: str
+    class_id: str
+    course_id: str
+    session_id: str | None
+    message: str
+    resource_type: str
+    knowledge_point: str
+    profile: dict[str, Any] | None
+    profile_focus: dict[str, list[str]]
+    sources: list[KnowledgeSource]
+    citations: list[dict[str, Any]]
+    plan: dict[str, Any]
+    render_payload: dict[str, Any]
+    title: str
+    summary: str
+    confidence: float
+    item_count: int
+    file_path: str
+    file_format: str
+    risk_flags: list[str]
     resource: StudentGeneratedResource
     run: AgentRun
 
@@ -182,7 +210,7 @@ def _cleanup_topic(raw: str) -> str:
     topic = re.sub(r"\s+", " ", raw).strip(" ：:，,。.；;、")
     topic = re.sub(r"^(帮我|请|生成|整理|制作|做一个|做一份|输出|围绕|关于)+", "", topic, flags=re.IGNORECASE)
     topic = topic.strip(" ：:，,。.；;、")
-    suffix_pattern = r"(相关|有关)?的?(PPTX?|pptx?|幻灯片|演示文稿|教学讲解|学习资源|复习资料|讲解|资料|资源)$"
+    suffix_pattern = r"(相关|有关)?的?(PPTX?|pptx?|幻灯片|演示文稿|思维导图|导图|学习地图|教学讲解|学习资源|复习资料|讲解|资料|资源)$"
     while True:
         cleaned = re.sub(suffix_pattern, "", topic, flags=re.IGNORECASE).strip(" ：:，,。.；;、")
         cleaned = re.sub(r"(相关|有关)的?$", "", cleaned, flags=re.IGNORECASE).strip(" ：:，,。.；;、")
@@ -196,8 +224,9 @@ def _cleanup_topic(raw: str) -> str:
 def _extract_requested_topic(message: str) -> str | None:
     text = message.strip()
     patterns = [
-        r"(?:关于|围绕)(.+?)(?:的)?(?:PPT|ppt|幻灯片|演示文稿|讲解|资料|资源|$)",
-        r"(?:生成|制作|整理|做一份|做一个)(.+?)(?:相关|有关|的)?(?:PPT|ppt|幻灯片|演示文稿|资料|资源|$)",
+        r"(?:把)(.+?)(?:整理|制作|生成|做成|转成|变成)(?:成|为)?(?:.+?)(?:思维导图|导图|学习地图)",
+        r"(?:关于|围绕)(.+?)(?:的)?(?:思维导图|导图|学习地图|PPT|ppt|幻灯片|演示文稿|讲解|资料|资源|$)",
+        r"(?:生成|制作|整理|做一份|做一个)(.+?)(?:相关|有关|的)?(?:思维导图|导图|学习地图|PPT|ppt|幻灯片|演示文稿|资料|资源|$)",
     ]
     for pattern in patterns:
         match = re.search(pattern, text, flags=re.IGNORECASE)
@@ -1011,6 +1040,15 @@ def _common_source_ids(sources: list[KnowledgeSource], limit: int = 3) -> list[s
     return [source.id for source in sources[:limit]]
 
 
+def _mind_map_topic_family(knowledge_point: str) -> str:
+    normalized = knowledge_point.lower()
+    if re.search(r"java|python|语法|函数|方法|变量|列表|字典|字符串|编程", normalized):
+        return "programming"
+    if re.search(r"机器学习|监督学习|过拟合|正则化|梯度|损失函数|模型|训练集|验证集", normalized):
+        return "machine_learning"
+    return "data_structure"
+
+
 def _fallback_document(
     *,
     message: str,
@@ -1073,53 +1111,356 @@ def _fallback_mind_map(
     course: Course,
     knowledge_point: str,
     sources: list[KnowledgeSource],
+    profile: dict[str, Any] | None = None,
 ) -> tuple[str, str, dict[str, Any], int]:
     source_ids = _common_source_ids(sources)
+    focus = _profile_focus(profile)
+    topic_family = _mind_map_topic_family(knowledge_point)
+    profile_matches_topic = any(
+        knowledge_point in item or item in knowledge_point
+        for item in [*focus["weak_points"], *focus["frequent_errors"]]
+        if item
+    )
+    first_source_summary = sources[0].summary if sources else f"当前课程资料未覆盖“{knowledge_point}”，本导图按用户主题生成基础学习框架。"
+    if topic_family == "programming":
+        weak_text = "、".join(focus["weak_points"]) if profile_matches_topic and focus["weak_points"] else "变量类型、流程控制、函数调用"
+        error_text = "、".join(focus["frequent_errors"]) if profile_matches_topic and focus["frequent_errors"] else "类型不匹配、作用域混淆、语法符号遗漏"
+        branch_labels = [
+            {
+                "id": "concept",
+                "title": "语言基础",
+                "node_type": "concept",
+                "relationship_type": "contains",
+                "children": [
+                    ("变量与类型", "理解变量声明、基本类型、引用类型和类型转换。", "concept", "contains"),
+                    ("表达式", "掌握运算符优先级、布尔表达式和赋值表达式。", "concept", "contains"),
+                    ("代码规范", "用命名、缩进和注释提升可读性。", "practice", "solves"),
+                ],
+            },
+            {
+                "id": "procedure",
+                "title": "流程控制",
+                "node_type": "procedure",
+                "relationship_type": "contains",
+                "children": [
+                    ("条件分支", "用 if / else 表达不同条件下的执行路径。", "procedure", "contains"),
+                    ("循环结构", "用 for / while 处理重复任务，并明确退出条件。", "procedure", "causes"),
+                    ("输入输出", "把读入、处理和输出拆成清晰步骤。", "procedure", "next_step"),
+                ],
+            },
+            {
+                "id": "structure",
+                "title": "函数与对象",
+                "node_type": "concept",
+                "relationship_type": "contains",
+                "children": [
+                    ("函数/方法", "用参数、返回值和局部变量封装一段逻辑。", "concept", "contains"),
+                    ("数组或集合", "选择合适的数据容器保存多项数据。", "concept", "example_of"),
+                    ("类与对象", "理解属性、方法和对象实例之间的关系。", "concept", "example_of"),
+                ],
+            },
+            {
+                "id": "mistake",
+                "title": "常见错误",
+                "node_type": "mistake",
+                "relationship_type": "common_mistake",
+                "children": [
+                    ("类型不匹配", "检查赋值、比较和方法参数类型是否一致。", "mistake", "common_mistake"),
+                    ("作用域混淆", "确认变量在哪个代码块中声明和使用。", "mistake", "causes"),
+                    ("符号遗漏", "重点检查分号、括号、引号和缩进层级。", "mistake", "common_mistake"),
+                ],
+            },
+            {
+                "id": "profile",
+                "title": "画像提醒",
+                "node_type": "profile_tip",
+                "relationship_type": "common_mistake",
+                "children": [
+                    ("薄弱点", weak_text, "profile_tip", "common_mistake"),
+                    ("高频错因", error_text, "profile_tip", "causes"),
+                    ("复习策略", "先读懂小程序，再手写一个同类型小例子。", "next_action", "solves"),
+                ],
+            },
+            {
+                "id": "practice",
+                "title": "练习路径",
+                "node_type": "practice",
+                "relationship_type": "next_step",
+                "children": [
+                    ("读代码", "先预测输出，再运行验证自己的理解。", "practice", "next_step"),
+                    ("改错题", "从编译错误和运行结果反推语法问题。", "practice", "solves"),
+                    ("小程序", f"围绕{knowledge_point}写一个 20 行以内的练习。", "next_action", "next_step"),
+                ],
+            },
+        ]
+    elif topic_family == "machine_learning":
+        weak_text = "、".join(focus["weak_points"]) if focus["weak_points"] else f"{knowledge_point}的指标理解和方法选择"
+        error_text = "、".join(focus["frequent_errors"]) if focus["frequent_errors"] else "概念混淆、指标误读、训练验证流程不清"
+        branch_labels = [
+            {
+                "id": "concept",
+                "title": "核心概念",
+                "node_type": "concept",
+                "relationship_type": "contains",
+                "children": [
+                    (f"{knowledge_point}是什么", "先明确概念定义、问题背景和适用前提。", "concept", "contains"),
+                    ("课程依据", first_source_summary, "concept", "example_of"),
+                    ("关键术语", "把数据、模型、损失、指标和泛化放到同一框架理解。", "concept", "contains"),
+                ],
+            },
+            {
+                "id": "procedure",
+                "title": "建模流程",
+                "node_type": "procedure",
+                "relationship_type": "contains",
+                "children": [
+                    ("数据划分", "区分训练集、验证集和测试集的作用。", "procedure", "prerequisite"),
+                    ("训练评估", "用指标观察模型是否学到可泛化规律。", "procedure", "causes"),
+                    ("调参与改进", "根据误差表现选择正则化、特征或模型调整。", "procedure", "solves"),
+                ],
+            },
+            {
+                "id": "mistake",
+                "title": "常见误区",
+                "node_type": "mistake",
+                "relationship_type": "common_mistake",
+                "children": [
+                    ("只看训练效果", "训练集表现好不代表泛化能力好。", "mistake", "common_mistake"),
+                    ("指标误读", "不同任务要选择匹配的评价指标。", "mistake", "causes"),
+                    ("泄漏数据", "训练阶段不能提前看到测试信息。", "mistake", "common_mistake"),
+                ],
+            },
+            {
+                "id": "profile",
+                "title": "画像提醒",
+                "node_type": "profile_tip",
+                "relationship_type": "common_mistake",
+                "children": [
+                    ("薄弱点", weak_text, "profile_tip", "common_mistake"),
+                    ("高频错因", error_text, "profile_tip", "causes"),
+                    ("复习策略", f"围绕{knowledge_point}先画流程，再做概念判断题。", "next_action", "solves"),
+                ],
+            },
+            {
+                "id": "practice",
+                "title": "练习路径",
+                "node_type": "practice",
+                "relationship_type": "next_step",
+                "children": [
+                    ("概念辨析", "用判断题检查术语边界。", "practice", "next_step"),
+                    ("案例分析", "根据训练/验证表现判断问题原因。", "practice", "example_of"),
+                    ("生成练习", f"保存导图后生成一组{knowledge_point}练习题。", "next_action", "next_step"),
+                ],
+            },
+        ]
+    else:
+        weak_text = "、".join(focus["weak_points"]) if focus["weak_points"] else f"{knowledge_point}的边界和迁移应用"
+        error_text = "、".join(focus["frequent_errors"]) if focus["frequent_errors"] else "概念混淆、更新顺序、边界遗漏"
+        branch_labels = [
+            {
+                "id": "concept",
+                "title": "核心概念",
+                "node_type": "concept",
+                "relationship_type": "contains",
+                "children": [
+                    (f"{knowledge_point}是什么", "先说清定义、解决的问题和使用场景。", "concept", "contains"),
+                    ("课程依据", first_source_summary, "concept", "example_of"),
+                    ("适用场景", f"判断{knowledge_point}适合解决哪类输入、状态或结构问题。", "example", "example_of"),
+                ],
+            },
+            {
+                "id": "procedure",
+                "title": "关键过程",
+                "node_type": "procedure",
+                "relationship_type": "contains",
+                "children": [
+                    ("输入与输出", "明确入口条件、输出目标和中间状态。", "procedure", "contains"),
+                    ("状态变化", "跟踪每一步操作后结构或变量如何变化。", "procedure", "causes"),
+                    ("复杂度关注", "理解时间复杂度和空间开销来自哪些步骤。", "concept", "contains"),
+                ],
+            },
+            {
+                "id": "boundary",
+                "title": "边界条件",
+                "node_type": "mistake",
+                "relationship_type": "common_mistake",
+                "children": [
+                    ("空结构", "先判断空输入，避免访问不存在的节点或元素。", "mistake", "common_mistake"),
+                    ("最小用例", "只含一个元素时，返回值和状态更新最容易暴露问题。", "mistake", "common_mistake"),
+                    ("连续操作", "多次插入、删除或遍历后检查状态是否仍一致。", "practice", "solves"),
+                ],
+            },
+            {
+                "id": "profile",
+                "title": "画像提醒",
+                "node_type": "profile_tip",
+                "relationship_type": "common_mistake",
+                "children": [
+                    ("薄弱点", weak_text, "profile_tip", "common_mistake"),
+                    ("高频错因", error_text, "profile_tip", "causes"),
+                    ("复习策略", f"围绕{knowledge_point}先画过程，再做边界自测。", "next_action", "solves"),
+                ],
+            },
+            {
+                "id": "practice",
+                "title": "练习路径",
+                "node_type": "practice",
+                "relationship_type": "next_step",
+                "children": [
+                    ("画状态图", "用小样例手动画出每一步变化。", "practice", "next_step"),
+                    ("写伪过程", "先写步骤和判断条件，再补具体代码。", "practice", "next_step"),
+                    ("生成练习", f"保存导图后生成一组{knowledge_point}练习题。", "next_action", "next_step"),
+                ],
+            },
+        ]
     center_id = "center"
-    branch_labels = [
-        ("concept", "核心概念", [f"{knowledge_point}是什么", "结构规则", "适用场景"]),
-        ("operation", "关键操作", ["输入与输出", "状态变化", "复杂度关注"]),
-        ("boundary", "边界条件", ["空结构", "满结构", "最小用例"]),
-        ("mistake", "常见错误", ["更新顺序", "遗漏判断", "只测普通用例"]),
-        ("practice", "练习路径", ["画状态图", "写伪过程", "做边界测试"]),
-    ]
+    center_summary = f"{course.name} · {message}" if source_ids else f"当前课程资料未覆盖该主题 · {message}"
     nodes = [
         {
             "id": center_id,
+            "node_id": center_id,
+            "parent_id": None,
             "label": f"{knowledge_point}学习地图",
+            "title": f"{knowledge_point}学习地图",
             "level": 0,
-            "summary": f"{course.name} · {message}",
+            "depth": 0,
+            "summary": center_summary,
+            "node_type": "central_topic",
+            "knowledge_points": [knowledge_point],
             "citation_ids": source_ids[:1],
+            "citations": source_ids[:1],
+            "confidence": 0.88 if source_ids else 0.58,
         }
     ]
     edges: list[dict[str, Any]] = []
-    for index, (branch_id, label, children) in enumerate(branch_labels, start=1):
-        node_id = f"branch_{branch_id}"
+    for index, branch in enumerate(branch_labels, start=1):
+        node_id = f"branch_{branch['id']}"
+        branch_source_ids = source_ids[: min(len(source_ids), 2)]
         nodes.append(
             {
                 "id": node_id,
-                "label": label,
+                "node_id": node_id,
+                "parent_id": center_id,
+                "label": branch["title"],
+                "title": branch["title"],
                 "level": 1,
-                "summary": " / ".join(children),
-                "citation_ids": source_ids[: min(len(source_ids), 2)],
+                "depth": 1,
+                "summary": " / ".join(str(child[0]) for child in branch["children"]),
+                "node_type": branch["node_type"],
+                "knowledge_points": [knowledge_point],
+                "citation_ids": branch_source_ids,
+                "citations": branch_source_ids,
+                "confidence": 0.86 if branch_source_ids else 0.56,
             }
         )
-        edges.append({"source": center_id, "target": node_id, "label": "展开"})
-        for child_index, child in enumerate(children, start=1):
-            child_id = f"{branch_id}_{child_index}"
+        edges.append(
+            {
+                "source": center_id,
+                "target": node_id,
+                "source_node_id": center_id,
+                "target_node_id": node_id,
+                "relationship_type": branch["relationship_type"],
+                "label": "展开",
+            }
+        )
+        for child_index, (child_title, child_summary, child_type, child_relation) in enumerate(branch["children"], start=1):
+            child_id = f"{branch['id']}_{child_index}"
+            child_source_ids = source_ids[index % len(source_ids): index % len(source_ids) + 1] if source_ids else []
             nodes.append(
                 {
                     "id": child_id,
-                    "label": child,
+                    "node_id": child_id,
+                    "parent_id": node_id,
+                    "label": child_title,
+                    "title": child_title,
                     "level": 2,
-                    "summary": f"用于理解{knowledge_point}的{label}。",
-                    "citation_ids": source_ids[index % len(source_ids): index % len(source_ids) + 1] if source_ids else [],
+                    "depth": 2,
+                    "summary": child_summary,
+                    "node_type": child_type,
+                    "knowledge_points": [knowledge_point],
+                    "citation_ids": child_source_ids,
+                    "citations": child_source_ids,
+                    "confidence": 0.84 if child_source_ids else 0.54,
                 }
             )
-            edges.append({"source": node_id, "target": child_id, "label": "包含"})
+            edges.append(
+                {
+                    "source": node_id,
+                    "target": child_id,
+                    "source_node_id": node_id,
+                    "target_node_id": child_id,
+                    "relationship_type": child_relation,
+                    "label": "包含",
+                }
+            )
+    cross_edges = [
+        ("branch_profile", "practice_1", "solves", "转为练习"),
+    ]
+    if topic_family == "programming":
+        cross_edges.extend(
+            [
+                ("procedure_1", "mistake_2", "causes", "分支变量影响作用域"),
+                ("mistake_1", "practice_2", "solves", "用改错题巩固"),
+            ]
+        )
+    elif topic_family == "machine_learning":
+        cross_edges.extend(
+            [
+                ("procedure_2", "mistake_1", "causes", "评估表现暴露问题"),
+                ("mistake_2", "practice_1", "solves", "用辨析题巩固"),
+            ]
+        )
+    else:
+        cross_edges.extend(
+            [
+                ("branch_boundary", "profile_2", "causes", "关联错因"),
+                ("procedure_2", "boundary_3", "causes", "连续状态影响边界"),
+                ("boundary_2", "practice_2", "solves", "用伪过程检查"),
+            ]
+        )
+    edges.extend(
+        [
+            {
+                "source": source_id,
+                "target": target_id,
+                "source_node_id": source_id,
+                "target_node_id": target_id,
+                "relationship_type": relation,
+                "label": label,
+            }
+            for source_id, target_id, relation, label in cross_edges
+        ]
+    )
     title = f"{knowledge_point}思维导图"
     summary = f"围绕“{message}”生成 {len(nodes)} 个节点的学习地图。"
-    return title, summary, {"nodes": nodes, "edges": edges}, len(nodes)
+    risk_flags = [] if source_ids else ["当前课程资料未覆盖该主题", "引用不足"]
+    return (
+        title,
+        summary,
+        {
+            "artifact_type": "MIND_MAP",
+            "central_topic": f"{knowledge_point}学习地图",
+            "nodes": nodes,
+            "edges": edges,
+            "risk_flags": risk_flags,
+            "recommended_next_actions": ["生成练习", "保存到资源中心", "继续追问"],
+            "metadata": {
+                "planner": "rule_fallback_mind_map_planner",
+                "topic_family": topic_family,
+                "relationship_types": [
+                    "prerequisite",
+                    "contains",
+                    "causes",
+                    "solves",
+                    "example_of",
+                    "common_mistake",
+                    "next_step",
+                    "contrast",
+                ],
+            },
+        },
+        len(nodes),
+    )
 
 
 def _fallback_practice_set(
@@ -1318,11 +1659,17 @@ def _markdown_lines(resource_type: str, title: str, payload: dict[str, Any], cit
         for node in nodes if isinstance(nodes, list) else []:
             if isinstance(node, dict):
                 indent = "  " * int(node.get("level", 0) or 0)
-                lines.append(f"{indent}- {node.get('label', '')}：{node.get('summary', '')}")
+                confidence = node.get("confidence")
+                confidence_text = f"；置信度 {round(float(confidence) * 100)}%" if isinstance(confidence, (int, float)) else ""
+                node_type = f"；类型 {node.get('node_type')}" if node.get("node_type") else ""
+                citation_ids = node.get("citation_ids") if isinstance(node.get("citation_ids"), list) else []
+                citation_text = f"；引用 {', '.join(str(item) for item in citation_ids)}" if citation_ids else ""
+                lines.append(f"{indent}- {node.get('label') or node.get('title', '')}：{node.get('summary', '')}{node_type}{confidence_text}{citation_text}")
         lines.extend(["", "## 关系", ""])
         for edge in edges if isinstance(edges, list) else []:
             if isinstance(edge, dict):
-                lines.append(f"- {edge.get('source')} -> {edge.get('target')}：{edge.get('label', '')}")
+                relation = edge.get("relationship_type", "contains")
+                lines.append(f"- {edge.get('source')} -> {edge.get('target')}：{edge.get('label', '')}（{relation}）")
     elif resource_type == "PRACTICE_SET":
         for index, question in enumerate(payload.get("questions", []), start=1):
             if not isinstance(question, dict):
@@ -1809,6 +2156,301 @@ def _generic_render_node(db: Session, state: GenericResourceState) -> GenericRes
     return state
 
 
+def _create_mind_map_run_node(db: Session, state: MindMapResourceState) -> MindMapResourceState:
+    context = AgentRunContext(
+        run_id=state["run_id"],
+        workflow_type=MIND_MAP_WORKFLOW_TYPE,
+        student_id=state["student_id"],
+        course_id=state["course_id"],
+    )
+    run = start_run(
+        db,
+        context,
+        input_payload={
+            "resource_type": "MIND_MAP",
+            "message": _trim(state["message"], 300),
+            "session_id": state.get("session_id"),
+        },
+        model_provider="RULE_FALLBACK",
+        model_name="mind-map-agent-template",
+        prompt_version=MIND_MAP_PROMPT_VERSION,
+    )
+    state["run"] = run
+    record_step(db, run, step_name="create_run", step_order=1, output_summary={"run_id": run.id})
+    return state
+
+
+def _mind_map_context_node(db: Session, user: User, course: Course, state: MindMapResourceState) -> MindMapResourceState:
+    profile = serialize_learner_profile(
+        db,
+        student_id=user.id,
+        course_id=course.id,
+        class_id=state["class_id"],
+    )
+    sources = _load_sources(db, course.id, state["message"])
+    knowledge_point = _guess_knowledge_point(state["message"], sources)
+    state["profile"] = profile
+    state["profile_focus"] = _profile_focus(profile)
+    state["sources"] = sources
+    state["knowledge_point"] = knowledge_point
+    record_step(
+        db,
+        state["run"],
+        step_name="build_context",
+        step_order=2,
+        output_summary={
+            "profile_available": profile is not None,
+            "source_ids": [source.id for source in sources],
+            "knowledge_point": knowledge_point,
+        },
+    )
+    return state
+
+
+def _mind_map_planner_node(db: Session, state: MindMapResourceState) -> MindMapResourceState:
+    focus = state.get("profile_focus") or {"weak_points": [], "frequent_errors": [], "recommendations": []}
+    topic_family = _mind_map_topic_family(state["knowledge_point"])
+    top_level_branches = (
+        ["语言基础", "流程控制", "函数与对象", "常见错误", "画像提醒", "练习路径"]
+        if topic_family == "programming"
+        else ["核心概念", "建模流程", "常见误区", "画像提醒", "练习路径"]
+        if topic_family == "machine_learning"
+        else ["核心概念", "关键过程", "边界条件", "画像提醒", "练习路径"]
+    )
+    plan = {
+        "central_topic": f"{state['knowledge_point']}学习地图",
+        "map_purpose": "帮助学生梳理概念、过程、易错点、画像提醒和练习路径。",
+        "target_depth": 2,
+        "top_level_branches": top_level_branches,
+        "required_relationship_types": ["contains", "causes", "solves", "example_of", "common_mistake", "next_step"],
+        "coverage_requirements": [
+            "必须回应用户原始生成要求",
+            "至少包含一个易错点分支",
+            "至少包含一个学习画像提醒分支",
+            "节点必须适合前端预览和资源中心导出",
+        ],
+        "profile_focus": focus,
+        "topic_family": topic_family,
+    }
+    state["plan"] = plan
+    record_step(
+        db,
+        state["run"],
+        step_name="mind_map_planner_agent",
+        step_order=3,
+        output_summary={
+            "central_topic": plan["central_topic"],
+            "branch_count": len(plan["top_level_branches"]),
+            "profile_focus_used": bool(focus.get("weak_points") or focus.get("frequent_errors")),
+        },
+    )
+    return state
+
+
+def _mind_map_content_node(db: Session, course: Course, state: MindMapResourceState) -> MindMapResourceState:
+    title, summary, render_payload, item_count = _fallback_mind_map(
+        message=state["message"],
+        course=course,
+        knowledge_point=state["knowledge_point"],
+        sources=state.get("sources", []),
+        profile=state.get("profile"),
+    )
+    state["title"] = title
+    state["summary"] = summary
+    state["render_payload"] = render_payload
+    state["item_count"] = item_count
+    record_step(
+        db,
+        state["run"],
+        step_name="mind_map_content_agent",
+        step_order=4,
+        output_summary={"node_count": item_count, "edge_count": len(render_payload.get("edges", []))},
+    )
+    return state
+
+
+def _mind_map_relationship_node(db: Session, state: MindMapResourceState) -> MindMapResourceState:
+    payload = state["render_payload"]
+    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+    topic_family = str(metadata.get("topic_family") or _mind_map_topic_family(state["knowledge_point"]))
+    edges = payload.get("edges", [])
+    if not isinstance(edges, list):
+        edges = []
+    existing_pairs = {
+        (str(edge.get("source") or edge.get("source_node_id")), str(edge.get("target") or edge.get("target_node_id")))
+        for edge in edges
+        if isinstance(edge, dict)
+    }
+    if topic_family == "programming":
+        extra_edges = [
+            ("concept_1", "procedure_1", "prerequisite", "变量类型支撑分支"),
+            ("procedure_2", "mistake_3", "causes", "循环结构暴露符号和边界问题"),
+            ("mistake_1", "practice_2", "solves", "用改错题巩固"),
+        ]
+    elif topic_family == "machine_learning":
+        extra_edges = [
+            ("concept_1", "procedure_1", "prerequisite", "先理解概念再看流程"),
+            ("procedure_2", "mistake_1", "causes", "评估表现暴露泛化问题"),
+            ("mistake_2", "practice_1", "solves", "用辨析题巩固"),
+        ]
+    else:
+        extra_edges = [
+            ("concept_1", "procedure_1", "prerequisite", "先理解再操作"),
+            ("procedure_2", "boundary_3", "causes", "连续状态影响边界"),
+            ("boundary_2", "practice_2", "solves", "用伪过程检查"),
+        ]
+    for source_id, target_id, relation, label in extra_edges:
+        if (source_id, target_id) in existing_pairs:
+            continue
+        edges.append(
+            {
+                "source": source_id,
+                "target": target_id,
+                "source_node_id": source_id,
+                "target_node_id": target_id,
+                "relationship_type": relation,
+                "label": label,
+            }
+        )
+    payload["edges"] = edges
+    state["render_payload"] = payload
+    record_step(
+        db,
+        state["run"],
+        step_name="relationship_refiner_agent",
+        step_order=5,
+        output_summary={"edge_count": len(edges), "cross_relationships": 3},
+    )
+    return state
+
+
+def _mind_map_guard_node(db: Session, state: MindMapResourceState) -> MindMapResourceState:
+    allowed_source_ids = {source.id for source in state.get("sources", [])}
+    payload = state["render_payload"]
+    invalid_ids: set[str] = set()
+    for node in payload.get("nodes", []) if isinstance(payload.get("nodes"), list) else []:
+        if not isinstance(node, dict):
+            continue
+        raw_ids = node.get("citation_ids") if isinstance(node.get("citation_ids"), list) else node.get("citations")
+        valid_ids = [str(source_id) for source_id in (raw_ids or []) if str(source_id) in allowed_source_ids]
+        invalid_ids.update(str(source_id) for source_id in (raw_ids or []) if str(source_id) not in allowed_source_ids)
+        node["citation_ids"] = valid_ids
+        node["citations"] = valid_ids
+        if not valid_ids and node.get("node_type") in {"concept", "procedure", "mistake"}:
+            node["confidence"] = min(float(node.get("confidence") or 0.5), 0.58)
+    citations = [_citation(source) for source in state.get("sources", [])]
+    risk_flags = list(payload.get("risk_flags", [])) if isinstance(payload.get("risk_flags"), list) else []
+    if not citations and "引用不足" not in risk_flags:
+        risk_flags.append("引用不足")
+    if invalid_ids and "存在无效引用并已过滤" not in risk_flags:
+        risk_flags.append("存在无效引用并已过滤")
+    payload["risk_flags"] = risk_flags
+    state["render_payload"] = payload
+    state["citations"] = citations
+    state["risk_flags"] = risk_flags
+    record_step(
+        db,
+        state["run"],
+        step_name="citation_guard_agent",
+        step_order=6,
+        output_summary={
+            "citation_count": len(citations),
+            "invalid_citation_ids": sorted(invalid_ids),
+            "risk_flags": risk_flags,
+        },
+    )
+    return state
+
+
+def _mind_map_critic_node(db: Session, state: MindMapResourceState) -> MindMapResourceState:
+    payload = state["render_payload"]
+    nodes = payload.get("nodes", []) if isinstance(payload.get("nodes"), list) else []
+    level_one_count = sum(1 for node in nodes if isinstance(node, dict) and int(node.get("level", 0) or 0) == 1)
+    has_mistake = any(isinstance(node, dict) and node.get("node_type") == "mistake" for node in nodes)
+    has_profile_tip = any(isinstance(node, dict) and node.get("node_type") == "profile_tip" for node in nodes)
+    risk_flags = list(state.get("risk_flags", []))
+    if not 4 <= level_one_count <= 7 and "一级分支数量异常" not in risk_flags:
+        risk_flags.append("一级分支数量异常")
+    if not has_mistake and "缺少易错点" not in risk_flags:
+        risk_flags.append("缺少易错点")
+    if not has_profile_tip and "缺少画像提醒" not in risk_flags:
+        risk_flags.append("缺少画像提醒")
+    payload["risk_flags"] = risk_flags
+    payload.setdefault("metadata", {})
+    if isinstance(payload["metadata"], dict):
+        payload["metadata"].update(
+            {
+                "critic": "rule_fallback_mind_map_critic",
+                "quality_checks": {
+                    "node_count": len(nodes),
+                    "level_one_count": level_one_count,
+                    "has_mistake": has_mistake,
+                    "has_profile_tip": has_profile_tip,
+                },
+            }
+        )
+    state["render_payload"] = payload
+    state["risk_flags"] = risk_flags
+    state["confidence"] = 0.84 if state.get("citations") and not risk_flags else 0.58 if state.get("citations") else 0.5
+    record_step(
+        db,
+        state["run"],
+        step_name="mind_map_critic_agent",
+        step_order=7,
+        status="SUCCEEDED",
+        output_summary={
+            "node_count": len(nodes),
+            "level_one_count": level_one_count,
+            "risk_flags": risk_flags,
+            "confidence": state["confidence"],
+        },
+    )
+    return state
+
+
+def _mind_map_persist_node(db: Session, state: MindMapResourceState) -> MindMapResourceState:
+    resource_id = _new_id("res")
+    path, file_format = _render_generic_resource(
+        resource_id,
+        "MIND_MAP",
+        state["title"],
+        state["render_payload"],
+        state.get("citations", []),
+    )
+    resource = StudentGeneratedResource(
+        id=resource_id,
+        student_id=state["student_id"],
+        course_id=state["course_id"],
+        class_id=state["class_id"],
+        run_id=state["run_id"],
+        session_id=state.get("session_id"),
+        resource_type="MIND_MAP",
+        title=state["title"],
+        prompt=state["message"],
+        knowledge_point=state["knowledge_point"],
+        summary=state["summary"],
+        status="READY",
+        render_payload_json=_json_dumps(state["render_payload"]),
+        citations_json=_json_dumps(state.get("citations", [])),
+        file_path=path,
+        file_format=file_format,
+        confidence=state["confidence"],
+        saved_to_resource_center=False,
+    )
+    db.add(resource)
+    state["resource"] = resource
+    state["file_path"] = path
+    state["file_format"] = file_format
+    record_step(
+        db,
+        state["run"],
+        step_name="persist_mind_map_resource",
+        step_order=8,
+        output_summary={"resource_id": resource_id, "file_format": file_format},
+    )
+    return state
+
+
 async def generate_ppt_resource(
     db: Session,
     *,
@@ -1865,6 +2507,73 @@ async def generate_ppt_resource(
     return _serialize_resource(resource)
 
 
+async def generate_mind_map_resource(
+    db: Session,
+    *,
+    user: User,
+    class_id: str,
+    course: Course,
+    message: str,
+    session_id: str | None = None,
+) -> dict[str, Any]:
+    state: MindMapResourceState = {
+        "run_id": new_run_id(),
+        "student_id": user.id,
+        "class_id": class_id,
+        "course_id": course.id,
+        "session_id": session_id,
+        "message": message.strip(),
+        "resource_type": "MIND_MAP",
+    }
+
+    if StateGraph is not None:
+        graph = StateGraph(MindMapResourceState)
+        graph.add_node("create_run", lambda graph_state: _create_mind_map_run_node(db, graph_state))
+        graph.add_node("build_context", lambda graph_state: _mind_map_context_node(db, user, course, graph_state))
+        graph.add_node("plan_structure", lambda graph_state: _mind_map_planner_node(db, graph_state))
+        graph.add_node("generate_nodes", lambda graph_state: _mind_map_content_node(db, course, graph_state))
+        graph.add_node("refine_relationships", lambda graph_state: _mind_map_relationship_node(db, graph_state))
+        graph.add_node("guard_citations", lambda graph_state: _mind_map_guard_node(db, graph_state))
+        graph.add_node("review_quality", lambda graph_state: _mind_map_critic_node(db, graph_state))
+        graph.add_node("persist_resource", lambda graph_state: _mind_map_persist_node(db, graph_state))
+        graph.set_entry_point("create_run")
+        graph.add_edge("create_run", "build_context")
+        graph.add_edge("build_context", "plan_structure")
+        graph.add_edge("plan_structure", "generate_nodes")
+        graph.add_edge("generate_nodes", "refine_relationships")
+        graph.add_edge("refine_relationships", "guard_citations")
+        graph.add_edge("guard_citations", "review_quality")
+        graph.add_edge("review_quality", "persist_resource")
+        graph.add_edge("persist_resource", END)
+        state = await graph.compile().ainvoke(state)
+    else:
+        state = _create_mind_map_run_node(db, state)
+        state = _mind_map_context_node(db, user, course, state)
+        state = _mind_map_planner_node(db, state)
+        state = _mind_map_content_node(db, course, state)
+        state = _mind_map_relationship_node(db, state)
+        state = _mind_map_guard_node(db, state)
+        state = _mind_map_critic_node(db, state)
+        state = _mind_map_persist_node(db, state)
+
+    resource = state["resource"]
+    finish_run(
+        db,
+        state["run"],
+        output={
+            "resource_id": resource.id,
+            "title": resource.title,
+            "resource_type": resource.resource_type,
+            "node_count": state["item_count"],
+            "risk_flags": state.get("risk_flags", []),
+        },
+        model_provider="RULE_FALLBACK",
+        model_name="mind-map-agent-template",
+        prompt_version=MIND_MAP_PROMPT_VERSION,
+    )
+    return _serialize_resource(resource)
+
+
 async def generate_learning_resource(
     db: Session,
     *,
@@ -1878,6 +2587,15 @@ async def generate_learning_resource(
     normalized_type = _validate_resource_type(resource_type)
     if normalized_type == "PPT":
         return await generate_ppt_resource(
+            db,
+            user=user,
+            class_id=class_id,
+            course=course,
+            message=message,
+            session_id=session_id,
+        )
+    if normalized_type == "MIND_MAP":
+        return await generate_mind_map_resource(
             db,
             user=user,
             class_id=class_id,
