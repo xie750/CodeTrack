@@ -210,7 +210,7 @@ def _cleanup_topic(raw: str) -> str:
     topic = re.sub(r"\s+", " ", raw).strip(" ：:，,。.；;、")
     topic = re.sub(r"^(帮我|请|生成|整理|制作|做一个|做一份|输出|围绕|关于)+", "", topic, flags=re.IGNORECASE)
     topic = topic.strip(" ：:，,。.；;、")
-    suffix_pattern = r"(相关|有关)?的?(PPTX?|pptx?|幻灯片|演示文稿|思维导图|导图|学习地图|教学讲解|学习资源|复习资料|讲解|资料|资源)$"
+    suffix_pattern = r"(相关|有关)?的?(PPTX?|pptx?|幻灯片|演示文稿|思维导图|导图|学习地图|学习文档|讲解文档|复习文档|文档|教学讲解|学习资源|复习资料|讲解|资料|资源)$"
     while True:
         cleaned = re.sub(suffix_pattern, "", topic, flags=re.IGNORECASE).strip(" ：:，,。.；;、")
         cleaned = re.sub(r"(相关|有关)的?$", "", cleaned, flags=re.IGNORECASE).strip(" ：:，,。.；;、")
@@ -225,8 +225,8 @@ def _extract_requested_topic(message: str) -> str | None:
     text = message.strip()
     patterns = [
         r"(?:把)(.+?)(?:整理|制作|生成|做成|转成|变成)(?:成|为)?(?:.+?)(?:思维导图|导图|学习地图)",
-        r"(?:关于|围绕)(.+?)(?:的)?(?:思维导图|导图|学习地图|PPT|ppt|幻灯片|演示文稿|讲解|资料|资源|$)",
-        r"(?:生成|制作|整理|做一份|做一个)(.+?)(?:相关|有关|的)?(?:思维导图|导图|学习地图|PPT|ppt|幻灯片|演示文稿|资料|资源|$)",
+        r"(?:关于|围绕)(.+?)(?:的)?(?:思维导图|导图|学习地图|PPT|ppt|幻灯片|演示文稿|学习文档|讲解文档|复习文档|文档|讲解|资料|资源|$)",
+        r"(?:生成|制作|整理|做一份|做一个)(.+?)(?:相关|有关|的)?(?:思维导图|导图|学习地图|PPT|ppt|幻灯片|演示文稿|学习文档|讲解文档|复习文档|文档|资料|资源|$)",
     ]
     for pattern in patterns:
         match = re.search(pattern, text, flags=re.IGNORECASE)
@@ -1049,6 +1049,10 @@ def _mind_map_topic_family(knowledge_point: str) -> str:
     return "data_structure"
 
 
+def _display_knowledge_point(knowledge_point: str) -> str:
+    return re.sub(r"java(?!script)", "Java", knowledge_point, flags=re.IGNORECASE)
+
+
 def _fallback_document(
     *,
     message: str,
@@ -1057,52 +1061,186 @@ def _fallback_document(
     sources: list[KnowledgeSource],
 ) -> tuple[str, str, dict[str, Any], int]:
     source_ids = _common_source_ids(sources)
-    source_summary = sources[0].summary if sources else f"围绕{knowledge_point}生成学习讲解。"
-    title = f"{knowledge_point}学习文档"
+    display_topic = _display_knowledge_point(knowledge_point)
+    source_summary = sources[0].summary if sources else f"课程资料暂未直接命中“{display_topic}”，以下内容按用户问题和课程学习路径组织。"
+    topic_family = _mind_map_topic_family(f"{message} {knowledge_point}")
+    requested_need = "复习巩固"
+    if re.search(r"入门|基础|小白|讲清楚|看不懂", message):
+        requested_need = "从零理解"
+    elif re.search(r"考试|测验|背|重点|复习", message):
+        requested_need = "考前复习"
+    elif re.search(r"代码|实现|编程|java|python|语法", message, flags=re.IGNORECASE):
+        requested_need = "代码应用"
+    elif re.search(r"对比|区别|关系", message):
+        requested_need = "概念辨析"
+    topic_domain = {
+        "programming": "编程基础",
+        "machine_learning": "机器学习",
+        "data_structure": "数据结构",
+    }.get(topic_family, course.name)
+
+    if topic_family == "programming":
+        rules_table = (
+            "| 模块 | 必须掌握什么 | 判断自己会不会 |\n"
+            "| --- | --- | --- |\n"
+            f"| 变量与类型 | 知道{display_topic}里数据如何被声明、赋值和转换 | 能解释 int、double、boolean、String 等类型适合存什么 |\n"
+            "| 表达式与运算符 | 理解算术、比较、逻辑运算的执行结果 | 能手算 `a > 3 && b != 0` 这类表达式 |\n"
+            "| 分支结构 | 用 if / else 表达不同条件下的执行路径 | 能画出每个条件对应的分支 |\n"
+            "| 循环结构 | 用 for / while 处理重复过程，并写清退出条件 | 能说出循环变量何时变化、何时停止 |\n"
+            "| 方法调用 | 把重复逻辑封装成输入、处理、返回值 | 能区分参数、返回值和局部变量 |"
+        )
+        example_block = (
+            "```java\n"
+            "int score = 86;\n"
+            "if (score >= 90) {\n"
+            "    System.out.println(\"A\");\n"
+            "} else if (score >= 60) {\n"
+            "    System.out.println(\"Pass\");\n"
+            "} else {\n"
+            "    System.out.println(\"Retry\");\n"
+            "}\n"
+            "```\n"
+            "读这段代码时不要先背语法名词，而是按三步走：先看变量保存了什么，再看条件从上到下如何判断，最后看实际输出落在哪个分支。"
+        )
+        mistake_table = (
+            "| 常见问题 | 典型表现 | 修正方式 |\n"
+            "| --- | --- | --- |\n"
+            "| 只背语法格式 | 会写模板，但换个题就不知道变量怎么设 | 先用一句话写出输入、处理、输出 |\n"
+            "| 条件顺序混乱 | 多个 if / else if 的结果和预期不一致 | 从最特殊条件写到最一般条件 |\n"
+            "| 循环边界写错 | 少执行一次或多执行一次 | 写出第 1 次、最后 1 次循环变量的值 |\n"
+            "| 类型混用 | 编译报错或结果被截断 | 每次赋值前确认左右两边类型是否匹配 |"
+        )
+        practice_list = (
+            "- 用 3 个变量描述一个学生成绩判断场景。\n"
+            "- 写一段 if / else，把分数映射成 A、B、C、D。\n"
+            "- 写一个 for 循环输出 1 到 10 中的偶数。\n"
+            "- 解释你的循环为什么不会多输出或少输出。"
+        )
+    elif topic_family == "machine_learning":
+        rules_table = (
+            "| 模块 | 必须掌握什么 | 判断自己会不会 |\n"
+            "| --- | --- | --- |\n"
+            f"| 问题定义 | 知道{display_topic}要预测、分类或解释什么 | 能说清输入特征和目标变量 |\n"
+            "| 数据划分 | 区分训练集、验证集和测试集 | 能解释为什么不能只看训练集效果 |\n"
+            "| 模型训练 | 理解参数如何根据损失函数被调整 | 能说出损失下降代表什么 |\n"
+            "| 泛化评估 | 判断模型是否过拟合或欠拟合 | 能根据训练/验证表现提出改进方向 |"
+        )
+        example_block = (
+            "| 观察现象 | 可能问题 | 下一步 |\n"
+            "| --- | --- | --- |\n"
+            "| 训练准确率很高，验证准确率低 | 过拟合 | 减少复杂度、增加正则化或补充数据 |\n"
+            "| 训练和验证准确率都低 | 欠拟合 | 增加特征、换模型或训练更充分 |\n"
+            "| 指标波动大 | 数据量或划分不稳定 | 做交叉验证或检查样本分布 |"
+        )
+        mistake_table = (
+            "| 常见问题 | 典型表现 | 修正方式 |\n"
+            "| --- | --- | --- |\n"
+            "| 把测试集当验证集反复调参 | 最终指标虚高 | 测试集只在最后使用 |\n"
+            "| 只看准确率 | 类别不均衡时误判模型好坏 | 同时看召回率、精确率、F1 |\n"
+            "| 忽略数据泄漏 | 线上效果明显变差 | 检查特征是否包含未来信息 |"
+        )
+        practice_list = (
+            "- 写出一个机器学习任务的输入、输出和评价指标。\n"
+            "- 说明训练集、验证集、测试集各自用途。\n"
+            "- 给出一个过拟合现象，并写出两种处理办法。"
+        )
+    else:
+        rules_table = (
+            "| 模块 | 必须掌握什么 | 判断自己会不会 |\n"
+            "| --- | --- | --- |\n"
+            f"| 抽象结构 | 知道{display_topic}存储什么、限制什么 | 能画出一次操作前后的状态 |\n"
+            "| 基本操作 | 掌握插入、删除、查找或访问规则 | 能手推连续 3 次操作后的结果 |\n"
+            "| 边界条件 | 处理空结构、满结构、首尾位置 | 能写出最小用例和边界用例 |\n"
+            "| 复杂度 | 知道关键操作的时间/空间代价 | 能解释为什么某个操作快或慢 |"
+        )
+        example_block = (
+            "| 操作 | 操作前 | 操作后 | 需要检查 |\n"
+            "| --- | --- | --- | --- |\n"
+            f"| 插入元素 | {display_topic}当前状态 | 元素进入指定位置 | 是否为空、是否满、指针/下标是否更新 |\n"
+            "| 删除元素 | 至少存在一个元素 | 目标元素被移除 | 删除后结构是否仍然连通或有序 |\n"
+            "| 访问元素 | 给定位置或条件 | 返回对应元素 | 越界、空结构、重复元素如何处理 |"
+        )
+        mistake_table = (
+            "| 常见问题 | 典型表现 | 修正方式 |\n"
+            "| --- | --- | --- |\n"
+            "| 只记住普通情况 | 一遇到空结构就错 | 每个操作先问能不能做，再问怎么做 |\n"
+            "| 更新顺序错误 | 指针、下标或计数不一致 | 画出操作前后两张状态图 |\n"
+            "| 忘记复杂度 | 会写代码但不会解释效率 | 把循环次数和数据规模对应起来 |"
+        )
+        practice_list = (
+            f"- 画出{display_topic}执行 3 次连续操作后的状态变化。\n"
+            "- 写出一个普通用例、一个最小用例、一个边界用例。\n"
+            "- 解释每个核心操作的时间复杂度。"
+        )
+
+    title = f"{display_topic}学习讲义"
     sections = [
         {
-            "heading": "学习目标",
+            "heading": "用户需求拆解",
             "paragraphs": [
-                f"本资源面向{course.name}自主学习场景，帮助学生围绕“{message}”形成可复习的完整文档。",
-                f"学习后应能说清{knowledge_point}的基本含义、关键操作、边界条件和常见应用。"
+                f"用户输入是“{message}”，核心不是简单要一份资料，而是希望把“{display_topic}”细化成能理解、能复习、能练习的学习材料。",
+                f"- 主题域：{topic_domain}\n- 关联课程：{course.name}\n- 需求类型：{requested_need}\n- 建议阅读方式：先看框架，再看例子，最后做自检任务。",
             ],
             "citation_ids": source_ids[:1],
         },
         {
-            "heading": "核心概念",
+            "heading": "一句话框架",
             "paragraphs": [
                 source_summary,
-                f"理解{knowledge_point}时，需要同时关注抽象规则、状态变化和实际实现中的约束。"
+                f"学习“{display_topic}”时，不要只记定义，要同时抓住三件事：它解决什么问题、规则如何运行、遇到边界情况时怎么判断。"
             ],
             "citation_ids": source_ids[:2],
         },
         {
-            "heading": "关键过程",
+            "heading": "必须掌握的规则",
             "paragraphs": [
-                "先识别输入、输出和状态变量，再按步骤追踪每一次操作对状态的影响。",
-                "建议用表格、手绘过程图或伪过程记录中间状态，避免只记结论。"
+                rules_table,
+                "这张表可以作为预习和复习清单：如果某一行不能用自己的话解释，就说明这一块还没有真正掌握。"
             ],
             "citation_ids": source_ids[:2],
         },
         {
-            "heading": "易错点与自检",
+            "heading": "带着例子走一遍",
             "paragraphs": [
-                "常见问题集中在空结构、满结构、边界输入和更新顺序上。",
-                "完成学习后，可以用普通用例、最小用例和边界用例各做一次自测。"
+                example_block,
+                "看例子时建议把每一步的输入、状态变化和输出写出来，这比只看最终答案更能发现薄弱点。"
+            ],
+            "citation_ids": source_ids[:2],
+        },
+        {
+            "heading": "高频易错点",
+            "paragraphs": [
+                mistake_table,
+                "如果你发现自己错在同一类问题上，可以把这一行单独保存成错因标签，后续让 AI 导师按这个错因继续出题。"
             ],
             "citation_ids": source_ids[1:3] or source_ids[:1],
         },
         {
+            "heading": "10 分钟自检任务",
+            "paragraphs": [
+                practice_list,
+                "自检时不要只写答案，还要写一句“为什么这样做”。能解释原因，才算真正掌握。"
+            ],
+            "citation_ids": source_ids[:1],
+        },
+        {
             "heading": "下一步学习建议",
             "paragraphs": [
-                f"先保存本文档，再生成一组{knowledge_point}练习题巩固判断和实现能力。",
-                "如果仍不稳定，可以回到 AI 对话窗口继续追问某个小步骤。"
+                f"如果本文档读完仍觉得抽象，下一步建议继续生成“{display_topic}练习题”或“{display_topic}思维导图”，用题目和结构图反向检验理解。",
+                f"推荐追问：请围绕{display_topic}出 5 道由浅入深的题，并标注每题考查的知识点和易错点。"
             ],
             "citation_ids": source_ids[:1],
         },
     ]
-    summary = f"围绕“{message}”生成 {len(sections)} 节中文学习文档。"
-    return title, summary, {"sections": sections}, len(sections)
+    metadata = {
+        "document_style": "study-handout",
+        "document_depth": "expanded",
+        "requested_need": requested_need,
+        "topic_family": topic_family,
+        "topic_domain": topic_domain,
+    }
+    summary = f"已将“{message}”细化为 {len(sections)} 节学习讲义，包含规则表、示例、易错点和自检任务。"
+    return title, summary, {"sections": sections, "metadata": metadata}, len(sections)
 
 
 def _fallback_mind_map(
@@ -1628,13 +1766,57 @@ def _render_docx(resource_id: str, title: str, payload: dict[str, Any], citation
     path = storage_dir / f"{resource_id}.docx"
     document = Document()
     document.add_heading(title, level=1)
+
+    def add_markdownish_table(lines: list[str]) -> bool:
+        if len(lines) < 2:
+            return False
+        divider = lines[1].replace("|", "").replace("-", "").replace(":", "").strip()
+        if divider:
+            return False
+        rows = [[cell.strip() for cell in line.strip().strip("|").split("|")] for line in lines if line.strip()]
+        rows = [row for index, row in enumerate(rows) if index != 1 and any(row)]
+        if not rows:
+            return False
+        table = document.add_table(rows=len(rows), cols=max(len(row) for row in rows))
+        try:
+            table.style = "Table Grid"
+        except KeyError:
+            pass
+        for row_index, row in enumerate(rows):
+            for col_index, cell in enumerate(row):
+                table.rows[row_index].cells[col_index].text = cell
+        return True
+
+    def add_markdownish_paragraphs(paragraphs: list[Any]) -> None:
+        for raw in paragraphs:
+            text = str(raw).strip()
+            if not text:
+                continue
+            lines = [line.rstrip() for line in text.splitlines() if line.strip()]
+            if lines and lines[0].startswith("|") and add_markdownish_table(lines):
+                continue
+            in_code = False
+            for line in lines:
+                stripped = line.strip()
+                if stripped.startswith("```"):
+                    in_code = not in_code
+                    continue
+                if stripped.startswith("- "):
+                    document.add_paragraph(stripped[2:].strip(), style="List Bullet")
+                elif stripped.startswith("### "):
+                    document.add_heading(stripped[4:].strip(), level=3)
+                elif in_code:
+                    paragraph = document.add_paragraph()
+                    run = paragraph.add_run(stripped)
+                    run.font.name = "Consolas"
+                else:
+                    document.add_paragraph(stripped)
+
     for section in payload.get("sections", []):
         if not isinstance(section, dict):
             continue
         document.add_heading(str(section.get("heading", "学习小节")), level=2)
-        for paragraph in section.get("paragraphs", []):
-            if str(paragraph).strip():
-                document.add_paragraph(str(paragraph).strip())
+        add_markdownish_paragraphs(section.get("paragraphs", []))
     if citations:
         document.add_heading("引用来源", level=2)
         for citation in citations[:5]:
@@ -1701,12 +1883,32 @@ def _markdown_lines(resource_type: str, title: str, payload: dict[str, Any], cit
     return lines
 
 
+def _attach_document_markdown_preview(title: str, payload: dict[str, Any], citations: list[dict[str, Any]]) -> dict[str, Any]:
+    next_payload = dict(payload)
+    metadata = next_payload.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+    metadata.update(
+        {
+            "renderer": "markdown",
+            "preview_format": "MARKDOWN",
+            "render_kernel": "react-markdown",
+        }
+    )
+    next_payload["metadata"] = metadata
+    next_payload["markdown"] = "\n".join(_markdown_lines("DOCUMENT", title, next_payload, citations)).strip() + "\n"
+    return next_payload
+
+
 def _render_markdown(resource_id: str, resource_type: str, title: str, payload: dict[str, Any], citations: list[dict[str, Any]]) -> tuple[str, str]:
     settings = get_settings()
     storage_dir = Path(settings.resource_storage_dir) / "generated" / resource_type.lower()
     storage_dir.mkdir(parents=True, exist_ok=True)
     path = storage_dir / f"{resource_id}.md"
-    path.write_text("\n".join(_markdown_lines(resource_type, title, payload, citations)), encoding="utf-8")
+    if resource_type == "DOCUMENT" and isinstance(payload.get("markdown"), str) and payload["markdown"].strip():
+        path.write_text(str(payload["markdown"]).strip() + "\n", encoding="utf-8")
+    else:
+        path.write_text("\n".join(_markdown_lines(resource_type, title, payload, citations)), encoding="utf-8")
     return str(path), "MD"
 
 
@@ -2093,6 +2295,8 @@ def _generic_content_node(db: Session, course: Course, state: GenericResourceSta
         sources=sources,
     )
     citations = [_citation(source) for source in sources]
+    if state["resource_type"] == "DOCUMENT":
+        render_payload = _attach_document_markdown_preview(title, render_payload, citations)
     state["title"] = title
     state["summary"] = summary
     state["render_payload"] = render_payload

@@ -388,6 +388,7 @@ export type GeneratedResource = {
     cards?: GeneratedResourceCard[];
     segments?: GeneratedResourcePodcastSegment[];
     presenton_slides?: GeneratedResourcePresentonSlide[];
+    markdown?: string;
     metadata?: {
       renderer?: string;
       renderer_requested?: string;
