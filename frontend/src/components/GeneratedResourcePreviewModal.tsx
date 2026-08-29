@@ -341,6 +341,180 @@ function DocumentMarkdownPreview({ resource }: { resource: GeneratedResource }) 
   );
 }
 
+function escapeHtml(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function practiceTypeLabel(type?: string) {
+  const normalized = String(type ?? "").toLowerCase();
+  if (normalized.includes("multiple")) return "多选题";
+  if (normalized.includes("true")) return "判断题";
+  if (normalized.includes("short") || normalized.includes("fill") || normalized.includes("process") || normalized.includes("debug") || normalized.includes("reflection")) return "简答题";
+  return "单选题";
+}
+
+function buildPracticePreviewHtml(resource: GeneratedResource, activeIndex: number) {
+  const questions = resource.render_payload.questions ?? [];
+  const activeQuestion = questions[Math.min(activeIndex, Math.max(questions.length - 1, 0))];
+  const optionHtml = (activeQuestion?.options ?? [])
+    .map((option, index) => `
+      <li>
+        <span>${String.fromCharCode(65 + index)}</span>
+        <p>${escapeHtml(option)}</p>
+      </li>
+    `)
+    .join("");
+  const citationHtml = resource.citations.slice(0, 3)
+    .map((citation) => `<span>引用：${escapeHtml(citation.title)}</span>`)
+    .join("");
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: #17243b;
+      background: linear-gradient(180deg, #f8fbff 0%, #eef5fb 100%);
+      font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    }
+    main {
+      width: min(760px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 34px 0 38px;
+    }
+    header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid #dce7f4;
+    }
+    small, .readonly {
+      min-height: 28px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 9px;
+      border-radius: 7px;
+      color: #176cf5;
+      background: #eef6ff;
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .readonly {
+      color: #38606f;
+      background: #eaf7fb;
+      white-space: nowrap;
+    }
+    h1 {
+      margin: 14px 0 0;
+      color: #0f1b45;
+      font-size: 26px;
+      line-height: 1.35;
+      letter-spacing: 0;
+    }
+    .stem {
+      margin: 24px 0 0;
+      padding: 22px;
+      border: 1px solid #dbe7f5;
+      border-radius: 8px;
+      background: #ffffff;
+      box-shadow: 0 16px 36px rgba(31, 63, 105, 0.08);
+    }
+    .stem h2 {
+      margin: 0;
+      color: #17243b;
+      font-size: 18px;
+      line-height: 1.65;
+      letter-spacing: 0;
+    }
+    ol {
+      display: grid;
+      gap: 10px;
+      margin: 18px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+    li {
+      min-height: 48px;
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr);
+      align-items: center;
+      gap: 10px;
+      padding: 11px 12px;
+      border: 1px solid #dce5f0;
+      border-radius: 8px;
+      background: #fbfdff;
+    }
+    li span {
+      width: 24px;
+      height: 24px;
+      display: grid;
+      place-items: center;
+      border-radius: 7px;
+      color: #176cf5;
+      background: #eef6ff;
+      font-size: 12px;
+      font-weight: 950;
+    }
+    p {
+      margin: 0;
+      color: #344156;
+      font-size: 15px;
+      line-height: 1.7;
+      font-weight: 720;
+    }
+    footer {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 18px;
+    }
+    footer span {
+      min-height: 26px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 8px;
+      border: 1px solid #dbe7f5;
+      border-radius: 7px;
+      color: #52627a;
+      background: #ffffff;
+      font-size: 12px;
+      font-weight: 850;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <small>${escapeHtml(resource.knowledge_point || "自主学习资源")} · ${escapeHtml(practiceTypeLabel(activeQuestion?.type))}</small>
+        <h1>第 ${activeIndex + 1} 题预览</h1>
+      </div>
+      <span class="readonly">只读预览</span>
+    </header>
+    <section class="stem">
+      <h2>${escapeHtml(activeQuestion?.stem || "暂无题面")}</h2>
+      ${optionHtml ? `<ol>${optionHtml}</ol>` : `<p style="margin-top:16px;">简答题题面预览，正式作答请进入资源中心练习页。</p>`}
+    </section>
+    <footer>
+      <span>答案与解析将在正式提交后展示</span>
+      ${citationHtml}
+    </footer>
+  </main>
+</body>
+</html>`;
+}
+
 export default function GeneratedResourcePreviewModal({
   resource,
   onClose,
@@ -366,6 +540,10 @@ export default function GeneratedResourcePreviewModal({
   const shouldUseDocumentPreview = resource?.resource_type === "DOCUMENT";
   const showPdfPreview = Boolean(shouldUsePdfPreview) && pdfPreviewStatus !== "failed";
   const showPdfPreviewUnavailable = Boolean(shouldUsePdfPreview) && pdfPreviewStatus === "failed";
+  const practicePreviewHtml = useMemo(
+    () => resource?.resource_type === "PRACTICE_SET" ? buildPracticePreviewHtml(resource, activeItem) : "",
+    [activeItem, resource]
+  );
 
   useEffect(() => {
     setActiveItem(0);
@@ -570,20 +748,12 @@ export default function GeneratedResourcePreviewModal({
                     </aside>
                   </section>
                 ) : activeQuestion ? (
-                  <section className="ai-preview-practice">
-                    <small>{resource.knowledge_point || "自主学习资源"}</small>
-                    <h2>{activeQuestion.stem}</h2>
-                    {activeQuestion.options?.length ? (
-                      <ol>
-                        {activeQuestion.options.map((option) => <li key={option}>{option}</li>)}
-                      </ol>
-                    ) : null}
-                    <footer>
-                      <strong>参考答案</strong>
-                      <p>{activeQuestion.answer}</p>
-                      <strong>解析</strong>
-                      <p>{activeQuestion.analysis}</p>
-                    </footer>
+                  <section className="ai-preview-practice ai-preview-practice-kernel">
+                    <iframe
+                      title={`${resource.title} 练习题只读预览`}
+                      srcDoc={practicePreviewHtml}
+                      sandbox=""
+                    />
                   </section>
                 ) : activeCard ? (
                   <section className="ai-preview-cards">

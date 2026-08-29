@@ -21,7 +21,11 @@ from backend.app.models import (
     AgentRun,
     Course,
     KnowledgeSource,
+    LearnerErrorStat,
     LearnerEvent,
+    LearnerKnowledgeState,
+    LearnerProfileSnapshot,
+    Recommendation,
     StudentGeneratedResource,
     User,
 )
@@ -2041,6 +2045,10 @@ def _serialize_resource(resource: StudentGeneratedResource) -> dict[str, Any]:
     }
 
 
+def serialize_generated_resource(resource: StudentGeneratedResource) -> dict[str, Any]:
+    return _serialize_resource(resource)
+
+
 def _create_run_node(db: Session, state: PptResourceState) -> PptResourceState:
     context = AgentRunContext(
         run_id=state["run_id"],
@@ -2884,6 +2892,367 @@ def save_generated_resource(db: Session, *, user: User, class_id: str, resource_
             )
         )
     return _serialize_resource(resource)
+
+
+def _practice_question_type(raw_type: str) -> str:
+    normalized = raw_type.strip().upper()
+    if normalized in {"MULTIPLE_CHOICE", "MULTI_CHOICE"}:
+        return "MULTIPLE_CHOICE"
+    if normalized in {"TRUE_FALSE", "JUDGE"}:
+        return "TRUE_FALSE"
+    if normalized in {"SHORT_ANSWER", "FILL_BLANK", "FILL_IN_BLANK", "PROCESS", "DEBUG", "REFLECTION"}:
+        return "SHORT_ANSWER"
+    return "SINGLE_CHOICE"
+
+
+def _normalize_practice_questions(resource: StudentGeneratedResource) -> list[dict[str, Any]]:
+    payload = _json_loads(resource.render_payload_json, {})
+    if not isinstance(payload, dict):
+        return []
+    questions = payload.get("questions", [])
+    if not isinstance(questions, list):
+        return []
+
+    normalized: list[dict[str, Any]] = []
+    for index, question in enumerate(questions, start=1):
+        if not isinstance(question, dict):
+            continue
+        options = question.get("options", [])
+        options = [str(option).strip() for option in options if str(option).strip()] if isinstance(options, list) else []
+        answer = str(question.get("answer", "")).strip()
+        question_type = _practice_question_type(str(question.get("type", "")))
+        if options and question_type == "SHORT_ANSWER":
+            question_type = "SINGLE_CHOICE"
+        correct_indexes = [
+            str(option_index)
+            for option_index, option in enumerate(options)
+            if option == answer or option.strip().lower() == answer.lower()
+        ]
+        normalized.append(
+            {
+                "question_id": f"{resource.id}_q{index}",
+                "question_type": question_type,
+                "stem": str(question.get("stem", "")).strip(),
+                "analysis": str(question.get("analysis", "")).strip(),
+                "knowledge_points": [resource.knowledge_point] if resource.knowledge_point else [],
+                "difficulty": "BASIC",
+                "score": 100 / max(len(questions), 1),
+                "answer": answer,
+                "correct_option_ids": correct_indexes,
+                "options": [
+                    {
+                        "option_id": str(option_index),
+                        "label": chr(65 + option_index),
+                        "content": option,
+                        "is_correct": str(option_index) in correct_indexes,
+                    }
+                    for option_index, option in enumerate(options)
+                ],
+            }
+        )
+    return [question for question in normalized if question["stem"]]
+
+
+def practice_workspace_payload(db: Session, *, student_id: str, resource_id: str) -> dict[str, Any]:
+    resource = get_generated_resource(db, student_id=student_id, resource_id=resource_id)
+    if resource.resource_type != "PRACTICE_SET":
+        raise ApiError(400, "RESOURCE_NOT_PRACTICE_SET", "当前资源不是练习题。")
+    if not resource.saved_to_resource_center:
+        raise ApiError(409, "RESOURCE_NOT_SAVED", "请先将练习题加入资源中心，再进入正式作答。")
+    questions = _normalize_practice_questions(resource)
+    if not questions:
+        raise ApiError(422, "PRACTICE_SET_EMPTY", "当前练习题没有可作答的题目。")
+    course = db.get(Course, resource.course_id)
+    return {
+        "resource": _serialize_resource(resource),
+        "course": {
+            "course_id": course.id if course else resource.course_id,
+            "course_name": course.name if course else resource.course_id,
+        },
+        "attempt": {
+            "status": "DRAFT",
+            "score": None,
+            "max_score": 100,
+            "correct_count": 0,
+            "total_count": len(questions),
+            "submitted_at": None,
+        },
+        "questions": [
+            {
+                **{
+                    key: value
+                    for key, value in question.items()
+                    if key not in {"answer", "correct_option_ids", "options"}
+                },
+                "options": [
+                    {key: value for key, value in option.items() if key != "is_correct"}
+                    for option in question.get("options", [])
+                    if isinstance(option, dict)
+                ],
+            }
+            for question in questions
+        ],
+    }
+
+
+def _answer_matches(question: dict[str, Any], selected: list[str]) -> bool:
+    options = question.get("options", [])
+    if options:
+        correct = sorted(str(item) for item in question.get("correct_option_ids", []))
+        return bool(correct) and sorted(str(item) for item in selected) == correct
+    expected = str(question.get("answer", "")).strip()
+    actual = str(selected[0] if selected else "").strip()
+    return bool(actual) and (actual == expected or actual.lower() == expected.lower())
+
+
+def _mastery_state(score: float) -> str:
+    if score >= 85:
+        return "STRONG"
+    if score >= 70:
+        return "STABLE"
+    if score >= 55:
+        return "NEEDS_REVIEW"
+    return "WEAK"
+
+
+def _update_profile_from_practice(
+    db: Session,
+    *,
+    user: User,
+    class_id: str,
+    resource: StudentGeneratedResource,
+    questions: list[dict[str, Any]],
+    results: list[dict[str, Any]],
+    score_percent: float,
+) -> dict[str, Any]:
+    now = utc_now()
+    points = sorted({point for question in questions for point in question.get("knowledge_points", []) if point})
+    if not points and resource.knowledge_point:
+        points = [resource.knowledge_point]
+    evidence_text = f"资源中心练习《{resource.title}》得分 {round(score_percent)}%。"
+
+    for point in points:
+        state = db.scalar(
+            select(LearnerKnowledgeState).where(
+                LearnerKnowledgeState.student_id == user.id,
+                LearnerKnowledgeState.course_id == resource.course_id,
+                LearnerKnowledgeState.knowledge_point == point,
+            )
+        )
+        if state is None:
+            state = LearnerKnowledgeState(
+                student_id=user.id,
+                course_id=resource.course_id,
+                knowledge_point=point,
+                mastery_score=round(score_percent, 1),
+                state=_mastery_state(score_percent),
+                evidence_count=1,
+                last_evidence=evidence_text,
+                updated_at=now,
+            )
+            db.add(state)
+        else:
+            next_score = round((state.mastery_score * 0.72) + (score_percent * 0.28), 1)
+            state.mastery_score = next_score
+            state.state = _mastery_state(next_score)
+            state.evidence_count += 1
+            state.last_evidence = evidence_text
+            state.updated_at = now
+
+    wrong_count = sum(1 for result in results if not result["is_correct"])
+    if wrong_count:
+        stat = db.scalar(
+            select(LearnerErrorStat).where(
+                LearnerErrorStat.student_id == user.id,
+                LearnerErrorStat.course_id == resource.course_id,
+                LearnerErrorStat.error_type == "generated_practice_misunderstanding",
+            )
+        )
+        if stat is None:
+            stat = LearnerErrorStat(
+                student_id=user.id,
+                course_id=resource.course_id,
+                error_type="generated_practice_misunderstanding",
+                label="自学练习理解偏差",
+                count=wrong_count,
+                severity="MEDIUM" if wrong_count >= 2 else "LOW",
+                related_knowledge_points=_json_dumps(points),
+                updated_at=now,
+            )
+            db.add(stat)
+        else:
+            stat.count += wrong_count
+            stat.severity = "HIGH" if stat.count >= 3 else "MEDIUM"
+            stat.related_knowledge_points = _json_dumps(sorted(set(_safe_json_list(stat.related_knowledge_points) + points)))
+            stat.updated_at = now
+
+    db.add(
+        LearnerEvent(
+            id=_new_id("event"),
+            student_id=user.id,
+            course_id=resource.course_id,
+            class_id=class_id,
+            event_type="GENERATED_PRACTICE_SUBMITTED",
+            knowledge_points=_json_dumps(points),
+            error_type="generated_practice_misunderstanding" if wrong_count else None,
+            payload=_json_dumps(
+                {
+                    "resource_id": resource.id,
+                    "resource_title": resource.title,
+                    "score_percent": score_percent,
+                    "correct_count": len(results) - wrong_count,
+                    "total_count": len(results),
+                    "wrong_question_ids": [result["question_id"] for result in results if not result["is_correct"]],
+                    "source": "resource_center_practice",
+                }
+            ),
+            created_at=now,
+        )
+    )
+
+    knowledge_states = list(
+        db.scalars(
+            select(LearnerKnowledgeState).where(
+                LearnerKnowledgeState.student_id == user.id,
+                LearnerKnowledgeState.course_id == resource.course_id,
+            )
+        ).all()
+    )
+    overall = round(sum(item.mastery_score for item in knowledge_states) / max(len(knowledge_states), 1), 1)
+    weak = min(knowledge_states, key=lambda item: item.mastery_score, default=None)
+    profile = db.scalar(
+        select(LearnerProfileSnapshot).where(
+            LearnerProfileSnapshot.student_id == user.id,
+            LearnerProfileSnapshot.course_id == resource.course_id,
+        )
+    )
+    if profile is None:
+        profile = LearnerProfileSnapshot(
+            id=f"profile_{user.id}_{resource.course_id}",
+            student_id=user.id,
+            course_id=resource.course_id,
+            class_id=class_id,
+            summary_text="已开始基于自学练习生成学习画像。",
+        )
+        db.add(profile)
+    profile.overall_progress = overall
+    profile.logic_error_rate = round((profile.logic_error_rate * 0.78) + ((wrong_count / max(len(results), 1)) * 0.22), 2)
+    profile.recent_task_completion = max(profile.recent_task_completion, 0.35 if score_percent >= 60 else 0.2)
+    profile.summary_text = f"完成资源中心练习《{resource.title}》，得分 {round(score_percent)}%，已纳入学习画像。"
+    profile.recommendation_text = (
+        f"建议复盘 {weak.knowledge_point}，再从资源中心进入同类练习巩固。"
+        if weak and weak.mastery_score < 70
+        else "当前自学练习掌握较稳，可以继续生成进阶练习或回到课程任务迁移应用。"
+    )
+    profile.updated_at = now
+
+    if weak:
+        recommendation_id = f"rec_{user.id}_{resource.course_id}_generated_practice"
+        recommendation = db.get(Recommendation, recommendation_id)
+        if recommendation is None:
+            recommendation = Recommendation(
+                id=recommendation_id,
+                student_id=user.id,
+                course_id=resource.course_id,
+                recommendation_type="REVIEW",
+                title=f"复盘 {weak.knowledge_point}",
+                reason=profile.recommendation_text,
+                priority=2,
+                related_knowledge_points=_json_dumps([weak.knowledge_point]),
+                suggested_action="REVIEW_GENERATED_PRACTICE",
+                status="ACTIVE",
+            )
+            db.add(recommendation)
+        else:
+            recommendation.title = f"复盘 {weak.knowledge_point}"
+            recommendation.reason = profile.recommendation_text
+            recommendation.related_knowledge_points = _json_dumps([weak.knowledge_point])
+            recommendation.status = "ACTIVE"
+            recommendation.created_at = now
+
+    return {
+        "overall_progress": profile.overall_progress,
+        "logic_error_rate": profile.logic_error_rate,
+        "recent_task_completion": profile.recent_task_completion,
+        "summary": profile.summary_text,
+        "recommendation": profile.recommendation_text,
+    }
+
+
+def submit_generated_practice(
+    db: Session,
+    *,
+    user: User,
+    class_id: str,
+    resource_id: str,
+    answers: list[dict[str, Any]],
+) -> dict[str, Any]:
+    resource = get_generated_resource(db, student_id=user.id, resource_id=resource_id)
+    if resource.resource_type != "PRACTICE_SET":
+        raise ApiError(400, "RESOURCE_NOT_PRACTICE_SET", "当前资源不是练习题。")
+    if not resource.saved_to_resource_center:
+        raise ApiError(409, "RESOURCE_NOT_SAVED", "请先将练习题加入资源中心，再进入正式作答。")
+    questions = _normalize_practice_questions(resource)
+    if not questions:
+        raise ApiError(422, "PRACTICE_SET_EMPTY", "当前练习题没有可作答的题目。")
+
+    answer_map = {
+        str(answer.get("question_id")): [str(item) for item in answer.get("selected_option_ids", [])]
+        for answer in answers
+        if isinstance(answer, dict)
+    }
+    results: list[dict[str, Any]] = []
+    score = 0.0
+    for question in questions:
+        selected = answer_map.get(question["question_id"], [])
+        is_correct = _answer_matches(question, selected)
+        earned = float(question["score"]) if is_correct else 0.0
+        score += earned
+        results.append(
+            {
+                "question_id": question["question_id"],
+                "is_correct": is_correct,
+                "earned_score": round(earned, 1),
+                "selected_option_ids": selected,
+            }
+        )
+    correct_count = sum(1 for result in results if result["is_correct"])
+    score_percent = round(score, 1)
+    profile_signal = _update_profile_from_practice(
+        db,
+        user=user,
+        class_id=class_id,
+        resource=resource,
+        questions=questions,
+        results=results,
+        score_percent=score_percent,
+    )
+    db.commit()
+    result_by_id = {result["question_id"]: result for result in results}
+    return {
+        "attempt_id": _new_id("practice_attempt"),
+        "status": "SUBMITTED",
+        "score": score_percent,
+        "max_score": 100,
+        "score_percent": score_percent,
+        "correct_count": correct_count,
+        "total_count": len(questions),
+        "submitted_at": iso(utc_now()),
+        "questions": [
+            {
+                key: value
+                for key, value in {
+                    **question,
+                    "selected_option_ids": result_by_id[question["question_id"]]["selected_option_ids"],
+                    "is_correct": result_by_id[question["question_id"]]["is_correct"],
+                    "earned_score": result_by_id[question["question_id"]]["earned_score"],
+                }.items()
+                if key != "answer"
+            }
+            for question in questions
+        ],
+        "profile_signal": profile_signal,
+    }
 
 
 def list_saved_generated_resources(

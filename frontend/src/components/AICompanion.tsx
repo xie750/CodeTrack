@@ -10,6 +10,7 @@ import {
   Send,
   X
 } from "lucide-react";
+import { api, type StudentAiChatStreamEvent } from "../api";
 
 type CompanionMode = "floating" | "expanded" | "chat";
 type MessageRole = "assistant" | "user";
@@ -19,6 +20,8 @@ type CompanionMessage = {
   role: MessageRole;
   content: string;
   time: string;
+  loading?: boolean;
+  error?: boolean;
 };
 
 type AICompanionProps = {
@@ -172,13 +175,16 @@ function initialMessage(routeGroup: string): CompanionMessage {
     id: "assistant-initial",
     role: "assistant",
     time: nowLabel(),
-    content: `你好，我是 CodeTrack AI 助手。我会根据「${contextLabel}」提供知识点梳理、学习建议和渐进式提示。正式 AI 回复接入后端后会显示引用来源和置信度。`
+    content: `你好，我是 CodeTrack AI 助手。我会结合「${contextLabel}」、课程知识库和学习者画像，帮助你梳理知识点、制定学习计划和定位问题。`
   };
 }
 
-function localAssistantReply(userText: string, routeGroup: string) {
-  const contextLabel = pageContextLabel(routeGroup);
-  return `前端已收到你的问题：「${userText}」。正式回答需要接入后端 AI 助学接口；当前先保留对话、输入、推荐追问和页面上下文。接入后这里会基于「${contextLabel}」、课程知识库和学习者画像生成回答。`;
+function readableAssistantError(event: { code?: string; message?: string; details?: Record<string, unknown> }) {
+  const detail = event.details?.llm_error_detail;
+  if (typeof detail === "string" && detail) {
+    return `${event.message ?? "AI 助手暂时不可用。"}（${detail}）`;
+  }
+  return event.message || "AI 助手暂时不可用，请稍后重试。";
 }
 
 function CompanionBot({ size = "large" }: { size?: "large" | "medium" | "small" }) {
@@ -209,6 +215,8 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
   const [input, setInput] = useState("");
   const [suggestionIndex, setSuggestionIndex] = useState(0);
   const [messages, setMessages] = useState<CompanionMessage[]>(() => [initialMessage(routeGroup)]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const draggedRef = useRef(false);
   const pointerStartRef = useRef<Position | null>(null);
@@ -255,36 +263,104 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
     startMorph("floating", LAUNCHER_SIZE);
   }
 
-  function pushMessage(role: MessageRole, content: string) {
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: `${role}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-        role,
-        content,
-        time: nowLabel()
-      }
-    ]);
+  function resetConversation() {
+    setMessages([initialMessage(routeGroup)]);
+    setSessionId(null);
+    setSuggestionIndex(0);
+    setInput("");
+  }
+
+  function updateMessage(messageId: string, update: Partial<CompanionMessage>) {
+    setMessages((prev) => prev.map((message) => (
+      message.id === messageId ? { ...message, ...update } : message
+    )));
     requestAnimationFrame(() => {
       messageListRef.current?.scrollTo({ top: messageListRef.current.scrollHeight, behavior: "smooth" });
     });
   }
 
-  function resetConversation() {
-    setMessages([initialMessage(routeGroup)]);
-    setSuggestionIndex(0);
-    setInput("");
+  function handleStreamEvent(event: StudentAiChatStreamEvent, assistantMessageId: string) {
+    if (event.event === "session") {
+      setSessionId(event.data.session.id);
+      return;
+    }
+    if (event.event === "delta") {
+      setMessages((prev) => prev.map((message) => (
+        message.id === assistantMessageId
+          ? { ...message, content: message.content === "正在思考..." ? event.data.content : message.content + event.data.content }
+          : message
+      )));
+      requestAnimationFrame(() => {
+        messageListRef.current?.scrollTo({ top: messageListRef.current.scrollHeight, behavior: "smooth" });
+      });
+      return;
+    }
+    if (event.event === "final") {
+      setSessionId(event.data.session?.id ?? null);
+      updateMessage(assistantMessageId, {
+        content: event.data.answer,
+        loading: false,
+        error: false,
+        time: nowLabel()
+      });
+      return;
+    }
+    if (event.event === "error") {
+      updateMessage(assistantMessageId, {
+        content: readableAssistantError(event.data),
+        loading: false,
+        error: true,
+        time: nowLabel()
+      });
+    }
   }
 
-  function submitMessage(messageText = input.trim()) {
+  async function submitMessage(messageText = input.trim()) {
     const value = messageText.trim();
-    if (!value) return;
+    if (!value || sending) return;
     setInput("");
     if (!isChat) startMorph("chat", normalizeChatSize(chatSize));
-    pushMessage("user", value);
-    window.setTimeout(() => {
-      pushMessage("assistant", localAssistantReply(value, routeGroup));
-    }, 360);
+    const userMessageId = `user-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const assistantMessageId = `assistant-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const history = messages
+      .filter((message) => message.id !== "assistant-initial" && !message.loading)
+      .map((message) => ({
+        role: message.role === "user" ? "student" as const : "assistant" as const,
+        content: message.content
+      }));
+    setMessages((prev) => [
+      ...prev,
+      { id: userMessageId, role: "user", content: value, time: nowLabel() },
+      { id: assistantMessageId, role: "assistant", content: "正在思考...", time: nowLabel(), loading: true }
+    ]);
+    setSending(true);
+    requestAnimationFrame(() => {
+      messageListRef.current?.scrollTo({ top: messageListRef.current.scrollHeight, behavior: "smooth" });
+    });
+    try {
+      await api.streamStudentAiChat(
+        {
+          message: value,
+          sessionId,
+          pageContext: {
+            route_path: routePath,
+            route_group: routeGroup,
+            page_label: contextLabel
+          },
+          history
+        },
+        (event) => handleStreamEvent(event, assistantMessageId)
+      );
+    } catch (error) {
+      updateMessage(assistantMessageId, {
+        content: error instanceof Error ? error.message : "AI 助手暂时不可用，请稍后重试。",
+        loading: false,
+        error: true,
+        time: nowLabel()
+      });
+    } finally {
+      setSending(false);
+    }
   }
 
   function handleInputKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -442,7 +518,7 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
                     onKeyDown={handleInputKeyDown}
                   />
                   <span>{input.length}/1000</span>
-                  <button type="button" aria-label="发送消息" onClick={() => submitMessage()} disabled={!input.trim()}>
+                  <button type="button" aria-label="发送消息" onClick={() => submitMessage()} disabled={!input.trim() || sending}>
                     <Send size={19} strokeWidth={2.6} />
                   </button>
                 </div>
@@ -470,7 +546,7 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
                     <CompanionBot size="medium" />
                   </span>
                   <strong>CodeTrack AI 助手</strong>
-                  <p>选择一个入口开始，后续会接入课程知识库、学习者画像和历史会话。</p>
+                  <p>选择一个入口开始，结合课程知识库、学习者画像和历史会话进行交流。</p>
                   <div className="ai-entry-actions">
                     <button
                       type="button"
@@ -501,7 +577,7 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
                       </span>
                       <span>
                         <strong>历史会话</strong>
-                        <small>继续查看当前本地对话记录</small>
+                        <small>继续查看当前 AI 对话记录</small>
                       </span>
                       <ChevronRight size={18} strokeWidth={2.3} />
                     </button>

@@ -1,4 +1,5 @@
 import json
+from typing import Any
 
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import FileResponse
@@ -46,11 +47,14 @@ from backend.app.services.student_resources import (
     generate_learning_resource,
     generate_ppt_resource,
     get_generated_resource,
+    practice_workspace_payload,
     list_saved_generated_resources,
     ppt_renderer_config_payload,
     resource_media_type,
     resource_preview_path,
     save_generated_resource,
+    serialize_generated_resource,
+    submit_generated_practice,
 )
 
 router = APIRouter(prefix="/api/v1/student", tags=["student"])
@@ -74,6 +78,7 @@ class StudentAiChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
     course_id: str | None = None
     session_id: str | None = None
+    page_context: dict[str, Any] = Field(default_factory=dict)
     history: list[AiChatHistoryItem] = Field(default_factory=list, max_length=12)
 
 
@@ -342,6 +347,7 @@ async def student_ai_chat(
         class_id=administrative_class.id,
         course=course,
         message=payload.message.strip(),
+        page_context=payload.page_context,
         history=history or [item.model_dump() for item in payload.history],
     )
     assistant_message = append_ai_tutor_message(
@@ -531,6 +537,9 @@ async def student_generate_resource(
         resource_type=resource_type,
         session_id=session.id,
     )
+    if resource_type == "PRACTICE_SET":
+        db.flush()
+        resource = save_generated_resource(db, user=user, class_id=administrative_class.id, resource_id=resource["id"])
     assistant_message = append_ai_tutor_message(
         db,
         session=session,
@@ -543,7 +552,7 @@ async def student_generate_resource(
             "resource": resource,
             "confidence": resource["confidence"],
             "citations": resource["citations"],
-            "suggested_actions": ["加入资源中心", "打开预览"],
+            "suggested_actions": ["前往资源中心做题", "打开预览"] if resource_type == "PRACTICE_SET" else ["加入资源中心", "打开预览"],
             "profile_used": True,
             "source_used": bool(resource["citations"]),
             "safety_note": generated_resource_safety_note(resource),
@@ -591,6 +600,42 @@ def student_generated_resources(
     require_role(user, "STUDENT")
     resources = list_saved_generated_resources(db, student_id=user.id, course_id=course_id)
     return ok({"items": resources})
+
+
+@router.get("/resources/{resource_id}")
+def student_generated_resource_detail(
+    resource_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    resource = get_generated_resource(db, student_id=user.id, resource_id=resource_id)
+    if not resource.saved_to_resource_center:
+        raise ApiError(409, "RESOURCE_NOT_SAVED", "请先将资源加入资源中心，再打开。")
+    return ok(serialize_generated_resource(resource))
+
+
+@router.get("/resources/{resource_id}/practice")
+def student_generated_practice_workspace(
+    resource_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    return ok(practice_workspace_payload(db, student_id=user.id, resource_id=resource_id))
+
+
+@router.post("/resources/{resource_id}/practice/submit", status_code=status.HTTP_201_CREATED)
+def student_submit_generated_practice(
+    resource_id: str,
+    payload: SaveQuestionAnswersRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    administrative_class, _ = require_active_class(db, user)
+    answers = [answer.model_dump() for answer in payload.answers]
+    return ok(submit_generated_practice(db, user=user, class_id=administrative_class.id, resource_id=resource_id, answers=answers))
 
 
 @router.get("/resources/{resource_id}/download")
@@ -690,6 +735,7 @@ async def student_ai_chat_stream(
                 class_id=class_id,
                 course=stream_course,
                 message=message_text,
+                page_context=payload.page_context,
                 history=history or [item.model_dump() for item in payload.history],
             ):
                 if reply_event["type"] == "delta":
