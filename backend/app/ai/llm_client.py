@@ -233,6 +233,16 @@ def _parse_openai_content(body: dict[str, Any]) -> dict[str, Any]:
     return parsed
 
 
+def _chat_completions_url(base_url: str) -> str:
+    """Normalize a provider base URL before appending the chat endpoint."""
+    normalized = base_url.rstrip("/")
+    for suffix in ("/chat/completions", "/responses"):
+        if normalized.endswith(suffix):
+            normalized = normalized[: -len(suffix)].rstrip("/")
+            break
+    return f"{normalized}/chat/completions"
+
+
 async def chat_json(
     messages: list[dict[str, Any]],
     *,
@@ -259,7 +269,7 @@ async def chat_json(
     }
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else None
     return await _call_json(
-        f"{base_url.rstrip('/')}/chat/completions",
+        _chat_completions_url(base_url),
         body=body,
         parse=parse or _parse_openai_content,
         validator=validator,
@@ -293,7 +303,7 @@ async def chat_text_stream(
     headers = {"Authorization": f"Bearer {api_key}"}
     try:
         async for chunk in _stream_json_lines(
-            f"{base_url.rstrip('/')}/chat/completions",
+            _chat_completions_url(base_url),
             json=body,
             headers=headers,
             timeout=timeout,
@@ -313,7 +323,7 @@ async def chat_text_stream(
         raise LLMHTTPError(
             "模型流式返回非 2xx",
             status_code=exc.response.status_code,
-            detail=str(exc),
+            detail=_http_error_detail(exc.response),
         ) from exc
     except httpx.HTTPError as exc:
         raise LLMHTTPError("模型流式请求传输失败", detail=str(exc)) from exc

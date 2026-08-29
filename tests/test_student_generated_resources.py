@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from backend.app.core.config import get_settings
 from backend.app.core.database import SessionLocal
 from backend.app.main import app
-from backend.app.models import AgentStep
+from backend.app.models import AgentStep, LearnerEvent
 from backend.app.services import student_resources
 from backend.app.services.presenton_client import _generation_body
 
@@ -452,11 +452,12 @@ def test_student_can_generate_save_and_download_generic_resources(monkeypatch, r
             assert resource["render_payload"]["metadata"]["document_style"] == "study-handout"
         assert resource["citations"]
         assert resource["download_available"] is True
-        assert resource["saved_to_resource_center"] is False
+        assert resource["saved_to_resource_center"] is (resource_type == "PRACTICE_SET")
 
-        saved = client.post(f"/api/v1/student/resources/{resource['id']}/save", headers=STUDENT)
-        assert saved.status_code == 200
-        assert saved.json()["data"]["saved_to_resource_center"] is True
+        if resource_type != "PRACTICE_SET":
+            saved = client.post(f"/api/v1/student/resources/{resource['id']}/save", headers=STUDENT)
+            assert saved.status_code == 200
+            assert saved.json()["data"]["saved_to_resource_center"] is True
 
         listing = client.get("/api/v1/student/resources/generated", headers=STUDENT)
         assert listing.status_code == 200
@@ -466,6 +467,71 @@ def test_student_can_generate_save_and_download_generic_resources(monkeypatch, r
         downloaded = client.get(f"/api/v1/student/resources/{resource['id']}/download", headers=STUDENT)
         assert downloaded.status_code == 200
         assert len(downloaded.content) > min_size
+
+
+def test_generated_practice_resource_auto_saves_and_submits_to_profile(monkeypatch):
+    monkeypatch.setenv("CODETRACK_MODEL_API_KEY", "")
+    monkeypatch.setenv("CODETRACK_MODEL_NAME", "")
+    monkeypatch.setenv("CODETRACK_MODEL_GATEWAY_URL", "")
+    get_settings.cache_clear()
+
+    with TestClient(app) as client:
+        generated = client.post(
+            "/api/v1/student/resources/generate",
+            headers=STUDENT,
+            json={
+                "course_id": "course_ds_001",
+                "resource_type": "PRACTICE_SET",
+                "message": "帮我生成关于队列的练习题",
+            },
+        )
+        assert generated.status_code == 200
+        resource = generated.json()["data"]["resource"]
+        assert resource["saved_to_resource_center"] is True
+
+        listing = client.get("/api/v1/student/resources/generated", headers=STUDENT)
+        assert listing.status_code == 200
+        assert resource["id"] in {item["id"] for item in listing.json()["data"]["items"]}
+
+        workspace = client.get(f"/api/v1/student/resources/{resource['id']}/practice", headers=STUDENT)
+        assert workspace.status_code == 200
+        questions = workspace.json()["data"]["questions"]
+        assert questions
+        assert "answer" not in questions[0]
+        assert all("is_correct" not in option for question in questions for option in question["options"])
+
+        answers = []
+        source_questions = resource["render_payload"]["questions"]
+        for index, question in enumerate(questions):
+            source_question = source_questions[index]
+            if question["options"]:
+                answer_text = source_question["answer"]
+                answer_index = source_question["options"].index(answer_text)
+                answers.append({"question_id": question["question_id"], "selected_option_ids": [str(answer_index)]})
+            else:
+                answers.append({"question_id": question["question_id"], "selected_option_ids": [source_question["answer"]]})
+
+        submitted = client.post(
+            f"/api/v1/student/resources/{resource['id']}/practice/submit",
+            headers=STUDENT,
+            json={"answers": answers},
+        )
+        assert submitted.status_code == 201
+        result = submitted.json()["data"]
+        assert result["status"] == "SUBMITTED"
+        assert result["correct_count"] >= 1
+        assert result["profile_signal"]["summary"]
+
+    db = SessionLocal()
+    try:
+        event = db.query(LearnerEvent).filter(
+            LearnerEvent.student_id == "user_student_001",
+            LearnerEvent.event_type == "GENERATED_PRACTICE_SUBMITTED",
+        ).order_by(LearnerEvent.created_at.desc()).first()
+        assert event is not None
+        assert resource["id"] in event.payload
+    finally:
+        db.close()
 
 
 def test_student_mind_map_uses_dedicated_agent_workflow(monkeypatch):

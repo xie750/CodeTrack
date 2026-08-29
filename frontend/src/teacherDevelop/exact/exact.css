@@ -1967,9 +1967,49 @@ button { cursor: pointer; }
 .exact-block-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
 .exact-block-title strong { display: inline-flex; align-items: center; gap: 5px; font-size: 14px; }
 .exact-block-title .ant-btn { padding-inline: 2px; font-size: 11px; }
-.exact-loader { min-height: 320px; display: flex; justify-content: center; align-items: center; gap: 5px; }
-.exact-loader > span { width: 7px; height: 7px; background: #43b81a; border-radius: 50%; animation: exactBounce 1s infinite alternate; }
-.exact-loader > span:nth-child(2) { animation-delay: .2s; }.exact-loader > span:nth-child(3) { animation-delay: .4s; margin-right: 8px; }
+.exact-loader {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 320px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+}
+.exact-loader-dots {
+  width: auto !important;
+  min-width: 44px;
+  height: 14px;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0 !important;
+  background: transparent !important;
+}
+.exact-loader-dots i {
+  display: block;
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: #43b81a;
+  animation: exactBounce 1s infinite ease-in-out;
+}
+.exact-loader-dots i:nth-child(2) { animation-delay: .16s; }
+.exact-loader-dots i:nth-child(3) { animation-delay: .32s; }
+.exact-loader > .ant-typography {
+  display: block;
+  width: max-content;
+  max-width: none;
+  margin: 0;
+  white-space: nowrap;
+  word-break: keep-all;
+  writing-mode: horizontal-tb;
+  text-orientation: mixed;
+  line-height: 1.5;
+}
 @keyframes exactBounce { to { transform: translateY(-7px); opacity: .4; } }
 .exact-empty { min-height: 310px; display: grid; place-content: center; justify-items: center; gap: 8px; color: #7f8b81; }
 .exact-empty svg { color: #7bca63; }
@@ -5572,7 +5612,7 @@ button { cursor: pointer; }
   box-shadow: 0 0 0 2px var(--teacher-primary) !important;
 }
 
-.exact-shell .exact-loader > span,
+.exact-shell .exact-loader-dots i,
 .exact-shell .exact-activity .dot,
 .exact-shell .workspace-list-row .dot,
 .exact-shell .status-dot,

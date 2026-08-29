@@ -28,6 +28,18 @@ def valid_content() -> str:
     return '{"diagnosis_type":"BOUNDARY_CASE_MISSING","confidence":0.7}'
 
 
+@pytest.mark.parametrize(
+    ("base_url", "expected"),
+    [
+        ("https://api.deepseek.com", "https://api.deepseek.com/chat/completions"),
+        ("https://api.deepseek.com/responses", "https://api.deepseek.com/chat/completions"),
+        ("https://api.deepseek.com/chat/completions", "https://api.deepseek.com/chat/completions"),
+    ],
+)
+def test_chat_completions_url_normalizes_provider_base(base_url, expected):
+    assert llm_client._chat_completions_url(base_url) == expected
+
+
 async def test_chat_json_returns_validated_result(monkeypatch):
     calls = []
 

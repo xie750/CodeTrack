@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Bot, BookOpen, ChartNoAxesColumnIncreasing, ChevronsLeft, ChevronsRight, Database, Flame, FolderOpen, Network, Route as RouteIcon } from "lucide-react";
 import StudentRouteBreadcrumb from "../components/StudentRouteBreadcrumb";
 import SelfStudy from "./SelfStudy";
@@ -8,6 +8,7 @@ import AiTutor from "./AiTutor";
 import StudentKnowledgeMap from "./StudentKnowledgeMap";
 import StudentResourceCenter from "./StudentResourceCenter";
 import StudentKnowledgeBase from "./StudentKnowledgeBase";
+import GeneratedPracticeWorkspace from "./GeneratedPracticeWorkspace";
 
 const selfStudyTabs = [
   { path: "", label: "学习主页", icon: <BookOpen size={18} /> },
@@ -30,6 +31,7 @@ export default function SelfStudyHub() {
         <Route path="profile" element={<LearningProfile />} />
         <Route path="knowledge-base" element={<StudentKnowledgeBase />} />
         <Route path="library" element={<StudentResourceCenter />} />
+        <Route path="library/practice/:resourceId" element={<GeneratedPracticeRoute />} />
         <Route path="resources" element={<Navigate to="/self-study/library" replace />} />
         <Route path="knowledge-map" element={<StudentKnowledgeMap scope="self-study" />} />
         <Route path="ai" element={<AiTutor />} />
@@ -44,7 +46,7 @@ function SelfStudyShell({ children }: { children: ReactNode }) {
   const location = useLocation();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const activePath = location.pathname.replace(/^\/self-study\/?/, "");
-  const activeTab = selfStudyTabs.find((item) => item.path === activePath) ?? selfStudyTabs[0];
+  const activeTab = selfStudyTabs.find((item) => item.path === activePath || (item.path && activePath.startsWith(`${item.path}/`))) ?? selfStudyTabs[0];
 
   return (
     <div className={`student-work-window self-study-window${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
@@ -104,4 +106,11 @@ function SelfStudyShell({ children }: { children: ReactNode }) {
       </main>
     </div>
   );
+}
+
+function GeneratedPracticeRoute() {
+  const navigate = useNavigate();
+  const { resourceId } = useParams<{ resourceId: string }>();
+  if (!resourceId) return <Navigate to="/self-study/library" replace />;
+  return <GeneratedPracticeWorkspace resourceId={resourceId} onBack={() => navigate("/self-study/library")} />;
 }

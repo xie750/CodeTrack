@@ -1,6 +1,6 @@
-import { useEffect, useState, type MouseEvent } from "react";
-import { Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
-import { Bell, BookOpen, ChartNoAxesColumnIncreasing, ChevronDown, ChevronsLeft, ChevronsRight, FolderOpen, House, LayoutDashboard, LogOut, Settings, UserRound } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
+import { ChartNoAxesColumnIncreasing, ChevronDown, FolderOpen, LayoutDashboard, LogOut, UserRound } from "lucide-react";
 import { ConfigProvider, Dropdown, type MenuProps } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import LearningHome from "./pages/LearningHome";
@@ -13,27 +13,6 @@ import SelfStudyHub from "./pages/SelfStudyHub";
 import LoginPage from "./pages/LoginPage";
 import AICompanion from "./components/AICompanion";
 import AdminApp from "./admin/App";
-import Dashboard from "./teacher/pages/Dashboard";
-import CourseClasses from "./teacher/pages/courses/CourseClasses";
-import CourseSyllabus from "./teacher/pages/courses/CourseSyllabus";
-import ResourceCenter from "./teacher/pages/resources/ResourceCenter";
-import TaskList from "./teacher/pages/tasks/TaskList";
-import TaskCreate from "./teacher/pages/tasks/TaskCreate";
-import QuestionEditor from "./teacher/pages/tasks/QuestionEditor";
-import ProgrammingEditor from "./teacher/pages/tasks/ProgrammingEditor";
-import GradingHintConfig from "./teacher/pages/tasks/GradingHintConfig";
-import TaskPublish from "./teacher/pages/tasks/TaskPublish";
-import MonitorHome from "./teacher/pages/monitor/MonitorHome";
-import GradingProgress from "./teacher/pages/monitor/GradingProgress";
-import TaskQuality from "./teacher/pages/monitor/TaskQuality";
-import GradingWorkspace from "./teacher/pages/GradingWorkspace";
-import DiagnosisSummary from "./teacher/pages/DiagnosisSummary";
-import AiReviewList from "./teacher/pages/aiReview/AiReviewList";
-import AiReviewDetail from "./teacher/pages/aiReview/AiReviewDetail";
-import StrategyOptimization from "./teacher/pages/improvement/StrategyOptimization";
-import TaskAdjustment from "./teacher/pages/improvement/TaskAdjustment";
-import EffectEvaluation from "./teacher/pages/improvement/EffectEvaluation";
-import { TeacherEntryPortal, TeacherResearchShowcase } from "./teacher/pages/TeacherPortal";
 import TeacherDevelopApp from "./teacherDevelop/exact/ExactApp";
 import { setCurrentUser as setTeacherDevelopUser } from "./teacherDevelop/api";
 import { api, apiCache } from "./api";
@@ -68,10 +47,6 @@ function routeMotion(from: string, to: string) {
   if (routeGroup(from) === "/workspace" || routeGroup(from) === "/question-workspace") return "back";
   if (fromIndex === toIndex) return "replace";
   return toIndex > fromIndex ? "forward" : "back";
-}
-
-function shouldUseNativeNavigation(event: MouseEvent<HTMLAnchorElement>) {
-  return event.defaultPrevented || event.button !== 0 || event.metaKey || event.altKey || event.ctrlKey || event.shiftKey;
 }
 
 function homePathForRole(role: string) {
@@ -241,12 +216,6 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
   );
 }
 
-const teacherNavItems = [
-  { key: "/teacher/dashboard", label: "工作台首页", icon: <House size={22} strokeWidth={2.2} /> },
-  { key: "/teacher/courses", label: "我的课程", icon: <BookOpen size={22} strokeWidth={2.1} /> },
-  { key: "/teacher/settings", label: "个人设置", icon: <Settings size={22} strokeWidth={2.1} /> },
-];
-
 function TeacherDevelopRoute({ authUser, onLogout }: { authUser: AuthUser; onLogout: () => void }) {
   useEffect(() => {
     setTeacherDevelopUser("teacher-01", authUser.display_name || "王老师");
@@ -259,162 +228,6 @@ function TeacherDevelopRoute({ authUser, onLogout }: { authUser: AuthUser; onLog
       onLogout={onLogout}
     />
   );
-}
-
-function TeacherAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogout: () => void }) {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-
-  function handleNavClick(event: MouseEvent<HTMLAnchorElement>, to: string) {
-    if (shouldUseNativeNavigation(event)) return;
-    event.preventDefault();
-    navigate(to);
-  }
-
-  if (location.pathname === "/teacher" || location.pathname === "/teacher/") {
-    return <TeacherEntryPortal authUser={authUser} accountSlot={<AccountMenu authUser={authUser} onLogout={onLogout} onNavigate={navigate} />} />;
-  }
-
-  if (location.pathname === "/teacher/research") {
-    return <TeacherResearchShowcase authUser={authUser} accountSlot={<AccountMenu authUser={authUser} onLogout={onLogout} onNavigate={navigate} />} />;
-  }
-
-  return (
-    <div className="teacher-workbench-shell">
-      <header className="teacher-workbench-topbar">
-        <NavLink to="/teacher" className="teacher-workbench-logo" aria-label="返回教师端入口" onClick={(event) => handleNavClick(event, "/teacher")}>
-          <span className="teacher-workbench-logo-mark" aria-hidden="true" />
-          <strong>CodeTrack Teacher</strong>
-        </NavLink>
-        <div className="teacher-workbench-actions" aria-label="教师端顶部工具栏">
-          <span className="teacher-workbench-status">
-            <i aria-hidden="true" />
-            课程知识库已连接
-          </span>
-          <button className="teacher-notification" type="button" aria-label="通知">
-            <Bell size={22} strokeWidth={2} />
-            <span>3</span>
-          </button>
-          <AccountMenu authUser={authUser} onLogout={onLogout} onNavigate={navigate} />
-        </div>
-      </header>
-
-      <div className={`teacher-workbench-app${sidebarCollapsed ? " collapsed" : ""}`}>
-        <aside className={`teacher-workbench-sidebar${sidebarCollapsed ? " collapsed" : ""}`}>
-          <nav className="teacher-workbench-nav" aria-label="教师工作台导航">
-            {teacherNavItems.map((item) => (
-              <NavLink
-                key={item.key}
-                to={item.key}
-                end={item.key === "/teacher/dashboard"}
-                className={({ isActive }) => isActive ? "teacher-workbench-nav-link active" : "teacher-workbench-nav-link"}
-                onClick={(event) => handleNavClick(event, item.key)}
-              >
-                <span>{item.icon}</span>
-                <span>{item.label}</span>
-              </NavLink>
-            ))}
-          </nav>
-          <button className="teacher-ai-entry" type="button" onClick={() => navigate("/teacher/ai-review")}>
-            <span aria-hidden="true">AI</span>
-            <strong>AI 助教</strong>
-            <small>智能备课与答疑</small>
-            <ChevronDown size={18} strokeWidth={2.2} />
-          </button>
-          <button className="collapse-btn teacher-collapse" type="button" onClick={() => setSidebarCollapsed((prev) => !prev)}>
-            {sidebarCollapsed ? <ChevronsRight size={18} /> : <ChevronsLeft size={18} />}
-            {sidebarCollapsed ? "展开侧栏" : "收起侧栏"}
-          </button>
-        </aside>
-
-        {sidebarCollapsed && (
-          <button className="sidebar-expand-float" type="button" onClick={() => setSidebarCollapsed(false)} aria-label="展开侧栏">
-            <ChevronsRight size={20} />
-          </button>
-        )}
-
-        <main className="teacher-workbench-content">
-          {/*
-            注意：外层是 <Route path="/teacher/*">，这里属于 descendant routes，
-            路径必须相对于 /teacher 书写。写成 /teacher/xxx 会导致全部不匹配、内容区空白。
-          */}
-          <Routes>
-            <Route index element={<Navigate to="dashboard" replace />} />
-
-            {/* 模块一 教学首页 */}
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="settings" element={<TeacherSettingsPlaceholder />} />
-
-            {/* 模块二 课程教学 */}
-            <Route path="courses" element={<CourseClasses />} />
-            <Route path="courses/syllabus" element={<CourseSyllabus />} />
-            {/*
-              旧路径保留重定向：课程大纲改用页内课程选择器（与资料中心、任务监控一致），
-              不再用 :courseId 路径参数。`courses/:courseId` 原来渲染的还是列表本身、
-              组件也从不读 useParams，是条死链，一并收敛到模块根页。
-            */}
-            <Route path="courses/:courseId/syllabus" element={<Navigate to="/teacher/courses/syllabus" replace />} />
-            <Route path="courses/:courseId" element={<Navigate to="/teacher/courses" replace />} />
-
-            {/* 模块三 资料中心 */}
-            <Route path="resources" element={<ResourceCenter />} />
-
-            {/* 模块四 任务中心 */}
-            <Route path="tasks" element={<TaskList />} />
-            <Route path="tasks/new" element={<TaskCreate />} />
-            <Route path="tasks/:taskId/questions" element={<QuestionEditor />} />
-            <Route path="tasks/:taskId/programming" element={<ProgrammingEditor />} />
-            <Route path="tasks/:taskId/grading" element={<GradingHintConfig />} />
-            <Route path="tasks/:taskId/publish" element={<TaskPublish />} />
-
-            {/* 模块五 任务监控 */}
-            <Route path="monitor" element={<MonitorHome />} />
-            <Route path="monitor/grading" element={<GradingProgress />} />
-            <Route path="monitor/quality" element={<TaskQuality />} />
-            {/*
-              带 taskId 的深链落到同一个看板，由页面把该任务预选中。
-              §9.1 的看板本身就带任务选择器，另开一个只看单任务的页面会变成第二套口径。
-            */}
-            <Route path="monitor/tasks/:taskId" element={<MonitorHome />} />
-            <Route path="submissions/:submissionId/grade" element={<GradingWorkspace />} />
-            {/* 旧路径保留重定向，避免历史链接失效 */}
-            <Route path="tasks/:taskId/monitor" element={<TaskMonitorRedirect />} />
-
-            {/* 模块六 学情诊断 */}
-            <Route path="diagnosis" element={<DiagnosisSummary />} />
-
-            {/* 模块七 AI 审核 */}
-            <Route path="ai-review" element={<AiReviewList />} />
-            <Route path="ai-review/:reviewId" element={<AiReviewDetail />} />
-
-            {/* 模块八 教学改进。三个子页各自一条路由，刷新和直接输网址都能落到对应子页 */}
-            <Route path="improvement" element={<StrategyOptimization />} />
-            <Route path="improvement/adjustment" element={<TaskAdjustment />} />
-            <Route path="improvement/effect" element={<EffectEvaluation />} />
-
-            <Route path="*" element={<Navigate to="dashboard" replace />} />
-          </Routes>
-        </main>
-      </div>
-    </div>
-  );
-}
-
-function TeacherSettingsPlaceholder() {
-  return (
-    <section className="teacher-settings-placeholder">
-      <span><Settings size={30} strokeWidth={2.1} /></span>
-      <h1>个人设置</h1>
-      <p>个人设置页面暂未开放，当前先保留入口，后续可接入账号资料、通知偏好和课程知识库连接配置。</p>
-    </section>
-  );
-}
-
-/** 任务监控旧路径 /teacher/tasks/:taskId/monitor 已迁到 /teacher/monitor/tasks/:taskId */
-function TaskMonitorRedirect() {
-  const { taskId } = useParams<{ taskId: string }>();
-  return <Navigate to={taskId ? `/teacher/monitor/tasks/${taskId}` : "/teacher/monitor"} replace />;
 }
 
 function TaskWorkspaceWrapper({ onBack }: { onBack: () => void }) {

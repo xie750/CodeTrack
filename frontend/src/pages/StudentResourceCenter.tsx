@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Archive,
   BookOpen,
@@ -259,6 +260,7 @@ function pageMarkers(currentPage: number, totalPages: number): PageMarker[] {
 }
 
 export default function StudentResourceCenter() {
+  const navigate = useNavigate();
   const [activeFolder, setActiveFolder] = useState<ResourceFolder>("全部收藏");
   const [resourceType, setResourceType] = useState<"全部" | ResourceType>("全部");
   const [source, setSource] = useState<ResourceSource>("全部");
@@ -411,6 +413,10 @@ export default function StudentResourceCenter() {
 
   function openExternalResource(item: ExternalResourceItem) {
     window.open(item.url, "_blank", "noopener,noreferrer");
+  }
+
+  function openGeneratedPractice(resource: GeneratedResource) {
+    navigate(`/self-study/library/practice/${encodeURIComponent(resource.id)}`);
   }
 
   async function downloadGeneratedResource(resource: GeneratedResource) {
@@ -580,6 +586,10 @@ export default function StudentResourceCenter() {
                     {item.kind === "external" ? (
                       <button type="button" className="primary" onClick={() => openExternalResource(item)}>
                         打开原文 <ExternalLink size={15} />
+                      </button>
+                    ) : item.resource.resource_type === "PRACTICE_SET" ? (
+                      <button type="button" className="primary" onClick={() => openGeneratedPractice(item.resource)}>
+                        <FileQuestion size={15} /> 开始练习
                       </button>
                     ) : (
                       <button type="button" className="primary" onClick={() => setPreviewResource(item.resource)}>

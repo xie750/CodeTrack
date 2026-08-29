@@ -774,6 +774,7 @@ def build_ai_tutor_payload(
     user: User,
     course: Course,
     message: str,
+    page_context: dict[str, Any] | None = None,
     profile: dict[str, Any] | None,
     sources: list[KnowledgeSource],
     history: list[dict[str, str]] | None,
@@ -790,6 +791,7 @@ def build_ai_tutor_payload(
             "course_name": course.name,
         },
         "message": message,
+        "page_context": page_context or {},
         "history": _history_payload(history),
         "learner_profile": profile,
         "knowledge_sources": [_source_payload(source) for source in sources],
@@ -868,6 +870,7 @@ async def generate_student_ai_reply(
     class_id: str,
     course: Course,
     message: str,
+    page_context: dict[str, Any] | None = None,
     history: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     get_settings.cache_clear()
@@ -901,6 +904,7 @@ async def generate_student_ai_reply(
         user=user,
         course=course,
         message=message,
+        page_context=page_context,
         profile=profile,
         sources=sources,
         history=history,
@@ -919,6 +923,7 @@ async def generate_student_ai_reply(
         input_payload={
             "course_id": course.id,
             "message": _trim(message, 300),
+            "page_context": page_context or {},
             "knowledge_source_ids": [source.id for source in sources],
             "personal_knowledge_source_ids": [source["source_id"] for source in personal_sources],
             "profile_available": profile is not None,
@@ -1026,6 +1031,7 @@ async def stream_student_ai_reply(
     class_id: str,
     course: Course,
     message: str,
+    page_context: dict[str, Any] | None = None,
     history: list[dict[str, str]] | None = None,
 ):
     get_settings.cache_clear()
@@ -1052,6 +1058,7 @@ async def stream_student_ai_reply(
             class_id=class_id,
             course=course,
             message=message,
+            page_context=page_context,
             history=history,
         )
         yield {"type": "delta", "content": result["answer"]}
@@ -1069,6 +1076,7 @@ async def stream_student_ai_reply(
         user=user,
         course=course,
         message=message,
+        page_context=page_context,
         profile=profile,
         sources=sources,
         history=history,
@@ -1086,6 +1094,7 @@ async def stream_student_ai_reply(
         input_payload={
             "course_id": course.id,
             "message": _trim(message, 300),
+            "page_context": page_context or {},
             "knowledge_source_ids": [source.id for source in sources],
             "personal_knowledge_source_ids": [source["source_id"] for source in personal_sources],
             "profile_available": profile is not None,

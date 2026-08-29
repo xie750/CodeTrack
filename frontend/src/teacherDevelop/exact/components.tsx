@@ -147,7 +147,10 @@ export function ExactShell(props: ShellProps) {
 }
 
 export function PageLoader() {
-  return <div className="exact-loader"><span /><span /><span /><Text type="secondary">正在读取教学数据</Text></div>
+  return <div className="exact-loader" role="status" aria-live="polite">
+    <span className="exact-loader-dots" aria-hidden="true"><i /><i /><i /></span>
+    <Text type="secondary">正在读取教学数据</Text>
+  </div>
 }
 
 export function EmptyPanel({ text }: { text: string }) {

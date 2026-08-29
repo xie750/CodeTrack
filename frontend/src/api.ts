@@ -771,6 +771,23 @@ export type SubmitQuestionResult = {
   };
 };
 
+export type GeneratedPracticeWorkspace = {
+  resource: GeneratedResource;
+  course: {
+    course_id: string;
+    course_name: string;
+  };
+  attempt: {
+    status: string;
+    score: number | null;
+    max_score: number;
+    correct_count: number;
+    total_count: number;
+    submitted_at: string | null;
+  };
+  questions: QuestionItem[];
+};
+
 const getCache = new Map<string, CachedGetEntry<unknown>>();
 
 function studentTasksUrl(courseId?: string) {
@@ -946,6 +963,7 @@ async function streamStudentAiChat(
     message: string;
     courseId?: string;
     sessionId?: string | null;
+    pageContext?: Record<string, unknown>;
     history?: Array<{ role: "student" | "assistant"; content: string }>;
   },
   onEvent: (event: StudentAiChatStreamEvent) => void
@@ -960,6 +978,7 @@ async function streamStudentAiChat(
       message: payload.message,
       course_id: payload.courseId,
       session_id: payload.sessionId,
+      page_context: payload.pageContext ?? {},
       history: payload.history ?? []
     })
   });
@@ -1120,6 +1139,19 @@ export const api = {
     if (courseId) params.set("course_id", courseId);
     const suffix = params.toString() ? `?${params.toString()}` : "";
     return request<{ items: GeneratedResource[] }>(`/api/v1/student/resources/generated${suffix}`);
+  },
+  getGeneratedResource: (resourceId: string) =>
+    request<GeneratedResource>(`/api/v1/student/resources/${encodeURIComponent(resourceId)}`),
+  getGeneratedPracticeWorkspace: (resourceId: string) =>
+    request<GeneratedPracticeWorkspace>(`/api/v1/student/resources/${encodeURIComponent(resourceId)}/practice`),
+  submitGeneratedPractice: async (resourceId: string, answers: Array<{ question_id: string; selected_option_ids: string[] }>) => {
+    const result = await request<SubmitQuestionResult>(`/api/v1/student/resources/${encodeURIComponent(resourceId)}/practice/submit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ answers })
+    });
+    clearApiCache((url) => url.startsWith("/api/v1/student/"));
+    return result;
   },
   generatedResourceDownloadUrl: (resourceId: string) =>
     `/api/v1/student/resources/${encodeURIComponent(resourceId)}/download`,
