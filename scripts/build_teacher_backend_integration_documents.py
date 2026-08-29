@@ -266,7 +266,7 @@ def build_connected():
     ], [2800, 1800, 4760], font_size=9.2)
 
     doc.add_heading('2.1 系统边界', level=2)
-    add_code_block(doc, '教师浏览器\n  -> React/TypeScript 页面与 src/api.ts\n  -> /api/v1/teacher/*（当前启用）\n  -> FastAPI + SQLAlchemy\n  -> backend/codetrack.db + backend/uploads\n\n/student/* 与 /classes/{join_code}/join\n  -> 仅保留契约，不进入当前教师端网络链路')
+    add_code_block(doc, '教师浏览器\n  -> React/TypeScript 页面与 src/api.ts\n  -> /api/v1/teacher/*（当前启用）\n  -> FastAPI + SQLAlchemy\n  -> teacher_backend/codetrack.db + teacher_backend/uploads\n\n/student/* 与 /classes/{join_code}/join\n  -> 仅保留契约，不进入当前教师端网络链路')
 
     doc.add_heading('3. 已接入功能矩阵', level=1)
     add_para(doc, '下表按教师工作流汇总活动页面、API 和持久化对象。每一行均要求“按钮或页面动作 → API → 数据返回/落库”成立。')
@@ -306,7 +306,7 @@ def build_connected():
         ('成员', 'users, enrollments', 'CSV 导入和加入状态', '学号去重；班级-学生唯一'),
         ('任务评测', 'tasks, test_cases, submissions, evaluation_results', '任务发布与提交结果', '隐藏测试只在教师侧展示'),
         ('批改', 'grades, teacher_feedback, diagnosis_reviews', '评分、反馈、AI 审核', '成绩发布前为草稿'),
-        ('资料', 'materials, material_folders, backend/uploads', '上传、链接、目录、回收站', '软删除与恢复保留审计语义'),
+        ('资料', 'materials, material_folders, teacher_backend/uploads', '上传、链接、目录、回收站', '软删除与恢复保留审计语义'),
         ('图谱', 'knowledge_points + teacher_knowledge_graphs', '课程图谱关联 + 教师画布编辑', '当前为两套模型，不能混用 ID'),
         ('讨论/公告', 'course_discussions, discussion_replies, course_announcements', '教师讨论动作、公告读取', '讨论遵循状态机；公告目前只读'),
     ], [1500, 2500, 2400, 2960], font_size=8.6)
@@ -338,8 +338,8 @@ def build_connected():
     add_table(doc, ['配置项', '默认值', '说明'], [
         ('VITE_API_BASE', '/api/v1', '生产环境应指向网关统一前缀'),
         ('X-User-Id', '当前登录教师 ID', '原型身份头；正式环境必须由 token 替代'),
-        ('上传目录', 'backend/uploads', '生产环境应迁移到对象存储并使用签名 URL'),
-        ('数据库', 'backend/codetrack.db', 'SQLite 适合本地/演示，不作为高并发生产方案'),
+        ('上传目录', 'teacher_backend/uploads', '生产环境应迁移到对象存储并使用签名 URL'),
+        ('数据库', 'teacher_backend/codetrack.db', 'SQLite 适合本地/演示，不作为高并发生产方案'),
     ], [1900, 2500, 4960], font_size=9)
     doc.add_heading('9.3 常见故障', level=2)
     add_table(doc, ['现象', '检查项', '处置'], [

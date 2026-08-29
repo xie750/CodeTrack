@@ -33,7 +33,7 @@ def seed_database(db: Session) -> None:
         role="teacher",
         number="T2024001",
         email="wang.teacher@university.edu.cn",
-        department="计算机科学与技术学院",
+        department="人工智能学院",
     )
     teacher_lin = User(
         id="teacher-02",
@@ -41,7 +41,7 @@ def seed_database(db: Session) -> None:
         role="teacher",
         number="T2024002",
         email="lin.teacher@university.edu.cn",
-        department="软件学院",
+        department="人工智能学院",
     )
     student_rows = [
         ("student-01", "赵明宇", "2024121001"),
@@ -64,7 +64,7 @@ def seed_database(db: Session) -> None:
         name="数据结构与程序设计基础",
         code="CST1024",
         term="2024-2025 学年春季",
-        description="面向计算机类专业的核心课程，覆盖线性表、树、图、排序与算法分析。",
+        description="面向人工智能专业的核心课程，覆盖线性表、树、图、排序与算法分析。",
         status="active",
         student_visible=True,
         progress=62,
@@ -83,10 +83,10 @@ def seed_database(db: Session) -> None:
     db.add_all([course, *other_courses])
 
     class_groups = [
-        ClassGroup(id="class-se1", course_id=course.id, name="软件工程 1 班", schedule="周二 3-4 节", mentor="王老师", join_code="SE12-34G7"),
-        ClassGroup(id="class-se2", course_id=course.id, name="软件工程 2 班", schedule="周四 1-2 节", mentor="王老师", join_code="SE22-61K8"),
-        ClassGroup(id="class-cs1", course_id=course.id, name="计算机科学 1 班", schedule="周三 5-6 节", mentor="陈老师", join_code="CS11-77M2"),
-        ClassGroup(id="class-se3", course_id="course-db", name="软件工程 3 班", schedule="周五 3-4 节", mentor="刘老师", join_code="SE33-92P4"),
+        ClassGroup(id="class-se1", course_id=course.id, name="人工智能 1 班", major="人工智能", schedule="周二 3-4 节", mentor="王老师", join_code="AI12-34G7"),
+        ClassGroup(id="class-se2", course_id=course.id, name="人工智能 2 班", major="人工智能", schedule="周四 1-2 节", mentor="王老师", join_code="AI22-61K8"),
+        ClassGroup(id="class-cs1", course_id=course.id, name="人工智能实验班", major="人工智能", schedule="周三 5-6 节", mentor="陈老师", join_code="AI11-77M2"),
+        ClassGroup(id="class-se3", course_id="course-db", name="人工智能 3 班", major="人工智能", schedule="周五 3-4 节", mentor="刘老师", join_code="AI33-92P4"),
     ]
     db.add_all(class_groups)
     db.flush()

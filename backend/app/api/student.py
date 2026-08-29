@@ -50,6 +50,7 @@ from backend.app.services.student_resources import (
     practice_workspace_payload,
     list_saved_generated_resources,
     ppt_renderer_config_payload,
+    record_generated_podcast_listened,
     resource_media_type,
     resource_preview_path,
     save_generated_resource,
@@ -98,6 +99,10 @@ class StudentResourceGenerateRequest(BaseModel):
     resource_type: str = Field(min_length=1, max_length=40)
     course_id: str | None = None
     session_id: str | None = None
+
+
+class StudentPodcastListenedRequest(BaseModel):
+    completed_segment_count: int | None = Field(default=None, ge=0, le=50)
 
 
 def task_knowledge_points(task: Task) -> list[str]:
@@ -537,9 +542,14 @@ async def student_generate_resource(
         resource_type=resource_type,
         session_id=session.id,
     )
-    if resource_type == "PRACTICE_SET":
+    if resource_type in {"PRACTICE_SET", "PODCAST_SCRIPT"}:
         db.flush()
         resource = save_generated_resource(db, user=user, class_id=administrative_class.id, resource_id=resource["id"])
+    suggested_actions = ["加入资源中心", "打开预览"]
+    if resource_type == "PRACTICE_SET":
+        suggested_actions = ["前往资源中心做题", "打开预览"]
+    elif resource_type == "PODCAST_SCRIPT":
+        suggested_actions = ["前往资源中心播放", "生成配套练习"]
     assistant_message = append_ai_tutor_message(
         db,
         session=session,
@@ -552,7 +562,7 @@ async def student_generate_resource(
             "resource": resource,
             "confidence": resource["confidence"],
             "citations": resource["citations"],
-            "suggested_actions": ["前往资源中心做题", "打开预览"] if resource_type == "PRACTICE_SET" else ["加入资源中心", "打开预览"],
+            "suggested_actions": suggested_actions,
             "profile_used": True,
             "source_used": bool(resource["citations"]),
             "safety_note": generated_resource_safety_note(resource),
@@ -636,6 +646,26 @@ def student_submit_generated_practice(
     administrative_class, _ = require_active_class(db, user)
     answers = [answer.model_dump() for answer in payload.answers]
     return ok(submit_generated_practice(db, user=user, class_id=administrative_class.id, resource_id=resource_id, answers=answers))
+
+
+@router.post("/resources/{resource_id}/podcast/listened")
+def student_mark_generated_podcast_listened(
+    resource_id: str,
+    payload: StudentPodcastListenedRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    administrative_class, _ = require_active_class(db, user)
+    return ok(
+        record_generated_podcast_listened(
+            db,
+            user=user,
+            class_id=administrative_class.id,
+            resource_id=resource_id,
+            completed_segment_count=payload.completed_segment_count,
+        )
+    )
 
 
 @router.get("/resources/{resource_id}/download")

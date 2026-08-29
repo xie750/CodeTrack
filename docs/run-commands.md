@@ -21,7 +21,7 @@ python -m pip install -r backend\requirements.txt
 初始化数据库迁移：
 
 ```powershell
-alembic upgrade head
+alembic -c backend/alembic.ini upgrade head
 ```
 
 写入 Demo 数据：
@@ -50,7 +50,7 @@ http://127.0.0.1:8000/health
 
 说明：
 
-- 不配置 `.env` 时，后端默认使用项目根目录下的 `codetrack_dev.db` SQLite 数据库。
+- 不配置 `.env` 时，学生端默认使用 `backend/codetrack_dev.db` SQLite 数据库。
 - 本地模式下如果没有配置 `CODETRACK_SANDBOX_SERVICE_URL`，后端会使用本地 sandbox fallback 执行。
 - sandbox 测试 C++ 代码时需要本机 `g++` 已加入 `PATH`。
 
@@ -190,7 +190,7 @@ CODETRACK_MODEL_NAME=
 ```powershell
 cd D:\Office_File\other\CodeTrack
 python -m pip install -r backend\requirements.txt
-alembic upgrade head
+alembic -c backend/alembic.ini upgrade head
 python scripts\seed_demo.py
 uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
 ```

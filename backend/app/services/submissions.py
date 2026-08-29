@@ -14,9 +14,13 @@ from backend.app.models import (
     IdempotencyRecord,
     Submission,
     SubmissionVersion,
+    StudentClassMembership,
+    StudentTaskProgress,
     Task,
+    TaskAssignment,
     TestCase,
     TestResult,
+    TeachingAssignment,
 )
 from backend.app.models.entities import utc_now
 from backend.app.services.audit import record_audit
@@ -150,6 +154,71 @@ def create_submission_version(
     return submission, version, execution, True
 
 
+def sync_published_task_progress(
+    db: Session,
+    submission: Submission,
+    version: SubmissionVersion,
+    status: str,
+    test_results: list[dict],
+    required_test_case_ids: set[str],
+) -> None:
+    """把编码提交的判题结果同步到学生端按发布记录读取的进度表。"""
+    assignments = db.scalars(
+        select(TaskAssignment)
+        .join(TeachingAssignment, TaskAssignment.teaching_assignment_id == TeachingAssignment.id)
+        .join(
+            StudentClassMembership,
+            StudentClassMembership.class_id == TeachingAssignment.class_id,
+        )
+        .where(
+            TaskAssignment.task_id == submission.task_id,
+            TaskAssignment.publish_status == "PUBLISHED",
+            TeachingAssignment.status == "ACTIVE",
+            StudentClassMembership.student_id == submission.student_id,
+            StudentClassMembership.status == "ACTIVE",
+        )
+    ).all()
+    if not assignments:
+        return
+
+    passed_ids = {
+        item["test_case_id"]
+        for item in test_results
+        if item["test_case_id"] in required_test_case_ids and item["status"] == "PASSED"
+    }
+    progress_status = {
+        "PASSED": "COMPLETED",
+        "FAILED": "SUBMITTED",
+        "REVIEW_REQUIRED": "NEEDS_REVISION",
+        "FEEDBACK_READY": "SUBMITTED",
+    }.get(status, "SUBMITTED")
+    now = utc_now()
+    for assignment in assignments:
+        progress = db.scalar(
+            select(StudentTaskProgress).where(
+                StudentTaskProgress.assignment_id == assignment.id,
+                StudentTaskProgress.student_id == submission.student_id,
+            )
+        )
+        if progress is None:
+            progress = StudentTaskProgress(
+                assignment_id=assignment.id,
+                student_id=submission.student_id,
+                total_required_count=len(required_test_case_ids),
+            )
+            db.add(progress)
+        progress.status = progress_status
+        progress.latest_submission_id = submission.id
+        progress.latest_version_id = version.id
+        progress.passed_count = len(passed_ids)
+        progress.total_required_count = len(required_test_case_ids)
+        progress.highest_hint_level = max(progress.highest_hint_level or 0, version.highest_hint_level or 0)
+        progress.started_at = progress.started_at or submission.first_submitted_at
+        progress.last_submitted_at = submission.last_submitted_at
+        progress.completed_at = now if progress_status == "COMPLETED" else None
+        progress.updated_at = now
+
+
 def run_execution(db: Session, execution_id: str, timeout_seconds: int, audit_request_id: str | None = None) -> ExecutionRun:
     execution = one_or_404(db, ExecutionRun, execution_id, "EXECUTION_NOT_FOUND", "执行记录不存在")
     version = one_or_404(
@@ -184,6 +253,7 @@ def run_execution(db: Session, execution_id: str, timeout_seconds: int, audit_re
     )
 
     required_total = len([case for case in test_cases if case.required])
+    required_test_case_ids = {case.id for case in test_cases if case.required}
     passed_required = sum(1 for result in sandbox_result.tests if result["status"] == "PASSED")
     # 只有「跑成功但没全过」才需要接着调模型诊断（内含最长 30s HTTP）。
     needs_analysis = sandbox_result.status == "SUCCEEDED" and passed_required != required_total
@@ -232,6 +302,15 @@ def run_execution(db: Session, execution_id: str, timeout_seconds: int, audit_re
         submission.status = "REVIEW_REQUIRED"
     else:
         submission.status = "FAILED"
+
+    sync_published_task_progress(
+        db,
+        submission,
+        version,
+        submission.status,
+        sandbox_result.tests,
+        required_test_case_ids,
+    )
 
     # 诊断做完了，现在才能把 execution 置成终态。
     execution.status = sandbox_result.status

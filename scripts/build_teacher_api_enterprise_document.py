@@ -103,7 +103,7 @@ MODULES = [
     {
         "name": "资料与文件",
         "scope": "教学资料列表、元数据创建、真实文件上传下载、可见性、回收站、恢复和图谱关联。",
-        "tables": "materials, material_knowledge_links, knowledge_points, audit_logs; backend/uploads",
+        "tables": "materials, material_knowledge_links, knowledge_points, audit_logs; teacher_backend/uploads",
         "rows": [
             ("MAT-01", "GET", "/api/v1/teacher/materials", "列出课程有效资料", "教学资料", "course_id?", "资料数组及关联知识点", "200/403/404", "已实现"),
             ("MAT-02", "POST", "/api/v1/teacher/materials", "创建资料元数据", "新增链接/占位资料", "MaterialCreate", "资料对象", "201/403/404/422", "已实现"),
@@ -348,11 +348,11 @@ def add_baseline(doc):
     add_table(doc, ["项目", "当前值"], [
         ("前端", "React / Vite / TypeScript，统一调用入口 src/api.ts"),
         ("后端", "FastAPI + Pydantic + SQLAlchemy"),
-        ("数据库", "SQLite codetrack.db；27 张业务表，1,191 行"),
+        ("数据库", "SQLite teacher_backend/codetrack.db；27 张业务表，1,191 行"),
         ("成功响应", "大多数接口返回 {\"data\": ...}"),
         ("当前身份", "X-User-Id 请求头；多个依赖默认 teacher-01"),
         ("规范前缀", "/api/v1；/api/teacher 仅为画布图谱历史兼容"),
-        ("文件存储", "backend/uploads 本地目录"),
+        ("文件存储", "teacher_backend/uploads 本地目录"),
     ], [2100, 7260], font_size=9.0, keep_together=True)
     add_callout(doc, "生产阻断项", "POST /teacher/auth/login 只验证 PBKDF2 密码并返回教师资料，没有签发 Cookie、JWT 或服务端 Session；后续请求仍由 X-User-Id 决定身份。GET /teacher/auth/accounts 还会公开列出教师账号。生产前必须完成真实会话、限流、账号锁定和 CSRF/Token 策略。", fill="FDECEC")
     doc.add_heading("2.1 两套知识图谱必须区分", level=2)
@@ -510,7 +510,7 @@ def add_errors_and_data(doc, bullet_id):
         ("任务批改", "tasks, test_cases, submissions, evaluations, grades, feedback", "提交相关数据对象级授权；成绩发布与通知同事务"),
         ("知识图谱", "knowledge_points/material links；teacher_knowledge_graphs", "两套模型隔离；发布状态和版本需审计"),
         ("讨论通知", "course_discussions, replies, notifications", "发布/回复与通知建议 Outbox"),
-        ("文件", "backend/uploads + materials.content_url", "路径净化、白名单、体积限制；生产应接对象存储"),
+        ("文件", "teacher_backend/uploads + materials.content_url", "路径净化、白名单、体积限制；生产应接对象存储"),
         ("审计", "audit_logs", "记录 actor/action/resource/detail；目标补 IP、trace_id、before/after"),
     ], [1600, 3600, 4160], font_size=8.0)
     doc.add_heading("20.1 安全上线要求", level=2)

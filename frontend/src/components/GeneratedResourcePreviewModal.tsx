@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Modal } from "antd";
-import { ChevronLeft, ChevronRight, Download, ExternalLink } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, ExternalLink, Pause, Play, Square, Volume2 } from "lucide-react";
 import MindElixir, { type MindElixirData, type NodeObj } from "mind-elixir";
 import "mind-elixir/style.css";
 import ReactMarkdown from "react-markdown";
@@ -341,6 +341,182 @@ function DocumentMarkdownPreview({ resource }: { resource: GeneratedResource }) 
   );
 }
 
+function PodcastPlayerPreview({
+  resource,
+  activeIndex,
+  onSelectSegment,
+  citationMap
+}: {
+  resource: GeneratedResource;
+  activeIndex: number;
+  onSelectSegment: (index: number) => void;
+  citationMap: Map<string, GeneratedResource["citations"][number]>;
+}) {
+  const segments = resource.render_payload.segments ?? [];
+  const [playing, setPlaying] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [playbackNotice, setPlaybackNotice] = useState("");
+  const recordedRef = useRef(false);
+  const activeIndexRef = useRef(activeIndex);
+
+  useEffect(() => {
+    activeIndexRef.current = activeIndex;
+  }, [activeIndex]);
+
+  useEffect(() => {
+    return () => {
+      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    };
+  }, []);
+
+  async function markListened(completedSegmentCount: number) {
+    if (recordedRef.current) return;
+    recordedRef.current = true;
+    try {
+      await api.markGeneratedPodcastListened(resource.id, completedSegmentCount);
+      setPlaybackNotice("已记录到学习画像，建议继续完成一组配套练习验证掌握度。");
+    } catch {
+      setPlaybackNotice("播客已播放完成，学习记录暂未同步，可稍后重试。");
+      recordedRef.current = false;
+    }
+  }
+
+  function speakSegment(index: number) {
+    const segment = segments[index];
+    if (!segment || !("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    onSelectSegment(index);
+    setPlaying(true);
+    setPaused(false);
+    setPlaybackNotice("");
+    const utterance = new SpeechSynthesisUtterance(`${segment.speaker}。${segment.label}。${segment.text}`);
+    utterance.lang = "zh-CN";
+    utterance.rate = segment.voice === "host" ? 1.03 : 0.96;
+    utterance.pitch = segment.voice === "host" ? 1.08 : 0.94;
+    utterance.onend = () => {
+      const nextIndex = index + 1;
+      if (nextIndex < segments.length) {
+        window.setTimeout(() => speakSegment(nextIndex), 160);
+        return;
+      }
+      setPlaying(false);
+      setPaused(false);
+      void markListened(segments.length);
+    };
+    utterance.onerror = () => {
+      setPlaying(false);
+      setPaused(false);
+      setPlaybackNotice("当前浏览器语音合成不可用，可以先阅读下方逐段转写稿。");
+    };
+    window.speechSynthesis.speak(utterance);
+  }
+
+  function play() {
+    if (!segments.length) return;
+    if (!("speechSynthesis" in window)) {
+      setPlaybackNotice("当前浏览器不支持语音合成，可以先阅读逐段转写稿。");
+      return;
+    }
+    if (paused) {
+      window.speechSynthesis.resume();
+      setPaused(false);
+      setPlaying(true);
+      return;
+    }
+    speakSegment(activeIndexRef.current);
+  }
+
+  function pause() {
+    if (!("speechSynthesis" in window)) return;
+    window.speechSynthesis.pause();
+    setPaused(true);
+    setPlaying(false);
+  }
+
+  function stop() {
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    setPlaying(false);
+    setPaused(false);
+  }
+
+  const totalTextLength = segments.reduce((sum, segment) => sum + segment.text.length, 0);
+  const estimatedMinutes = Math.max(2, Math.round(totalTextLength / 180));
+  const activeSegment = segments[activeIndex] ?? segments[0];
+  const playbackState = playing
+    ? `正在播放：${activeSegment?.speaker} · ${activeSegment?.label}`
+    : paused
+      ? "已暂停"
+      : "可播放";
+
+  return (
+    <section className="ai-preview-podcast ai-preview-podcast-player">
+      <header>
+        <div>
+          <small>{resource.knowledge_point || "自主学习资源"} · 学习播客</small>
+          <h2>{resource.title}</h2>
+          <p>{resource.summary}</p>
+        </div>
+        <div className="ai-podcast-runtime">
+          <Volume2 size={18} />
+          <strong>{estimatedMinutes} 分钟</strong>
+          <span>{segments.length} 段</span>
+        </div>
+      </header>
+
+      <div className="ai-podcast-body">
+        <div className="ai-podcast-player-bar">
+          <button type="button" className="primary" onClick={play} disabled={!segments.length || playing}>
+            <Play size={16} /> {paused ? "继续播放" : "播放播客"}
+          </button>
+          <button type="button" onClick={pause} disabled={!playing}>
+            <Pause size={16} /> 暂停
+          </button>
+          <button type="button" onClick={stop} disabled={!playing && !paused}>
+            <Square size={15} /> 停止
+          </button>
+          <span>{playbackState}</span>
+        </div>
+
+        <nav className="ai-podcast-segment-tabs" aria-label="播客分段">
+          {segments.map((segment, index) => (
+            <button
+              type="button"
+              key={`${segment.speaker}_${segment.label}_${index}`}
+              className={index === activeIndex ? "active" : ""}
+              onClick={() => {
+                stop();
+                onSelectSegment(index);
+              }}
+            >
+              <span>{index + 1}</span>
+              <strong>{segment.label}</strong>
+              <small>{segment.speaker}</small>
+            </button>
+          ))}
+        </nav>
+
+        <article className="ai-podcast-transcript-card">
+          <div className="ai-podcast-transcript-heading">
+            <small>{activeSegment?.speaker} · {activeSegment?.label}</small>
+            <span>第 {activeIndex + 1} 段 / 共 {segments.length} 段</span>
+          </div>
+          <p>{activeSegment?.text}</p>
+          {activeSegment?.takeaway ? <blockquote>{activeSegment.takeaway}</blockquote> : null}
+          <footer>
+            {(activeSegment?.citation_ids ?? []).map((sourceId) => {
+              const source = citationMap.get(sourceId);
+              return source ? <span key={sourceId}>引用：{source.title}</span> : null;
+            })}
+            <span>语音合成：浏览器 TTS</span>
+          </footer>
+        </article>
+      </div>
+
+      {playbackNotice ? <p className="ai-podcast-notice">{playbackNotice}</p> : null}
+    </section>
+  );
+}
+
 function escapeHtml(value: unknown) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -538,6 +714,7 @@ export default function GeneratedResourcePreviewModal({
   const shouldUsePdfPreview = resource?.resource_type === "PPT";
   const shouldUseMindMapPreview = resource?.resource_type === "MIND_MAP";
   const shouldUseDocumentPreview = resource?.resource_type === "DOCUMENT";
+  const shouldUsePodcastPreview = resource?.resource_type === "PODCAST_SCRIPT";
   const showPdfPreview = Boolean(shouldUsePdfPreview) && pdfPreviewStatus !== "failed";
   const showPdfPreviewUnavailable = Boolean(shouldUsePdfPreview) && pdfPreviewStatus === "failed";
   const practicePreviewHtml = useMemo(
@@ -618,13 +795,13 @@ export default function GeneratedResourcePreviewModal({
       onCancel={onClose}
       footer={null}
       centered
-      width={shouldUsePdfPreview || shouldUseDocumentPreview ? 1120 : 1180}
-      className={`ai-resource-preview-modal${shouldUsePdfPreview ? " ai-resource-preview-modal-pdf" : ""}${shouldUseMindMapPreview ? " ai-resource-preview-modal-mindmap" : ""}${shouldUseDocumentPreview ? " ai-resource-preview-modal-document" : ""}`}
+      width={shouldUsePdfPreview || shouldUseDocumentPreview ? 1120 : shouldUsePodcastPreview ? 1040 : 1180}
+      className={`ai-resource-preview-modal${shouldUsePdfPreview ? " ai-resource-preview-modal-pdf" : ""}${shouldUseMindMapPreview ? " ai-resource-preview-modal-mindmap" : ""}${shouldUseDocumentPreview ? " ai-resource-preview-modal-document" : ""}${shouldUsePodcastPreview ? " ai-resource-preview-modal-podcast" : ""}`}
       title={resource ? `${resource.title} · 预览` : ""}
     >
       {resource ? (
-        <div className={`ai-resource-preview${shouldUsePdfPreview ? " pdf-preview" : ""}${shouldUseMindMapPreview ? " mindmap-preview" : ""}${shouldUseDocumentPreview ? " document-preview" : ""}`}>
-          {!shouldUsePdfPreview && !shouldUseMindMapPreview && !shouldUseDocumentPreview ? (
+        <div className={`ai-resource-preview${shouldUsePdfPreview ? " pdf-preview" : ""}${shouldUseMindMapPreview ? " mindmap-preview" : ""}${shouldUseDocumentPreview ? " document-preview" : ""}${shouldUsePodcastPreview ? " podcast-preview" : ""}`}>
+          {!shouldUsePdfPreview && !shouldUseMindMapPreview && !shouldUseDocumentPreview && !shouldUsePodcastPreview ? (
             <aside className="ai-resource-slide-nav" aria-label="资源目录">
               {navItems.map((title, index) => (
                 <button type="button" key={`${resource.id}_${index}`} className={index === activeIndex ? "active" : ""} onClick={() => setActiveItem(index)}>
@@ -634,9 +811,9 @@ export default function GeneratedResourcePreviewModal({
               ))}
             </aside>
           ) : null}
-          <main className={`ai-resource-stage${shouldUsePdfPreview ? " pdf-stage" : ""}${shouldUseMindMapPreview ? " mindmap-stage" : ""}${shouldUseDocumentPreview ? " document-stage" : ""}`}>
-            <div className={`ai-ppt-viewer${shouldUsePdfPreview ? " pdf" : ""}${shouldUseMindMapPreview ? " mindmap" : ""}${shouldUseDocumentPreview ? " document" : ""}`}>
-              {!shouldUsePdfPreview && !shouldUseMindMapPreview && !shouldUseDocumentPreview ? (
+          <main className={`ai-resource-stage${shouldUsePdfPreview ? " pdf-stage" : ""}${shouldUseMindMapPreview ? " mindmap-stage" : ""}${shouldUseDocumentPreview ? " document-stage" : ""}${shouldUsePodcastPreview ? " podcast-stage" : ""}`}>
+            <div className={`ai-ppt-viewer${shouldUsePdfPreview ? " pdf" : ""}${shouldUseMindMapPreview ? " mindmap" : ""}${shouldUseDocumentPreview ? " document" : ""}${shouldUsePodcastPreview ? " podcast" : ""}`}>
+              {!shouldUsePdfPreview && !shouldUseMindMapPreview && !shouldUseDocumentPreview && !shouldUsePodcastPreview ? (
                 <button type="button" className="ai-ppt-arrow left" aria-label="上一页" onClick={() => moveSlide(-1)} disabled={activeIndex <= 0}>
                   <ChevronLeft size={20} />
                 </button>
@@ -768,14 +945,15 @@ export default function GeneratedResourcePreviewModal({
                     </article>
                   </section>
                 ) : activeSegment ? (
-                  <section className="ai-preview-podcast">
-                    <small>{activeSegment.label}</small>
-                    <h2>{activeSegment.speaker}</h2>
-                    <p>{activeSegment.text}</p>
-                  </section>
+                  <PodcastPlayerPreview
+                    resource={resource}
+                    activeIndex={activeIndex}
+                    onSelectSegment={setActiveItem}
+                    citationMap={citationMap}
+                  />
                 ) : null}
               </div>
-              {!shouldUsePdfPreview && !shouldUseMindMapPreview && !shouldUseDocumentPreview ? (
+              {!shouldUsePdfPreview && !shouldUseMindMapPreview && !shouldUseDocumentPreview && !shouldUsePodcastPreview ? (
                 <button type="button" className="ai-ppt-arrow right" aria-label="下一页" onClick={() => moveSlide(1)} disabled={activeIndex >= navItems.length - 1}>
                   <ChevronRight size={20} />
                 </button>
@@ -789,6 +967,8 @@ export default function GeneratedResourcePreviewModal({
                   ? `思维导图 · ${nodes.length} 个节点`
                   : shouldUsePdfPreview
                     ? "PDF 预览"
+                    : shouldUsePodcastPreview
+                      ? `播客 · ${segments.length} 段`
                     : `${activeIndex + 1}/${Math.max(navItems.length, 1)}`}
               </span>
               <span>AI 生成</span>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ChartNoAxesColumnIncreasing, ChevronDown, FolderOpen, LayoutDashboard, LogOut, UserRound } from "lucide-react";
 import { ConfigProvider, Dropdown, type MenuProps } from "antd";
 import zhCN from "antd/locale/zh_CN";
@@ -156,7 +156,8 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
       transitionTo(`/question-workspace/${target.assignmentId}`, target.courseId ? { fromCourseId: target.courseId } : undefined);
       return;
     }
-    transitionTo(`/workspace/${target.taskId ?? "task_linked_list_delete_001"}`, target.courseId ? { fromCourseId: target.courseId } : undefined);
+    const query = target.assignmentId ? `?assignment_id=${encodeURIComponent(target.assignmentId)}` : "";
+    transitionTo(`/workspace/${target.taskId ?? "task_linked_list_delete_001"}${query}`, target.courseId ? { fromCourseId: target.courseId } : undefined);
   }
 
   const workspaceState = location.state as { fromCourseId?: string; fromPath?: string } | null;
@@ -218,8 +219,13 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
 
 function TeacherDevelopRoute({ authUser, onLogout }: { authUser: AuthUser; onLogout: () => void }) {
   useEffect(() => {
-    setTeacherDevelopUser("teacher-01", authUser.display_name || "王老师");
-  }, [authUser.display_name]);
+    const teacherBackendId = authUser.id === "user_teacher_001" || authUser.username === "teacher_wang"
+      ? "teacher-01"
+      : authUser.id === "user_teacher_002" || authUser.username === "teacher_li"
+        ? "teacher-02"
+        : authUser.id;
+    setTeacherDevelopUser(teacherBackendId, authUser.display_name || "王老师");
+  }, [authUser.display_name, authUser.id, authUser.username]);
 
   return (
     <TeacherDevelopApp
@@ -232,6 +238,7 @@ function TeacherDevelopRoute({ authUser, onLogout }: { authUser: AuthUser; onLog
 
 function TaskWorkspaceWrapper({ onBack }: { onBack: () => void }) {
   const { taskId } = useParams<{ taskId: string }>();
+  const [searchParams] = useSearchParams();
   if (!taskId) {
     return (
       <div className="page-grid">
@@ -239,7 +246,7 @@ function TaskWorkspaceWrapper({ onBack }: { onBack: () => void }) {
       </div>
     );
   }
-  return <TaskWorkspace taskId={taskId} onBack={onBack} />;
+  return <TaskWorkspace taskId={taskId} assignmentId={searchParams.get("assignment_id") ?? undefined} onBack={onBack} />;
 }
 
 function QuestionWorkspaceWrapper({ onBack }: { onBack: () => void }) {

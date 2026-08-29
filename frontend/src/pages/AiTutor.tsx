@@ -226,7 +226,11 @@ function resourceToTurn(id: string, resource: GeneratedResource): AiChatTurn {
     time: nowLabel(),
     confidence: resource.confidence,
     citations: resource.citations,
-    suggestedActions: ["加入资源中心", "打开预览"],
+    suggestedActions: resource.resource_type === "PODCAST_SCRIPT"
+      ? ["去资源中心播放", "生成配套练习"]
+      : resource.resource_type === "PRACTICE_SET"
+        ? ["去资源中心做题", "打开预览"]
+        : ["加入资源中心", "打开预览"],
     profileUsed: true,
     sourceUsed: Boolean(resource.citations.length),
     safetyNote: notes.length
@@ -255,7 +259,7 @@ function resourceMetric(resource: GeneratedResource) {
   if (resource.resource_type === "DOCUMENT") return `${resource.item_count} 节文档`;
   if (resource.resource_type === "MIND_MAP") return `${resource.item_count} 个节点`;
   if (resource.resource_type === "PRACTICE_SET") return `${resource.item_count} 道练习`;
-  if (resource.resource_type === "PODCAST_SCRIPT") return `${resource.item_count} 段播客稿`;
+  if (resource.resource_type === "PODCAST_SCRIPT") return `${resource.item_count} 段播客`;
   if (resource.resource_type === "KNOWLEDGE_CARD") return `${resource.item_count} 张卡片`;
   return `${resource.item_count || 1} 个${label}`;
 }

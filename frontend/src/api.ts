@@ -344,6 +344,8 @@ export type GeneratedResourcePodcastSegment = {
   speaker: string;
   label: string;
   text: string;
+  voice?: string;
+  takeaway?: string;
   citation_ids?: string[];
 };
 
@@ -534,6 +536,23 @@ export type TaskDetail = {
     passed_count: number;
     total_required_count: number;
     highest_hint_level: number;
+  };
+  teacher_review?: {
+    grade: null | {
+      id: string;
+      score: number;
+      status: string;
+      comment: string;
+      dimensions?: Record<string, unknown>;
+      published_at?: string | null;
+    };
+    feedback: Array<{
+      id: string;
+      content: string;
+      status: string;
+      student_visible: boolean;
+      published_at?: string | null;
+    }>;
   };
 };
 
@@ -1022,7 +1041,7 @@ export const api = {
   me: () => request<AuthUser>("/api/v1/auth/me"),
   logout: () => request<{ logged_out: boolean }>("/api/v1/auth/logout", { method: "POST" }),
   listTasks: () => request<TaskListItem[]>("/api/v1/tasks"),
-  getTask: (taskId: string) => request<TaskDetail>(`/api/v1/tasks/${taskId}`),
+  getTask: (taskId: string, assignmentId?: string) => request<TaskDetail>(`/api/v1/tasks/${taskId}${assignmentId ? `?assignment_id=${encodeURIComponent(assignmentId)}` : ''}`),
   getQuestionWorkspace: (assignmentId: string) =>
     request<QuestionWorkspace>(`/api/v1/student/assignments/${assignmentId}/workspace`),
   getLearningContext: () => cachedGet<LearningContext>("/api/v1/student/learning-context"),
@@ -1153,14 +1172,28 @@ export const api = {
     clearApiCache((url) => url.startsWith("/api/v1/student/"));
     return result;
   },
+  markGeneratedPodcastListened: async (resourceId: string, completedSegmentCount?: number) => {
+    const result = await request<{
+      resource_id: string;
+      event_type: string;
+      completion_ratio: number;
+      profile_signal: SubmitQuestionResult["profile_signal"];
+    }>(`/api/v1/student/resources/${encodeURIComponent(resourceId)}/podcast/listened`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ completed_segment_count: completedSegmentCount })
+    });
+    clearApiCache((url) => url.startsWith("/api/v1/student/"));
+    return result;
+  },
   generatedResourceDownloadUrl: (resourceId: string) =>
     `/api/v1/student/resources/${encodeURIComponent(resourceId)}/download`,
   generatedResourcePreviewUrl: (resourceId: string) =>
     `/api/v1/student/resources/${encodeURIComponent(resourceId)}/preview`,
   getPptRendererConfig: () =>
     request<PptRendererConfig>("/api/v1/student/resources/ppt/renderers"),
-  submitCode: async (taskId: string, language: string, sourceCode: string) => {
-    const result = await request<SubmitResponse>(`/api/v1/tasks/${taskId}/submissions`, {
+  submitCode: async (taskId: string, language: string, sourceCode: string, assignmentId?: string) => {
+    const result = await request<SubmitResponse>(`/api/v1/tasks/${taskId}/submissions${assignmentId ? `?assignment_id=${encodeURIComponent(assignmentId)}` : ''}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

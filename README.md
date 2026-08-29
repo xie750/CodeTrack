@@ -32,7 +32,7 @@ AI/RAG 集成通过模型网关适配器进行。当配置了 `CODETRACK_MODEL_G
 ```bash
 cd backend
 pip install -r requirements.txt
-alembic upgrade head
+alembic -c backend/alembic.ini upgrade head
 cd ../scripts && python seed_demo.py && cd ../backend
 uvicorn app.main:app --reload
 
@@ -58,7 +58,7 @@ RAG 知识库后端使用 PostgreSQL + pgvector、Redis/Celery、MinIO、Parent-
 
 ```bash
 docker compose up -d
-alembic upgrade head
+alembic -c backend/alembic.ini upgrade head
 ```
 
 创建知识库：

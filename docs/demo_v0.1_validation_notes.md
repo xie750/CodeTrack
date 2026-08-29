@@ -28,7 +28,7 @@ Result:
 
 ```powershell
 $env:CODETRACK_DATABASE_URL='sqlite:///./codetrack_migration_check.db'
-python -m alembic upgrade head
+python -m alembic -c backend/alembic.ini upgrade head
 python .\scripts\seed_demo.py
 ```
 

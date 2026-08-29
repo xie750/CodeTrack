@@ -32,6 +32,7 @@ import { StudentState, studentErrorDetail, studentErrorMessage } from "../compon
 
 type PageProps = {
   taskId: string;
+  assignmentId?: string;
   onBack: () => void;
 };
 
@@ -209,7 +210,7 @@ function normalizeTaskDetail(rawTask: TaskDetail): TaskDetail {
   };
 }
 
-export default function TaskWorkspace({ taskId, onBack }: PageProps) {
+export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProps) {
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [context, setContext] = useState<LearningContext | null>(null);
   const [loading, setLoading] = useState(true);
@@ -244,7 +245,7 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
     setActiveResultTab("cases");
     setSelectedCaseIndex(0);
 
-    Promise.allSettled([api.getTask(taskId), api.getLearningContext()])
+    Promise.allSettled([api.getTask(taskId, assignmentId), api.getLearningContext()])
       .then(([taskResult, contextResult]) => {
         if (!alive) return;
         if (taskResult.status === "fulfilled") {
@@ -271,7 +272,7 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
     return () => {
       alive = false;
     };
-  }, [taskId]);
+  }, [assignmentId, taskId]);
 
   useEffect(() => {
     window.localStorage.setItem(WORKSPACE_LAYOUT_KEY, JSON.stringify(layout));
@@ -294,6 +295,18 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
           if (cancelled) return;
           setLatestResult(result);
           setActiveResultTab("results");
+          try {
+            const refreshed = await api.getTask(taskId, assignmentId);
+            if (!cancelled) {
+              setTask((current) => current ? {
+                ...current,
+                current_progress: refreshed.current_progress,
+                teacher_review: refreshed.teacher_review,
+              } : current);
+            }
+          } catch {
+            // 判题结果已经可用，教师反馈刷新失败不应遮挡学生结果。
+          }
           if (result.diagnosis.status === "READY") {
             try {
               const nextDiagnosis = await api.getDiagnosis(result.version_id);
@@ -452,7 +465,7 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
     setDiagnosis(null);
     setHints([]);
     try {
-      const response = await api.submitCode(task.task_id, selectedLanguage, sourceCode);
+      const response = await api.submitCode(task.task_id, selectedLanguage, sourceCode, assignmentId);
       setActiveExecutionId(response.execution_id);
       setRunMessage(response.status);
     } catch (caught) {
@@ -880,6 +893,13 @@ export default function TaskWorkspace({ taskId, onBack }: PageProps) {
                 <a className="program-card-link" href="#">查看推荐题目 <ChevronRight size={14} /></a>
               </article>
             </section>
+            {(task.teacher_review?.grade || task.teacher_review?.feedback.length) ? (
+              <section className="program-card program-teacher-feedback">
+                <header><h2>教师反馈</h2><span>已发布到本次任务</span></header>
+                {task.teacher_review.grade && <div className="teacher-grade-summary"><strong>{task.teacher_review.grade.score}</strong><span> / 100</span><p>{task.teacher_review.grade.comment || "教师已发布成绩，暂无文字补充。"}</p></div>}
+                {task.teacher_review.feedback.map((item) => <p className="teacher-feedback-item" key={item.id}>{item.content}</p>)}
+              </section>
+            ) : null}
           </>
         )}
       </main>

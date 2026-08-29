@@ -143,7 +143,7 @@ class ClassGroup(Base):
     course_id: Mapped[str] = mapped_column(ForeignKey("courses.id"), index=True)
     name: Mapped[str] = mapped_column(String(120))
     grade: Mapped[str] = mapped_column(String(40), default="2024级")
-    major: Mapped[str] = mapped_column(String(120), default="软件工程")
+    major: Mapped[str] = mapped_column(String(120), default="人工智能")
     schedule: Mapped[str] = mapped_column(String(120), default="")
     mentor: Mapped[str] = mapped_column(String(80), default="")
     join_code: Mapped[str] = mapped_column(String(20), unique=True)

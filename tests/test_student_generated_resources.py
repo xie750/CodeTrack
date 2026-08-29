@@ -452,9 +452,9 @@ def test_student_can_generate_save_and_download_generic_resources(monkeypatch, r
             assert resource["render_payload"]["metadata"]["document_style"] == "study-handout"
         assert resource["citations"]
         assert resource["download_available"] is True
-        assert resource["saved_to_resource_center"] is (resource_type == "PRACTICE_SET")
+        assert resource["saved_to_resource_center"] is (resource_type in {"PRACTICE_SET", "PODCAST_SCRIPT"})
 
-        if resource_type != "PRACTICE_SET":
+        if resource_type not in {"PRACTICE_SET", "PODCAST_SCRIPT"}:
             saved = client.post(f"/api/v1/student/resources/{resource['id']}/save", headers=STUDENT)
             assert saved.status_code == 200
             assert saved.json()["data"]["saved_to_resource_center"] is True
@@ -527,6 +527,56 @@ def test_generated_practice_resource_auto_saves_and_submits_to_profile(monkeypat
         event = db.query(LearnerEvent).filter(
             LearnerEvent.student_id == "user_student_001",
             LearnerEvent.event_type == "GENERATED_PRACTICE_SUBMITTED",
+        ).order_by(LearnerEvent.created_at.desc()).first()
+        assert event is not None
+        assert resource["id"] in event.payload
+    finally:
+        db.close()
+
+
+def test_generated_podcast_auto_saves_and_listening_updates_profile(monkeypatch):
+    monkeypatch.setenv("CODETRACK_MODEL_API_KEY", "")
+    monkeypatch.setenv("CODETRACK_MODEL_NAME", "")
+    monkeypatch.setenv("CODETRACK_MODEL_GATEWAY_URL", "")
+    get_settings.cache_clear()
+
+    with TestClient(app) as client:
+        generated = client.post(
+            "/api/v1/student/resources/generate",
+            headers=STUDENT,
+            json={
+                "course_id": "course_ds_001",
+                "resource_type": "PODCAST_SCRIPT",
+                "message": "帮我生成关于队列的播客讲解",
+            },
+        )
+        assert generated.status_code == 200
+        resource = generated.json()["data"]["resource"]
+        assert resource["resource_type"] == "PODCAST_SCRIPT"
+        assert resource["saved_to_resource_center"] is True
+        assert resource["render_payload"]["metadata"]["playback_mode"] == "browser_speech_synthesis"
+        assert any(segment.get("takeaway") for segment in resource["render_payload"]["segments"])
+
+        listing = client.get("/api/v1/student/resources/generated", headers=STUDENT)
+        assert listing.status_code == 200
+        assert resource["id"] in {item["id"] for item in listing.json()["data"]["items"]}
+
+        listened = client.post(
+            f"/api/v1/student/resources/{resource['id']}/podcast/listened",
+            headers=STUDENT,
+            json={"completed_segment_count": len(resource["render_payload"]["segments"])},
+        )
+        assert listened.status_code == 200
+        payload = listened.json()["data"]
+        assert payload["event_type"] == "PODCAST_LISTENED"
+        assert payload["completion_ratio"] == 1
+        assert "播客" in payload["profile_signal"]["summary"]
+
+    db = SessionLocal()
+    try:
+        event = db.query(LearnerEvent).filter(
+            LearnerEvent.student_id == "user_student_001",
+            LearnerEvent.event_type == "PODCAST_LISTENED",
         ).order_by(LearnerEvent.created_at.desc()).first()
         assert event is not None
         assert resource["id"] in event.payload

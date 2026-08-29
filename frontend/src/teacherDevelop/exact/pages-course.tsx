@@ -310,9 +310,9 @@ export function ExactWorkspace(props: CommonProps) {
 
       <section className="exact-block workspace-panel workspace-ai">
         <div className="exact-block-title"><strong><Sparkles size={14} /> AI 进度分析</strong><Text type="secondary">基于学习行为与任务数据</Text></div>
-        <div><Tag color="red">软件工程 2 班</Tag><strong>边界条件错误集中</strong></div>
-        <div><Tag color="gold">计算机科学 1 班</Tag><strong>提示依赖偏高</strong></div>
-        <div><Tag color="green">软件工程 1 班</Tag><strong>任务完成率回升</strong></div>
+        <div><Tag color="red">人工智能 2 班</Tag><strong>边界条件错误集中</strong></div>
+        <div><Tag color="gold">人工智能实验班</Tag><strong>提示依赖偏高</strong></div>
+        <div><Tag color="green">人工智能 1 班</Tag><strong>任务完成率回升</strong></div>
         <Button className="workspace-panel-more" type="link" onClick={() => props.onNavigate('analytics')}>查看完整分析 <ChevronRight size={13} /></Button>
       </section>
     </div>
@@ -521,7 +521,7 @@ export function ExactClasses(props: CommonProps) {
         <Button type="primary" block icon={<UserPlus size={15} />} onClick={() => props.onNavigate('invite')}>邀请学生加入</Button>
       </aside>
     </div>
-    <Modal title="新建教学班" open={createOpen} onCancel={() => setCreateOpen(false)} onOk={create} confirmLoading={saving}><Form form={form} layout="vertical"><Form.Item label="班级名称" name="name" rules={[{ required: true }]}><Input placeholder="例如：软件工程 4 班" /></Form.Item><Form.Item label="上课安排" name="schedule"><Input placeholder="例如：周二 3-4 节" /></Form.Item><Form.Item label="任课教师" name="mentor" initialValue={'\u738b\u8001\u5e08'}><Input /></Form.Item></Form></Modal>
+    <Modal title="新建教学班" open={createOpen} onCancel={() => setCreateOpen(false)} onOk={create} confirmLoading={saving}><Form form={form} layout="vertical"><Form.Item label="班级名称" name="name" rules={[{ required: true }]}><Input placeholder="例如：人工智能 4 班" /></Form.Item><Form.Item label="上课安排" name="schedule"><Input placeholder="例如：周二 3-4 节" /></Form.Item><Form.Item label="任课教师" name="mentor" initialValue={'\u738b\u8001\u5e08'}><Input /></Form.Item></Form></Modal>
   </div>
 }
 

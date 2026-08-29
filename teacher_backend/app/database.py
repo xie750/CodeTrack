@@ -5,8 +5,8 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 
-ROOT_DIR = Path(__file__).resolve().parents[2]
-DATABASE_PATH = ROOT_DIR / "codetrack.db"
+TEACHER_BACKEND_DIR = Path(__file__).resolve().parents[1]
+DATABASE_PATH = TEACHER_BACKEND_DIR / "codetrack.db"
 DATABASE_URL = os.getenv("CODETRACK_DATABASE_URL", f"sqlite:///{DATABASE_PATH.as_posix()}")
 
 

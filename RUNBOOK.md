@@ -8,9 +8,9 @@ CodeTrack 是一个前后端一体的教学管理系统：
 
 - 前端：React 19、TypeScript、Vite、Ant Design。
 - 后端：FastAPI、SQLAlchemy、Pydantic。
-- 数据库：SQLite，默认文件为根目录 `codetrack.db`。
+- 数据库：SQLite，本地教师端默认文件为 `teacher_backend/codetrack.db`，学生端默认文件为 `backend/codetrack_dev.db`。
 - 数据库迁移：Alembic。
-- 文件存储：本地目录 `backend/uploads/`。
+- 文件存储：本地目录 `teacher_backend/uploads/`。
 - 前端开发端口：`5173`。
 - 后端开发端口：`8001`。
 - API 前缀：`/api/v1`。
@@ -21,7 +21,7 @@ CodeTrack 是一个前后端一体的教学管理系统：
 浏览器 http://127.0.0.1:5173
         |
         +-- 前端页面 -> Vite 5173
-        +-- /api/*  -> FastAPI 8001 -> SQLite + backend/uploads
+        +-- /api/*  -> FastAPI 8001 -> SQLite + teacher_backend/uploads
 ```
 
 ## 2. 必需环境
@@ -155,7 +155,7 @@ pnpm run dev:frontend
 默认数据库位置：
 
 ```text
-<项目根目录>/codetrack.db
+<项目根目录>/teacher_backend/codetrack.db
 ```
 
 FastAPI 启动时会执行以下操作：
@@ -172,23 +172,23 @@ FastAPI 启动时会执行以下操作：
 新环境建议在第一次启动前执行：
 
 ```powershell
-python -m alembic -c backend\alembic.ini upgrade head
+python -m alembic -c teacher_backend\alembic.ini upgrade head
 ```
 
 macOS / Linux：
 
 ```bash
-python -m alembic -c backend/alembic.ini upgrade head
+python -m alembic -c teacher_backend/alembic.ini upgrade head
 ```
 
 查看迁移状态和历史：
 
 ```powershell
-python -m alembic -c backend\alembic.ini current
-python -m alembic -c backend\alembic.ini history
+python -m alembic -c teacher_backend\alembic.ini current
+python -m alembic -c teacher_backend\alembic.ini history
 ```
 
-迁移命令必须从项目根目录运行。当前 `backend/alembic.ini` 固定指向根目录 `codetrack.db`；如果使用自定义数据库地址，需要同步调整 Alembic 的 `sqlalchemy.url`。
+迁移命令必须从项目根目录运行，并使用 `teacher_backend/alembic.ini`；教师端默认数据库位于 `teacher_backend/codetrack.db`。如果使用自定义数据库地址，需要同步设置 `CODETRACK_DATABASE_URL`。
 
 ### 6.2 自定义 SQLite 数据库
 
@@ -288,7 +288,7 @@ pnpm run build
 - 前端：TypeScript 和 Vite 生产构建通过。
 - 构建存在 JavaScript 包体积超过 500 kB 的提示，不影响启动，但后续可通过路由懒加载优化。
 
-测试使用 `backend/test_codetrack.db`，不会覆盖根目录的开发数据库。上传测试可能在 `backend/uploads/` 生成少量测试文件，该目录已被 Git 忽略。
+测试使用 `teacher_backend/test_codetrack.db`，不会覆盖开发数据库。上传测试可能在 `teacher_backend/uploads/` 生成少量测试文件，该目录已被 Git 忽略。
 
 ## 10. 生产构建与运行
 
@@ -308,7 +308,7 @@ dist/
 ### 10.2 执行迁移
 
 ```powershell
-python -m alembic -c backend\alembic.ini upgrade head
+python -m alembic -c teacher_backend\alembic.ini upgrade head
 ```
 
 ### 10.3 由 FastAPI 托管构建结果
@@ -370,7 +370,7 @@ server {
 上传文件保存在：
 
 ```text
-backend/uploads/
+teacher_backend/uploads/
 ```
 
 默认允许的扩展名：
@@ -388,8 +388,8 @@ client_max_body_size 200m;
 业务数据备份至少包括：
 
 ```text
-codetrack.db
-backend/uploads/
+teacher_backend/codetrack.db
+teacher_backend/uploads/
 ```
 
 ## 12. 数据备份、恢复与重置
@@ -401,8 +401,8 @@ backend/uploads/
 ```powershell
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 New-Item -ItemType Directory -Path ".\backups\$stamp" -Force
-Copy-Item .\codetrack.db ".\backups\$stamp\codetrack.db"
-Copy-Item .\backend\uploads ".\backups\$stamp\uploads" -Recurse
+Copy-Item .\teacher_backend\codetrack.db ".\backups\$stamp\codetrack.db"
+Copy-Item .\teacher_backend\uploads ".\backups\$stamp\uploads" -Recurse
 ```
 
 ### 12.2 Linux 备份
@@ -410,8 +410,8 @@ Copy-Item .\backend\uploads ".\backups\$stamp\uploads" -Recurse
 ```bash
 stamp=$(date +%Y%m%d-%H%M%S)
 mkdir -p "backups/$stamp"
-cp codetrack.db "backups/$stamp/codetrack.db"
-cp -a backend/uploads "backups/$stamp/uploads"
+cp teacher_backend/codetrack.db "backups/$stamp/codetrack.db"
+cp -a teacher_backend/uploads "backups/$stamp/uploads"
 ```
 
 恢复时停止服务，将备份的数据库和上传目录放回原位置，再启动服务并执行健康检查。
@@ -424,11 +424,11 @@ Windows PowerShell：
 
 ```powershell
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-Move-Item .\codetrack.db ".\codetrack.before-reset-$stamp.db"
+Move-Item .\teacher_backend\codetrack.db ".\teacher_backend\codetrack.before-reset-$stamp.db"
 python -m uvicorn teacher_backend.app.main:app --host 127.0.0.1 --port 8001
 ```
 
-下一次启动会创建新数据库并写入演示数据。上传文件不会自动删除；如果需要完全重置，应在备份后单独清理 `backend/uploads/`。
+下一次启动会创建新数据库并写入演示数据。上传文件不会自动删除；如果需要完全重置，应在备份后单独清理 `teacher_backend/uploads/`。
 
 ## 13. 常见故障
 
@@ -492,7 +492,7 @@ SQLite 同时写入能力有限。确认没有重复启动多个后端实例，�
 
 - 文件扩展名是否在允许列表中。
 - 文件是否超过 `200 MB`。
-- `backend/uploads/` 是否可写。
+- `teacher_backend/uploads/` 是否可写。
 - 反向代理的上传大小限制是否至少为 `200m`。
 
 ### 13.7 生产环境刷新深层地址返回 404
@@ -532,13 +532,13 @@ dist/
 backups/
 *.log
 *.tsbuildinfo
-backend/test_codetrack.db
+teacher_backend/test_codetrack.db
 ```
 
 是否交付以下数据由双方确认：
 
-- `codetrack.db`：包含当前业务数据；不提供时，系统首次启动会生成演示数据。
-- `backend/uploads/`：包含实际上传材料，应与数据库一起交付或一起排除。
+- `teacher_backend/codetrack.db`：包含当前教师端业务数据；不提供时，系统首次启动会生成演示数据。
+- `teacher_backend/uploads/`：包含实际上传材料，应与数据库一起交付或一起排除。
 
 数据库与上传文件必须成对备份，避免数据库记录存在但文件缺失。
 

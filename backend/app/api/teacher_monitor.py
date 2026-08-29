@@ -594,6 +594,10 @@ def _board_payload(
 ) -> tuple[dict, list[dict]]:
     """看板载荷。返回 (分页后的响应, 当前筛选下的全部行) —— 导出要用后者。"""
     all_assignments = teacher_assignments(db, user.id)
+    if not course_id and task_id:
+        requested_task = db.get(Task, task_id)
+        if requested_task and any(item.course_id == requested_task.course_id for item in all_assignments):
+            course_id = requested_task.course_id
     course_options = _course_options(db, all_assignments, course_id)
 
     # 不传课程时落到第一门，保证首屏就有数据，同时把选中值回传给前端
