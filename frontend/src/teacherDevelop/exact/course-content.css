@@ -128,3 +128,189 @@
   .chapter-publish-control { grid-column: 1 / 3; grid-row: 2; justify-items: start; }
   .chapter-detail-tabs button span { display: none; }
 }
+
+/* Teacher course content color alignment: keep this page on the blue SaaS system. */
+.course-content-page,
+.chapter-detail-drawer,
+.student-content-preview-drawer {
+  --course-primary: #1677ff;
+  --course-primary-strong: #0f63d9;
+  --course-primary-soft: #eff6ff;
+  --course-primary-softer: #f8fbff;
+  --course-primary-border: #bfdbfe;
+  --course-border: #dbe5f2;
+  --course-border-soft: #e7edf5;
+  --course-surface-muted: #f6f9fc;
+  --course-text: #1f2937;
+  --course-muted: #64748b;
+}
+
+.course-content-summary > span,
+.chapter-catalog,
+.chapter-outline,
+.chapter-editor,
+.course-content-overview {
+  border-color: var(--course-border);
+}
+
+.course-content-summary svg,
+.chapter-catalog-head > div > span,
+.course-content-overview > div > span,
+.chapter-editor section > header svg,
+.student-knowledge-grid svg,
+.student-content-body main section > article > svg {
+  color: var(--course-primary);
+}
+
+.course-content-summary small,
+.chapter-catalog-head small,
+.chapter-catalog-title > em,
+.chapter-catalog-meta small,
+.course-content-overview > div small,
+.course-content-overview dd,
+.chapter-outline > header span,
+.chapter-editor-head p,
+.chapter-publish-control small,
+.chapter-editor section > header small,
+.chapter-knowledge-list article p,
+.chapter-resource-list article small,
+.chapter-practice-list article small,
+.student-chapter-heading p,
+.student-content-body main article small {
+  color: var(--course-muted);
+}
+
+.course-content-summary strong,
+.chapter-catalog-head strong,
+.chapter-catalog-title > strong,
+.course-content-overview > div strong,
+.course-content-overview dt {
+  color: var(--course-text);
+}
+
+.chapter-catalog-head,
+.chapter-catalog-list > button,
+.chapter-outline > header,
+.chapter-editor > section,
+.student-content-preview > header,
+.student-chapter-heading,
+.student-content-body main > section,
+.student-content-body main section > article {
+  border-color: var(--course-border-soft);
+}
+
+.chapter-catalog-head > div > span,
+.course-content-overview > div > span,
+.chapter-detail-number,
+.chapter-knowledge-list > article > span,
+.chapter-resource-list > article > span,
+.chapter-practice-list > article > span {
+  background: var(--course-primary-soft);
+  color: var(--course-primary);
+}
+
+.chapter-catalog-list > button:hover,
+.chapter-outline nav button:hover {
+  background: var(--course-primary-softer);
+}
+
+.chapter-catalog-list > button:hover > svg,
+.chapter-catalog-title > small,
+.chapter-editor-head > div:first-child > span,
+.chapter-editor-head > div:nth-child(2) > span,
+.student-content-preview > header small {
+  color: var(--course-primary-strong);
+}
+
+.chapter-catalog-number {
+  border-color: var(--course-primary-border);
+  background: var(--course-primary-soft);
+}
+
+.chapter-catalog-number small {
+  color: #6b8bb8;
+}
+
+.chapter-catalog-number strong {
+  color: var(--course-primary-strong);
+}
+
+.chapter-catalog-meta small svg,
+.chapter-catalog-list > button > svg {
+  color: #94a3b8;
+}
+
+.chapter-catalog-add {
+  border-color: var(--course-primary-border);
+  background: #fff;
+  color: var(--course-primary-strong);
+}
+
+.chapter-catalog-add:hover {
+  border-color: var(--course-primary);
+  background: var(--course-primary-soft);
+}
+
+.chapter-detail-drawer .ant-drawer-body,
+.student-content-preview-drawer .ant-drawer-body {
+  background: var(--course-surface-muted);
+}
+
+.chapter-outline nav button {
+  color: #475569;
+}
+
+.chapter-outline nav button.active {
+  border-left-color: var(--course-primary);
+  background: var(--course-primary-soft);
+  color: var(--course-primary-strong);
+}
+
+.chapter-outline nav button > span {
+  background: #eef2f7;
+}
+
+.chapter-outline nav button.active > span,
+.chapter-detail-tabs button.active small,
+.student-content-body > aside button.active > span {
+  background: #dbeafe;
+}
+
+.chapter-outline nav button > i.published {
+  background: var(--course-primary);
+}
+
+.chapter-detail-tabs {
+  border-color: var(--course-border);
+  background: #f2f6fb;
+}
+
+.chapter-detail-tabs button {
+  color: #526276;
+}
+
+.chapter-detail-tabs button small {
+  background: #e7edf5;
+}
+
+.chapter-detail-tabs button.active {
+  color: var(--course-primary-strong);
+  box-shadow: 0 1px 3px rgba(15, 35, 70, .12);
+}
+
+.chapter-knowledge-list > article,
+.chapter-resource-list > article,
+.chapter-practice-list > article,
+.student-knowledge-grid span {
+  border-color: var(--course-border-soft);
+}
+
+.student-content-body > aside {
+  border-color: var(--course-border-soft);
+  background: #f8fbff;
+}
+
+.student-content-body > aside button.active {
+  background: var(--course-primary-soft);
+  color: var(--course-primary-strong);
+}

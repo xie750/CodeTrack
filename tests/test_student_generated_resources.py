@@ -4,7 +4,9 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 
 from backend.app.core.config import get_settings
+from backend.app.core.database import SessionLocal
 from backend.app.main import app
+from backend.app.models import AgentStep
 from backend.app.services import student_resources
 from backend.app.services.presenton_client import _generation_body
 
@@ -85,6 +87,7 @@ def test_ppt_generation_prioritizes_explicit_student_topic_over_course_fallback(
 def test_requested_topic_extraction_keeps_discipline_terms():
     assert student_resources._extract_requested_topic("生成机器学习相关的PPT") == "机器学习"
     assert student_resources._extract_requested_topic("帮我生成关于队列的讲解 PPT") == "队列"
+    assert student_resources._extract_requested_topic("帮我把链表删除节点整理成适合复习的思维导图") == "链表删除节点"
 
 
 def test_model_ppt_generation_receives_student_request_contract(monkeypatch):
@@ -452,3 +455,92 @@ def test_student_can_generate_save_and_download_generic_resources(monkeypatch, r
         downloaded = client.get(f"/api/v1/student/resources/{resource['id']}/download", headers=STUDENT)
         assert downloaded.status_code == 200
         assert len(downloaded.content) > min_size
+
+
+def test_student_mind_map_uses_dedicated_agent_workflow(monkeypatch):
+    monkeypatch.setenv("CODETRACK_MODEL_API_KEY", "")
+    monkeypatch.setenv("CODETRACK_MODEL_NAME", "")
+    monkeypatch.setenv("CODETRACK_MODEL_GATEWAY_URL", "")
+    get_settings.cache_clear()
+
+    with TestClient(app) as client:
+        generated = client.post(
+            "/api/v1/student/resources/generate",
+            headers=STUDENT,
+            json={
+                "course_id": "course_ds_001",
+                "resource_type": "MIND_MAP",
+                "message": "帮我把链表删除节点整理成适合复习的思维导图",
+            },
+        )
+
+    assert generated.status_code == 200
+    resource = generated.json()["data"]["resource"]
+    payload = resource["render_payload"]
+    nodes = payload["nodes"]
+    edges = payload["edges"]
+    assert resource["resource_type"] == "MIND_MAP"
+    assert payload["artifact_type"] == "MIND_MAP"
+    assert payload["central_topic"]
+    assert resource["item_count"] >= 12
+    assert any(node["node_type"] == "profile_tip" for node in nodes)
+    assert any(node["node_type"] == "mistake" for node in nodes)
+    assert all("confidence" in node for node in nodes)
+    assert any(edge["relationship_type"] == "solves" for edge in edges)
+    assert "生成练习" in payload["recommended_next_actions"]
+
+    db = SessionLocal()
+    try:
+        step_names = [
+            step.step_name
+            for step in db.query(AgentStep)
+            .filter(AgentStep.run_id == resource["run_id"])
+            .order_by(AgentStep.step_order)
+            .all()
+        ]
+    finally:
+        db.close()
+    assert step_names == [
+        "create_run",
+        "build_context",
+        "mind_map_planner_agent",
+        "mind_map_content_agent",
+        "relationship_refiner_agent",
+        "citation_guard_agent",
+        "mind_map_critic_agent",
+        "persist_mind_map_resource",
+    ]
+
+
+def test_student_mind_map_uses_programming_template_for_java_topic(monkeypatch):
+    monkeypatch.setenv("CODETRACK_MODEL_API_KEY", "")
+    monkeypatch.setenv("CODETRACK_MODEL_NAME", "")
+    monkeypatch.setenv("CODETRACK_MODEL_GATEWAY_URL", "")
+    get_settings.cache_clear()
+
+    with TestClient(app) as client:
+        generated = client.post(
+            "/api/v1/student/resources/generate",
+            headers=STUDENT,
+            json={
+                "course_id": "course_arch_001",
+                "resource_type": "MIND_MAP",
+                "message": "生成java基础语法的思维导图",
+            },
+        )
+
+    assert generated.status_code == 200
+    resource = generated.json()["data"]["resource"]
+    payload = resource["render_payload"]
+    nodes = payload["nodes"]
+    edges = payload["edges"]
+    node_ids = {node["id"] for node in nodes}
+    labels = {node["label"] for node in nodes}
+    assert resource["knowledge_point"] == "java基础语法"
+    assert payload["metadata"]["topic_family"] == "programming"
+    assert "流程控制" in labels
+    assert "函数与对象" in labels
+    assert "边界条件" not in labels
+    assert "画状态图" not in labels
+    assert "当前课程资料未覆盖该主题" in payload["risk_flags"]
+    assert all(edge["source"] in node_ids and edge["target"] in node_ids for edge in edges)

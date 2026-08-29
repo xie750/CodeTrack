@@ -270,7 +270,7 @@ export function ExactCourseContent(props: Props) {
           return <button type="button" key={chapter.id} onClick={() => openChapter(chapter.id)}>
             <span className="chapter-catalog-number"><small>CHAPTER</small><strong>{String(chapter.position).padStart(2, '0')}</strong></span>
             <span className="chapter-catalog-title"><small>第{chapterNumber(chapter.position)}章</small><strong>{chapterName(chapter.title)}</strong><em>{chapter.description || '暂无章节说明'}</em></span>
-            <span className="chapter-catalog-meta"><Tag color={chapter.status === 'published' ? 'green' : 'default'}>{chapter.status === 'published' ? '已发布' : '草稿'}</Tag><small><Sparkles size={13} />{chapter.knowledge_points.length} 知识点</small><small><Presentation size={13} />{chapterMaterialCount} 课件</small><small><ClipboardCheck size={13} />{chapterTaskCount} 练习</small></span>
+            <span className="chapter-catalog-meta"><Tag color={chapter.status === 'published' ? 'blue' : 'default'}>{chapter.status === 'published' ? '已发布' : '草稿'}</Tag><small><Sparkles size={13} />{chapter.knowledge_points.length} 知识点</small><small><Presentation size={13} />{chapterMaterialCount} 课件</small><small><ClipboardCheck size={13} />{chapterTaskCount} 练习</small></span>
             <ChevronRight size={18} />
           </button>
         })}
@@ -302,7 +302,7 @@ export function ExactCourseContent(props: Props) {
           {detailTab === 'knowledge' && <section className="chapter-knowledge-section chapter-tab-panel">
             <header><div><Sparkles size={17} /><span><strong>章节知识点</strong><small>按教学顺序组织二级内容</small></span></div><Button size="small" icon={<Plus size={13} />} onClick={() => setKnowledgeModalOpen(true)}>添加知识点</Button></header>
             <div className="chapter-knowledge-list">{selectedChapter.knowledge_points.map((point, index) => <article key={point.id}>
-              <span>{index + 1}</span><div><strong>{point.name}</strong><p>{point.description || '暂无知识点说明'}</p></div><Tag color={point.difficulty === '挑战' ? 'red' : point.difficulty === '进阶' ? 'gold' : 'green'}>{point.difficulty}</Tag><Progress percent={point.mastery} size="small" showInfo={false} />
+              <span>{index + 1}</span><div><strong>{point.name}</strong><p>{point.description || '暂无知识点说明'}</p></div><Tag color={point.difficulty === '挑战' ? 'red' : point.difficulty === '进阶' ? 'gold' : 'blue'}>{point.difficulty}</Tag><Progress percent={point.mastery} size="small" showInfo={false} />
             </article>)}{!selectedChapter.knowledge_points.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="本章节还没有知识点" />}</div>
           </section>}
 
@@ -316,7 +316,7 @@ export function ExactCourseContent(props: Props) {
 
           {detailTab === 'practice' && <section className="chapter-practice-section chapter-tab-panel">
             <header><div><ClipboardCheck size={17} /><span><strong>课后练习</strong><small>复用任务管理中的练习与成绩数据</small></span></div><Button size="small" icon={<Plus size={13} />} onClick={() => setPracticeModalOpen(true)}>创建练习</Button></header>
-            <div className="chapter-practice-list">{chapterTasks.map((task) => <article key={task.id}><span><FileQuestion size={17} /></span><div><strong>{task.title}</strong><small>截止 {task.due_at.slice(0, 16).replace('T', ' ')} · {task.submitted}/{task.total || 0} 提交</small></div><Tag color={task.status === 'published' ? 'green' : 'gold'}>{task.status === 'published' ? '已发布' : '草稿'}</Tag><Button type="link" size="small" onClick={() => props.onNavigate('tasks')}>任务管理 <ChevronRight size={12} /></Button></article>)}{!chapterTasks.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="本章节还没有课后练习" />}</div>
+            <div className="chapter-practice-list">{chapterTasks.map((task) => <article key={task.id}><span><FileQuestion size={17} /></span><div><strong>{task.title}</strong><small>截止 {task.due_at.slice(0, 16).replace('T', ' ')} · {task.submitted}/{task.total || 0} 提交</small></div><Tag color={task.status === 'published' ? 'blue' : 'gold'}>{task.status === 'published' ? '已发布' : '草稿'}</Tag><Button type="link" size="small" onClick={() => props.onNavigate('tasks')}>任务管理 <ChevronRight size={12} /></Button></article>)}{!chapterTasks.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="本章节还没有课后练习" />}</div>
           </section>}
         </>}
       </main>
@@ -336,7 +336,7 @@ export function ExactCourseContent(props: Props) {
 
     <Drawer rootClassName="student-content-preview-drawer" title={<span><GraduationCap size={18} /> 学生视角</span>} open={previewOpen} onClose={() => setPreviewOpen(false)} width={720}>
       {previewLoading ? <PageLoader /> : !studentChapters.length ? <Alert type="info" showIcon message="暂无已发布章节" description="发布章节后，学生才能在课程内容中查看对应知识点、课件和练习。" /> : <div className="student-content-preview">
-        <header><div><small>我的课程</small><Title level={3}>{course?.name}</Title></div><Tag color="green">学生端预览</Tag></header>
+        <header><div><small>我的课程</small><Title level={3}>{course?.name}</Title></div><Tag color="blue">学生端预览</Tag></header>
         <div className="student-content-body"><aside>{studentChapters.map((chapter) => <button className={chapter.id === studentChapterId ? 'active' : ''} key={chapter.id} onClick={() => setStudentChapterId(chapter.id)}><span>{chapter.position}</span><div><strong>{chapter.title}</strong><small>{chapter.knowledge_points.length} 个知识点</small></div></button>)}</aside><main>{selectedStudentChapter && <>
           <div className="student-chapter-heading"><Tag>{selectedStudentChapter.teaching_mode}</Tag><Title level={3}>{selectedStudentChapter.title}</Title><p>{selectedStudentChapter.description || '本章课程内容'}</p></div>
           <section><strong><BookOpen size={15} /> 本章知识点</strong><div className="student-knowledge-grid">{selectedStudentChapter.knowledge_points.map((point) => <span key={point.id}><CheckCircle2 size={13} />{point.name}</span>)}</div></section>
