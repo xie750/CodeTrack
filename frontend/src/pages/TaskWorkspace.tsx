@@ -4,7 +4,6 @@ import * as THREE from "three";
 import {
   Activity,
   ArrowLeft,
-  Bell,
   BookOpen,
   Bot,
   Brain,
@@ -18,18 +17,14 @@ import {
   Database,
   Eye,
   FileSearch,
-  GraduationCap,
   GitBranch,
   Lightbulb,
   ListChecks,
-  Maximize2,
-  MoreVertical,
   NotebookTabs,
   PanelRightClose,
   PanelRightOpen,
   Play,
   Save,
-  Search,
   ShieldCheck,
   Upload,
   Zap
@@ -1300,16 +1295,13 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
           </span>
         </div>
         <div className="program-top-actions">
-          <button type="button" aria-label="搜索"><Search size={22} /></button>
-          <button className="program-bell" type="button" aria-label="通知"><Bell size={21} /><span>3</span></button>
-          <button className="program-account" type="button" aria-label={`${studentName}账号`}>
+          <div className="program-account" aria-label={`${studentName}账号`}>
             <img src={avatarImg} alt={`${studentName}头像`} />
             <span className="program-account-copy">
               <strong>{studentName}</strong>
               <small>学生端</small>
             </span>
-            <ChevronDown size={16} />
-          </button>
+          </div>
         </div>
       </header>
 
@@ -1356,12 +1348,6 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
                   <span>状态：<b>{latestResult?.submission_status ?? task.current_progress.status}</b></span>
                 </div>
               </div>
-              <div className="program-head-actions">
-                <button type="button"><Eye size={17} /> 收藏</button>
-                <button type="button"><NotebookTabs size={17} /> 笔记</button>
-                <button className="outline" type="button"><ChevronLeft size={17} /> 上一题</button>
-                <button className="primary" type="button">下一题 <ChevronRight size={17} /></button>
-              </div>
             </section>
 
             <section className="program-grid" data-ai-collapsed={aiCollapsed ? "true" : "false"} ref={gridRef}>
@@ -1407,9 +1393,6 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
                           <option value={language} key={language}>{task.interface_spec.language_labels[language] ?? language}</option>
                         ))}
                       </select>
-                      <button type="button" aria-label="提示"><Lightbulb size={17} /></button>
-                      <button type="button" aria-label="全屏"><Maximize2 size={17} /></button>
-                      <button type="button" aria-label="更多"><MoreVertical size={17} /></button>
                     </div>
                   </header>
                   <div className="program-monaco">
@@ -1556,12 +1539,12 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
                           <h3>分层提示</h3>
                           {hints.length ? [...hints].sort((a, b) => a.level - b.level).map((hint) => (
                             <article className="open" key={`${hint.diagnosis_id}-${hint.level}`}>
-                              <button type="button"><Lightbulb size={15} /> 第{hint.level}层提示 <ChevronDown size={15} /></button>
+                              <div className="program-hint-title"><Lightbulb size={15} /> 第{hint.level}层提示</div>
                               <p>{hint.content}</p>
                             </article>
                           )) : (
                             <article>
-                              <button type="button"><Lightbulb size={15} /> 第1层提示 <ChevronDown size={15} /></button>
+                              <div className="program-hint-title"><Lightbulb size={15} /> 第1层提示</div>
                               <p>诊断生成后会先解锁方向性提示，不直接给完整答案。</p>
                             </article>
                           )}
@@ -1572,7 +1555,6 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
                           <p><Eye size={14} /> 第三层提示 <span>{hints.some((hint) => hint.level === 3) ? "已解锁" : "按任务规则控制"}</span></p>
                         </div>
                         <footer>
-                          <button type="button"><GraduationCap size={16} /> 查看讲解</button>
                           <button className="primary" type="button" disabled={!diagnosis?.diagnosis_id} onClick={requestNextHint}><Lightbulb size={16} /> 获取下一层提示</button>
                         </footer>
                       </>
@@ -1595,7 +1577,7 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
 
             <section className="program-bottom-grid">
               <article className="program-card program-history">
-                <header><h2>提交记录</h2><a href="#">更多 <ChevronRight size={14} /></a></header>
+                <header><h2>提交记录</h2></header>
                 <table>
                   <thead><tr><th>状态</th><th>版本</th><th>执行</th><th>语言</th></tr></thead>
                   <tbody>
@@ -1611,7 +1593,6 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
                     )}
                   </tbody>
                 </table>
-                <a className="program-card-link" href="#">查看全部提交 <ChevronRight size={14} /></a>
               </article>
 
               <article className="program-card program-growth">
@@ -1623,11 +1604,10 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
                     <em>{isPassed(latestResult) ? "已更新" : "待更新"}</em>
                   </div>
                 ))}
-                <a className="program-card-link" href="#">查看能力详情 <ChevronRight size={14} /></a>
               </article>
 
               <article className="program-card program-error">
-                <header><h2>错因分析</h2><button type="button">本题表现 <ChevronDown size={14} /></button></header>
+                <header><h2>错因分析</h2><span className="program-panel-meta">本题表现</span></header>
                 <div className="error-layout">
                   <div className="error-donut"><strong>{latestResult?.tests.filter((test) => test.status === "FAILED").length ?? 0}<span>次</span></strong></div>
                   <div className="error-legend">
@@ -1637,7 +1617,6 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
                     <p><i /> 其他问题 <b>{runState === "ERROR" ? "需要检查" : "0次"}</b></p>
                   </div>
                 </div>
-                <a className="program-card-link" href="#">查看错题本 <ChevronRight size={14} /></a>
               </article>
 
               <article className="program-card program-advice">
@@ -1648,7 +1627,6 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
                     <div><strong>复习{item}</strong><p>先对照公开样例自测，再根据系统证据逐步修正。</p></div>
                   </div>
                 ))}
-                <a className="program-card-link" href="#">查看推荐题目 <ChevronRight size={14} /></a>
               </article>
             </section>
             {(task.teacher_review?.grade || task.teacher_review?.feedback.length) ? (
