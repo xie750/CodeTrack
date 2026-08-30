@@ -284,16 +284,11 @@ a {
   white-space: nowrap;
 }
 .sider-brand-mark {
-  width: 32px;
+  width: 36px;
   height: 32px;
-  border-radius: var(--radius-btn);
-  background: linear-gradient(135deg, var(--primary), #5DA3E5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-weight: 700;
-  font-size: 15px;
+  background: url("/brand-logo.png") center / contain no-repeat;
+  color: transparent;
+  font-size: 0;
   flex-shrink: 0;
 }
 .sider-brand-name {
