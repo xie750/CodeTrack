@@ -10,7 +10,7 @@ import { useAppStore } from '@admin/stores/useAppStore'
 import { colors } from '@admin/theme/themeConfig'
 import type { ProjectItem, ProjectStatus } from '@admin/types'
 
-const disciplines = ['教育大数据', '计算化学', '人工智能', '管理科学', '教育技术']
+const disciplines = ['人工智能']
 const statuses: ProjectStatus[] = ['草稿', '待审核', '进行中', '已结项', '已驳回']
 const outputTypes = ['前沿报告', '文献综述', '数据分析报告', '论文框架', '热点图谱']
 

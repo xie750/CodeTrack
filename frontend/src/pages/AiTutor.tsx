@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Drawer } from "antd";
+import { useLocation } from "react-router-dom";
 import {
   Bookmark,
   BookOpen,
@@ -63,6 +64,12 @@ type AiChatTurn = {
   resource?: GeneratedResource;
   resourceSaving?: boolean;
 };
+
+type AiTutorRouteState = {
+  initialMessage?: string;
+  focusKnowledgePoint?: string;
+  fromCourseId?: string;
+} | null;
 
 const fallbackSuggestedActions = ["继续解释", "生成练习", "保存为笔记", "只给一级提示"];
 const resourceOutputActions: Array<{ label: string; type: GeneratedResourceType; icon: JSX.Element }> = [
@@ -420,6 +427,7 @@ function GeneratedResourceCard({
 }
 
 export default function AiTutor() {
+  const location = useLocation();
   const [context, setContext] = useState<LearningContext | null>(null);
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [loadingContext, setLoadingContext] = useState(true);
@@ -438,6 +446,7 @@ export default function AiTutor() {
   const [activeResourceType, setActiveResourceType] = useState<GeneratedResourceType | null>(null);
   const [previewResource, setPreviewResource] = useState<GeneratedResource | null>(null);
   const hydratedRef = useRef(false);
+  const routeDraftHydratedRef = useRef(false);
   const threadRef = useRef<HTMLDivElement | null>(null);
 
   const weakestPoint = useMemo(() => {
@@ -495,6 +504,15 @@ export default function AiTutor() {
     if (!thread) return;
     thread.scrollTop = thread.scrollHeight;
   }, [turns]);
+
+  useEffect(() => {
+    if (routeDraftHydratedRef.current) return;
+    const routeState = location.state as AiTutorRouteState;
+    const initialMessage = routeState?.initialMessage?.trim();
+    if (!initialMessage) return;
+    routeDraftHydratedRef.current = true;
+    setDraft(initialMessage);
+  }, [location.state]);
 
   useEffect(() => {
     if (!courseId || hydratedRef.current) return;

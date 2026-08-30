@@ -1110,11 +1110,16 @@ export const api = {
     request<{ items: RagKnowledgeChunk[] }>(`/api/v1/documents/${encodeURIComponent(documentId)}/chunks`),
   deleteRagDocument: (documentId: string) =>
     request<{ deleted: boolean }>(`/api/v1/documents/${encodeURIComponent(documentId)}`, { method: "DELETE" }),
-  sendStudentAiChat: (message: string, courseId?: string, history?: Array<{ role: "student" | "assistant"; content: string }>) =>
+  sendStudentAiChat: (
+    message: string,
+    courseId?: string,
+    history?: Array<{ role: "student" | "assistant"; content: string }>,
+    pageContext?: Record<string, unknown>
+  ) =>
     request<StudentAiChatResponse>("/api/v1/student/ai-chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message, course_id: courseId, history: history ?? [] })
+      body: JSON.stringify({ message, course_id: courseId, history: history ?? [], page_context: pageContext ?? {} })
     }),
   streamStudentAiChat,
   listStudentAiChatSessions: (courseId?: string, query?: string) => {

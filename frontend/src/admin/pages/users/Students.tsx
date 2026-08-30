@@ -8,9 +8,9 @@ import { useAppStore } from '@admin/stores/useAppStore'
 import { colors } from '@admin/theme/themeConfig'
 import type { Student } from '@admin/types'
 
-const majors = ['计算机科学与技术', '物联网工程', '人工智能', '软件工程']
+const majors = ['人工智能']
 const grades = ['2023级', '2024级', '2025级']
-const classNames = ['数据结构与算法', '操作系统', '机器学习导论', '数据库系统', '传感器原理与应用', '软件工程导论']
+const classNames = ['机器学习', 'Python 程序设计', '数据结构']
 
 export default function Students() {
   const students = useAppStore((s) => s.students)
@@ -241,11 +241,11 @@ export default function Students() {
           const weekdays = ['周一', '周二', '周三', '周四', '周五']
           const periods = ['第1-2节', '第3-4节', '第5-6节', '第7-8节']
           const mockSchedule: Record<string, Record<string, { name: string; room: string } | null>> = {
-            '周一': { '第1-2节': { name: '数据结构与算法', room: '教3-401' }, '第3-4节': { name: '高等数学', room: '教1-205' }, '第5-6节': null, '第7-8节': { name: '大学英语', room: '教2-310' } },
-            '周二': { '第1-2节': null, '第3-4节': { name: '操作系统', room: '教3-402' }, '第5-6节': { name: '数据库原理', room: '实验楼A201' }, '第7-8节': null },
-            '周三': { '第1-2节': { name: '计算机网络', room: '教1-108' }, '第3-4节': { name: '数据结构与算法', room: '教3-401' }, '第5-6节': null, '第7-8节': { name: '体育', room: '体育馆' } },
-            '周四': { '第1-2节': { name: '高等数学', room: '教1-205' }, '第3-4节': null, '第5-6节': { name: '操作系统', room: '实验楼B103' }, '第7-8节': null },
-            '周五': { '第1-2节': { name: '大学英语', room: '教2-310' }, '第3-4节': { name: '形势与政策', room: '教1-301' }, '第5-6节': null, '第7-8节': null },
+            '周一': { '第1-2节': { name: '数据结构', room: '教3-401' }, '第3-4节': { name: 'Python 程序设计', room: '实验楼A201' }, '第5-6节': null, '第7-8节': null },
+            '周二': { '第1-2节': null, '第3-4节': { name: '机器学习', room: '教3-402' }, '第5-6节': null, '第7-8节': null },
+            '周三': { '第1-2节': { name: 'Python 程序设计', room: '实验楼A201' }, '第3-4节': { name: '数据结构', room: '教3-401' }, '第5-6节': null, '第7-8节': null },
+            '周四': { '第1-2节': { name: '机器学习', room: '教3-402' }, '第3-4节': null, '第5-6节': { name: '数据结构', room: '教3-401' }, '第7-8节': null },
+            '周五': { '第1-2节': null, '第3-4节': { name: 'Python 程序设计', room: '实验楼A201' }, '第5-6节': null, '第7-8节': null },
           }
 
           return (

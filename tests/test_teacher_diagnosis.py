@@ -9,7 +9,9 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.app.core.database import SessionLocal
 from backend.app.main import app
+from backend.app.models import Course, Enrollment
 
 TEACHER = {"X-Demo-User-Id": "user_teacher_001"}
 OTHER_TEACHER = {"X-Demo-User-Id": "user_teacher_002"}
@@ -339,7 +341,35 @@ def test_teacher_cannot_read_another_teachers_student(client):
 
 
 def test_course_without_teaching_assignment_is_forbidden(client):
-    """course_scope_probe_001 上 teacher_001 只是课程成员，没有教学安排 —— 学情范围按教学安排算。"""
+    """测试自己创建探针课程，避免正式演示种子出现人工智能三门课以外的数据。"""
+    db = SessionLocal()
+    try:
+        if db.get(Course, "course_scope_probe_001") is None:
+            db.add(
+                Course(
+                    id="course_scope_probe_001",
+                    name="权限校验探针课程",
+                    description="测试专用课程，不属于正式演示数据。",
+                    term="test",
+                    status="ACTIVE",
+                    owner_teacher_id="user_teacher_001",
+                )
+            )
+            db.flush()
+        existing = (
+            db.query(Enrollment)
+            .filter(
+                Enrollment.course_id == "course_scope_probe_001",
+                Enrollment.user_id == "user_teacher_001",
+            )
+            .one_or_none()
+        )
+        if existing is None:
+            db.add(Enrollment(course_id="course_scope_probe_001", user_id="user_teacher_001", role="TEACHER"))
+        db.commit()
+    finally:
+        db.close()
+
     response = client.get(
         "/api/v1/teacher/analytics/class",
         params={"course_id": "course_scope_probe_001"},

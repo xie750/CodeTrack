@@ -12,6 +12,7 @@ from backend.app.services.presenton_client import _generation_body
 
 
 STUDENT = {"X-Demo-User-Id": "user_student_001"}
+OTHER_STUDENT = {"X-Demo-User-Id": "user_student_002"}
 
 
 @pytest.fixture(autouse=True)
@@ -57,6 +58,55 @@ def test_student_can_generate_save_and_download_ppt_resource(monkeypatch):
         assert downloaded.status_code == 200
         assert downloaded.headers["content-type"] == "application/vnd.openxmlformats-officedocument.presentationml.presentation"
         assert len(downloaded.content) > 1000
+
+
+def test_student_profile_and_generated_resources_are_scoped_to_current_user(monkeypatch):
+    monkeypatch.setenv("CODETRACK_MODEL_API_KEY", "")
+    monkeypatch.setenv("CODETRACK_MODEL_NAME", "")
+    monkeypatch.setenv("CODETRACK_MODEL_GATEWAY_URL", "")
+    get_settings.cache_clear()
+
+    with TestClient(app) as client:
+        first_profile = client.get(
+            "/api/v1/student/profile",
+            params={"course_id": "course_ds_001"},
+            headers=STUDENT,
+        )
+        second_profile = client.get(
+            "/api/v1/student/profile",
+            params={"course_id": "course_ds_001"},
+            headers=OTHER_STUDENT,
+        )
+        assert first_profile.status_code == 200
+        assert second_profile.status_code == 200
+        assert first_profile.json()["data"]["student"]["id"] == "user_student_001"
+        assert second_profile.json()["data"]["student"]["id"] == "user_student_002"
+        assert first_profile.json()["data"]["student"]["class_id"] == "class_se_001"
+        assert second_profile.json()["data"]["student"]["class_id"] == "class_cs_001"
+
+        generated = client.post(
+            "/api/v1/student/resources/generate",
+            headers=STUDENT,
+            json={
+                "course_id": "course_ds_001",
+                "resource_type": "PRACTICE_SET",
+                "message": "帮我生成关于链表边界处理的练习题",
+            },
+        )
+        assert generated.status_code == 200
+        resource_id = generated.json()["data"]["resource"]["id"]
+
+        detail = client.get(f"/api/v1/student/resources/{resource_id}", headers=OTHER_STUDENT)
+        workspace = client.get(f"/api/v1/student/resources/{resource_id}/practice", headers=OTHER_STUDENT)
+        submitted = client.post(
+            f"/api/v1/student/resources/{resource_id}/practice/submit",
+            headers=OTHER_STUDENT,
+            json={"answers": []},
+        )
+
+        for response in (detail, workspace, submitted):
+            assert response.status_code == 404
+            assert response.json()["error"]["code"] == "GENERATED_RESOURCE_NOT_FOUND"
 
 
 def test_ppt_generation_prioritizes_explicit_student_topic_over_course_fallback(monkeypatch):

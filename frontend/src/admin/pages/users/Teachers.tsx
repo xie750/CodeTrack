@@ -220,11 +220,11 @@ export default function Teachers() {
           const weekdays = ['周一', '周二', '周三', '周四', '周五']
           const periods = ['第1-2节', '第3-4节', '第5-6节', '第7-8节']
           const mockSchedule: Record<string, Record<string, { name: string; room: string } | null>> = {
-            '周一': { '第1-2节': { name: '数据结构与算法', room: '教3-401' }, '第3-4节': { name: '高等数学', room: '教1-205' }, '第5-6节': null, '第7-8节': null },
-            '周二': { '第1-2节': null, '第3-4节': { name: '操作系统', room: '教3-402' }, '第5-6节': { name: '数据库原理', room: '实验楼A201' }, '第7-8节': null },
-            '周三': { '第1-2节': { name: '计算机网络', room: '教1-108' }, '第3-4节': { name: '数据结构与算法', room: '教3-401' }, '第5-6节': null, '第7-8节': null },
-            '周四': { '第1-2节': { name: '高等数学', room: '教1-205' }, '第3-4节': null, '第5-6节': { name: '操作系统', room: '实验楼B103' }, '第7-8节': null },
-            '周五': { '第1-2节': null, '第3-4节': { name: '形势与政策', room: '教1-301' }, '第5-6节': null, '第7-8节': null },
+            '周一': { '第1-2节': { name: '数据结构', room: '教3-401' }, '第3-4节': { name: 'Python 程序设计', room: '实验楼A201' }, '第5-6节': null, '第7-8节': null },
+            '周二': { '第1-2节': null, '第3-4节': { name: '机器学习', room: '教3-402' }, '第5-6节': null, '第7-8节': null },
+            '周三': { '第1-2节': { name: 'Python 程序设计', room: '实验楼A201' }, '第3-4节': { name: '数据结构', room: '教3-401' }, '第5-6节': null, '第7-8节': null },
+            '周四': { '第1-2节': { name: '机器学习', room: '教3-402' }, '第3-4节': null, '第5-6节': { name: '数据结构', room: '教3-401' }, '第7-8节': null },
+            '周五': { '第1-2节': null, '第3-4节': { name: 'Python 程序设计', room: '实验楼A201' }, '第5-6节': null, '第7-8节': null },
           }
           return (
             <div style={{ overflowX: 'auto' }}>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   BookOpenCheck,
   Bot,
@@ -23,7 +24,7 @@ import {
   Triangle,
   UserRound
 } from "lucide-react";
-import { api, LearningContext, StudentProfile } from "../api";
+import { api, LearningContext, StudentAiChatResponse, StudentProfile } from "../api";
 import heroArt from "../assets/ui-home/hero-art.png";
 import { StudentState, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
 
@@ -41,6 +42,19 @@ type CourseProfileDimension = {
 
 type GlobalProfileDimension = CourseProfileDimension & {
   group: "课程能力" | "自主学习" | "学习行为";
+};
+
+type ProfileRecommendation = StudentProfile["recommendations"][number];
+
+type AdviceItem = {
+  icon: JSX.Element;
+  title: string;
+  desc: string;
+  rawAction: string;
+  actionLabel: string;
+  color: "blue" | "green" | "orange";
+  relatedTaskId: string | null;
+  relatedKnowledgePoints: string[];
 };
 
 function clampScore(value: number) {
@@ -212,11 +226,58 @@ function globalSummary(profile: StudentProfile) {
   return "当前整体画像较稳定，建议继续通过自主学习补齐迁移任务和学习产物证据。";
 }
 
+function recommendationActionLabel(action?: string) {
+  const normalized = (action || "").trim();
+  const map: Record<string, string> = {
+    OPEN_SELF_STUDY: "去自学",
+    OPEN_TASK: "去任务",
+    GENERATE_EXERCISE: "生成练习",
+    REVIEW_GENERATED_PRACTICE: "练习复盘",
+    REVIEW_WRONG_QUESTIONS: "复盘错题",
+    REVIEW_SELF_STUDY: "自学复盘"
+  };
+  if (!normalized) return "去处理";
+  if (map[normalized]) return map[normalized];
+  return /^[A-Z0-9_]+$/.test(normalized) ? "去处理" : normalized;
+}
+
+function buildAiAdvicePrompt(profile: StudentProfile, dimensions: CourseProfileDimension[]) {
+  const weakPoints = profile.knowledge_states
+    .filter((item) => item.state === "WEAK" || item.mastery_score < 70)
+    .slice(0, 5)
+    .map((item) => `${item.knowledge_point}${item.mastery_score}%`)
+    .join("、") || "暂无明显低分知识点";
+  const frequentErrors = profile.frequent_errors
+    .slice(0, 4)
+    .map((item) => `${item.label}${item.count}次`)
+    .join("、") || "暂无高频错因";
+  const dimensionText = dimensions
+    .slice(0, 6)
+    .map((item) => `${item.label}${item.score}分`)
+    .join("、");
+  const recommendations = profile.recommendations
+    .slice(0, 4)
+    .map((item) => item.title)
+    .join("、") || "暂无系统推荐项";
+
+  return [
+    "请基于当前登录学生的学习画像，生成自主学习页“个人下一步建议”。",
+    "业务要求：先指出当前最主要薄弱点，再结合画像各维度给出3步以内的优先补强安排；每步包含目标、学习动作和验证方式；语言要直接可执行，不要泛泛鼓励。",
+    `课程：${profile.course.name}`,
+    `画像概览：总体进度${profile.overview.overall_progress}%，提示依赖${profile.overview.hint_dependency_level}，编译错误率${profile.overview.compile_error_rate}%，逻辑错误率${profile.overview.logic_error_rate}%，近期任务完成率${profile.overview.recent_task_completion}%。`,
+    `维度得分：${dimensionText}`,
+    `薄弱知识点：${weakPoints}`,
+    `高频错因：${frequentErrors}`,
+    `已有系统推荐：${recommendations}`
+  ].join("\n").slice(0, 1900);
+}
+
 type LearningProfileProps = {
   initialCourseId?: string;
 };
 
 export default function LearningProfile({ initialCourseId }: LearningProfileProps = {}) {
+  const navigate = useNavigate();
   const [context, setContext] = useState<LearningContext | null>(null);
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
   const [profile, setProfile] = useState<StudentProfile | null>(null);
@@ -225,7 +286,9 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
   const [error, setError] = useState<string | null>(null);
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
-  const [aiAdviceRequested, setAiAdviceRequested] = useState(false);
+  const [aiAdvice, setAiAdvice] = useState<StudentAiChatResponse | null>(null);
+  const [aiAdviceLoading, setAiAdviceLoading] = useState(false);
+  const [aiAdviceError, setAiAdviceError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -260,6 +323,9 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
     setError(null);
     setErrorDetail(null);
     setProfile(null);
+    setAiAdvice(null);
+    setAiAdviceError(null);
+    setAiAdviceLoading(false);
     api.getStudentProfile(selectedCourseId).then((data) => {
       if (alive) setProfile(data);
     }).catch((err) => {
@@ -316,11 +382,13 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
     );
   }
 
+  const activeProfile = profile;
+  const activeContext = context;
   const isCourseLocked = Boolean(initialCourseId);
-  const overview = profile.overview;
-  const dimensions = isCourseLocked ? courseDimensionProfile(profile) : buildGlobalProfileDimensions(profile);
+  const overview = activeProfile.overview;
+  const dimensions = isCourseLocked ? courseDimensionProfile(activeProfile) : buildGlobalProfileDimensions(activeProfile);
   const polygonPoints = radarPoints(dimensions).map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
-  const knowledgeCards = profile.knowledge_states.map((item, index) => ({
+  const knowledgeCards = activeProfile.knowledge_states.map((item, index) => ({
     icon: knowledgeIcons[index % knowledgeIcons.length],
     title: item.knowledge_point,
     score: item.mastery_score,
@@ -329,21 +397,24 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
     warn: item.state === "WEAK",
     evidence: item.last_evidence
   }));
-  const weakItems = profile.knowledge_states
+  const weakItems = activeProfile.knowledge_states
     .filter((item) => item.state === "WEAK" || item.mastery_score < 70)
     .map((item) => ({
       title: item.knowledge_point,
       rate: `掌握度 ${item.mastery_score}%`,
       desc: item.last_evidence || `证据 ${item.evidence_count} 条，建议结合最近任务复盘。`
     }));
-  const adviceItems = profile.recommendations.map((item, index) => ({
+  const adviceItems: AdviceItem[] = activeProfile.recommendations.map((item, index) => ({
     icon: index === 0 ? <CalendarDays size={21} /> : index === 1 ? <Goal size={21} /> : <BookOpenCheck size={21} />,
     title: item.title,
     desc: item.reason,
-    action: item.suggested_action || "去完成",
-    color: index === 0 ? "blue" : index === 1 ? "green" : "orange"
+    rawAction: item.suggested_action || "",
+    actionLabel: recommendationActionLabel(item.suggested_action),
+    color: index === 0 ? "blue" : index === 1 ? "green" : "orange",
+    relatedTaskId: item.related_task_id,
+    relatedKnowledgePoints: item.related_knowledge_points
   }));
-  const records = profile.frequent_errors.slice(0, 4).map((item) => ({
+  const records = activeProfile.frequent_errors.slice(0, 4).map((item) => ({
       icon: <ClipboardCheck size={16} />,
       title: `高频错因　${item.label}`,
       meta: `${item.count} 次 · ${item.related_knowledge_points.join(" / ")}`,
@@ -353,6 +424,84 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
   const compileRate = overview.compile_error_rate;
   const logicRate = overview.logic_error_rate;
   const completion = overview.recent_task_completion;
+
+  function openSelfStudyForPoint(knowledgePoint?: string) {
+    navigate("/self-study", {
+      state: {
+        knowledgePoint: knowledgePoint || weakItems[0]?.title || activeProfile.knowledge_states[0]?.knowledge_point,
+        fromCourseId: selectedCourseId
+      }
+    });
+  }
+
+  function openAiTutorWithPrompt(message: string) {
+    navigate("/self-study/ai", {
+      state: {
+        initialMessage: message,
+        focusKnowledgePoint: weakItems[0]?.title || activeProfile.knowledge_states[0]?.knowledge_point,
+        fromCourseId: selectedCourseId
+      }
+    });
+  }
+
+  function handleRecommendationAction(item: AdviceItem | ProfileRecommendation) {
+    const rawAction = "rawAction" in item ? item.rawAction : item.suggested_action;
+    const relatedTaskId = "relatedTaskId" in item ? item.relatedTaskId : item.related_task_id;
+    const relatedKnowledgePoints = "relatedKnowledgePoints" in item ? item.relatedKnowledgePoints : item.related_knowledge_points;
+    const title = item.title;
+    const firstPoint = relatedKnowledgePoints[0] || weakItems[0]?.title || activeProfile.knowledge_states[0]?.knowledge_point;
+
+    switch ((rawAction || "").toUpperCase()) {
+      case "OPEN_SELF_STUDY":
+      case "REVIEW_SELF_STUDY":
+        openSelfStudyForPoint(firstPoint);
+        return;
+      case "GENERATE_EXERCISE":
+        openAiTutorWithPrompt(`请围绕${firstPoint || title}生成一组专项练习，并在题后给出答案解析和自查标准。`);
+        return;
+      case "REVIEW_GENERATED_PRACTICE":
+        navigate("/self-study/library", { state: { focus: "practice", fromCourseId: selectedCourseId } });
+        return;
+      case "REVIEW_WRONG_QUESTIONS":
+        openAiTutorWithPrompt(`请基于我的错因记录，帮我复盘${firstPoint || title}相关错题，并给出下一次提交前的检查清单。`);
+        return;
+      case "OPEN_TASK":
+        navigate(selectedCourseId ? `/courses/${selectedCourseId}/tasks` : "/learning-home", {
+          state: relatedTaskId ? { focusTaskId: relatedTaskId } : undefined
+        });
+        return;
+      default:
+        openAiTutorWithPrompt(`请基于我的学习画像，帮我处理这条建议：${title}。`);
+    }
+  }
+
+  async function generateAiAdvice() {
+    if (aiAdviceLoading) return;
+    setAiAdviceLoading(true);
+    setAiAdviceError(null);
+    try {
+      const result = await api.sendStudentAiChat(
+        buildAiAdvicePrompt(activeProfile, dimensions),
+        selectedCourseId,
+        [],
+        {
+          entry: "self-study.profile.next_advice",
+          profile_scope: isCourseLocked ? "course" : "global",
+          student_id: activeContext.student.id,
+          course_id: selectedCourseId,
+          dimensions: dimensions.map((item) => ({ key: item.key, label: item.label, score: item.score, source: item.source })),
+          weak_points: weakItems,
+          frequent_errors: activeProfile.frequent_errors.slice(0, 4),
+          recommendations: activeProfile.recommendations.slice(0, 5)
+        }
+      );
+      setAiAdvice(result);
+    } catch (err) {
+      setAiAdviceError(studentErrorMessage(err, "AI 建议暂时生成失败，请稍后重试。"));
+    } finally {
+      setAiAdviceLoading(false);
+    }
+  }
 
   if (!isCourseLocked) {
     const globalDimensions = dimensions as GlobalProfileDimension[];
@@ -509,7 +658,7 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
                     <span className="rank">{index + 1}</span>
                     <div className="weak-name"><strong>{item.title}</strong><span>{item.rate}</span></div>
                     <p>{item.desc}</p>
-                    <button type="button">去自学</button>
+                    <button type="button" onClick={() => openSelfStudyForPoint(item.title)}>去自学</button>
                   </div>
                 )) : <div className="empty-panel">暂无明显整体薄弱项，继续积累自学和课程证据。</div>}
               </div>
@@ -547,25 +696,43 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
                 <h2>个人下一步建议</h2>
                 <span>基于左侧整体薄弱信号生成，优先给出可执行学习动作</span>
               </div>
-              <button className="ai-suggest-button" type="button" onClick={() => setAiAdviceRequested(true)}>
-                <Sparkles size={15} />
-                AI 建议
+              <button className="ai-suggest-button" type="button" onClick={generateAiAdvice} disabled={aiAdviceLoading}>
+                {aiAdviceLoading ? <RefreshCw size={15} className="spinning" /> : <Sparkles size={15} />}
+                {aiAdviceLoading ? "生成中" : aiAdvice ? "重新生成" : "AI 建议"}
               </button>
             </div>
-            <div className="ai-advice-brief">
-              <strong>{aiAdviceRequested ? "AI 已根据整体薄弱信号生成建议" : "等待生成 AI 建议"}</strong>
-              <p>
-                {aiAdviceRequested
-                  ? "建议先围绕最薄弱知识点完成一次概念复盘，再生成 1 组专项练习，最后用课程任务或迁移题验证是否真正稳定。"
-                  : "点击右上角后，系统会读取薄弱信号、最近学习内容、资料沉淀和提示依赖，生成下一步学习安排。"}
-              </p>
+            <div className={`ai-advice-brief${aiAdvice ? " ready" : ""}${aiAdviceError ? " error" : ""}`}>
+              <strong>{aiAdviceLoading ? "正在生成个人画像 AI 建议" : aiAdvice ? "AI 已根据整体画像生成建议" : aiAdviceError ? "AI 建议生成失败" : "等待生成 AI 建议"}</strong>
+              {aiAdvice ? (
+                <>
+                  <p className="ai-advice-text">{aiAdvice.answer}</p>
+                  <div className="ai-advice-meta">
+                    <span>{aiAdvice.profile_used ? "已结合学习画像" : "画像未参与"}</span>
+                    <span>{aiAdvice.source_used ? `引用 ${aiAdvice.citations.length} 个课程来源` : "未命中课程引用"}</span>
+                    <span>置信度 {Math.round(aiAdvice.confidence * 100)}%</span>
+                  </div>
+                  {aiAdvice.suggested_actions.length ? (
+                    <div className="ai-advice-actions" aria-label="AI 建议动作">
+                      {aiAdvice.suggested_actions.slice(0, 4).map((action) => (
+                        <button type="button" key={action} onClick={() => openAiTutorWithPrompt(action)}>
+                          {action}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <p>
+                  {aiAdviceError || "点击右上角后，系统会读取薄弱信号、最近学习内容、资料沉淀和提示依赖，生成下一步学习安排。"}
+                </p>
+              )}
             </div>
             <div className="advice-list">
               {adviceItems.length ? adviceItems.map((item) => (
                 <div className="advice-row" key={item.title}>
                   <span className={item.color}>{item.icon}</span>
                   <div><strong>{item.title}</strong><p>{item.desc}</p></div>
-                  <button type="button">{item.action}</button>
+                  <button type="button" onClick={() => handleRecommendationAction(item)}>{item.actionLabel}</button>
                 </div>
               )) : <div className="empty-panel">暂无个性化建议。</div>}
             </div>
@@ -708,7 +875,7 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
                 <span className="rank">{index + 1}</span>
                 <div className="weak-name"><strong>{item.title}</strong><span>{item.rate}</span></div>
                 <p>{item.desc}</p>
-                <button type="button">去练习</button>
+                <button type="button" onClick={() => openAiTutorWithPrompt(`请围绕${item.title}生成一组专项练习，并给出做题后的自查标准。`)}>去练习</button>
               </div>
             )) : <div className="empty-panel">暂无明显薄弱项，继续完成任务后画像会更新。</div>}
           </div>
@@ -722,7 +889,7 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
               <div className="advice-row" key={item.title}>
                 <span className={item.color}>{item.icon}</span>
                 <div><strong>{item.title}</strong><p>{item.desc}</p></div>
-                <button type="button">{item.action}</button>
+                <button type="button" onClick={() => handleRecommendationAction(item)}>{item.actionLabel}</button>
               </div>
             )) : <div className="empty-panel">暂无个性化建议。</div>}
           </div>
