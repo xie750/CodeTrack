@@ -5125,8 +5125,7 @@ button.student-resource-thumb {
 .profile-top-grid + .course-dimension-section,
 .course-dimension-section + .knowledge-section,
 .knowledge-section + .profile-mid-grid,
-.profile-mid-grid + .profile-bottom-grid,
-.profile-bottom-grid + .profile-summary-grid {
+.profile-mid-grid + .profile-bottom-grid {
   margin-top: 16px;
 }
 
@@ -5314,10 +5313,6 @@ button.student-resource-thumb {
 
 .global-advice-card {
   min-height: 100%;
-}
-
-.global-profile-page .global-advice-grid + .profile-summary-grid {
-  margin-top: 28px;
 }
 
 .global-advice-card .profile-section-head {
@@ -5526,8 +5521,7 @@ button.student-resource-thumb {
 }
 
 .profile-section-head a,
-.profile-more,
-.summary-card a {
+.profile-more {
   color: #176cf5;
   font-size: 13px;
   font-weight: 800;
@@ -5704,8 +5698,7 @@ button.student-resource-thumb {
 .weak-row p,
 .advice-row p,
 .record-row em,
-.record-row time,
-.summary-card p {
+.record-row time {
   color: #6b778d;
   font-size: 12px;
 }
@@ -5850,84 +5843,6 @@ button.student-resource-thumb {
 .record-row time {
   font-style: normal;
   text-align: right;
-}
-
-.profile-summary-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.summary-card {
-  min-height: 126px;
-  padding: 24px 30px;
-  display: grid;
-  grid-template-columns: 60px minmax(0, 1fr);
-  gap: 16px;
-  border-radius: 0;
-  box-shadow: none;
-}
-
-.summary-card:first-child {
-  border-radius: 12px 0 0 12px;
-}
-
-.summary-card:last-child {
-  border-radius: 0 12px 12px 0;
-}
-
-.summary-card + .summary-card {
-  border-left: 0;
-}
-
-.summary-icon {
-  width: 52px;
-  height: 52px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  color: #176cf5;
-  background: linear-gradient(145deg, #edf4ff, #dceaff);
-}
-
-.summary-icon.purple {
-  color: #8753f3;
-  background: #f2ecff;
-}
-
-.summary-icon.green {
-  color: #18b875;
-  background: #e7f9f1;
-}
-
-.summary-card h3 {
-  color: #17243b;
-  font-size: 15px;
-  font-weight: 800;
-}
-
-.summary-card strong {
-  display: block;
-  margin: 6px 0;
-  color: #176cf5;
-  font-size: 29px;
-  line-height: 1;
-}
-
-.summary-card strong.purple {
-  color: #8753f3;
-}
-
-.summary-card strong.green {
-  color: #18b875;
-}
-
-.summary-card strong span {
-  color: #18b875;
-  font-size: 13px;
-}
-
-.summary-card p {
-  line-height: 1.75;
 }
 
 @media (max-width: 1180px) {

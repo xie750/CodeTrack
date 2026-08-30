@@ -5,6 +5,7 @@ import {
   Bot,
   Check,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Circle,
@@ -231,11 +232,20 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
       <header className="program-topbar">
         <div className="program-brand">
           <span className="program-brand-mark ct-brand-mark" aria-hidden="true" />
-          <strong>Code<span>Track</span></strong>
+          <span className="program-brand-copy">
+            <strong>Code<span>Track</span></strong>
+            <small>学生助学空间</small>
+          </span>
         </div>
         <div className="program-top-actions">
-          <img src={avatarImg} alt="学生头像" />
-          <strong>学生端</strong>
+          <button className="program-account" type="button" aria-label="学生端账号">
+            <img src={avatarImg} alt="学生头像" />
+            <span className="program-account-copy">
+              <strong>学生端</strong>
+              <small>作答工作区</small>
+            </span>
+            <ChevronDown size={16} />
+          </button>
         </div>
       </header>
 

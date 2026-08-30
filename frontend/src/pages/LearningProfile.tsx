@@ -20,9 +20,7 @@ import {
   RefreshCw,
   ShieldCheck,
   Sparkles,
-  Star,
   Triangle,
-  UserRound
 } from "lucide-react";
 import { api, LearningContext, StudentAiChatResponse, StudentProfile } from "../api";
 import heroArt from "../assets/ui-home/hero-art.png";
@@ -739,20 +737,6 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
           </article>
         </section>
 
-        <section className="profile-summary-grid">
-          <article className="profile-card summary-card">
-            <div className="summary-icon"><Star size={27} fill="currentColor" /></div>
-            <div><h3>系统综合画像</h3><strong>{globalScore}<span> 分</span></strong><p>{globalSummary(profile)}<br />更新于：{formatTime(overview.updated_at)}</p></div>
-          </article>
-          <article className="profile-card summary-card">
-            <div className="summary-icon purple"><GraduationCap size={28} /></div>
-            <div><h3>课程能力沉淀</h3><strong className="purple">{courseAbility}<span> 分</span></strong><p>课程画像中的知识、任务和调试能力已合并进个人画像。<br />来源：课程任务与知识库</p></div>
-          </article>
-          <article className="profile-card summary-card">
-            <div className="summary-icon green"><UserRound size={28} /></div>
-            <div><h3>自学空间表现</h3><strong className="green">{selfStudyAbility}<span> 分</span></strong><p>结合自主学习内容生成、资料保存和 AI 助学使用。<br />班级：{context.student.class_name}</p></div>
-          </article>
-        </section>
       </div>
     );
   }
@@ -939,20 +923,6 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
         </article>
       </section>
 
-      <section className="profile-summary-grid">
-        <article className="profile-card summary-card">
-          <div className="summary-icon"><Star size={27} fill="currentColor" /></div>
-          <div><h3>课程系统分析</h3><strong>{progress}<span> 分</span></strong><p>{overview.summary}<br />更新于：{formatTime(overview.updated_at)}</p></div>
-        </article>
-        <article className="profile-card summary-card">
-          <div className="summary-icon purple"><GraduationCap size={28} /></div>
-          <div><h3>教师评价</h3><strong className="purple">{currentCourse?.teacher_name ?? profile.course.teacher_name} <span>课程视角</span></strong><p>画像按课程独立计算，便于老师查看本课程情况。<br />来自：{profile.course.name}</p><a href="#">查看评语 ›</a></div>
-        </article>
-        <article className="profile-card summary-card">
-          <div className="summary-icon green"><UserRound size={28} /></div>
-          <div><h3>自我评价</h3><strong className="green">{completion}<span> 分</span></strong><p>我会继续努力，突破薄弱点！<br />班级：{context.student.class_name}</p><a href="#">去更新 ›</a></div>
-        </article>
-      </section>
     </div>
   );
 }
