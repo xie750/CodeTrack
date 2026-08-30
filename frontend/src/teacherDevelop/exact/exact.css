@@ -12,7 +12,7 @@ button { cursor: pointer; }
 .ant-btn { box-shadow: none; }
 .ant-card, .exact-block { border-radius: 6px; }
 .exact-logo { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-.exact-logo > span { color: #46b827; font-weight: 800; letter-spacing: -1px; }
+.exact-logo > span { color: transparent; font-weight: 800; letter-spacing: 0; }
 .exact-logo strong { color: #1c271f; }
 .exact-logo small { font-size: 9px; color: #79847b; margin-left: -3px; }
 .exact-avatar { color: #2f8e1d !important; background: #e5f3df !important; font-weight: 700; }
@@ -97,7 +97,15 @@ button { cursor: pointer; }
 .exact-login-shell-simple { width: min(430px, calc(100% - 32px)); min-height: 650px; grid-template-columns: 1fr; border-color: #dfe6dc; border-radius: 8px; box-shadow: 0 16px 42px rgba(35,57,31,.09); }
 .exact-login-shell-simple .exact-login-panel { width: 100%; padding: 38px 42px 30px; }
 .exact-login-brand { display: flex; align-items: center; gap: 6px; margin-bottom: 44px; }
-.exact-login-brand > span { color: #43b81a; font-weight: 800; }
+.exact-login-brand > span {
+  width: 36px;
+  height: 32px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  color: transparent;
+  background: url("/brand-logo.png") center / contain no-repeat;
+  font-size: 0;
+}
 .exact-login-brand > strong { color: #1c271f; font-size: 17px; }
 .exact-login-brand > small { margin-left: -2px; color: #7d887f; font-size: 9px; }
 .exact-login-shell-simple .exact-login-title { margin-bottom: 30px; }
@@ -1843,23 +1851,20 @@ button { cursor: pointer; }
 }
 
 .exact-shell:has(.view-ai-assistant) .exact-logo > span {
-  width: 32px;
-  height: 24px;
+  width: 36px;
+  height: 32px;
   display: grid;
   place-items: center;
-  border-radius: 10px;
-  color: #ffffff;
-  background: linear-gradient(135deg, #d6ff56 0%, #7ddc31 54%, #35a674 100%);
-  box-shadow: 0 8px 18px rgba(108, 206, 40, .24);
+  border-radius: 0;
+  color: transparent;
+  background: url("/brand-logo.png") center / contain no-repeat;
+  box-shadow: none;
   font-size: 0;
   letter-spacing: 0;
 }
 
 .exact-shell:has(.view-ai-assistant) .exact-logo > span::before {
-  content: "</>";
-  font-size: 11px;
-  font-weight: 950;
-  letter-spacing: -1px;
+  content: none;
 }
 
 .exact-shell:has(.view-ai-assistant) .exact-logo strong {
@@ -4457,37 +4462,20 @@ button { cursor: pointer; }
 
 .exact-logo > span {
   position: relative;
-  width: 32px;
-  height: 24px;
+  width: 36px;
+  height: 32px;
   display: grid;
   place-items: center;
-  border-radius: 10px;
+  border-radius: 0;
   color: transparent;
-  background: linear-gradient(135deg, #d6ff56 0%, #7ddc31 54%, #35a674 100%);
-  box-shadow: 0 8px 18px rgba(108, 206, 40, .24);
+  background: url("/brand-logo.png") center / contain no-repeat;
+  box-shadow: none;
   font-size: 0;
 }
 
 .exact-logo > span::before,
 .exact-logo > span::after {
-  content: "";
-  position: absolute;
-  top: 7px;
-  width: 7px;
-  height: 7px;
-  border-top: 3px solid #ffffff;
-  border-left: 3px solid #ffffff;
-  border-radius: 2px;
-}
-
-.exact-logo > span::before {
-  left: 7px;
-  transform: rotate(-45deg);
-}
-
-.exact-logo > span::after {
-  right: 7px;
-  transform: rotate(135deg);
+  content: none;
 }
 
 .exact-logo strong,
@@ -5556,14 +5544,17 @@ button { cursor: pointer; }
 }
 
 .exact-shell .exact-logo > span {
-  color: #ffffff !important;
-  background: linear-gradient(135deg, #4f8cff 0%, #1677ff 52%, #06b6d4 100%) !important;
-  box-shadow: 0 8px 18px rgba(22, 119, 255, .22) !important;
+  width: 36px !important;
+  height: 32px !important;
+  color: transparent !important;
+  background: url("/brand-logo.png") center / contain no-repeat !important;
+  box-shadow: none !important;
 }
 
 .exact-shell .exact-logo > span::before,
 .exact-shell .exact-logo > span::after {
-  border-color: rgba(255, 255, 255, .95) !important;
+  content: none !important;
+  border-color: transparent !important;
 }
 
 .exact-shell .exact-logo strong {

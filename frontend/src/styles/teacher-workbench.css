@@ -44,33 +44,15 @@
 
 .teacher-workbench-logo-mark {
   position: relative;
-  width: 42px;
-  height: 30px;
-  border-radius: 13px;
-  background: linear-gradient(135deg, #7fee29, #20b66f);
-  box-shadow: 0 12px 28px rgba(70, 197, 44, 0.28);
+  width: 44px;
+  height: 38px;
+  flex: 0 0 auto;
+  background: url("/brand-logo.png") center / contain no-repeat;
 }
 
 .teacher-workbench-logo-mark::before,
 .teacher-workbench-logo-mark::after {
-  content: "";
-  position: absolute;
-  top: 9px;
-  width: 10px;
-  height: 10px;
-  border-top: 4px solid #fff;
-  border-left: 4px solid #fff;
-  border-radius: 3px;
-}
-
-.teacher-workbench-logo-mark::before {
-  left: 9px;
-  transform: rotate(-45deg);
-}
-
-.teacher-workbench-logo-mark::after {
-  right: 9px;
-  transform: rotate(135deg);
+  content: none;
 }
 
 .teacher-workbench-actions {

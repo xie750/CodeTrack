@@ -731,34 +731,15 @@
 
 .student-app-logo-mark {
   position: relative;
-  width: 32px;
-  height: 24px;
+  width: 36px;
+  height: 32px;
   flex: 0 0 auto;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #d6ff56 0%, #7ddc31 54%, #35a674 100%);
-  box-shadow: 0 8px 18px rgba(108, 206, 40, 0.24);
+  background: url("/brand-logo.png") center / contain no-repeat;
 }
 
 .student-app-logo-mark::before,
 .student-app-logo-mark::after {
-  content: "";
-  position: absolute;
-  top: 7px;
-  width: 7px;
-  height: 7px;
-  border-top: 3px solid #ffffff;
-  border-left: 3px solid #ffffff;
-  border-radius: 2px;
-}
-
-.student-app-logo-mark::before {
-  left: 7px;
-  transform: rotate(-45deg);
-}
-
-.student-app-logo-mark::after {
-  right: 7px;
-  transform: rotate(135deg);
+  content: none;
 }
 
 .student-app-brand strong,

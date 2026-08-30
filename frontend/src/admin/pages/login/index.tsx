@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { Card, Form, Input, Button, Checkbox, message } from 'antd'
 import { UserOutlined, LockOutlined } from '@ant-design/icons'
-import { Code2, Sparkles } from 'lucide-react'
+import { Sparkles } from 'lucide-react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAppStore } from '@admin/stores/useAppStore'
 import { colors } from '@admin/theme/themeConfig'
+import brandLogo from '../../../assets/ui-home/logo-img.png'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -47,16 +48,13 @@ export default function Login() {
             style={{
               width: 56,
               height: 56,
-              borderRadius: 14,
               margin: '0 auto 12px',
-              background: 'linear-gradient(135deg, #2563EB, #3B82F6)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#fff',
             }}
           >
-            <Code2 size={30} />
+            <img src={brandLogo} alt="CodeTrack" style={{ width: 56, height: 50, objectFit: 'contain' }} />
           </div>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>CodeTrack</h1>
           <div className="ai-badge" style={{ marginTop: 6 }}>
