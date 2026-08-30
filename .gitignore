@@ -30,6 +30,7 @@ dist/
 tools/ppt-master*/
 # 资料中心端到端校验脚本的截图产物
 frontend/.resource-check/
+frontend/.tmp-town-check/
 
 # 教师端资料中心上传件的落盘目录（CODETRACK_RESOURCE_STORAGE_DIR）
 var/
