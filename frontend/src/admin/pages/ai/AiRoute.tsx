@@ -498,7 +498,7 @@ export default function AiRoute() {
               label="连接地址"
               rules={[{ required: true, message: '请输入连接地址' }]}
             >
-              <Input placeholder="https://api.codetrack.ai/vertical/cs-code/v2.1" />
+              <Input placeholder="https://api.codetrack.ai/vertical/ai-major/v2.1" />
             </Form.Item>
             <Form.Item
               name="apiKey"

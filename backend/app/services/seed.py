@@ -224,9 +224,13 @@ def seed_demo_data(db: Session) -> None:
     }
     for user_id, values in users.items():
         upsert(db, User, user_id, values)
+    db.flush()
+
+    for user_id in users:
         user = db.get(User, user_id)
         if user and not verify_password("codetrack123", user.password_hash):
             user.password_hash = hash_password("codetrack123")
+    db.flush()
 
     upsert(
         db,
@@ -264,18 +268,7 @@ def seed_demo_data(db: Session) -> None:
             "owner_teacher_id": "user_teacher_001",
         },
     )
-    upsert(
-        db,
-        Course,
-        "course_scope_probe_001",
-        {
-            "name": "权限校验探针课程",
-            "description": "仅用于验证无教学安排课程不可访问，不在学生端展示。",
-            "term": "2026-demo",
-            "status": "ACTIVE",
-            "owner_teacher_id": "user_teacher_001",
-        },
-    )
+    db.flush()
 
     enrollments = [
         ("course_ds_001", "user_teacher_001", "TEACHER"),
@@ -313,6 +306,7 @@ def seed_demo_data(db: Session) -> None:
     }
     for class_id, values in classes.items():
         upsert(db, AdministrativeClass, class_id, values)
+    db.flush()
 
     memberships = [
         ("class_se_001", "user_student_001", "ACTIVE"),
@@ -359,6 +353,7 @@ def seed_demo_data(db: Session) -> None:
     }
     for assignment_id, values in teaching_assignments.items():
         upsert(db, TeachingAssignment, assignment_id, values)
+    db.flush()
 
     upsert(
         db,
@@ -400,6 +395,7 @@ def seed_demo_data(db: Session) -> None:
             "description": "能够区分训练集、验证集和测试集，并解释过拟合与正则化的基本作用。",
         },
     )
+    db.flush()
 
     learning_objectives = [
         "理解单链表删除操作",
@@ -534,6 +530,7 @@ def seed_demo_data(db: Session) -> None:
             "status": "OPEN",
         },
     )
+    db.flush()
     upsert(
         db,
         TaskAssignment,
@@ -654,6 +651,7 @@ def seed_demo_data(db: Session) -> None:
             "deadline": datetime(2026, 8, 6, 23, 59, tzinfo=timezone.utc),
         },
     )
+    db.flush()
 
     test_cases = [
         (

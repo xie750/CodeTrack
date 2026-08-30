@@ -524,7 +524,7 @@ export default function AiMonitor() {
         statisticalWindow: v.statisticalWindow as AlertRule['statisticalWindow'],
         alertLevel: v.alertLevel as AlertRule['alertLevel'],
         enabled: true,
-        subject: '计算机科学与技术',
+        subject: '人工智能',
         createdAt: new Date().toISOString().slice(0, 10),
       }
       if (editingRule) {

@@ -37,7 +37,7 @@ export default function ImportModal({ open, onCancel, kind, onSuccess }: ImportM
     const valid = Array.from({ length: 8 }, (_, i) => ({
       [`${kind === '教师' ? '工号' : '学号'}`]: `${idPrefix}${String(20260800 + i)}`,
       姓名: `批量导入-${i + 1}号`,
-      院系: '计算机科学与技术学院',
+      院系: '人工智能学院',
     }))
     setErrors(simulated)
     setDone(valid.length)

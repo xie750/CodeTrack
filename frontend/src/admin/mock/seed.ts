@@ -21,36 +21,22 @@ import type {
 
 // ===================== 用户与组织 =====================
 export const seedTeachers: Teacher[] = [
-  { id: 'T1001', name: '张伟明', dept: '计算机科学与技术学院', title: '教授', email: 'zhangwm@hust.edu.cn', phone: '13800001001', status: '已启用', loginStatus: '在线', lastActiveAt: '2026-08-08 09:41', createdAt: '2025-03-01', assetCount: 24 },
-  { id: 'T1002', name: '李慧', dept: '计算机科学与技术学院', title: '副教授', email: 'lihui@hust.edu.cn', phone: '13800001002', status: '已启用', loginStatus: '离线', lastActiveAt: '2026-08-07 22:15', createdAt: '2025-03-01', assetCount: 17 },
+  { id: 'T1001', name: '张伟明', dept: '人工智能学院', title: '教授', email: 'zhangwm@hust.edu.cn', phone: '13800001001', status: '已启用', loginStatus: '在线', lastActiveAt: '2026-08-08 09:41', createdAt: '2025-03-01', assetCount: 24 },
+  { id: 'T1002', name: '李慧', dept: '人工智能学院', title: '副教授', email: 'lihui@hust.edu.cn', phone: '13800001002', status: '已启用', loginStatus: '离线', lastActiveAt: '2026-08-07 22:15', createdAt: '2025-03-01', assetCount: 17 },
   { id: 'T1003', name: '王建国', dept: '人工智能学院', title: '教授', email: 'wangjg@hust.edu.cn', phone: '13800001003', status: '已启用', loginStatus: '在线', lastActiveAt: '2026-08-08 10:02', createdAt: '2025-04-12', assetCount: 31 },
-  { id: 'T1004', name: '陈晓燕', dept: '人工智能学院', title: '讲师', email: 'chenxy@hust.edu.cn', phone: '13800001004', status: '待激活', loginStatus: '离线', lastActiveAt: '—', createdAt: '2026-08-06', assetCount: 0 },
-  { id: 'T1005', name: '刘强', dept: '数学与统计学院', title: '副教授', email: 'liuqiang@hust.edu.cn', phone: '13800001005', status: '已启用', loginStatus: '离线', lastActiveAt: '2026-08-05 16:30', createdAt: '2025-05-20', assetCount: 12 },
-  { id: 'T1006', name: '赵敏', dept: '数学与统计学院', title: '教授', email: 'zhaomin@hust.edu.cn', phone: '13800001006', status: '已启用', loginStatus: '在线', lastActiveAt: '2026-08-08 09:55', createdAt: '2025-03-15', assetCount: 29 },
-  { id: 'T1007', name: '孙鹏', dept: '物理学院', title: '讲师', email: 'sunpeng@hust.edu.cn', phone: '13800001007', status: '已停用', loginStatus: '离线', lastActiveAt: '2026-06-20 11:08', createdAt: '2025-06-01', assetCount: 8 },
-  { id: 'T1008', name: '周丽华', dept: '化学与化工学院', title: '副教授', email: 'zhoulh@hust.edu.cn', phone: '13800001008', status: '已启用', loginStatus: '离线', lastActiveAt: '2026-08-06 19:44', createdAt: '2025-03-28', assetCount: 15 },
-  { id: 'T1009', name: '吴勇', dept: '经济与管理学院', title: '教授', email: 'wuyong@hust.edu.cn', phone: '13800001009', status: '已启用', loginStatus: '在线', lastActiveAt: '2026-08-08 10:11', createdAt: '2025-04-02', assetCount: 20 },
-  { id: 'T1010', name: '郑芳', dept: '外国语学院', title: '讲师', email: 'zhengfang@hust.edu.cn', phone: '13800001010', status: '待激活', loginStatus: '离线', lastActiveAt: '—', createdAt: '2026-08-07', assetCount: 0 },
-  { id: 'T1011', name: '马涛', dept: '计算机科学与技术学院', title: '讲师', email: 'matao@hust.edu.cn', phone: '13800001011', status: '已启用', loginStatus: '离线', lastActiveAt: '2026-08-01 14:20', createdAt: '2025-07-15', assetCount: 6 },
-  { id: 'T1012', name: '林静', dept: '生命科学与技术学院', title: '副教授', email: 'linjing@hust.edu.cn', phone: '13800001012', status: '已启用', loginStatus: '在线', lastActiveAt: '2026-08-08 09:20', createdAt: '2025-04-18', assetCount: 22 },
 ]
 
 export const seedStudents: Student[] = [
-  { id: 'U2024001', name: '王芳', gender: '女', grade: '2024级', dept: '计算机科学与技术', courseName: '数据结构与算法', status: '已启用', loginStatus: '在线', lastActiveAt: '2026-08-08 09:12', createdAt: '2026-02-20' },
-  { id: 'U2024002', name: '李浩', gender: '男', grade: '2024级', dept: '计算机科学与技术', courseName: '数据结构与算法', status: '已启用', loginStatus: '离线', lastActiveAt: '2026-08-07 21:36', createdAt: '2026-02-20' },
-  { id: 'U2024003', name: '张磊', gender: '男', grade: '2024级', dept: '计算机科学与技术', courseName: '操作系统', status: '已启用', loginStatus: '在线', lastActiveAt: '2026-08-08 08:47', createdAt: '2026-02-20' },
-  { id: 'U2024004', name: '刘洋', gender: '男', grade: '2024级', dept: '人工智能', courseName: '机器学习导论', status: '已启用', loginStatus: '离线', lastActiveAt: '2026-08-06 20:15', createdAt: '2026-02-20' },
-  { id: 'U2024005', name: '陈思思', gender: '女', grade: '2024级', dept: '人工智能', courseName: '机器学习导论', status: '待激活', loginStatus: '离线', lastActiveAt: '—', createdAt: '2026-08-05' },
-  { id: 'U2023001', name: '赵文博', gender: '男', grade: '2023级', dept: '计算机科学与技术', courseName: '数据库系统', status: '已启用', loginStatus: '在线', lastActiveAt: '2026-08-08 10:05', createdAt: '2025-02-25' },
-  { id: 'U2023002', name: '孙婷婷', gender: '女', grade: '2024级', dept: '物联网工程', courseName: '传感器原理与应用', status: '已启用', loginStatus: '离线', lastActiveAt: '2026-08-04 17:22', createdAt: '2025-02-25' },
-  { id: 'U2023003', name: '周杰', gender: '男', grade: '2024级', dept: '软件工程', courseName: '软件工程导论', status: '已停用', loginStatus: '离线', lastActiveAt: '2026-05-18 10:40', createdAt: '2025-02-25' },
-  { id: 'U2025001', name: '吴倩', gender: '女', grade: '2024级', dept: '物联网工程', courseName: '传感器原理与应用', status: '已启用', loginStatus: '离线', lastActiveAt: '2026-08-06 18:09', createdAt: '2026-08-01' },
-  { id: 'U2025002', name: '郑凯', gender: '男', grade: '2024级', dept: '软件工程', courseName: '软件工程导论', status: '待激活', loginStatus: '离线', lastActiveAt: '—', createdAt: '2026-08-03' },
+  { id: 'U2024001', name: '王芳', gender: '女', grade: '2024级', dept: '人工智能', courseName: '数据结构', status: '已启用', loginStatus: '在线', lastActiveAt: '2026-08-08 09:12', createdAt: '2026-02-20' },
+  { id: 'U2024002', name: '李浩', gender: '男', grade: '2024级', dept: '人工智能', courseName: '数据结构', status: '已启用', loginStatus: '离线', lastActiveAt: '2026-08-07 21:36', createdAt: '2026-02-20' },
+  { id: 'U2024003', name: '张磊', gender: '男', grade: '2024级', dept: '人工智能', courseName: 'Python 程序设计', status: '已启用', loginStatus: '在线', lastActiveAt: '2026-08-08 08:47', createdAt: '2026-02-20' },
+  { id: 'U2024004', name: '刘洋', gender: '男', grade: '2024级', dept: '人工智能', courseName: '机器学习', status: '已启用', loginStatus: '离线', lastActiveAt: '2026-08-06 20:15', createdAt: '2026-02-20' },
+  { id: 'U2024005', name: '陈思思', gender: '女', grade: '2024级', dept: '人工智能', courseName: '机器学习', status: '待激活', loginStatus: '离线', lastActiveAt: '—', createdAt: '2026-08-05' },
 ]
 
 export const seedCourses: CourseItem[] = [
   {
-    id: 'CO001', name: '数据结构与算法', teacher: '张伟明', semester: '2025-2026-2', hours: 64, model: 'DeepSeek-V3', status: '进行中', studentCount: 82, classCount: 3,
+    id: 'CO001', name: '数据结构', teacher: '张伟明', semester: '2026-demo', hours: 64, model: '数据结构课程垂类模型', status: '进行中', studentCount: 2, classCount: 2,
     students: [
       { id: 'U2024001', name: '王芳', gender: '女' },
       { id: 'U2024002', name: '李浩', gender: '男' },
@@ -61,40 +47,17 @@ export const seedCourses: CourseItem[] = [
     ],
   },
   {
-    id: 'CO002', name: '操作系统', teacher: '李慧', semester: '2026-2027-1', hours: 48, model: 'DeepSeek-V3', status: '进行中', studentCount: 40, classCount: 2,
+    id: 'CO002', name: 'Python 程序设计', teacher: '李慧', semester: '2026-demo', hours: 48, model: 'Python 程序设计课程垂类模型', status: '进行中', studentCount: 1, classCount: 1,
     students: [
       { id: 'U2024003', name: '张磊', gender: '男' },
     ],
     enrollmentChanges: [],
   },
   {
-    id: 'CO003', name: '机器学习导论', teacher: '王建国', semester: '2026-2027-1', hours: 56, model: 'DeepSeek-R1', status: '进行中', studentCount: 90, classCount: 4,
+    id: 'CO003', name: '机器学习', teacher: '王建国', semester: '2026-demo', hours: 56, model: '机器学习课程垂类模型', status: '进行中', studentCount: 2, classCount: 1,
     students: [
       { id: 'U2024004', name: '刘洋', gender: '男' },
       { id: 'U2024005', name: '陈思思', gender: '女' },
-    ],
-    enrollmentChanges: [],
-  },
-  {
-    id: 'CO004', name: '数据库系统', teacher: '李慧', semester: '2026-2027-1', hours: 48, model: 'DeepSeek-V3', status: '筹备中', studentCount: 38, classCount: 2,
-    students: [
-      { id: 'U2023001', name: '赵文博', gender: '男' },
-    ],
-    enrollmentChanges: [],
-  },
-  {
-    id: 'CO005', name: '传感器原理与应用', teacher: '郑芳', semester: '2026-2027-1', hours: 40, model: 'DeepSeek-V3', status: '进行中', studentCount: 72, classCount: 3,
-    students: [
-      { id: 'U2023002', name: '孙婷婷', gender: '女' },
-      { id: 'U2025001', name: '吴倩', gender: '女' },
-    ],
-    enrollmentChanges: [],
-  },
-  {
-    id: 'CO006', name: '软件工程导论', teacher: '王建国', semester: '2026-2027-1', hours: 48, model: 'DeepSeek-R1', status: '已归档', studentCount: 66, classCount: 3,
-    students: [
-      { id: 'U2023003', name: '周杰', gender: '男' },
-      { id: 'U2025002', name: '郑凯', gender: '男' },
     ],
     enrollmentChanges: [],
   },
@@ -103,7 +66,7 @@ export const seedCourses: CourseItem[] = [
 // ===================== 科研管理 =====================
 export const seedProjects: ProjectItem[] = [
   {
-    id: 'P2026001', name: '基于大模型的课堂教学质量智能评估', discipline: '教育大数据', leader: '张伟明',
+    id: 'P2026001', name: '人工智能专业学习画像评估', discipline: '人工智能', leader: '张伟明',
     status: '进行中',
     members: [
       { name: '张伟明', id: 'T1001', role: '负责人' },
@@ -112,8 +75,8 @@ export const seedProjects: ProjectItem[] = [
       { name: '陈博士', id: 'E01', role: '外部协作' },
     ],
     outputs: [
-      { id: 'O1', type: '前沿报告', title: 'LLM 教学质量评估方法前沿综述', status: '已入库', aiGenerated: true, generatedAt: '2026-07-18', refCount: 23 },
-      { id: 'O2', type: '数据分析报告', title: '课堂互动数据多维度分析', status: '已入库', aiGenerated: true, generatedAt: '2026-07-25', refCount: 11 },
+      { id: 'O1', type: '前沿报告', title: '人工智能专业助学模型前沿综述', status: '已入库', aiGenerated: true, generatedAt: '2026-07-18', refCount: 23 },
+      { id: 'O2', type: '数据分析报告', title: '人工智能课程学习画像多维度分析', status: '已入库', aiGenerated: true, generatedAt: '2026-07-25', refCount: 11 },
     ],
     milestones: [
       { name: '文献调研与需求梳理', progress: 100, dueDate: '2026-06-30' },
@@ -122,48 +85,48 @@ export const seedProjects: ProjectItem[] = [
     ],
     changes: [
       { time: '2026-07-02', content: '核心成员加入：李慧', operator: '张伟明' },
-      { time: '2026-07-19', content: '研究方向微调：聚焦形成性评估', operator: '张伟明' },
+      { time: '2026-07-19', content: '研究方向微调：聚焦人工智能专业形成性评估', operator: '张伟明' },
     ],
     createdAt: '2026-05-20', updatedAt: '2026-08-06', stageProgress: 70,
   },
   {
-    id: 'P2026002', name: '面向化学合成的 AI 辅助路径规划', discipline: '计算化学', leader: '周丽华',
+    id: 'P2026002', name: '机器学习课程自适应学习路径规划', discipline: '人工智能', leader: '王建国',
     status: '待审核',
-    members: [{ name: '周丽华', id: 'T1008', role: '负责人' }],
+    members: [{ name: '王建国', id: 'T1003', role: '负责人' }],
     outputs: [],
     milestones: [{ name: '立项书提交', progress: 100, dueDate: '2026-08-10' }],
     changes: [],
     createdAt: '2026-08-01', updatedAt: '2026-08-07', stageProgress: 20,
   },
   {
-    id: 'P2026003', name: '情感计算在学生心理预警中的应用', discipline: '人工智能', leader: '王建国',
+    id: 'P2026003', name: '机器学习薄弱点诊断与提示控制', discipline: '人工智能', leader: '王建国',
     status: '已结项',
     members: [
       { name: '王建国', id: 'T1003', role: '负责人' },
       { name: '刘洋', id: 'U2024004', role: '参与学生' },
     ],
     outputs: [
-      { id: 'O3', type: '热点图谱', title: '情感计算研究方向热点图谱', status: '已入库', aiGenerated: true, generatedAt: '2026-06-12', refCount: 34 },
-      { id: 'O4', type: '论文框架', title: '融合多模态的心理预警模型框架', status: '已入库', aiGenerated: true, generatedAt: '2026-06-20', refCount: 17 },
+      { id: 'O3', type: '热点图谱', title: '机器学习薄弱知识点热点图谱', status: '已入库', aiGenerated: true, generatedAt: '2026-06-12', refCount: 34 },
+      { id: 'O4', type: '论文框架', title: '基于学习画像的提示控制模型框架', status: '已入库', aiGenerated: true, generatedAt: '2026-06-20', refCount: 17 },
     ],
     milestones: [{ name: '全阶段', progress: 100, dueDate: '2026-06-30' }],
     changes: [],
     createdAt: '2026-03-01', updatedAt: '2026-07-01', stageProgress: 100,
   },
   {
-    id: 'P2026004', name: '高校科研经费使用效率分析', discipline: '管理科学', leader: '吴勇',
+    id: 'P2026004', name: 'Python 程序设计学习行为分析', discipline: '人工智能', leader: '李慧',
     status: '草稿',
-    members: [{ name: '吴勇', id: 'T1009', role: '负责人' }],
+    members: [{ name: '李慧', id: 'T1002', role: '负责人' }],
     outputs: [],
     milestones: [],
     changes: [],
     createdAt: '2026-08-05', updatedAt: '2026-08-05', stageProgress: 5,
   },
   {
-    id: 'P2026005', name: '基于知识图谱的课程资源推荐', discipline: '教育技术', leader: '赵敏',
+    id: 'P2026005', name: '数据结构知识图谱资源推荐', discipline: '人工智能', leader: '张伟明',
     status: '已驳回',
     rejectReason: '立项论证不足，请补充技术可行性与数据来源说明',
-    members: [{ name: '赵敏', id: 'T1006', role: '负责人' }],
+    members: [{ name: '张伟明', id: 'T1001', role: '负责人' }],
     outputs: [],
     milestones: [],
     changes: [],
@@ -173,7 +136,7 @@ export const seedProjects: ProjectItem[] = [
 
 export const seedCompliance: ComplianceItem[] = [
   {
-    id: 'CM1', projectName: '基于大模型的课堂教学质量智能评估', outputTitle: '课堂互动数据多维度分析',
+    id: 'CM1', projectName: '人工智能专业学习画像评估', outputTitle: '人工智能课程学习画像多维度分析',
     dimension: '数据合规', result: '疑似违规', severity: '高', status: '待处理',
     aiDetected: true, summary: '样本数据疑似包含未脱敏的学生姓名与学号',
     aiHints: ['检测到连续学号序列', '存在未掩码的个人信息字段'],
@@ -181,7 +144,7 @@ export const seedCompliance: ComplianceItem[] = [
     detectedAt: '2026-08-06 10:20',
   },
   {
-    id: 'CM2', projectName: '基于大模型的课堂教学质量智能评估', outputTitle: 'LLM 教学质量评估方法前沿综述',
+    id: 'CM2', projectName: '人工智能专业学习画像评估', outputTitle: '人工智能专业助学模型前沿综述',
     dimension: '引用真实性', result: '疑似违规', severity: '中', status: '待处理',
     aiDetected: true, summary: '第 5 节引用「Zhang et al., 2024」未在知识库中检索到对应文献',
     aiHints: ['引用条目在学术论文库中不存在'],
@@ -189,7 +152,7 @@ export const seedCompliance: ComplianceItem[] = [
     detectedAt: '2026-08-07 09:15',
   },
   {
-    id: 'CM3', projectName: '情感计算在学生心理预警中的应用', outputTitle: '融合多模态的心理预警模型框架',
+    id: 'CM3', projectName: '机器学习薄弱点诊断与提示控制', outputTitle: '基于学习画像的提示控制模型框架',
     dimension: 'AI 标识', result: '疑似违规', severity: '中', status: '已处置',
     aiDetected: true, summary: '产出由 AI 辅助生成但未标注 AI 生成标记',
     aiHints: ['文本相似度与生成模板高度一致'],
@@ -197,15 +160,15 @@ export const seedCompliance: ComplianceItem[] = [
     detectedAt: '2026-06-22', handledAt: '2026-06-23', handler: '管理员', handleMethod: '修改',
   },
   {
-    id: 'CM4', projectName: '面向化学合成的 AI 辅助路径规划', outputTitle: '立项书中实验数据来源说明',
+    id: 'CM4', projectName: '机器学习课程自适应学习路径规划', outputTitle: '立项书中训练数据来源说明',
     dimension: '伪造检测', result: '疑似违规', severity: '高', status: '待处理',
     aiDetected: true, summary: '反应收率数据与公共数据库记录存在明显偏差',
     aiHints: ['收率数值异常集中于 95%-98%'],
-    issue: '实验数据来源无法核验，疑似数据伪造',
+    issue: '训练数据来源无法核验，疑似数据伪造',
     detectedAt: '2026-08-08 08:40',
   },
   {
-    id: 'CM5', projectName: '基于知识图谱的课程资源推荐', outputTitle: '课程资源推荐系统架构说明',
+    id: 'CM5', projectName: '数据结构知识图谱资源推荐', outputTitle: '课程资源推荐系统架构说明',
     dimension: '学术伦理', result: '合规', severity: '低', status: '已处置',
     aiDetected: false, summary: '内容未发现学术不端风险',
     aiHints: [],
@@ -217,25 +180,24 @@ export const seedCompliance: ComplianceItem[] = [
 // ===================== AI 运维管控 =====================
 
 export const seedSubjectRoutes: SubjectRoute[] = [
-  { id: 'SR1', subject: '计算机科学与技术', primaryModel: '计算机代码垂类大模型', primaryVersion: 'v2.1', fallbackModel: '通用大模型', fallbackVersion: 'v3.0', currentModel: 'primary', triggerConfig: {
+  { id: 'SR1', subject: '人工智能', primaryModel: '人工智能专业垂类大模型', primaryVersion: 'v2.1', fallbackModel: '通用大模型', fallbackVersion: 'v3.0', currentModel: 'primary', triggerConfig: {
     toFallback: { timeoutMs: 10000, consecutiveFailures: 3, http5xx: true, authFailure: true, successRateThreshold: 90 },
     toPrimary: { timeoutMs: 30000, consecutiveFailures: 5, http5xx: false, authFailure: false, successRateThreshold: 95 },
   }, connectivity: '主可用', online: true },
 ]
 
 export const seedSwitchHistories: SwitchHistory[] = [
-  { id: 'SH1', time: '2026-08-09 09:45:00', subject: '计算机科学与技术', fromModel: '计算机代码垂类大模型 v2.1', toModel: '通用大模型 v3.0', type: '自动', reason: '连续 5 次 HTTP 500 错误，自动触发兜底切换', operator: '系统自动' },
-  { id: 'SH2', time: '2026-08-08 14:30:00', subject: '计算机科学与技术', fromModel: '通用大模型 v3.0', toModel: '计算机代码垂类大模型 v2.1', type: '手动', reason: '垂类模型恢复，手动切回', operator: '管理员' },
-  { id: 'SH3', time: '2026-08-06 20:00:00', subject: '计算机科学与技术', fromModel: '计算机代码垂类大模型 v2.1', toModel: '通用大模型 v3.0', type: '自动', reason: '成功率降至 78%，低于阈值 85%', operator: '系统自动' },
+  { id: 'SH1', time: '2026-08-09 09:45:00', subject: '人工智能', fromModel: '人工智能专业垂类大模型 v2.1', toModel: '通用大模型 v3.0', type: '自动', reason: '连续 5 次 HTTP 500 错误，自动触发兜底切换', operator: '系统自动' },
+  { id: 'SH2', time: '2026-08-08 14:30:00', subject: '人工智能', fromModel: '通用大模型 v3.0', toModel: '人工智能专业垂类大模型 v2.1', type: '手动', reason: '垂类模型恢复，手动切回', operator: '管理员' },
+  { id: 'SH3', time: '2026-08-06 20:00:00', subject: '人工智能', fromModel: '人工智能专业垂类大模型 v2.1', toModel: '通用大模型 v3.0', type: '自动', reason: '成功率降至 78%，低于阈值 85%', operator: '系统自动' },
 ]
 
 export const seedConnectedModels: ConnectedModel[] = [
-  { id: 'CM1', subjectRouteId: 'SR1', modelType: 'primary', nickname: '计算机代码垂类', modelName: 'cs-code-vertical-v2.1', version: 'v2.1', releaseDate: '2026-08-01', notes: '主路由模型，用于代码生成与审阅', url: 'https://api.codetrack.ai/vertical/cs-code/v2.1', apiKey: 'sk-ct-****a1b2', enabled: true },
+  { id: 'CM1', subjectRouteId: 'SR1', modelType: 'primary', nickname: '人工智能专业垂类', modelName: 'ai-major-vertical-v2.1', version: 'v2.1', releaseDate: '2026-08-01', notes: '主路由模型，用于人工智能专业学习诊断、代码审阅与资源生成', url: 'https://api.codetrack.ai/vertical/ai-major/v2.1', apiKey: 'sk-ct-****a1b2', enabled: true },
   // 课程垂类大模型
   { id: 'CM3', subjectRouteId: 'SR1', modelType: 'primary', nickname: 'Python程序设计', modelName: 'course-python-v2.3', version: 'v2.3', releaseDate: '2026-07-18', notes: 'Python语言课程专用垂类模型', url: 'https://api.codetrack.ai/course/python/v2.3', apiKey: 'sk-ct-****p3t4', enabled: true },
-  { id: 'CM4', subjectRouteId: 'SR1', modelType: 'primary', nickname: 'Java面向对象编程', modelName: 'course-java-oop-v1.9', version: 'v1.9', releaseDate: '2026-06-25', notes: 'Java课程专用垂类模型', url: 'https://api.codetrack.ai/course/java/v1.9', apiKey: 'sk-ct-****j5v6', enabled: true },
-  { id: 'CM5', subjectRouteId: 'SR1', modelType: 'primary', nickname: '人工智能导论', modelName: 'course-ai-intro-v3.1', version: 'v3.1', releaseDate: '2026-08-05', notes: 'AI入门课程专用垂类模型', url: 'https://api.codetrack.ai/course/ai-intro/v3.1', apiKey: 'sk-ct-****a7i8', enabled: true },
-  { id: 'CM6', subjectRouteId: 'SR1', modelType: 'primary', nickname: '数据结构与算法', modelName: 'course-ds-algo-v2.0', version: 'v2.0', releaseDate: '2026-07-10', notes: '数据结构课程专用垂类模型', url: 'https://api.codetrack.ai/course/dsa/v2.0', apiKey: 'sk-ct-****d9s0', enabled: false },
+  { id: 'CM5', subjectRouteId: 'SR1', modelType: 'primary', nickname: '机器学习', modelName: 'course-machine-learning-v3.1', version: 'v3.1', releaseDate: '2026-08-05', notes: '机器学习课程专用垂类模型', url: 'https://api.codetrack.ai/course/machine-learning/v3.1', apiKey: 'sk-ct-****m7l8', enabled: true },
+  { id: 'CM6', subjectRouteId: 'SR1', modelType: 'primary', nickname: '数据结构', modelName: 'course-data-structure-v2.0', version: 'v2.0', releaseDate: '2026-07-10', notes: '数据结构课程专用垂类模型', url: 'https://api.codetrack.ai/course/data-structure/v2.0', apiKey: 'sk-ct-****d9s0', enabled: true },
   { id: 'CM2', subjectRouteId: 'SR1', modelType: 'fallback', nickname: '通用大模型', modelName: 'general-v3.0', version: 'v3.0', releaseDate: '2026-07-20', notes: '', url: 'https://api.codetrack.ai/general/v3.0', apiKey: 'sk-ct-****c3d4', enabled: false },
 ]
 
@@ -247,39 +209,39 @@ export const seedModelVersions: ModelVersion[] = [
 ]
 
 export const seedSubjectAvailabilities: SubjectAvailability[] = [
-  { id: 'SA1', subject: '计算机科学与技术', open: true, allowedScope: '全体学生', dailyCallLimit: 10000, dailyTokenLimit: 5000000, singleUserConcurrency: 5 },
+  { id: 'SA1', subject: '人工智能', open: true, allowedScope: '全体学生', dailyCallLimit: 10000, dailyTokenLimit: 5000000, singleUserConcurrency: 5 },
 ]
 
 export const seedAiCallLogs: AiCallLog[] = [
-  { id: 'CL1', requestId: 'req-20260809-a001', time: '2026-08-09 10:23:15', user: '张伟明', subject: '计算机科学与技术', feature: '代码智能补全', planModel: '计算机代码垂类大模型', actualModel: '计算机代码垂类大模型', fallbackTriggered: false, fallbackLevel: 0, status: '成功', latency: '1.2s', tokenUsed: 2048 },
-  { id: 'CL2', requestId: 'req-20260809-a002', time: '2026-08-09 10:22:48', user: '王芳', subject: '计算机科学与技术', feature: '算法题解', planModel: '计算机代码垂类大模型', actualModel: '通用大模型', fallbackTriggered: true, fallbackLevel: 1, status: '成功', latency: '3.1s', tokenUsed: 512 },
-  { id: 'CL3', requestId: 'req-20260809-a003', time: '2026-08-09 10:21:33', user: '王建国', subject: '计算机科学与技术', feature: '代码调试', planModel: '计算机代码垂类大模型', actualModel: '计算机代码垂类大模型', fallbackTriggered: false, fallbackLevel: 0, status: '超时', latency: '12.4s', tokenUsed: 0, errorInfo: '请求超时 >10s' },
-  { id: 'CL4', requestId: 'req-20260809-a004', time: '2026-08-09 10:20:12', user: '系统', subject: '计算机科学与技术', feature: '知识问答', planModel: '通用大模型', actualModel: '通用大模型', fallbackTriggered: false, fallbackLevel: 0, status: '成功', latency: '0.9s', tokenUsed: 4096 },
-  { id: 'CL5', requestId: 'req-20260809-a005', time: '2026-08-09 10:18:55', user: '刘洋', subject: '计算机科学与技术', feature: '代码审查', planModel: '计算机代码垂类大模型', actualModel: '通用大模型', fallbackTriggered: true, fallbackLevel: 1, status: '失败', latency: '—', tokenUsed: 0, errorInfo: '500 Internal Server Error' },
-  { id: 'CL6', requestId: 'req-20260809-a006', time: '2026-08-09 10:17:40', user: '李慧', subject: '计算机科学与技术', feature: '文档生成', planModel: '通用大模型', actualModel: '通用大模型', fallbackTriggered: false, fallbackLevel: 0, status: '限流', latency: '0.1s', tokenUsed: 0, errorInfo: 'QPS 超限' },
+  { id: 'CL1', requestId: 'req-20260809-a001', time: '2026-08-09 10:23:15', user: '张伟明', subject: '人工智能', feature: '数据结构代码诊断', planModel: '人工智能专业垂类大模型', actualModel: '人工智能专业垂类大模型', fallbackTriggered: false, fallbackLevel: 0, status: '成功', latency: '1.2s', tokenUsed: 2048 },
+  { id: 'CL2', requestId: 'req-20260809-a002', time: '2026-08-09 10:22:48', user: '王芳', subject: '人工智能', feature: '机器学习概念问答', planModel: '人工智能专业垂类大模型', actualModel: '通用大模型', fallbackTriggered: true, fallbackLevel: 1, status: '成功', latency: '3.1s', tokenUsed: 512 },
+  { id: 'CL3', requestId: 'req-20260809-a003', time: '2026-08-09 10:21:33', user: '王建国', subject: '人工智能', feature: 'Python 练习诊断', planModel: '人工智能专业垂类大模型', actualModel: '人工智能专业垂类大模型', fallbackTriggered: false, fallbackLevel: 0, status: '超时', latency: '12.4s', tokenUsed: 0, errorInfo: '请求超时 >10s' },
+  { id: 'CL4', requestId: 'req-20260809-a004', time: '2026-08-09 10:20:12', user: '系统', subject: '人工智能', feature: '知识问答', planModel: '通用大模型', actualModel: '通用大模型', fallbackTriggered: false, fallbackLevel: 0, status: '成功', latency: '0.9s', tokenUsed: 4096 },
+  { id: 'CL5', requestId: 'req-20260809-a005', time: '2026-08-09 10:18:55', user: '刘洋', subject: '人工智能', feature: '学习画像建议', planModel: '人工智能专业垂类大模型', actualModel: '通用大模型', fallbackTriggered: true, fallbackLevel: 1, status: '失败', latency: '—', tokenUsed: 0, errorInfo: '500 Internal Server Error' },
+  { id: 'CL6', requestId: 'req-20260809-a006', time: '2026-08-09 10:17:40', user: '李慧', subject: '人工智能', feature: '学习资料生成', planModel: '通用大模型', actualModel: '通用大模型', fallbackTriggered: false, fallbackLevel: 0, status: '限流', latency: '0.1s', tokenUsed: 0, errorInfo: 'QPS 超限' },
 ]
 
 export const seedAiAlerts: AiAlert[] = [
-  { id: 'AL1', time: '2026-08-10 10:21:35', subject: '计算机科学与技术', level: '警告', type: '兜底切换', summary: '垂类模型连续 5 次 500 错误，已自动切至通用大模型', detail: '计算机代码垂类大模型持续返回 HTTP 500，已触发自动熔断切换至通用大模型 v3.0。请排查垂类模型服务状态。', status: '待处理' },
-  { id: 'AL2', time: '2026-08-10 09:45:00', subject: '计算机科学与技术', level: '严重', type: '服务失联', summary: '垂类模型服务失联，已自动切换', detail: '计算机代码垂类大模型主链路连续 5 次心跳检测失败，已触发自动熔断切换至通用大模型 v3.0。', status: '已认领', claimedBy: '张伟明', claimedAt: '2026-08-10 09:50:00' },
-  { id: 'AL3', time: '2026-08-09 21:30:00', subject: '计算机科学与技术', level: '提示', type: '并发过载', summary: '瞬时并发接近上限', detail: '21:28-21:30 期间 计算机科学与技术并发量接近上限，建议关注是否需扩容或调整配额', status: '处理中', claimedBy: '管理员', claimedAt: '2026-08-09 21:35:00', handler: '管理员', handlingRecords: [
+  { id: 'AL1', time: '2026-08-10 10:21:35', subject: '人工智能', level: '警告', type: '兜底切换', summary: '垂类模型连续 5 次 500 错误，已自动切至通用大模型', detail: '人工智能专业垂类大模型持续返回 HTTP 500，已触发自动熔断切换至通用大模型 v3.0。请排查垂类模型服务状态。', status: '待处理' },
+  { id: 'AL2', time: '2026-08-10 09:45:00', subject: '人工智能', level: '严重', type: '服务失联', summary: '垂类模型服务失联，已自动切换', detail: '人工智能专业垂类大模型主链路连续 5 次心跳检测失败，已触发自动熔断切换至通用大模型 v3.0。', status: '已认领', claimedBy: '张伟明', claimedAt: '2026-08-10 09:50:00' },
+  { id: 'AL3', time: '2026-08-09 21:30:00', subject: '人工智能', level: '提示', type: '并发过载', summary: '瞬时并发接近上限', detail: '21:28-21:30 期间人工智能专业垂类并发量接近上限，建议关注是否需扩容或调整配额', status: '处理中', claimedBy: '管理员', claimedAt: '2026-08-09 21:35:00', handler: '管理员', handlingRecords: [
     { time: '2026-08-09 21:35:00', operator: '管理员', content: '已认领告警，开始排查并发来源' },
     { time: '2026-08-09 21:45:00', operator: '管理员', content: '确认瞬时峰值来自代码审查批量任务，已临时限流' },
   ]},
-  { id: 'AL4', time: '2026-08-09 14:10:00', subject: '计算机科学与技术', level: '警告', type: '接口超时', summary: '垂类模型接口响应时间超过阈值', detail: '13:50-14:10 期间垂类模型接口多次超时超过 10s，触发告警。经排查为下游资源波动，已恢复。', status: '已解决', claimedBy: '李慧', claimedAt: '2026-08-09 14:15:00', handler: '李慧', handledBy: '管理员', handledAt: '2026-08-09 15:30:00', handlingRecords: [
+  { id: 'AL4', time: '2026-08-09 14:10:00', subject: '人工智能', level: '警告', type: '接口超时', summary: '垂类模型接口响应时间超过阈值', detail: '13:50-14:10 期间人工智能专业垂类接口多次超时超过 10s，触发告警。经排查为下游资源波动，已恢复。', status: '已解决', claimedBy: '李慧', claimedAt: '2026-08-09 14:15:00', handler: '李慧', handledBy: '管理员', handledAt: '2026-08-09 15:30:00', handlingRecords: [
     { time: '2026-08-09 14:15:00', operator: '李慧', content: '已认领，开始排查下游服务状态' },
     { time: '2026-08-09 14:30:00', operator: '李慧', content: '定位到下游 GPU 资源池波动，已联系基础设施团队' },
     { time: '2026-08-09 15:00:00', operator: '李慧', content: '下游资源已恢复，模型响应时间恢复正常' },
   ]},
-  { id: 'AL5', time: '2026-08-08 11:00:00', subject: '计算机科学与技术', level: '提示', type: '其他异常', summary: 'API Key 调用频率接近限额', detail: '近1小时 API Key 使用量已达配额的 85%，建议关注是否需要提升配额', status: '已关闭', handledBy: '管理员', handledAt: '2026-08-08 12:00:00' },
+  { id: 'AL5', time: '2026-08-08 11:00:00', subject: '人工智能', level: '提示', type: '其他异常', summary: 'API Key 调用频率接近限额', detail: '近1小时 API Key 使用量已达配额的 85%，建议关注是否需要提升配额', status: '已关闭', handledBy: '管理员', handledAt: '2026-08-08 12:00:00' },
 ]
 
 export const seedAlertRules: AlertRule[] = [
-  { id: 'AR1', metric: '延迟', threshold: 3000, statisticalWindow: '5分钟', alertLevel: '警告', enabled: true, subject: '计算机科学与技术', createdAt: '2026-08-01' },
-  { id: 'AR2', metric: '成功率', threshold: 95, statisticalWindow: '1分钟', alertLevel: '严重', enabled: true, subject: '计算机科学与技术', createdAt: '2026-08-02' },
-  { id: 'AR3', metric: '错误率', threshold: 5, statisticalWindow: '15分钟', alertLevel: '警告', enabled: false, subject: '计算机科学与技术', createdAt: '2026-08-03' },
-  { id: 'AR4', metric: '调用量', threshold: 10000, statisticalWindow: '1小时', alertLevel: '提示', enabled: true, subject: '计算机科学与技术', createdAt: '2026-08-04' },
-  { id: 'AR5', metric: '延迟', threshold: 5000, statisticalWindow: '1小时', alertLevel: '提示', enabled: true, subject: '计算机科学与技术', createdAt: '2026-08-05' },
+  { id: 'AR1', metric: '延迟', threshold: 3000, statisticalWindow: '5分钟', alertLevel: '警告', enabled: true, subject: '人工智能', createdAt: '2026-08-01' },
+  { id: 'AR2', metric: '成功率', threshold: 95, statisticalWindow: '1分钟', alertLevel: '严重', enabled: true, subject: '人工智能', createdAt: '2026-08-02' },
+  { id: 'AR3', metric: '错误率', threshold: 5, statisticalWindow: '15分钟', alertLevel: '警告', enabled: false, subject: '人工智能', createdAt: '2026-08-03' },
+  { id: 'AR4', metric: '调用量', threshold: 10000, statisticalWindow: '1小时', alertLevel: '提示', enabled: true, subject: '人工智能', createdAt: '2026-08-04' },
+  { id: 'AR5', metric: '延迟', threshold: 5000, statisticalWindow: '1小时', alertLevel: '提示', enabled: true, subject: '人工智能', createdAt: '2026-08-05' },
 ]
 
 export const seedAISafetyConfig: AISafetyConfig = {
