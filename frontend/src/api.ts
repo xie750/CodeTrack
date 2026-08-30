@@ -667,6 +667,33 @@ export type Hint = {
   viewed_at: string;
 };
 
+export type AgentWorkflowStep = {
+  step_id: string;
+  step_name: string;
+  step_order: number;
+  status: string;
+  input_summary: unknown;
+  output_summary: unknown;
+  started_at: string | null;
+  finished_at: string | null;
+  duration_ms: number | null;
+};
+
+export type AgentWorkflowRun = {
+  run_id: string;
+  workflow_type: string;
+  status: string;
+  model_provider: string | null;
+  model_name: string | null;
+  prompt_version: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  duration_ms: number | null;
+  input_summary: unknown;
+  output_summary: unknown;
+  steps: AgentWorkflowStep[];
+};
+
 export type VersionHistoryItem = {
   version_id: string;
   version_no: number;
@@ -1264,6 +1291,10 @@ export const api = {
     request<VersionResult>(`/api/v1/submission-versions/${versionId}/results`),
   getDiagnosis: (versionId: string) =>
     request<Diagnosis>(`/api/v1/submission-versions/${versionId}/diagnosis`),
+  getDiagnosisAgentRun: (diagnosisId: string) =>
+    request<{ diagnosis_id: string; version_id: string; run: AgentWorkflowRun | null }>(
+      `/api/v1/diagnoses/${encodeURIComponent(diagnosisId)}/agent-run`
+    ),
   requestHint: (diagnosisId: string, requestedLevel: number) =>
     request<Hint>(`/api/v1/diagnoses/${diagnosisId}/hints`, {
       method: "POST",

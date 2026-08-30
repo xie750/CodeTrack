@@ -14,6 +14,7 @@ from sqlalchemy.orm import sessionmaker
 from types import SimpleNamespace
 
 from backend.app.ai import llm_client
+from backend.app.api.versions import _find_diagnosis_agent_run, _serialize_agent_run
 from backend.app.models import (
     AgentRun,
     AgentStep,
@@ -225,6 +226,35 @@ def test_code_diagnosis_coach_records_multi_agent_steps(monkeypatch, db):
         "answer_leakage_guard_agent",
         "profile_signal_agent",
     ]
+
+
+def test_diagnosis_agent_run_payload_matches_frontend_contract(monkeypatch, db):
+    monkeypatch.setattr(
+        model_gateway,
+        "get_settings",
+        lambda: SimpleNamespace(model_gateway_url=None, model_api_key=None, model_name=None),
+    )
+
+    diagnosis = create_diagnosis_for_version(db, db.get(SubmissionVersion, "ver_1"))
+    assert diagnosis is not None
+
+    run = _find_diagnosis_agent_run(flushed(db), diagnosis)
+    payload = _serialize_agent_run(run)
+
+    assert payload is not None
+    assert payload["workflow_type"] == "code_diagnosis_coach"
+    assert payload["output_summary"]["diagnosis_id"] == diagnosis.id
+    assert [step["step_name"] for step in payload["steps"]] == [
+        "execution_evidence_agent",
+        "error_classifier_agent",
+        "knowledge_retrieval_agent",
+        "diagnosis_agent",
+        "citation_guard_agent",
+        "progressive_hint_agent",
+        "answer_leakage_guard_agent",
+        "profile_signal_agent",
+    ]
+    assert payload["steps"][0]["output_summary"]["failed_count"] == 1
 
 
 def test_timeout_falls_back_but_leaves_failed_run_with_error_code(monkeypatch, db):
