@@ -5,8 +5,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, object_session
 
 from backend.app.ai import guardrails
+from backend.app.ai.run_recorder import finish_run, new_run_id as new_agent_run_id, record_step, start_run
+from backend.app.ai.schemas import AgentRunContext
 from backend.app.core.api_response import ApiError
-from backend.app.models import Diagnosis, HintRecord, KnowledgeSource, Submission, SubmissionVersion, TestResult
+from backend.app.models import AgentRun, Diagnosis, HintRecord, KnowledgeSource, Submission, SubmissionVersion, TestResult
 from backend.app.models.entities import utc_now
 from backend.app.services.audit import record_audit
 from backend.app.services.model_gateway import GatewayDiagnosis, request_gateway_diagnosis
@@ -25,6 +27,9 @@ SOURCE_BY_ERROR_TAG = {
     "TAIL_DELETE": ["kb_linked_list_delete_basic", "kb_boundary_test_reasoning"],
     "INVALID_POSITION": ["kb_empty_list_guard", "kb_boundary_test_reasoning"],
 }
+
+CODE_DIAGNOSIS_COACH_WORKFLOW_TYPE = "code_diagnosis_coach"
+CODE_DIAGNOSIS_COACH_PROMPT_VERSION = "code_diagnosis_agents_v0.1"
 
 
 def prefixed_id(prefix: str) -> str:
@@ -80,6 +85,47 @@ def primary_diagnosis_type(failed_results: list[TestResult]) -> str:
     return "UNKNOWN_OR_LOW_CONFIDENCE"
 
 
+def _start_code_diagnosis_coach_run(
+    db: Session,
+    version: SubmissionVersion,
+    failed_results: list[TestResult],
+) -> AgentRun:
+    submission = version.submission
+    task = submission.task
+    run = start_run(
+        db,
+        AgentRunContext(
+            run_id=new_agent_run_id(),
+            workflow_type=CODE_DIAGNOSIS_COACH_WORKFLOW_TYPE,
+            student_id=submission.student_id,
+            course_id=task.course_id,
+        ),
+        input_payload={
+            "task_id": task.id,
+            "submission_id": submission.id,
+            "version_id": version.id,
+            "failed_result_ids": [result.id for result in failed_results],
+            "error_tags": [result.error_tag for result in failed_results],
+        },
+        model_provider="COACH_WORKFLOW",
+        model_name="code-diagnosis-agent-workflow",
+        prompt_version=CODE_DIAGNOSIS_COACH_PROMPT_VERSION,
+    )
+    record_step(
+        db,
+        run,
+        step_name="execution_evidence_agent",
+        step_order=1,
+        output_summary={
+            "execution_id": version.execution.id if version.execution else None,
+            "failed_count": len(failed_results),
+            "failed_result_ids": [result.id for result in failed_results],
+            "error_tags": [result.error_tag for result in failed_results],
+        },
+    )
+    return run
+
+
 def create_diagnosis_for_version(db: Session, version: SubmissionVersion) -> Diagnosis | None:
     existing = db.scalar(select(Diagnosis).where(Diagnosis.submission_version_id == version.id))
     if existing is not None:
@@ -91,9 +137,20 @@ def create_diagnosis_for_version(db: Session, version: SubmissionVersion) -> Dia
     if not failed_results:
         return None
 
+    run = _start_code_diagnosis_coach_run(db, version, failed_results)
     diagnosis_type = primary_diagnosis_type(failed_results)
     if diagnosis_type not in ALLOWED_DIAGNOSIS_TYPES:
         diagnosis_type = "UNKNOWN_OR_LOW_CONFIDENCE"
+    record_step(
+        db,
+        run,
+        step_name="error_classifier_agent",
+        step_order=2,
+        output_summary={
+            "diagnosis_type": diagnosis_type,
+            "failed_error_tags": [result.error_tag for result in failed_results],
+        },
+    )
 
     source_ids: list[str] = []
     for result in failed_results:
@@ -102,14 +159,50 @@ def create_diagnosis_for_version(db: Session, version: SubmissionVersion) -> Dia
                 source_ids.append(source_id)
     if not source_ids:
         source_ids = ["kb_boundary_test_reasoning"] if db.get(KnowledgeSource, "kb_boundary_test_reasoning") else []
+    record_step(
+        db,
+        run,
+        step_name="knowledge_retrieval_agent",
+        step_order=3,
+        output_summary={
+            "source_ids": source_ids,
+            "source_count": len(source_ids),
+            "fallback_source_used": source_ids == ["kb_boundary_test_reasoning"],
+        },
+    )
 
     evidence_ids = [result.id for result in failed_results]
     knowledge_sources = [source for source_id in source_ids if (source := db.get(KnowledgeSource, source_id))]
     gateway_result = request_gateway_diagnosis(db, version, failed_results, knowledge_sources)
     if gateway_result is not None:
         diagnosis = create_gateway_diagnosis(db, version, gateway_result)
+        record_step(
+            db,
+            run,
+            step_name="diagnosis_agent",
+            step_order=4,
+            output_summary={
+                "provider": gateway_result.model_provider,
+                "model_name": gateway_result.model_name,
+                "diagnosis_type": gateway_result.diagnosis_type,
+                "confidence": gateway_result.confidence,
+                "diagnosis_status": diagnosis.status,
+            },
+        )
+        record_step(
+            db,
+            run,
+            step_name="citation_guard_agent",
+            step_order=5,
+            status="SUCCEEDED" if diagnosis.knowledge_source_ids else "WARNING",
+            output_summary={
+                "verified_evidence_ids": gateway_result.verified_evidence_ids,
+                "knowledge_source_ids": gateway_result.knowledge_source_ids,
+                "citation_count": len(gateway_result.knowledge_source_ids),
+            },
+        )
         if diagnosis.status == "READY":
-            create_or_get_hint(
+            hint = create_or_get_hint(
                 db,
                 diagnosis,
                 1,
@@ -117,6 +210,59 @@ def create_diagnosis_for_version(db: Session, version: SubmissionVersion) -> Dia
                 request_reason="MODEL_LEVEL_1",
                 content_override=gateway_result.hint,
             )
+            record_step(
+                db,
+                run,
+                step_name="progressive_hint_agent",
+                step_order=6,
+                output_summary={
+                    "hint_id": hint.id,
+                    "hint_level": hint.level,
+                    "request_reason": hint.request_reason,
+                },
+            )
+            record_step(
+                db,
+                run,
+                step_name="answer_leakage_guard_agent",
+                step_order=7,
+                output_summary=_loads(hint.leakage_check),
+            )
+        else:
+            record_step(
+                db,
+                run,
+                step_name="progressive_hint_agent",
+                step_order=6,
+                status="SKIPPED",
+                output_summary={
+                    "reason": "diagnosis_not_ready",
+                    "diagnosis_status": diagnosis.status,
+                },
+            )
+        record_step(
+            db,
+            run,
+            step_name="profile_signal_agent",
+            step_order=8,
+            output_summary={
+                "student_id": version.submission.student_id,
+                "task_id": version.submission.task_id,
+                "signal": "negative_capability_evidence_created_by_submission_flow",
+            },
+        )
+        finish_run(
+            db,
+            run,
+            status="SUCCEEDED",
+            output={
+                "diagnosis_id": diagnosis.id,
+                "diagnosis_status": diagnosis.status,
+                "diagnosis_type": diagnosis.diagnosis_type,
+                "confidence": diagnosis.confidence,
+                "model_provider": diagnosis.model_provider,
+            },
+        )
         return diagnosis
 
     if diagnosis_type == "LINKED_LIST_HEAD_UPDATE_ERROR":
@@ -145,9 +291,86 @@ def create_diagnosis_for_version(db: Session, version: SubmissionVersion) -> Dia
     )
     db.add(diagnosis)
     db.flush()
+    record_step(
+        db,
+        run,
+        step_name="diagnosis_agent",
+        step_order=4,
+        output_summary={
+            "provider": "RULE_FALLBACK",
+            "diagnosis_type": diagnosis.diagnosis_type,
+            "confidence": diagnosis.confidence,
+            "diagnosis_status": diagnosis.status,
+        },
+    )
+    record_step(
+        db,
+        run,
+        step_name="citation_guard_agent",
+        step_order=5,
+        status="SUCCEEDED" if source_ids else "WARNING",
+        output_summary={
+            "verified_evidence_ids": evidence_ids,
+            "knowledge_source_ids": source_ids,
+            "citation_count": len(source_ids),
+        },
+    )
     record_diagnosis_audit(db, version, diagnosis)
     if diagnosis.status == "READY":
-        create_or_get_hint(db, diagnosis, 1, student_requested=False, request_reason="AUTO_LEVEL_1")
+        hint = create_or_get_hint(db, diagnosis, 1, student_requested=False, request_reason="AUTO_LEVEL_1")
+        record_step(
+            db,
+            run,
+            step_name="progressive_hint_agent",
+            step_order=6,
+            output_summary={
+                "hint_id": hint.id,
+                "hint_level": hint.level,
+                "request_reason": hint.request_reason,
+            },
+        )
+        record_step(
+            db,
+            run,
+            step_name="answer_leakage_guard_agent",
+            step_order=7,
+            output_summary=_loads(hint.leakage_check),
+        )
+    else:
+        record_step(
+            db,
+            run,
+            step_name="progressive_hint_agent",
+            step_order=6,
+            status="SKIPPED",
+            output_summary={
+                "reason": "diagnosis_not_ready",
+                "diagnosis_status": diagnosis.status,
+            },
+        )
+    record_step(
+        db,
+        run,
+        step_name="profile_signal_agent",
+        step_order=8,
+        output_summary={
+            "student_id": version.submission.student_id,
+            "task_id": version.submission.task_id,
+            "signal": "negative_capability_evidence_created_by_submission_flow",
+        },
+    )
+    finish_run(
+        db,
+        run,
+        status="SUCCEEDED",
+        output={
+            "diagnosis_id": diagnosis.id,
+            "diagnosis_status": diagnosis.status,
+            "diagnosis_type": diagnosis.diagnosis_type,
+            "confidence": diagnosis.confidence,
+            "model_provider": diagnosis.model_provider,
+        },
+    )
     return diagnosis
 
 

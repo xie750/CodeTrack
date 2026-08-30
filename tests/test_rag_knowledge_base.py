@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 
 from backend.app.main import app
 from backend.app.core.database import SessionLocal
-from backend.app.models import RagChunk, RagDocument, RagDocumentElement
+from backend.app.models import AgentRun, AgentStep, RagChunk, RagDocument, RagDocumentElement
 from backend.app.services.rag.documents import ingest_document_version
 from backend.app.services.rag.utils import vector_from_db
 
@@ -82,6 +82,35 @@ def test_rag_mvp_e2e_retrieve_rag_and_delete():
                 )
             )
             assert len(vector_from_db(vector)) == 1024
+
+            run = db.scalar(
+                select(AgentRun)
+                .where(
+                    AgentRun.workflow_type == "rag_document_ingestion",
+                    AgentRun.input_json.contains(document_id),
+                )
+                .order_by(AgentRun.started_at.desc())
+                .limit(1)
+            )
+            assert run is not None
+            assert run.status == "SUCCEEDED"
+            step_names = [
+                step.step_name
+                for step in db.scalars(
+                    select(AgentStep).where(AgentStep.run_id == run.id).order_by(AgentStep.step_order)
+                ).all()
+            ]
+            assert step_names == [
+                "file_intake_agent",
+                "document_parser_agent",
+                "content_profile_agent",
+                "cleaning_strategy_agent",
+                "chunk_planner_agent",
+                "chunk_builder_agent",
+                "retrieval_quality_agent",
+                "embedding_agent",
+                "index_agent",
+            ]
         finally:
             db.close()
 
@@ -145,6 +174,23 @@ def test_document_can_be_uploaded_then_confirmed_for_processing():
         assert ready.status_code == 200, ready.text
         assert ready.json()["data"]["status"] == "ready"
         assert ready.json()["data"]["stats"]["children"] >= 1
+
+        run_response = c.get(f"/api/v1/documents/{document_id}/ingestion-run")
+        assert run_response.status_code == 200, run_response.text
+        run_payload = run_response.json()["data"]["run"]
+        assert run_payload["workflow_type"] == "rag_document_ingestion"
+        assert run_payload["status"] == "SUCCEEDED"
+        assert [step["name"] for step in run_payload["steps"]] == [
+            "file_intake_agent",
+            "document_parser_agent",
+            "content_profile_agent",
+            "cleaning_strategy_agent",
+            "chunk_planner_agent",
+            "chunk_builder_agent",
+            "retrieval_quality_agent",
+            "embedding_agent",
+            "index_agent",
+        ]
 
         chunks = c.get(f"/api/v1/documents/{document_id}/chunks")
         assert chunks.status_code == 200, chunks.text

@@ -17,7 +17,14 @@ import {
   UploadCloud,
   X
 } from "lucide-react";
-import { api, type RagKnowledgeBaseListItem, type RagKnowledgeChunk, type RagKnowledgeDocument } from "../api";
+import {
+  api,
+  type RagIngestionRun,
+  type RagIngestionStep,
+  type RagKnowledgeBaseListItem,
+  type RagKnowledgeChunk,
+  type RagKnowledgeDocument
+} from "../api";
 
 type KnowledgeBaseStatus = "READY" | "PARTIAL_READY" | "PROCESSING" | "FAILED" | "DRAFT";
 type DocumentStatus =
@@ -118,6 +125,45 @@ function workflowText(doc: KnowledgeDocumentView) {
   return `${statusText(doc.status)}，正在生成可引用知识切片`;
 }
 
+function agentStepText(name: string) {
+  const map: Record<string, string> = {
+    file_intake_agent: "文件接收代理",
+    document_parser_agent: "文档解析代理",
+    content_profile_agent: "内容画像代理",
+    cleaning_strategy_agent: "清洗策略代理",
+    chunk_planner_agent: "切分规划代理",
+    chunk_builder_agent: "切片构建代理",
+    retrieval_quality_agent: "检索质量代理",
+    embedding_agent: "向量化代理",
+    index_agent: "索引入库代理"
+  };
+  return map[name] ?? name;
+}
+
+function agentStepSummary(step: RagIngestionStep) {
+  const output = step.output;
+  if (step.name === "document_parser_agent") return `解析出 ${Number(output.element_count ?? 0)} 个结构元素`;
+  if (step.name === "content_profile_agent") return `${String(output.content_profile ?? "通用资料")} · ${String(output.chunking_strategy ?? "默认切分")}`;
+  if (step.name === "cleaning_strategy_agent") return `${Number(output.input_element_count ?? 0)} -> ${Number(output.output_element_count ?? 0)} 个元素`;
+  if (step.name === "chunk_builder_agent") return `${Number(output.parent_count ?? 0)} 个父切片 · ${Number(output.child_count ?? 0)} 个检索切片`;
+  if (step.name === "retrieval_quality_agent") {
+    const flags = Array.isArray(output.risk_flags) ? output.risk_flags.length : 0;
+    return flags ? `${flags} 个质量风险，需关注切片边界` : "切片质量检查通过";
+  }
+  if (step.name === "embedding_agent") return `${Number(output.embedding_count ?? 0)} 个切片已向量化`;
+  if (step.name === "index_agent") return `${Number(output.child_count ?? 0)} 个切片写入索引`;
+  return step.status === "SUCCEEDED" ? "已完成" : step.status;
+}
+
+function agentRunDuration(run: RagIngestionRun | null) {
+  if (!run?.finished_at) return "运行中";
+  const start = new Date(run.started_at).getTime();
+  const end = new Date(run.finished_at).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return "已完成";
+  const seconds = Math.max(0.1, (end - start) / 1000);
+  return `${seconds.toFixed(seconds < 10 ? 1 : 0)} 秒`;
+}
+
 function fileIconClass(fileType: string) {
   if (fileType === "PDF") return "pdf";
   if (fileType === "DOCX") return "docx";
@@ -193,6 +239,7 @@ export default function StudentKnowledgeBase() {
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBaseView[]>([]);
   const [documentsByBase, setDocumentsByBase] = useState<Record<string, KnowledgeDocumentView[]>>({});
   const [chunksByDocument, setChunksByDocument] = useState<Record<string, RagKnowledgeChunk[]>>({});
+  const [runsByDocument, setRunsByDocument] = useState<Record<string, RagIngestionRun | null>>({});
   const [activeBaseId, setActiveBaseId] = useState("");
   const [activeDocumentId, setActiveDocumentId] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -261,15 +308,23 @@ export default function StudentKnowledgeBase() {
     const docs = documentsByBase[activeBaseId] ?? [];
     if (!docs.some((doc) => isProcessing(doc.status))) return undefined;
     const timer = window.setInterval(() => {
-      loadDocuments(activeBaseId).catch((error) => setMessage(error instanceof Error ? error.message : "文档状态刷新失败"));
+      loadDocuments(activeBaseId)
+        .then((nextDocs) => {
+          const visibleDoc = nextDocs.find((doc) => doc.id === activeDocumentId && isProcessing(doc.status));
+          if (visibleDoc) {
+            void loadIngestionRun(visibleDoc.id);
+          }
+        })
+        .catch((error) => setMessage(error instanceof Error ? error.message : "文档状态刷新失败"));
     }, 1500);
     return () => window.clearInterval(timer);
-  }, [activeBaseId, documentsByBase]);
+  }, [activeBaseId, activeDocumentId, documentsByBase]);
 
   const activeBase = knowledgeBases.find((item) => item.id === activeBaseId) ?? knowledgeBases[0];
   const documents = activeBase ? documentsByBase[activeBase.id] ?? [] : [];
   const activeDocument = documents.find((item) => item.id === activeDocumentId) ?? documents[0];
   const activeDocumentChunks = activeDocument ? chunksByDocument[activeDocument.id] ?? [] : [];
+  const activeIngestionRun = activeDocument ? runsByDocument[activeDocument.id] ?? null : null;
   const pendingDeleteDocument = documents.find((item) => item.id === pendingDeleteDocumentId);
 
   const visibleKnowledgeBases = useMemo(() => {
@@ -311,12 +366,22 @@ export default function StudentKnowledgeBase() {
   async function openChunkDrawer(documentId: string) {
     setActiveDocumentId(documentId);
     setDrawerOpen(true);
+    await loadIngestionRun(documentId);
     try {
       const result = await api.listRagChunks(documentId);
       setChunksByDocument((current) => ({ ...current, [documentId]: result.items }));
     } catch (error) {
       setChunksByDocument((current) => ({ ...current, [documentId]: [] }));
       setMessage(error instanceof Error ? error.message : "切片加载失败");
+    }
+  }
+
+  async function loadIngestionRun(documentId: string) {
+    try {
+      const result = await api.getRagIngestionRun(documentId);
+      setRunsByDocument((current) => ({ ...current, [documentId]: result.run }));
+    } catch {
+      setRunsByDocument((current) => ({ ...current, [documentId]: null }));
     }
   }
 
@@ -367,8 +432,11 @@ export default function StudentKnowledgeBase() {
   async function processDocument(documentId: string) {
     if (!activeBase) return;
     setMessage(null);
+    setActiveDocumentId(documentId);
+    setDrawerOpen(true);
     try {
       await api.processRagDocument(documentId);
+      await loadIngestionRun(documentId);
       setChunksByDocument((current) => {
         const next = { ...current };
         delete next[documentId];
@@ -376,6 +444,7 @@ export default function StudentKnowledgeBase() {
       });
       await loadDocuments(activeBase.id);
       if (drawerOpen && activeDocumentId === documentId) {
+        await loadIngestionRun(documentId);
         const result = await api.listRagChunks(documentId);
         setChunksByDocument((current) => ({ ...current, [documentId]: result.items }));
       }
@@ -569,6 +638,37 @@ export default function StudentKnowledgeBase() {
               <div>
                 <strong>{activeDocument.filename}</strong>
                 <small>{activeDocument.chunkCount}个切片</small>
+              </div>
+            </section>
+
+            <section className="kb-agent-trace">
+              <div className="kb-agent-trace-head">
+                <div>
+                  <strong>协同处理轨迹</strong>
+                  <small>{activeIngestionRun ? `${activeIngestionRun.steps.length} 个代理步骤 · ${agentRunDuration(activeIngestionRun)}` : "等待处理任务启动"}</small>
+                </div>
+                <span className={`kb-agent-run-status ${activeIngestionRun?.status.toLowerCase() || "pending"}`}>
+                  {activeIngestionRun?.status === "SUCCEEDED" ? "已完成" : activeIngestionRun?.status === "FAILED" ? "失败" : "运行中"}
+                </span>
+              </div>
+              <div className="kb-agent-step-list">
+                {activeIngestionRun?.steps.length ? activeIngestionRun.steps.map((step) => (
+                  <article key={step.id} className={step.status.toLowerCase()}>
+                    <span>{String(step.order).padStart(2, "0")}</span>
+                    <div>
+                      <strong>{agentStepText(step.name)}</strong>
+                      <small>{agentStepSummary(step)}</small>
+                    </div>
+                  </article>
+                )) : (
+                  <article className="pending">
+                    <span>00</span>
+                    <div>
+                      <strong>{activeDocument.status === "UPLOADED" ? "尚未开始" : "任务排队中"}</strong>
+                      <small>{activeDocument.status === "UPLOADED" ? "确认处理后会展示解析、清洗、切分、向量化和索引步骤" : "后台任务启动后会持续刷新处理轨迹"}</small>
+                    </div>
+                  </article>
+                )}
               </div>
             </section>
 

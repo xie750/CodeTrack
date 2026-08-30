@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import io
 from pathlib import Path
 import re
-import tempfile
 
 from backend.app.services.rag.utils import normalize_text
 
@@ -244,14 +244,13 @@ def parse_pdf_document(content: bytes) -> ParseResult:
         raise RuntimeError("PyMuPDF is required for PDF parsing") from exc
 
     elements: list[ParsedElement] = []
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=True) as temp:
-        temp.write(content)
-        temp.flush()
-        doc = fitz.open(temp.name)
+    doc = fitz.open(stream=content, filetype="pdf")
+    try:
         for index, page in enumerate(doc, start=1):
             text = normalize_text(page.get_text("text"))
             if text:
                 elements.append(ParsedElement("paragraph", text, page_no=index, metadata={"page": index}))
+    finally:
         doc.close()
     return ParseResult("pymupdf", "1", elements)
 
@@ -264,31 +263,28 @@ def parse_docx_document(content: bytes) -> ParseResult:
 
     elements: list[ParsedElement] = []
     heading_path: list[str] = []
-    with tempfile.NamedTemporaryFile(suffix=".docx", delete=True) as temp:
-        temp.write(content)
-        temp.flush()
-        doc = Document(temp.name)
-        for paragraph in doc.paragraphs:
-            text = normalize_text(paragraph.text)
-            if not text:
-                continue
-            style_name = (paragraph.style.name if paragraph.style is not None else "").lower()
-            if style_name.startswith("heading"):
-                match = re.search(r"(\d+)", style_name)
-                level = int(match.group(1)) if match else 1
-                heading_path = heading_path[: level - 1] + [text]
-                elements.append(ParsedElement("heading", text, heading_level=level, heading_path=list(heading_path)))
-            else:
-                elements.append(ParsedElement("paragraph", text, heading_path=list(heading_path)))
-        for table in doc.tables:
-            rows = []
-            for row in table.rows:
-                cells = [normalize_text(cell.text) for cell in row.cells]
-                if any(cells):
-                    rows.append(" | ".join(cells))
-            table_text = normalize_text("\n".join(rows))
-            if table_text:
-                elements.append(ParsedElement("table", table_text, heading_path=list(heading_path), metadata={"format": "docx_table"}))
+    doc = Document(io.BytesIO(content))
+    for paragraph in doc.paragraphs:
+        text = normalize_text(paragraph.text)
+        if not text:
+            continue
+        style_name = (paragraph.style.name if paragraph.style is not None else "").lower()
+        if style_name.startswith("heading"):
+            match = re.search(r"(\d+)", style_name)
+            level = int(match.group(1)) if match else 1
+            heading_path = heading_path[: level - 1] + [text]
+            elements.append(ParsedElement("heading", text, heading_level=level, heading_path=list(heading_path)))
+        else:
+            elements.append(ParsedElement("paragraph", text, heading_path=list(heading_path)))
+    for table in doc.tables:
+        rows = []
+        for row in table.rows:
+            cells = [normalize_text(cell.text) for cell in row.cells]
+            if any(cells):
+                rows.append(" | ".join(cells))
+        table_text = normalize_text("\n".join(rows))
+        if table_text:
+            elements.append(ParsedElement("table", table_text, heading_path=list(heading_path), metadata={"format": "docx_table"}))
     return ParseResult("python-docx", "1", elements)
 
 
@@ -299,37 +295,34 @@ def parse_pptx_document(content: bytes) -> ParseResult:
         raise RuntimeError("python-pptx is required for PPTX parsing") from exc
 
     elements: list[ParsedElement] = []
-    with tempfile.NamedTemporaryFile(suffix=".pptx", delete=True) as temp:
-        temp.write(content)
-        temp.flush()
-        deck = Presentation(temp.name)
-        for slide_index, slide in enumerate(deck.slides, start=1):
-            slide_texts: list[str] = []
-            for shape in slide.shapes:
-                text = normalize_text(getattr(shape, "text", "") or "")
-                if text:
-                    slide_texts.append(text)
-            if not slide_texts:
-                continue
-            title = slide_texts[0]
+    deck = Presentation(io.BytesIO(content))
+    for slide_index, slide in enumerate(deck.slides, start=1):
+        slide_texts: list[str] = []
+        for shape in slide.shapes:
+            text = normalize_text(getattr(shape, "text", "") or "")
+            if text:
+                slide_texts.append(text)
+        if not slide_texts:
+            continue
+        title = slide_texts[0]
+        elements.append(
+            ParsedElement(
+                "heading",
+                title,
+                slide_no=slide_index,
+                heading_level=1,
+                heading_path=[title],
+                metadata={"slide": slide_index},
+            )
+        )
+        for text in slide_texts[1:]:
             elements.append(
                 ParsedElement(
-                    "heading",
-                    title,
+                    "paragraph",
+                    text,
                     slide_no=slide_index,
-                    heading_level=1,
                     heading_path=[title],
                     metadata={"slide": slide_index},
                 )
             )
-            for text in slide_texts[1:]:
-                elements.append(
-                    ParsedElement(
-                        "paragraph",
-                        text,
-                        slide_no=slide_index,
-                        heading_path=[title],
-                        metadata={"slide": slide_index},
-                    )
-                )
     return ParseResult("python-pptx", "1", elements)

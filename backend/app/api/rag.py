@@ -2,16 +2,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, Response, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import func, select
 
 from backend.app.core.api_response import ApiError, ok
-from backend.app.core.database import get_db
+from backend.app.core.database import SessionLocal, get_db
 from backend.app.core.security import current_user
-from backend.app.models import RagChunk, RagDocument, User
+from backend.app.models import AgentRun, AgentStep, RagChunk, RagDocument, RagDocumentVersion, User
 from backend.app.services.rag.documents import (
+    RAG_INGEST_WORKFLOW_TYPE,
     create_text_document,
     create_knowledge_base,
     delete_document,
@@ -20,6 +21,7 @@ from backend.app.services.rag.documents import (
     list_documents,
     list_knowledge_bases,
     reprocess_document,
+    ingest_document_version,
     start_processing_document,
     upload_document,
 )
@@ -52,6 +54,14 @@ class RagQueryRequest(BaseModel):
 class TextDocumentCreate(BaseModel):
     title: str = Field(default="pasted-text", min_length=1, max_length=255)
     content: str = Field(min_length=1)
+
+
+def _run_ingestion_background(document_id: str, version_id: str) -> None:
+    db = SessionLocal()
+    try:
+        ingest_document_version(db, document_id, version_id)
+    finally:
+        db.close()
 
 
 @router.post("/knowledge-bases")
@@ -173,8 +183,17 @@ def get_document(document_id: str, db: Session = Depends(get_db), user: User = D
 
 
 @router.post("/documents/{document_id}/process")
-def process(document_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    document, version, job = start_processing_document(db, user, document_id)
+def process(
+    document_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    document, version, job = start_processing_document(db, user, document_id, enqueue=False)
+    if job.status == "QUEUED" and not job.celery_task_id:
+        job.celery_task_id = "fastapi-background"
+        db.commit()
+        background_tasks.add_task(_run_ingestion_background, document.id, version.id)
     return ok(
         {
             "document_id": document.id,
@@ -184,6 +203,71 @@ def process(document_id: str, db: Session = Depends(get_db), user: User = Depend
             "content_profile": json_loads(version.content_profile, {}),
             "cleaning_strategy": version.cleaning_strategy,
             "chunking_strategy": version.chunking_strategy,
+        }
+    )
+
+
+@router.get("/documents/{document_id}/ingestion-run")
+def get_document_ingestion_run(document_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    document = db.get(RagDocument, document_id)
+    if document is None or document.deleted_at is not None:
+        raise ApiError(404, "DOCUMENT_NOT_FOUND", "文档不存在")
+    ensure_kb_owner(db, document.knowledge_base_id, user)
+    version_id = document.active_version_id or db.scalar(
+        select(RagDocumentVersion.id)
+        .where(RagDocumentVersion.document_id == document.id)
+        .order_by(RagDocumentVersion.version_no.desc())
+        .limit(1)
+    )
+    run = db.scalar(
+        select(AgentRun)
+        .where(
+            AgentRun.workflow_type == RAG_INGEST_WORKFLOW_TYPE,
+            AgentRun.input_json.contains(document.id),
+            AgentRun.input_json.contains(version_id or ""),
+        )
+        .order_by(AgentRun.started_at.desc())
+        .limit(1)
+    )
+    if run is None:
+        return ok({"run": None})
+    steps = list(
+        db.scalars(
+            select(AgentStep)
+            .where(AgentStep.run_id == run.id)
+            .order_by(AgentStep.step_order)
+        )
+    )
+    return ok(
+        {
+            "run": {
+                "id": run.id,
+                "workflow_type": run.workflow_type,
+                "status": run.status,
+                "model_provider": run.model_provider,
+                "model_name": run.model_name,
+                "prompt_version": run.prompt_version,
+                "input": json_loads(run.input_json, {}),
+                "output": json_loads(run.output_json, {}),
+                "error": None
+                if not run.error_code
+                else {"code": run.error_code, "message": run.error_message},
+                "started_at": run.started_at.isoformat(),
+                "finished_at": run.finished_at.isoformat() if run.finished_at else None,
+                "steps": [
+                    {
+                        "id": step.id,
+                        "name": step.step_name,
+                        "order": step.step_order,
+                        "status": step.status,
+                        "input": json_loads(step.input_summary, {}),
+                        "output": json_loads(step.output_summary, {}),
+                        "started_at": step.started_at.isoformat(),
+                        "finished_at": step.finished_at.isoformat() if step.finished_at else None,
+                    }
+                    for step in steps
+                ],
+            }
         }
     )
 
