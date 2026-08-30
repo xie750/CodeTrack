@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -6,7 +8,7 @@ from sqlalchemy.orm import Session
 from backend.app.core.api_response import ApiError, ok, request_id
 from backend.app.core.database import get_db
 from backend.app.core.security import current_user, ensure_course_member, require_role
-from backend.app.models import Capability, CapabilityEvidence, Diagnosis, ExecutionRun, Submission, SubmissionVersion, User
+from backend.app.models import AgentRun, Capability, CapabilityEvidence, Diagnosis, ExecutionRun, Submission, SubmissionVersion, User
 from backend.app.services.audit import record_audit
 from backend.app.services.diagnosis import create_or_get_hint, serialize_diagnosis, serialize_hint
 from backend.app.services.submissions import duration_ms_between, iso
@@ -115,6 +117,73 @@ def ensure_submission_access(db: Session, submission: Submission, user: User) ->
     raise ApiError(403, "AUTH_FORBIDDEN", "当前角色无权访问该资源")
 
 
+def _loads_summary(value: str | None):
+    if not value:
+        return {}
+    try:
+        return json.loads(value)
+    except (TypeError, ValueError):
+        return value
+
+
+def _find_diagnosis_agent_run(db: Session, diagnosis: Diagnosis) -> AgentRun | None:
+    version = diagnosis.version
+    submission = version.submission
+    course_id = submission.task.course_id
+    runs = db.scalars(
+        select(AgentRun)
+        .where(
+            AgentRun.workflow_type == "code_diagnosis_coach",
+            AgentRun.student_id == submission.student_id,
+            AgentRun.course_id == course_id,
+        )
+        .order_by(AgentRun.started_at.desc())
+        .limit(20)
+    ).all()
+    for run in runs:
+        output = _loads_summary(run.output_json)
+        if isinstance(output, dict) and output.get("diagnosis_id") == diagnosis.id:
+            return run
+        input_payload = _loads_summary(run.input_json)
+        if isinstance(input_payload, dict) and input_payload.get("version_id") == version.id:
+            return run
+    return None
+
+
+def _serialize_agent_run(run: AgentRun | None) -> dict | None:
+    if run is None:
+        return None
+    steps = []
+    for step in run.steps:
+        steps.append(
+            {
+                "step_id": step.id,
+                "step_name": step.step_name,
+                "step_order": step.step_order,
+                "status": step.status,
+                "input_summary": _loads_summary(step.input_summary),
+                "output_summary": _loads_summary(step.output_summary),
+                "started_at": iso(step.started_at),
+                "finished_at": iso(step.finished_at),
+                "duration_ms": duration_ms_between(step.started_at, step.finished_at),
+            }
+        )
+    return {
+        "run_id": run.id,
+        "workflow_type": run.workflow_type,
+        "status": run.status,
+        "model_provider": run.model_provider,
+        "model_name": run.model_name,
+        "prompt_version": run.prompt_version,
+        "started_at": iso(run.started_at),
+        "finished_at": iso(run.finished_at),
+        "duration_ms": duration_ms_between(run.started_at, run.finished_at),
+        "input_summary": _loads_summary(run.input_json),
+        "output_summary": _loads_summary(run.output_json),
+        "steps": steps,
+    }
+
+
 @router.get("/submission-versions/{version_id}/results")
 def get_version_results(
     version_id: str,
@@ -186,6 +255,26 @@ def get_diagnosis(
     if version.diagnosis is None:
         raise ApiError(404, "DIAGNOSIS_NOT_READY", "诊断尚未就绪，当前仅返回工具验证结果")
     return ok(serialize_diagnosis(version.diagnosis))
+
+
+@router.get("/diagnoses/{diagnosis_id}/agent-run")
+def get_diagnosis_agent_run(
+    diagnosis_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    diagnosis = db.get(Diagnosis, diagnosis_id)
+    if diagnosis is None:
+        raise ApiError(404, "DIAGNOSIS_NOT_FOUND", "诊断不存在")
+    version = diagnosis.version
+    ensure_submission_access(db, version.submission, user)
+    return ok(
+        {
+            "diagnosis_id": diagnosis.id,
+            "version_id": version.id,
+            "run": _serialize_agent_run(_find_diagnosis_agent_run(db, diagnosis)),
+        }
+    )
 
 
 @router.post("/diagnoses/{diagnosis_id}/hints")

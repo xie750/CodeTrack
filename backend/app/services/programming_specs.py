@@ -112,9 +112,9 @@ public:
 
 
 LINKED_LIST_DELETE_SPEC = ProgrammingSpec(
-    runner_profile="legacy_linked_list_delete_v1",
-    supported_languages=["CPP"],
-    default_language="CPP",
+    runner_profile="linked_list_delete_transform_v1",
+    supported_languages=["PYTHON", "JAVA"],
+    default_language="PYTHON",
     function_signature="deleteAt(values, position) -> values",
     editable_region="SOLUTION_ONLY",
     language_templates={
@@ -130,17 +130,12 @@ LINKED_LIST_DELETE_SPEC = ProgrammingSpec(
     }
 }
 """,
-        "CPP": """ListNode* deleteAt(ListNode* head, int position) {
-    // Implement deletion at the given position.
-    return head;
-}
-""",
     },
     rules=[
         "Return an empty list or array for an empty input.",
         "Return the original values for an invalid position.",
         "When deleting the head node, return the values starting from the new head.",
-        "C++ pointer-based judging is enabled for the current data-structure task.",
+        "Python and Java submissions run through the Piston sandbox for this task.",
     ],
 )
 

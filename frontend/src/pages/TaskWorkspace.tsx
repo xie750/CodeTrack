@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import Editor from "@monaco-editor/react";
 import {
+  Activity,
   ArrowLeft,
   Bell,
+  BookOpen,
   Bot,
+  Brain,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -11,9 +14,13 @@ import {
   ChevronRight,
   Circle,
   Code2,
+  Database,
   Eye,
+  FileSearch,
   GraduationCap,
+  GitBranch,
   Lightbulb,
+  ListChecks,
   Maximize2,
   MoreVertical,
   NotebookTabs,
@@ -22,10 +29,11 @@ import {
   Play,
   Save,
   Search,
+  ShieldCheck,
   Upload,
   Zap
 } from "lucide-react";
-import { api, LearningContext, TaskDetail, VersionResult, Diagnosis, Hint } from "../api";
+import { api, LearningContext, TaskDetail, VersionResult, Diagnosis, Hint, AgentWorkflowRun } from "../api";
 import StudentRouteBreadcrumb from "../components/StudentRouteBreadcrumb";
 import avatarImg from "../assets/ui-home/avatar.png";
 import { StudentState, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
@@ -49,6 +57,7 @@ type WorkspaceMetrics = {
 
 type RunState = "IDLE" | "QUEUED" | "RUNNING" | "DONE" | "ERROR";
 type ResultPanelTab = "cases" | "results";
+type AiPanelMode = "hint" | "town";
 
 type TeacherTestCase = TaskDetail["test_cases"][number];
 
@@ -143,6 +152,102 @@ function statusClass(status: string) {
   return "";
 }
 
+function agentStepMeta(stepName: string) {
+  const meta: Record<string, { label: string; description: string; tone: string; icon: JSX.Element }> = {
+    execution_evidence_agent: {
+      label: "执行证据代理",
+      description: "读取编译输出、测试状态和失败证据。",
+      tone: "blue",
+      icon: <ListChecks size={16} />
+    },
+    error_classifier_agent: {
+      label: "错因分类代理",
+      description: "把失败用例归入可解释的错误类型。",
+      tone: "orange",
+      icon: <GitBranch size={16} />
+    },
+    knowledge_retrieval_agent: {
+      label: "知识检索代理",
+      description: "检索本课程可引用的知识来源。",
+      tone: "green",
+      icon: <BookOpen size={16} />
+    },
+    diagnosis_agent: {
+      label: "代码诊断代理",
+      description: "综合证据和知识源生成错因解释。",
+      tone: "violet",
+      icon: <Brain size={16} />
+    },
+    citation_guard_agent: {
+      label: "引用守卫代理",
+      description: "检查诊断是否绑定真实课程来源。",
+      tone: "teal",
+      icon: <ShieldCheck size={16} />
+    },
+    progressive_hint_agent: {
+      label: "渐进提示代理",
+      description: "按层级生成提示，避免直接泄露答案。",
+      tone: "amber",
+      icon: <Lightbulb size={16} />
+    },
+    answer_leakage_guard_agent: {
+      label: "答案泄露检查代理",
+      description: "拦截过度接近标准答案的提示内容。",
+      tone: "red",
+      icon: <FileSearch size={16} />
+    },
+    profile_signal_agent: {
+      label: "画像信号代理",
+      description: "把本次表现转成学习画像更新信号。",
+      tone: "slate",
+      icon: <Database size={16} />
+    }
+  };
+  return meta[stepName] ?? {
+    label: stepName.replace(/_/g, " "),
+    description: "记录该智能体节点的运行输入和输出摘要。",
+    tone: "slate",
+    icon: <Activity size={16} />
+  };
+}
+
+function agentStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    RUNNING: "运行中",
+    SUCCEEDED: "已完成",
+    WARNING: "需关注",
+    SKIPPED: "已跳过",
+    FAILED: "失败"
+  };
+  return labels[status] ?? status;
+}
+
+function agentStatusClass(status: string) {
+  if (status === "SUCCEEDED") return "done";
+  if (status === "RUNNING") return "running";
+  if (status === "WARNING") return "warn";
+  if (status === "SKIPPED") return "skip";
+  if (status === "FAILED") return "fail";
+  return "idle";
+}
+
+function summarizeAgentValue(value: unknown): string {
+  if (value === null || value === undefined) return "暂无摘要";
+  if (typeof value === "string") return value || "暂无摘要";
+  if (Array.isArray(value)) {
+    return value.length ? value.map((item) => summarizeAgentValue(item)).join("；") : "暂无条目";
+  }
+  if (typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (!entries.length) return "暂无摘要";
+    return entries
+      .slice(0, 5)
+      .map(([key, item]) => `${key}: ${typeof item === "object" ? JSON.stringify(item) : String(item)}`)
+      .join("；");
+  }
+  return String(value);
+}
+
 function caseFields(testCase: TeacherTestCase | null) {
   if (!testCase) return [];
   if (!testCase.input_visible || testCase.input_summary === null) {
@@ -210,6 +315,129 @@ function normalizeTaskDetail(rawTask: TaskDetail): TaskDetail {
   };
 }
 
+function AgentTownView({
+  run,
+  loading,
+  error,
+  latestResult,
+  activeStepId,
+  onSelectStep
+}: {
+  run: AgentWorkflowRun | null;
+  loading: boolean;
+  error: string | null;
+  latestResult: VersionResult | null;
+  activeStepId: string | null;
+  onSelectStep: (stepId: string) => void;
+}) {
+  const steps = [...(run?.steps ?? [])].sort((a, b) => a.step_order - b.step_order);
+  const activeStep = steps.find((step) => step.step_id === activeStepId) ?? steps[0] ?? null;
+  const activeMeta = activeStep ? agentStepMeta(activeStep.step_name) : null;
+  const finishedCount = steps.filter((step) => step.status === "SUCCEEDED").length;
+
+  if (loading) {
+    return (
+      <section className="agent-town-empty">
+        <Activity size={18} />
+        <h3>协同轨迹读取中</h3>
+        <p>正在整理本次诊断背后的智能体步骤。</p>
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section className="agent-town-empty warn">
+        <ShieldCheck size={18} />
+        <h3>协同轨迹暂不可用</h3>
+        <p>{error}</p>
+      </section>
+    );
+  }
+
+  if (!latestResult) {
+    return (
+      <section className="agent-town-empty">
+        <Bot size={18} />
+        <h3>等待一次提交</h3>
+        <p>运行代码后，这里会展示诊断、提示和画像信号之间的协同过程。</p>
+      </section>
+    );
+  }
+
+  if (!run || !steps.length) {
+    return (
+      <section className="agent-town-empty">
+        <FileSearch size={18} />
+        <h3>等待协同记录</h3>
+        <p>当前诊断还没有可展示的智能体运行轨迹，请先查看系统测试证据或重新提交。</p>
+      </section>
+    );
+  }
+
+  return (
+    <div className="agent-town">
+      <section className="agent-town-overview">
+        <div>
+          <span><Activity size={15} /> {agentStatusLabel(run.status)}</span>
+          <strong>{finishedCount}/{steps.length} 个节点完成</strong>
+        </div>
+        <small>{run.model_provider ?? "COACH_WORKFLOW"} · {run.prompt_version ?? "workflow"}</small>
+      </section>
+
+      <section className="agent-town-map" aria-label="智能体协同流程">
+        {steps.map((step) => {
+          const meta = agentStepMeta(step.step_name);
+          const selected = activeStep?.step_id === step.step_id;
+          return (
+            <button
+              className={`agent-node ${selected ? "active" : ""}`}
+              data-tone={meta.tone}
+              type="button"
+              key={step.step_id}
+              onClick={() => onSelectStep(step.step_id)}
+            >
+              <span>{meta.icon}</span>
+              <strong>{meta.label}</strong>
+              <small className={agentStatusClass(step.status)}>{agentStatusLabel(step.status)}</small>
+            </button>
+          );
+        })}
+      </section>
+
+      {activeStep && activeMeta && (
+        <section className="agent-town-detail">
+          <div className="agent-detail-head">
+            <span data-tone={activeMeta.tone}>{activeMeta.icon}</span>
+            <div>
+              <h3>{activeMeta.label}</h3>
+              <p>{activeMeta.description}</p>
+            </div>
+          </div>
+          <dl>
+            <div>
+              <dt>状态</dt>
+              <dd>{agentStatusLabel(activeStep.status)}</dd>
+            </div>
+            <div>
+              <dt>耗时</dt>
+              <dd>{activeStep.duration_ms === null ? "瞬时" : `${activeStep.duration_ms} ms`}</dd>
+            </div>
+            <div>
+              <dt>读取</dt>
+              <dd>{summarizeAgentValue(activeStep.input_summary)}</dd>
+            </div>
+            <div>
+              <dt>产出</dt>
+              <dd>{summarizeAgentValue(activeStep.output_summary)}</dd>
+            </div>
+          </dl>
+        </section>
+      )}
+    </div>
+  );
+}
+
 export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProps) {
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [context, setContext] = useState<LearningContext | null>(null);
@@ -217,6 +445,7 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
   const [error, setError] = useState<string | null>(null);
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [aiCollapsed, setAiCollapsed] = useState(false);
+  const [aiPanelMode, setAiPanelMode] = useState<AiPanelMode>("hint");
   const [layout, setLayout] = useState<WorkspaceLayout>(() => readWorkspaceLayout());
   const [metrics, setMetrics] = useState<WorkspaceMetrics | null>(null);
   const [selectedLanguage, setSelectedLanguage] = useState("CPP");
@@ -229,6 +458,10 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
   const [latestResult, setLatestResult] = useState<VersionResult | null>(null);
   const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null);
   const [hints, setHints] = useState<Hint[]>([]);
+  const [agentRun, setAgentRun] = useState<AgentWorkflowRun | null>(null);
+  const [agentRunLoading, setAgentRunLoading] = useState(false);
+  const [agentRunError, setAgentRunError] = useState<string | null>(null);
+  const [activeAgentStepId, setActiveAgentStepId] = useState<string | null>(null);
   const [activeExecutionId, setActiveExecutionId] = useState<string | null>(null);
   const gridRef = useRef<HTMLElement | null>(null);
   const centerRef = useRef<HTMLDivElement | null>(null);
@@ -242,6 +475,10 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
     setLatestResult(null);
     setDiagnosis(null);
     setHints([]);
+    setAgentRun(null);
+    setAgentRunLoading(false);
+    setAgentRunError(null);
+    setActiveAgentStepId(null);
     setActiveResultTab("cases");
     setSelectedCaseIndex(0);
 
@@ -349,6 +586,40 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
   }, [activeExecutionId]);
 
   useEffect(() => {
+    const diagnosisId = diagnosis?.diagnosis_id ?? latestResult?.diagnosis.diagnosis_id;
+    if (!diagnosisId) {
+      setAgentRun(null);
+      setAgentRunLoading(false);
+      setAgentRunError(null);
+      setActiveAgentStepId(null);
+      return undefined;
+    }
+
+    let alive = true;
+    setAgentRunLoading(true);
+    setAgentRunError(null);
+    api.getDiagnosisAgentRun(diagnosisId)
+      .then((payload) => {
+        if (!alive) return;
+        setAgentRun(payload.run);
+        setActiveAgentStepId(payload.run?.steps[0]?.step_id ?? null);
+      })
+      .catch((caught) => {
+        if (!alive) return;
+        setAgentRun(null);
+        setActiveAgentStepId(null);
+        setAgentRunError(caught instanceof Error ? caught.message : "协同轨迹读取失败。");
+      })
+      .finally(() => {
+        if (alive) setAgentRunLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [diagnosis?.diagnosis_id, latestResult?.diagnosis.diagnosis_id]);
+
+  useEffect(() => {
     const grid = gridRef.current;
     const center = centerRef.current;
     if (!grid || !center) return undefined;
@@ -453,6 +724,9 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
     setLatestResult(null);
     setDiagnosis(null);
     setHints([]);
+    setAgentRun(null);
+    setAgentRunError(null);
+    setActiveAgentStepId(null);
     setRunState("IDLE");
     setRunMessage("等待提交");
   }
@@ -464,6 +738,10 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
     setLatestResult(null);
     setDiagnosis(null);
     setHints([]);
+    setAgentRun(null);
+    setAgentRunLoading(false);
+    setAgentRunError(null);
+    setActiveAgentStepId(null);
     try {
       const response = await api.submitCode(task.task_id, selectedLanguage, sourceCode, assignmentId);
       setActiveExecutionId(response.execution_id);
@@ -795,41 +1073,58 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
                 </header>
                 {!aiCollapsed && (
                   <>
-                    <section>
-                      <h3>AI诊断总结</h3>
-                      <p>{diagnosis?.explanation ?? (latestResult ? "当前版本暂无可用 AI 诊断，请先查看系统测试证据。" : "提交代码后，AI 会基于编译输出、失败用例和课程知识源给出诊断。")}</p>
-                    </section>
-                    <section>
-                      <h3>系统证据</h3>
-                      <ul>
-                        <li><b>通过情况：</b>{latestResult ? `${latestResult.tests.filter((test) => test.status === "PASSED").length}/${latestResult.tests.length}` : "等待提交"}</li>
-                        <li><b>编译状态：</b>{latestResult?.execution.compile_exit_code === 0 ? "通过" : latestResult ? "未通过" : "等待提交"}</li>
-                        <li><b>语言：</b>{task.interface_spec.language_labels[selectedLanguage] ?? selectedLanguage}</li>
-                      </ul>
-                    </section>
-                    <section className="program-hints">
-                      <h3>分层提示</h3>
-                      {hints.length ? [...hints].sort((a, b) => a.level - b.level).map((hint) => (
-                        <article className="open" key={`${hint.diagnosis_id}-${hint.level}`}>
-                          <button type="button"><Lightbulb size={15} /> 第{hint.level}层提示 <ChevronDown size={15} /></button>
-                          <p>{hint.content}</p>
-                        </article>
-                      )) : (
-                        <article>
-                          <button type="button"><Lightbulb size={15} /> 第1层提示 <ChevronDown size={15} /></button>
-                          <p>诊断生成后会先解锁方向性提示，不直接给完整答案。</p>
-                        </article>
-                      )}
-                    </section>
-                    <div className="hint-usage">
-                      <p><Eye size={14} /> 第一层提示 <span>{hints.some((hint) => hint.level === 1) ? "已解锁" : "待诊断"}</span></p>
-                      <p><Eye size={14} /> 第二层提示 <span>{hints.some((hint) => hint.level === 2) ? "已解锁" : "按需解锁"}</span></p>
-                      <p><Eye size={14} /> 第三层提示 <span>{hints.some((hint) => hint.level === 3) ? "已解锁" : "按任务规则控制"}</span></p>
-                    </div>
-                    <footer>
-                      <button type="button"><GraduationCap size={16} /> 查看讲解</button>
-                      <button className="primary" type="button" disabled={!diagnosis?.diagnosis_id} onClick={requestNextHint}><Lightbulb size={16} /> 获取下一层提示</button>
-                    </footer>
+                    <nav className="program-ai-tabs" aria-label="AI学习助手视图">
+                      <button className={aiPanelMode === "hint" ? "active" : ""} type="button" onClick={() => setAiPanelMode("hint")}>AI提示</button>
+                      <button className={aiPanelMode === "town" ? "active" : ""} type="button" onClick={() => setAiPanelMode("town")}>协同视图</button>
+                    </nav>
+                    {aiPanelMode === "hint" ? (
+                      <>
+                        <section>
+                          <h3>AI诊断总结</h3>
+                          <p>{diagnosis?.explanation ?? (latestResult ? "当前版本暂无可用 AI 诊断，请先查看系统测试证据。" : "提交代码后，AI 会基于编译输出、失败用例和课程知识源给出诊断。")}</p>
+                        </section>
+                        <section>
+                          <h3>系统证据</h3>
+                          <ul>
+                            <li><b>通过情况：</b>{latestResult ? `${latestResult.tests.filter((test) => test.status === "PASSED").length}/${latestResult.tests.length}` : "等待提交"}</li>
+                            <li><b>编译状态：</b>{latestResult?.execution.compile_exit_code === 0 ? "通过" : latestResult ? "未通过" : "等待提交"}</li>
+                            <li><b>语言：</b>{task.interface_spec.language_labels[selectedLanguage] ?? selectedLanguage}</li>
+                          </ul>
+                        </section>
+                        <section className="program-hints">
+                          <h3>分层提示</h3>
+                          {hints.length ? [...hints].sort((a, b) => a.level - b.level).map((hint) => (
+                            <article className="open" key={`${hint.diagnosis_id}-${hint.level}`}>
+                              <button type="button"><Lightbulb size={15} /> 第{hint.level}层提示 <ChevronDown size={15} /></button>
+                              <p>{hint.content}</p>
+                            </article>
+                          )) : (
+                            <article>
+                              <button type="button"><Lightbulb size={15} /> 第1层提示 <ChevronDown size={15} /></button>
+                              <p>诊断生成后会先解锁方向性提示，不直接给完整答案。</p>
+                            </article>
+                          )}
+                        </section>
+                        <div className="hint-usage">
+                          <p><Eye size={14} /> 第一层提示 <span>{hints.some((hint) => hint.level === 1) ? "已解锁" : "待诊断"}</span></p>
+                          <p><Eye size={14} /> 第二层提示 <span>{hints.some((hint) => hint.level === 2) ? "已解锁" : "按需解锁"}</span></p>
+                          <p><Eye size={14} /> 第三层提示 <span>{hints.some((hint) => hint.level === 3) ? "已解锁" : "按任务规则控制"}</span></p>
+                        </div>
+                        <footer>
+                          <button type="button"><GraduationCap size={16} /> 查看讲解</button>
+                          <button className="primary" type="button" disabled={!diagnosis?.diagnosis_id} onClick={requestNextHint}><Lightbulb size={16} /> 获取下一层提示</button>
+                        </footer>
+                      </>
+                    ) : (
+                      <AgentTownView
+                        run={agentRun}
+                        loading={agentRunLoading}
+                        error={agentRunError}
+                        latestResult={latestResult}
+                        activeStepId={activeAgentStepId}
+                        onSelectStep={setActiveAgentStepId}
+                      />
+                    )}
                   </>
                 )}
               </aside>
