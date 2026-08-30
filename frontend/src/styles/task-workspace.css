@@ -8,8 +8,12 @@
   color: #101b31;
 }
 
-.program-shell button {
+.program-shell button:not(:disabled) {
   cursor: pointer;
+}
+
+.program-shell button:disabled {
+  cursor: not-allowed;
 }
 
 .program-shell h1,
@@ -163,13 +167,6 @@
   background: #ffffff;
 }
 
-.program-top-actions .program-account:hover,
-.program-top-actions .program-account:focus-visible {
-  border-color: #c8d8ea;
-  background: #f8fbff;
-  box-shadow: 0 10px 22px rgba(30, 44, 66, 0.08);
-}
-
 .program-account-copy {
   min-width: 64px;
   display: grid;
@@ -189,27 +186,6 @@
   color: #657187;
   font-size: 11px;
   font-weight: 800;
-}
-
-.program-account > svg {
-  flex: 0 0 auto;
-  color: #526078;
-}
-
-.program-bell span {
-  position: absolute;
-  right: 0;
-  top: -2px;
-  width: 15px;
-  height: 15px;
-  display: grid;
-  place-items: center;
-  border: 1px solid #ffffff;
-  border-radius: 50%;
-  color: #ffffff;
-  background: #ff3648;
-  font-size: 9px;
-  font-weight: 900;
 }
 
 .program-top-actions img {
@@ -1083,7 +1059,7 @@ html.workspace-resizing-y * {
   background: linear-gradient(180deg, #fbfdff 0%, #f8f5ff 100%);
 }
 
-.program-hints article button {
+.program-hint-title {
   width: 100%;
   min-height: 39px;
   padding: 0 10px;
@@ -1096,10 +1072,6 @@ html.workspace-resizing-y * {
   font-size: 12px;
   font-weight: 900;
   text-align: left;
-}
-
-.program-hints article button svg:last-child {
-  margin-left: auto;
 }
 
 .program-hints article p,
@@ -1838,24 +1810,6 @@ html.workspace-resizing-y * {
   gap: 10px;
 }
 
-.program-bottom-grid a {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  color: #176cf5;
-  font-size: 12px;
-  font-weight: 900;
-  text-decoration: none;
-}
-
-.program-card-link {
-  width: 100%;
-  margin-top: 15px;
-  padding-top: 12px;
-  border-top: 1px solid #edf1f6;
-}
-
 .program-history table {
   margin-top: 12px;
 }
@@ -2067,6 +2021,12 @@ html.workspace-resizing-y * {
 
 .ant-btn {
   min-height: 36px;
+}
+
+.program-panel-meta {
+  color: #657187;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 @keyframes agentRoadFlow {
