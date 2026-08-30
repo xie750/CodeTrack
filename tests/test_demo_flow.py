@@ -23,6 +23,7 @@ def ensure_student_enrolled(user_id: str, display_name: str) -> None:
     db = SessionLocal()
     try:
         db.merge(User(id=user_id, display_name=display_name, role="STUDENT", status="ACTIVE"))
+        db.flush()
         if (
             db.query(Enrollment)
             .filter(Enrollment.course_id == "course_ds_001", Enrollment.user_id == user_id)
@@ -311,6 +312,7 @@ def test_independent_first_pass_creates_strong_capability_evidence():
         db = SessionLocal()
         try:
             db.merge(User(id="user_student_independent", display_name="独立通过学生", role="STUDENT", status="ACTIVE"))
+            db.flush()
             if (
                 db.query(Enrollment)
                 .filter(Enrollment.course_id == "course_ds_001", Enrollment.user_id == "user_student_independent")
@@ -361,6 +363,7 @@ def test_level_one_hint_then_pass_creates_moderate_capability_evidence():
         db = SessionLocal()
         try:
             db.merge(User(id="user_student_level1", display_name="一级提示学生", role="STUDENT", status="ACTIVE"))
+            db.flush()
             if (
                 db.query(Enrollment)
                 .filter(Enrollment.course_id == "course_ds_001", Enrollment.user_id == "user_student_level1")
@@ -497,6 +500,7 @@ def test_version_history_keeps_source_code_and_hash_immutable():
         db = SessionLocal()
         try:
             db.merge(User(id="user_student_history", display_name="版本历史学生", role="STUDENT", status="ACTIVE"))
+            db.flush()
             if (
                 db.query(Enrollment)
                 .filter(Enrollment.course_id == "course_ds_001", Enrollment.user_id == "user_student_history")

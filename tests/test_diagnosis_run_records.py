@@ -29,6 +29,7 @@ from backend.app.models import (
     User,
 )
 from backend.app.services import model_gateway
+from backend.app.services.diagnosis import create_diagnosis_for_version
 
 
 TASK_ID = "task_demo"
@@ -192,6 +193,38 @@ def test_successful_run_is_recorded_with_attempts_and_step(monkeypatch, db):
     step = flushed(db).scalars(select(AgentStep)).one()
     assert step.run_id == run.id
     assert step.step_name == "model_diagnosis"
+
+
+def test_code_diagnosis_coach_records_multi_agent_steps(monkeypatch, db):
+    monkeypatch.setattr(
+        model_gateway,
+        "get_settings",
+        lambda: SimpleNamespace(model_gateway_url=None, model_api_key=None, model_name=None),
+    )
+
+    diagnosis = create_diagnosis_for_version(db, db.get(SubmissionVersion, "ver_1"))
+
+    assert diagnosis is not None
+    assert diagnosis.diagnosis_type == "LINKED_LIST_HEAD_UPDATE_ERROR"
+    run = flushed(db).scalars(
+        select(AgentRun).where(AgentRun.workflow_type == "code_diagnosis_coach")
+    ).one()
+    assert run.status == "SUCCEEDED"
+    assert run.student_id == STUDENT_ID
+    assert run.course_id == COURSE_ID
+    steps = flushed(db).scalars(
+        select(AgentStep).where(AgentStep.run_id == run.id).order_by(AgentStep.step_order)
+    ).all()
+    assert [step.step_name for step in steps] == [
+        "execution_evidence_agent",
+        "error_classifier_agent",
+        "knowledge_retrieval_agent",
+        "diagnosis_agent",
+        "citation_guard_agent",
+        "progressive_hint_agent",
+        "answer_leakage_guard_agent",
+        "profile_signal_agent",
+    ]
 
 
 def test_timeout_falls_back_but_leaves_failed_run_with_error_code(monkeypatch, db):

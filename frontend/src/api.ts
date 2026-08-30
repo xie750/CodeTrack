@@ -254,6 +254,32 @@ export type RagKnowledgeChunk = {
   metadata: Record<string, unknown>;
 };
 
+export type RagIngestionStep = {
+  id: string;
+  name: string;
+  order: number;
+  status: string;
+  input: Record<string, unknown>;
+  output: Record<string, unknown>;
+  started_at: string;
+  finished_at: string | null;
+};
+
+export type RagIngestionRun = {
+  id: string;
+  workflow_type: string;
+  status: string;
+  model_provider: string | null;
+  model_name: string | null;
+  prompt_version: string | null;
+  input: Record<string, unknown>;
+  output: Record<string, unknown>;
+  error: null | { code: string; message: string | null };
+  started_at: string;
+  finished_at: string | null;
+  steps: RagIngestionStep[];
+};
+
 export type StudentAiChatCitation = {
   source_id: string;
   title: string;
@@ -1108,6 +1134,8 @@ export const api = {
     }>(`/api/v1/documents/${encodeURIComponent(documentId)}`),
   listRagChunks: (documentId: string) =>
     request<{ items: RagKnowledgeChunk[] }>(`/api/v1/documents/${encodeURIComponent(documentId)}/chunks`),
+  getRagIngestionRun: (documentId: string) =>
+    request<{ run: RagIngestionRun | null }>(`/api/v1/documents/${encodeURIComponent(documentId)}/ingestion-run`),
   deleteRagDocument: (documentId: string) =>
     request<{ deleted: boolean }>(`/api/v1/documents/${encodeURIComponent(documentId)}`, { method: "DELETE" }),
   sendStudentAiChat: (

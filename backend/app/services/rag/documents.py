@@ -8,9 +8,12 @@ from sqlalchemy import delete, func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from backend.app.ai.run_recorder import finish_run, new_run_id as new_agent_run_id, record_step, start_run
+from backend.app.ai.schemas import AgentRunContext
 from backend.app.core.api_response import ApiError
 from backend.app.core.config import get_settings
 from backend.app.models import (
+    AgentRun,
     RagChunk,
     RagDocument,
     RagDocumentElement,
@@ -37,6 +40,9 @@ INGEST_PROGRESS = {
     "INDEXING": 88,
     "READY": 100,
 }
+
+RAG_INGEST_WORKFLOW_TYPE = "rag_document_ingestion"
+RAG_INGEST_PROMPT_VERSION = "rag_ingest_agents_v0.1"
 
 
 def utc_now() -> datetime:
@@ -247,7 +253,13 @@ def list_documents(db: Session, user: User, kb_id: str) -> list[RagDocument]:
     )
 
 
-def start_processing_document(db: Session, user: User, document_id: str) -> tuple[RagDocument, RagDocumentVersion, RagIngestJob]:
+def start_processing_document(
+    db: Session,
+    user: User,
+    document_id: str,
+    *,
+    enqueue: bool = True,
+) -> tuple[RagDocument, RagDocumentVersion, RagIngestJob]:
     document = db.get(RagDocument, document_id)
     if document is None or document.deleted_at is not None:
         raise ApiError(404, "DOCUMENT_NOT_FOUND", "文档不存在")
@@ -298,9 +310,11 @@ def start_processing_document(db: Session, user: User, document_id: str) -> tupl
     job.status = "QUEUED"
     job.current_stage = "QUEUED"
     job.progress = 0
+    job.celery_task_id = None
     job.updated_at = utc_now()
     db.commit()
-    enqueue_ingest_job(db, job)
+    if enqueue:
+        enqueue_ingest_job(db, job)
     db.refresh(document)
     db.refresh(version)
     db.refresh(job)
@@ -367,6 +381,93 @@ def _set_stage(db: Session, document: RagDocument, version: RagDocumentVersion, 
     db.commit()
 
 
+def _start_ingest_agent_run(db: Session, document: RagDocument, version: RagDocumentVersion) -> AgentRun:
+    file_profile = json_loads(document.file_profile, {})
+    run = start_run(
+        db,
+        AgentRunContext(
+            run_id=new_agent_run_id(),
+            workflow_type=RAG_INGEST_WORKFLOW_TYPE,
+            student_id=document.owner_id,
+            course_id=None,
+        ),
+        input_payload={
+            "knowledge_base_id": document.knowledge_base_id,
+            "document_id": document.id,
+            "document_version_id": version.id,
+            "filename": document.name,
+            "file_profile": file_profile,
+        },
+        model_provider="RULE_FALLBACK",
+        model_name="rag-ingest-agent-workflow",
+        prompt_version=RAG_INGEST_PROMPT_VERSION,
+    )
+    record_step(
+        db,
+        run,
+        step_name="file_intake_agent",
+        step_order=1,
+        output_summary={
+            "file_type": file_profile.get("file_type"),
+            "source_family": file_profile.get("source_family"),
+            "size_bytes": document.size_bytes,
+            "status": "accepted",
+        },
+    )
+    return run
+
+
+def _chunk_quality_report(
+    *,
+    profile: ContentProfile,
+    chunk_groups: list[tuple[Any, list[Any]]],
+) -> dict[str, Any]:
+    settings = get_settings()
+    parents = [parent for parent, _children in chunk_groups]
+    children = [child for _parent, child_group in chunk_groups for child in child_group]
+    risk_flags: list[str] = []
+
+    empty_children = [child for child in children if not child.content.strip()]
+    oversized_children = [child for child in children if len(child.content) > settings.child_max_chars]
+    tiny_children = [child for child in children if len(child.content.strip()) < 80]
+    missing_heading_children = [
+        child
+        for child in children
+        if profile.chunking_strategy in {"markdown_section", "section_recursive"} and not child.heading_path
+    ]
+    code_block_split_risks = [
+        child
+        for child in children
+        if child.content_type == "code" and child.content.count("```") % 2 == 1
+    ]
+
+    if empty_children:
+        risk_flags.append("EMPTY_CHILD_CHUNK")
+    if oversized_children:
+        risk_flags.append("CHILD_CHUNK_TOO_LARGE")
+    if len(tiny_children) > max(2, len(children) // 3):
+        risk_flags.append("TOO_MANY_TINY_CHUNKS")
+    if missing_heading_children:
+        risk_flags.append("MISSING_HEADING_CONTEXT")
+    if code_block_split_risks:
+        risk_flags.append("CODE_BLOCK_SPLIT_RISK")
+    if not parents or not children:
+        risk_flags.append("NO_RETRIEVABLE_CHUNKS")
+
+    return {
+        "status": "PASSED" if not risk_flags else "WARNING",
+        "risk_flags": risk_flags,
+        "parent_count": len(parents),
+        "child_count": len(children),
+        "empty_child_count": len(empty_children),
+        "oversized_child_count": len(oversized_children),
+        "tiny_child_count": len(tiny_children),
+        "missing_heading_child_count": len(missing_heading_children),
+        "code_block_split_risk_count": len(code_block_split_risks),
+        "chunking_strategy": profile.chunking_strategy,
+    }
+
+
 def ingest_document_version(db: Session, document_id: str, version_id: str) -> None:
     document = db.get(RagDocument, document_id)
     version = db.get(RagDocumentVersion, version_id)
@@ -383,7 +484,10 @@ def ingest_document_version(db: Session, document_id: str, version_id: str) -> N
     if version.status == "READY" and document.active_version_id == version.id:
         return
 
+    run: AgentRun | None = None
     try:
+        run = _start_ingest_agent_run(db, document, version)
+
         db.execute(delete(RagChunk).where(RagChunk.document_version_id == version.id))
         db.execute(delete(RagDocumentElement).where(RagDocumentElement.document_version_id == version.id))
         db.commit()
@@ -393,6 +497,17 @@ def ingest_document_version(db: Session, document_id: str, version_id: str) -> N
         parsed = parse_document(document.name, content)
         if not parsed.elements:
             raise ApiError(422, "DOCUMENT_EMPTY", "文档解析结果为空")
+        record_step(
+            db,
+            run,
+            step_name="document_parser_agent",
+            step_order=2,
+            output_summary={
+                "parser_name": parsed.parser_name,
+                "parser_version": parsed.parser_version,
+                "element_count": len(parsed.elements),
+            },
+        )
 
         version.parser_name = parsed.parser_name
         version.parser_version = parsed.parser_version
@@ -403,7 +518,30 @@ def ingest_document_version(db: Session, document_id: str, version_id: str) -> N
         version.cleaning_strategy = profile.cleaning_strategy
         version.chunking_strategy = profile.chunking_strategy
         version.chunk_config = json_dumps(_chunk_config(profile))
+        record_step(
+            db,
+            run,
+            step_name="content_profile_agent",
+            step_order=3,
+            output_summary={
+                "content_profile": profile.content_profile,
+                "cleaning_strategy": profile.cleaning_strategy,
+                "chunking_strategy": profile.chunking_strategy,
+                "signals": profile.signals,
+            },
+        )
         elements = clean_elements(parsed.elements, profile)
+        record_step(
+            db,
+            run,
+            step_name="cleaning_strategy_agent",
+            step_order=4,
+            output_summary={
+                "strategy": profile.cleaning_strategy,
+                "input_element_count": len(parsed.elements),
+                "output_element_count": len(elements),
+            },
+        )
         for index, element in enumerate(elements):
             db.add(
                 RagDocumentElement(
@@ -425,6 +563,37 @@ def ingest_document_version(db: Session, document_id: str, version_id: str) -> N
         chunk_groups = build_parent_child_chunks(elements, profile)
         if not chunk_groups:
             raise ApiError(422, "CHUNKING_FAILED", "文档没有生成可检索切片")
+        child_count = sum(len(children) for _parent, children in chunk_groups)
+        record_step(
+            db,
+            run,
+            step_name="chunk_planner_agent",
+            step_order=5,
+            output_summary={
+                "chunking_strategy": profile.chunking_strategy,
+                "parent_target_chars": get_settings().parent_target_chars,
+                "child_target_chars": get_settings().child_target_chars,
+            },
+        )
+        record_step(
+            db,
+            run,
+            step_name="chunk_builder_agent",
+            step_order=6,
+            output_summary={
+                "parent_count": len(chunk_groups),
+                "child_count": child_count,
+            },
+        )
+        quality = _chunk_quality_report(profile=profile, chunk_groups=chunk_groups)
+        record_step(
+            db,
+            run,
+            step_name="retrieval_quality_agent",
+            step_order=7,
+            status="SUCCEEDED" if quality["status"] == "PASSED" else "WARNING",
+            output_summary=quality,
+        )
 
         _set_stage(db, document, version, job, "EMBEDDING")
         provider = get_embedding_provider()
@@ -436,6 +605,17 @@ def ingest_document_version(db: Session, document_id: str, version_id: str) -> N
             embeddings.extend(provider.embed(child_texts[offset : offset + batch_size]))
         if any(len(vector) != version.embedding_dim for vector in embeddings):
             raise ApiError(500, "EMBEDDING_DIM_MISMATCH", "Embedding 维度与知识库配置不一致")
+        record_step(
+            db,
+            run,
+            step_name="embedding_agent",
+            step_order=8,
+            output_summary={
+                "child_count": len(child_texts),
+                "embedding_count": len(embeddings),
+                "embedding_dim": version.embedding_dim,
+            },
+        )
 
         _set_stage(db, document, version, job, "INDEXING")
         embedding_index = 0
@@ -453,6 +633,17 @@ def ingest_document_version(db: Session, document_id: str, version_id: str) -> N
                 child_global_index += 1
         db.commit()
         _refresh_search_vectors(db, version.id)
+        record_step(
+            db,
+            run,
+            step_name="index_agent",
+            step_order=9,
+            output_summary={
+                "parent_count": parent_index,
+                "child_count": child_global_index,
+                "active_version_id": version.id,
+            },
+        )
 
         old_active = document.active_version_id
         if old_active and old_active != version.id:
@@ -463,11 +654,41 @@ def ingest_document_version(db: Session, document_id: str, version_id: str) -> N
         document.active_version_id = version.id
         _set_stage(db, document, version, job, "READY")
         job.finished_at = utc_now()
+        finish_run(
+            db,
+            run,
+            status="SUCCEEDED",
+            output={
+                "document_id": document.id,
+                "document_version_id": version.id,
+                "parent_count": parent_index,
+                "child_count": child_global_index,
+                "quality": quality,
+            },
+        )
         db.commit()
     except ApiError as exc:
+        if run is not None:
+            finish_run(
+                db,
+                run,
+                status="FAILED",
+                output={"document_id": document_id, "document_version_id": version_id, "failed_stage": job.current_stage},
+                error_code=exc.detail["code"],
+                error_message=exc.detail["message"],
+            )
         _mark_failed(db, document, version, job, job.current_stage, exc.detail["code"], exc.detail["message"])
         raise
     except Exception as exc:
+        if run is not None:
+            finish_run(
+                db,
+                run,
+                status="FAILED",
+                output={"document_id": document_id, "document_version_id": version_id, "failed_stage": job.current_stage},
+                error_code="INDEXING_FAILED",
+                error_message=str(exc),
+            )
         _mark_failed(db, document, version, job, job.current_stage, "INDEXING_FAILED", str(exc))
         raise
 
