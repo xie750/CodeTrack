@@ -422,7 +422,9 @@ button:disabled {
   font-size: 12px;
   font-weight: 850;
   line-height: 1.4;
+  cursor: default;
   scrollbar-width: none;
+  user-select: none;
 }
 
 .student-route-breadcrumb::-webkit-scrollbar {
@@ -457,6 +459,7 @@ button:disabled {
 
 .student-route-crumb a {
   color: #52627a;
+  cursor: pointer;
   transition: color 160ms var(--motion-soft), background 160ms var(--motion-soft);
 }
 
@@ -469,6 +472,7 @@ button:disabled {
 
 .student-route-crumb span[aria-current="page"] {
   color: #17243b;
+  cursor: default;
   font-weight: 950;
 }
 

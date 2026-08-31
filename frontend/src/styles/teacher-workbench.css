@@ -5520,14 +5520,6 @@ button.student-resource-thumb {
   font-weight: 800;
 }
 
-.profile-section-head a,
-.profile-more {
-  color: #176cf5;
-  font-size: 13px;
-  font-weight: 800;
-  text-decoration: none;
-}
-
 .course-dimension-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -5705,12 +5697,6 @@ button.student-resource-thumb {
 
 .weak-row p {
   line-height: 1.55;
-}
-
-.profile-more {
-  display: block;
-  margin-top: 12px;
-  text-align: right;
 }
 
 .advice-row {

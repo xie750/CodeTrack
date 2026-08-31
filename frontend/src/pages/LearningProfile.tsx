@@ -838,7 +838,7 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
       </section>
 
       <section className="profile-card profile-pad knowledge-section">
-        <div className="profile-section-head"><h2>本课程知识掌握画像</h2><a href="#">查看详情 ›</a></div>
+        <div className="profile-section-head"><h2>本课程知识掌握画像</h2></div>
         <div className="knowledge-grid">
           {knowledgeCards.length ? knowledgeCards.map((item) => (
             <article className="knowledge-card" key={item.title}>
@@ -863,7 +863,6 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
               </div>
             )) : <div className="empty-panel">暂无明显薄弱项，继续完成任务后画像会更新。</div>}
           </div>
-          <a className="profile-more" href="#">查看全部薄弱项 ›</a>
         </article>
 
         <article className="profile-card profile-pad">
@@ -904,7 +903,6 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
               <span>任务完成率 <b>{completion}%</b></span>
             </div>
           </div>
-          <a className="profile-more" href="#">查看学习周报 ›</a>
         </article>
 
         <article className="profile-card chart-card">
@@ -919,7 +917,6 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
               </div>
             )) : <div className="empty-panel">暂无近期学习记录。</div>}
           </div>
-          <a className="profile-more" href="#">查看全部记录 ›</a>
         </article>
       </section>
 

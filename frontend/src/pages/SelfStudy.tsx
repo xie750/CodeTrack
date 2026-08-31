@@ -2,14 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowRight,
-  BadgeCheck,
   BarChart3,
   BookOpen,
   Bot,
   CalendarCheck2,
-  Check,
   CheckCircle2,
-  ChevronRight,
   ClipboardList,
   Database,
   FileText,
@@ -22,6 +19,7 @@ import {
 } from "lucide-react";
 import { api, StudentProfile } from "../api";
 import { StudentInlineNotice, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
+import selfStudyHeroArt from "../assets/self-study/self-study-ai-hero.jpg";
 
 type TaskState = "done" | "active" | "pending";
 
@@ -158,13 +156,7 @@ export default function SelfStudy() {
           </div>
         </div>
         <div className="study-ai-visual" aria-hidden="true">
-          <span className="study-ai-bubble chart"><BarChart3 size={24} /></span>
-          <span className="study-ai-bubble file"><FileText size={23} /></span>
-          <span className="study-ai-bubble check"><Check size={24} /></span>
-          <span className="study-ai-bubble brain"><BadgeCheck size={22} /></span>
-          <div className="study-ai-orbit">
-            <div className="study-ai-card">AI</div>
-          </div>
+          <img src={selfStudyHeroArt} alt="" draggable={false} />
         </div>
       </section>
 
@@ -203,10 +195,10 @@ export default function SelfStudy() {
                 <h2>每日学习建议</h2>
               </div>
               <p>基于学习画像、薄弱知识点与近期行为，每日自动推断推荐</p>
-              <button type="button" aria-label="刷新每日建议">
+              <span className="study-advice-status" aria-label="每日建议自动更新">
                 <RefreshCw size={15} />
                 每日更新
-              </button>
+              </span>
             </header>
 
             <article className="study-topic-banner">
@@ -223,15 +215,14 @@ export default function SelfStudy() {
               <strong>推荐外部资源</strong>
               <div>
                 {resourceCards.map((card) => (
-                  <button className={`study-resource-card ${card.tone}`} type="button" key={card.title}>
+                  <article className={`study-resource-card ${card.tone}`} key={card.title}>
                     <span>{card.icon}</span>
                     <div>
                       <b>{card.title}</b>
                       <small>{card.type}</small>
                       <p>{card.desc}</p>
                     </div>
-                    <ChevronRight size={17} />
-                  </button>
+                  </article>
                 ))}
               </div>
             </div>

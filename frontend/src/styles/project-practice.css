@@ -412,6 +412,20 @@
   background: #f4f8ff;
 }
 
+.practice-section-meta {
+  min-height: 34px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #e3eaf4;
+  border-radius: 8px;
+  color: #66758c;
+  background: #ffffff;
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 850;
+}
+
 .practice-section-title.compact span {
   font-size: 17px;
 }

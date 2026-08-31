@@ -13,7 +13,6 @@ import {
   Folder,
   ListChecks,
   Map,
-  MoreHorizontal,
   Network,
   Plus,
   PlayCircle,
@@ -642,9 +641,6 @@ export default function StudentKnowledgeBase() {
                 <h2>{activeBase?.title ?? "知识库"}</h2>
                 <p>{loading ? "正在加载..." : `${activeBase?.documentCount ?? 0}个文件 · ${activeBase?.chunkCount ?? 0}个切片`}</p>
               </div>
-              <button type="button" aria-label="更多操作">
-                <MoreHorizontal size={20} />
-              </button>
             </div>
 
             <div className="kb-design-upload">

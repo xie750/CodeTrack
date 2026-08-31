@@ -6,7 +6,6 @@ import {
   Bot,
   CalendarDays,
   CheckCircle2,
-  ChevronDown,
   CirclePlay,
   ClipboardList,
   Code2,
@@ -383,7 +382,7 @@ export default function ProjectPractice() {
             <section className="practice-stats-card">
               <div className="practice-section-title compact">
                 <span><LineChart size={19} /> 学习统计</span>
-                <button type="button">本周 05.12 - 05.18 <ChevronDown size={14} /></button>
+                <em className="practice-section-meta">本周 05.12 - 05.18</em>
               </div>
               <div className="practice-stat-grid">
                 <div><span>项目数</span><strong>{pageData.stats.project_count}</strong><small>全部项目</small></div>
@@ -396,7 +395,6 @@ export default function ProjectPractice() {
             <section className="practice-activity-card">
               <div className="practice-section-title compact">
                 <span><ShieldCheck size={19} /> 最近动态</span>
-                <button type="button">查看全部 <ArrowRight size={14} /></button>
               </div>
               <div className="practice-activity-list">
                 {pageData.activities.map((activity) => (
@@ -475,6 +473,7 @@ function ProjectPracticeDetail({
   fallbackProject: PracticeProjectSummary;
   projectId: string;
 }) {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("任务说明");
   const [detail, setDetail] = useState<PracticeProjectDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -764,13 +763,12 @@ function ProjectPracticeDetail({
             <h2><Bot size={20} /> AI科研导师</h2>
             <p>基于当前阶段为你提供：</p>
             {pageData.mentor_tips.map((tip) => <span key={tip}><CheckCircle2 size={14} /> {tip}</span>)}
-            <button type="button">与导师对话</button>
+            <button type="button" onClick={() => navigate("/self-study/ai")}>与导师对话</button>
           </section>
 
           <section className="project-resource-card">
             <div className="project-card-head">
               <h2>资料与文献</h2>
-              <button type="button">查看更多 <ArrowRight size={14} /></button>
             </div>
             {pageData.resources.map((resource) => (
               <article key={resource.title}>
@@ -784,7 +782,6 @@ function ProjectPracticeDetail({
           <section className="project-timeline-card">
             <div className="project-card-head">
               <h2>阶段动态</h2>
-              <button type="button">查看全部 <ArrowRight size={14} /></button>
             </div>
             {activityRows.map((item, index) => (
               <article key={item.id} data-step={index + 1}>

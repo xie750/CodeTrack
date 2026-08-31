@@ -17,8 +17,6 @@ import {
   Presentation,
   Search,
   SendHorizontal,
-  ThumbsDown,
-  ThumbsUp,
   Trash2,
   Waypoints,
   X
@@ -911,8 +909,6 @@ export default function AiTutor() {
                               {action}
                             </button>
                           ))}
-                          <button type="button" aria-label="回答有帮助"><ThumbsUp size={16} /></button>
-                          <button type="button" aria-label="回答需要改进"><ThumbsDown size={16} /></button>
                         </footer>
                       ) : null}
                     </>

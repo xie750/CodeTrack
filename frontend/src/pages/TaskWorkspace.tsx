@@ -9,7 +9,6 @@ import {
   Brain,
   Check,
   CheckCircle2,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Circle,

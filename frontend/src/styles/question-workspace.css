@@ -26,6 +26,8 @@
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 12px 30px rgba(24, 39, 75, 0.06);
+  cursor: default;
+  user-select: none;
 }
 
 .question-title-line {
@@ -34,10 +36,13 @@
   gap: 12px;
   flex-wrap: wrap;
   margin-top: 8px;
+  cursor: default;
+  user-select: none;
 }
 
 .question-title-line h1 {
   margin: 0;
+  cursor: default;
   font-size: 21px;
   line-height: 1.35;
 }
@@ -47,6 +52,7 @@
   border-radius: 6px;
   background: #eef6ff;
   color: #2263c7;
+  cursor: default;
   font-size: 12px;
   font-weight: 800;
 }
