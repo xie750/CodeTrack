@@ -809,7 +809,6 @@
    Student course/self-study navigation windows
    ========================================================================== */
 
-.student-courses-page,
 .student-work-window {
   width: min(calc(var(--app-viewport-width) - 56px), var(--app-page-content-max));
   max-width: var(--app-page-content-max);
@@ -819,14 +818,6 @@
   font-size: 13px;
 }
 
-.student-courses-page {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  gap: 16px;
-}
-
-.student-courses-main,
-.student-courses-aside,
 .student-window-content {
   min-width: 0;
 }
@@ -946,25 +937,9 @@
   height: 40px;
 }
 
-.student-course-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 14px;
-}
-
-.student-course-card {
-  cursor: default;
-}
-
 .course-status.active {
   color: #1f8e08;
   background: #eafbdd;
-}
-
-.student-courses-aside {
-  display: grid;
-  gap: 16px;
-  align-content: start;
 }
 
 .student-panel {
@@ -978,24 +953,6 @@
   font-weight: 900;
 }
 
-.student-flow-list {
-  display: grid;
-  gap: 12px;
-  margin-top: 14px;
-}
-
-.student-flow-list p {
-  margin: 0;
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
-  color: #29364d;
-  font-size: 13px;
-  font-weight: 800;
-  line-height: 1.5;
-}
-
 .student-data-message {
   margin: 0 0 14px;
   padding: 10px 12px;
@@ -1005,24 +962,6 @@
   background: #fff8e9;
   font-size: 13px;
   font-weight: 800;
-}
-
-.student-empty-panel {
-  grid-column: 1 / -1;
-  min-height: 180px;
-  display: grid;
-  place-items: center;
-  gap: 8px;
-  padding: 26px;
-  border: 1px dashed #d8e2ef;
-  border-radius: 8px;
-  background: #fbfdff;
-  text-align: center;
-}
-
-.student-empty-panel h2,
-.student-empty-panel p {
-  margin: 0;
 }
 
 .student-work-window {
@@ -2955,12 +2894,10 @@
 }
 
 @media (max-width: 1180px) {
-  .student-courses-page,
   .student-work-window {
     width: min(calc(var(--app-viewport-width) - 32px), 100%);
   }
 
-  .student-courses-page,
   .student-map-layout {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -2973,11 +2910,6 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .student-courses-aside {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .student-course-grid,
   .student-map-detail-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -3046,11 +2978,9 @@
   }
 
   .student-stat-strip,
-  .student-course-grid,
   .course-workbench-grid,
   .student-map-detail-grid,
-  .student-graph-stats,
-  .student-courses-aside {
+  .student-graph-stats {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -3153,7 +3083,6 @@
 }
 
 @media (max-width: 760px) {
-  .student-courses-page,
   .student-work-window {
     width: 100%;
     padding: 0 14px 88px;

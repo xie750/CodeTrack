@@ -254,13 +254,6 @@ a {
   margin-bottom: 16px;
 }
 
-/* ================= Monaco ================= */
-.monaco-shell {
-  border: 1px solid var(--n-4);
-  border-radius: var(--radius-btn);
-  overflow: hidden;
-}
-
 /* ================= 应用壳：左栏固定 + 右内容独占滚动（经典双栏）================= */
 .app-shell {
   height: 100vh;
@@ -410,13 +403,6 @@ a {
   box-shadow: 0 0 0 3px var(--c-success-bg);
 }
 
-/* 面包屑 */
-.app-breadcrumb {
-  margin-bottom: var(--space-4);
-  display: flex;
-  align-items: center;
-}
-
 /* 主内容工作区 */
 .app-content {
   padding: var(--content-padding);
@@ -453,17 +439,6 @@ a {
 }
 .todo-row:hover > span:nth-child(2) {
   color: var(--primary);
-}
-
-/* ================= 预警卡片（左侧彩色边框，功能色场景）================= */
-.alert-card {
-  border-radius: var(--radius-card);
-  border-left: 4px solid var(--n-4);
-  transition: box-shadow 0.25s ease;
-  box-shadow: var(--shadow-card);
-}
-.alert-card:hover {
-  box-shadow: var(--shadow-card-hover);
 }
 
 /* ================= 个人中心 Drawer ================= */
