@@ -19,13 +19,21 @@ import {
   GitBranch,
   Lightbulb,
   ListChecks,
+  Box,
+  Maximize2,
+  MousePointer2,
   NotebookTabs,
   PanelRightClose,
   PanelRightOpen,
+  Pause,
   Play,
+  RotateCcw,
   Save,
   ShieldCheck,
+  SkipBack,
+  SkipForward,
   Upload,
+  X,
   Zap
 } from "lucide-react";
 import { api, LearningContext, TaskDetail, VersionResult, Diagnosis, Hint, AgentWorkflowRun } from "../api";
@@ -52,7 +60,8 @@ type WorkspaceMetrics = {
 
 type RunState = "IDLE" | "QUEUED" | "RUNNING" | "DONE" | "ERROR";
 type ResultPanelTab = "cases" | "results";
-type AiPanelMode = "hint" | "town";
+type AiPanelMode = "hint" | "town" | "scene";
+type AlgorithmSceneType = "linked_list" | "stack" | "binary_tree" | "grid_bfs" | "grid_dfs";
 
 type TeacherTestCase = TaskDetail["test_cases"][number];
 type AgentWorkflowStepItem = AgentWorkflowRun["steps"][number];
@@ -61,8 +70,32 @@ type TownFlowPhase = {
   title: string;
   detail: string;
 };
+type AlgorithmSceneStep = {
+  id: string;
+  title: string;
+  explanation: string;
+  activeNodes: string[];
+  visitedNodes: string[];
+  queue?: string[];
+  stack?: string[];
+  codeFocus: string;
+};
+type AlgorithmSceneAsset = {
+  id: string;
+  taskId: string;
+  taskSignature: string;
+  sceneType: AlgorithmSceneType;
+  title: string;
+  algorithm: string;
+  generatedAt: string;
+  knowledgePoints: string[];
+  citations: string[];
+  confidence: number;
+  steps: AlgorithmSceneStep[];
+};
 
 const WORKSPACE_LAYOUT_KEY = "codetrack.taskWorkspace.layout.v1";
+const ALGORITHM_SCENE_STORAGE_PREFIX = "codetrack.algorithmScene.v1:";
 const DEFAULT_PROBLEM_WIDTH = 316;
 const DEFAULT_EDITOR_HEIGHT = 407;
 const DEFAULT_PROBLEM_RATIO = 0.31;
@@ -256,6 +289,278 @@ function summarizeAgentValue(value: unknown): string {
       .join("；");
   }
   return String(value);
+}
+
+function taskSceneStorageKey(taskId: string) {
+  return `${ALGORITHM_SCENE_STORAGE_PREFIX}${taskId}`;
+}
+
+function algorithmTaskSignature(task: TaskDetail) {
+  return [
+    task.task_id,
+    task.title,
+    task.interface_spec.runner_profile,
+    task.learning_objectives.join("|"),
+    task.public_tests.map((test) => `${test.name}:${compactJson(test.input_summary)}`).join("|")
+  ].join("::");
+}
+
+function inferAlgorithmSceneType(task: TaskDetail): AlgorithmSceneType {
+  const text = [
+    task.title,
+    task.description,
+    task.interface_spec.runner_profile,
+    task.learning_objectives.join(" ")
+  ].join(" ").toLowerCase();
+  if (text.includes("bfs") || text.includes("广度") || text.includes("最短路径")) return "grid_bfs";
+  if (text.includes("dfs") || text.includes("深度") || text.includes("回溯")) return "grid_dfs";
+  if (text.includes("二叉树") || text.includes("binary") || text.includes("tree") || text.includes("遍历")) return "binary_tree";
+  if (text.includes("栈") || text.includes("括号") || text.includes("stack")) return "stack";
+  return "linked_list";
+}
+
+function sceneTypeLabel(sceneType: AlgorithmSceneType) {
+  const labels: Record<AlgorithmSceneType, string> = {
+    linked_list: "链表指针演示",
+    stack: "栈匹配演示",
+    binary_tree: "二叉树遍历演示",
+    grid_bfs: "BFS 广度优先演示",
+    grid_dfs: "DFS 深度优先演示"
+  };
+  return labels[sceneType];
+}
+
+function algorithmTemplateSteps(sceneType: AlgorithmSceneType): AlgorithmSceneStep[] {
+  if (sceneType === "grid_bfs") {
+    return [
+      {
+        id: "bfs-start",
+        title: "起点入队",
+        explanation: "从起点开始，先把起点标记为已发现并加入队列。",
+        activeNodes: ["0,0"],
+        visitedNodes: ["0,0"],
+        queue: ["(0,0)"],
+        codeFocus: "queue.push(start); visited[start] = true;"
+      },
+      {
+        id: "bfs-layer-1",
+        title: "按层扩展",
+        explanation: "每次从队首取出一个节点，再把它的未访问邻居加入队尾。",
+        activeNodes: ["1,0", "0,1"],
+        visitedNodes: ["0,0", "1,0", "0,1"],
+        queue: ["(1,0)", "(0,1)"],
+        codeFocus: "current = queue.shift(); for (neighbor of current.neighbors)"
+      },
+      {
+        id: "bfs-layer-2",
+        title: "队列保证先近后远",
+        explanation: "先入队的近层节点会先被处理，因此第一次到达终点就是最短层数。",
+        activeNodes: ["2,0", "1,1", "0,2"],
+        visitedNodes: ["0,0", "1,0", "0,1", "2,0", "1,1", "0,2"],
+        queue: ["(2,0)", "(1,1)", "(0,2)"],
+        codeFocus: "distance[neighbor] = distance[current] + 1;"
+      },
+      {
+        id: "bfs-end",
+        title: "到达终点",
+        explanation: "终点被首次访问时，记录路径或距离，停止继续扩展即可得到最短路径。",
+        activeNodes: ["4,4"],
+        visitedNodes: ["0,0", "1,0", "0,1", "2,0", "1,1", "0,2", "3,1", "2,2", "1,3", "4,4"],
+        queue: ["(4,4)"],
+        codeFocus: "if (current === target) return distance[current];"
+      }
+    ];
+  }
+  if (sceneType === "grid_dfs") {
+    return [
+      {
+        id: "dfs-start",
+        title: "选择起点",
+        explanation: "DFS 从起点开始，沿着一个方向尽可能深入。",
+        activeNodes: ["0,0"],
+        visitedNodes: ["0,0"],
+        stack: ["(0,0)"],
+        codeFocus: "dfs(start);"
+      },
+      {
+        id: "dfs-deep",
+        title: "持续深入",
+        explanation: "递归调用会把当前路径压入调用栈，直到遇到边界或已访问节点。",
+        activeNodes: ["0,1", "0,2", "0,3"],
+        visitedNodes: ["0,0", "0,1", "0,2", "0,3"],
+        stack: ["(0,0)", "(0,1)", "(0,2)", "(0,3)"],
+        codeFocus: "for (neighbor of node.neighbors) dfs(neighbor);"
+      },
+      {
+        id: "dfs-backtrack",
+        title: "回溯换路",
+        explanation: "当前方向走不通时，递归返回上一层，继续尝试其他邻居。",
+        activeNodes: ["1,2"],
+        visitedNodes: ["0,0", "0,1", "0,2", "0,3", "1,2"],
+        stack: ["(0,0)", "(0,1)", "(0,2)", "(1,2)"],
+        codeFocus: "return; // 回到上一层继续尝试"
+      },
+      {
+        id: "dfs-end",
+        title: "完成搜索",
+        explanation: "当所有可达分支都处理完，DFS 完成整张图的连通探索。",
+        activeNodes: ["3,3"],
+        visitedNodes: ["0,0", "0,1", "0,2", "0,3", "1,2", "2,2", "3,2", "3,3"],
+        stack: ["(3,3)"],
+        codeFocus: "visited[node] = true;"
+      }
+    ];
+  }
+  if (sceneType === "binary_tree") {
+    return [
+      {
+        id: "tree-root",
+        title: "访问根节点",
+        explanation: "以前序遍历为例，第一步先访问当前根节点。",
+        activeNodes: ["A"],
+        visitedNodes: ["A"],
+        stack: ["preorder(A)"],
+        codeFocus: "visit(root);"
+      },
+      {
+        id: "tree-left",
+        title: "递归左子树",
+        explanation: "访问根节点后，递归进入左子树，重复根、左、右的顺序。",
+        activeNodes: ["B"],
+        visitedNodes: ["A", "B"],
+        stack: ["preorder(A)", "preorder(B)"],
+        codeFocus: "preorder(root.left);"
+      },
+      {
+        id: "tree-back",
+        title: "返回上一层",
+        explanation: "左子树处理完后回到父节点，再进入右子树。",
+        activeNodes: ["C"],
+        visitedNodes: ["A", "B", "D", "E", "C"],
+        stack: ["preorder(A)", "preorder(C)"],
+        codeFocus: "preorder(root.right);"
+      },
+      {
+        id: "tree-done",
+        title: "形成遍历序列",
+        explanation: "所有节点按访问顺序记录后，得到完整前序遍历结果。",
+        activeNodes: ["F"],
+        visitedNodes: ["A", "B", "D", "E", "C", "F"],
+        stack: ["A", "B", "D", "E", "C", "F"],
+        codeFocus: "return result;"
+      }
+    ];
+  }
+  if (sceneType === "stack") {
+    return [
+      {
+        id: "stack-scan",
+        title: "从左到右扫描",
+        explanation: "遇到左括号时入栈，等待后续右括号匹配。",
+        activeNodes: ["("],
+        visitedNodes: ["("],
+        stack: ["("],
+        codeFocus: "if (isLeft(ch)) stack.push(ch);"
+      },
+      {
+        id: "stack-push",
+        title: "连续入栈",
+        explanation: "新的左括号放到栈顶，表示它需要最先被匹配。",
+        activeNodes: ["["],
+        visitedNodes: ["(", "["],
+        stack: ["(", "["],
+        codeFocus: "stack.push(ch);"
+      },
+      {
+        id: "stack-pop",
+        title: "右括号匹配栈顶",
+        explanation: "遇到右括号时只检查栈顶，因为最近打开的括号必须最先闭合。",
+        activeNodes: ["]"],
+        visitedNodes: ["(", "[", "]"],
+        stack: ["("],
+        codeFocus: "if (match(stack.top(), ch)) stack.pop();"
+      },
+      {
+        id: "stack-empty",
+        title: "栈空说明全部匹配",
+        explanation: "扫描结束时栈为空，说明所有左括号都找到了对应右括号。",
+        activeNodes: [")"],
+        visitedNodes: ["(", "[", "]", ")"],
+        stack: [],
+        codeFocus: "return stack.empty();"
+      }
+    ];
+  }
+  return [
+    {
+      id: "list-locate",
+      title: "定位前驱节点",
+      explanation: "普通删除需要先找到目标节点的前驱节点，后续才能绕过目标节点。",
+      activeNodes: ["prev"],
+      visitedNodes: ["head", "prev"],
+      codeFocus: "prev = head; for (...) prev = prev.next;"
+    },
+    {
+      id: "list-target",
+      title: "确认删除目标",
+      explanation: "目标节点是 prev.next，删除前先确认它存在，避免空指针。",
+      activeNodes: ["target"],
+      visitedNodes: ["head", "prev", "target"],
+      codeFocus: "target = prev.next;"
+    },
+    {
+      id: "list-relink",
+      title: "重连指针",
+      explanation: "把前驱节点的 next 指向目标节点的下一个节点，链表结构就跳过了目标节点。",
+      activeNodes: ["prev", "next"],
+      visitedNodes: ["head", "prev", "target", "next"],
+      codeFocus: "prev.next = target.next;"
+    },
+    {
+      id: "list-head-case",
+      title: "处理头节点边界",
+      explanation: "如果删除的是头节点，没有前驱节点，需要直接更新链表入口。",
+      activeNodes: ["head"],
+      visitedNodes: ["head", "next"],
+      codeFocus: "if (index === 0) return head.next;"
+    }
+  ];
+}
+
+function createAlgorithmSceneAsset(task: TaskDetail): AlgorithmSceneAsset {
+  const sceneType = inferAlgorithmSceneType(task);
+  const knowledgePoints = task.learning_objectives.length ? task.learning_objectives : [sceneTypeLabel(sceneType)];
+  return {
+    id: `algo-scene-${task.task_id}`,
+    taskId: task.task_id,
+    taskSignature: algorithmTaskSignature(task),
+    sceneType,
+    title: `${task.title} · 算法演示`,
+    algorithm: sceneTypeLabel(sceneType),
+    generatedAt: new Date().toISOString(),
+    knowledgePoints,
+    citations: ["课程知识库", "当前题目说明", "公开样例"],
+    confidence: 0.86,
+    steps: algorithmTemplateSteps(sceneType)
+  };
+}
+
+function readAlgorithmSceneAsset(task: TaskDetail): AlgorithmSceneAsset | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(taskSceneStorageKey(task.task_id));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as AlgorithmSceneAsset;
+    if (parsed.taskId !== task.task_id || !Array.isArray(parsed.steps) || !parsed.steps.length) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function persistAlgorithmSceneAsset(asset: AlgorithmSceneAsset) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(taskSceneStorageKey(asset.taskId), JSON.stringify(asset));
 }
 
 function agentTownWorldPosition(index: number) {
@@ -562,6 +867,656 @@ function CyberHintTownScene({
   }, [hintJourneyKey, steps]);
 
   return <div className="agent-town-scene" ref={mountRef} aria-label="三维智能体提示小镇" />;
+}
+
+function createAlgorithmNode(color: number, opacity = 1) {
+  const node = new THREE.Mesh(
+    new THREE.BoxGeometry(0.62, 0.62, 0.62),
+    new THREE.MeshStandardMaterial({
+      color,
+      emissive: color,
+      emissiveIntensity: 0.05,
+      roughness: 0.34,
+      metalness: 0.16,
+      transparent: opacity < 1,
+      opacity
+    })
+  );
+  const outline = new THREE.LineSegments(
+    new THREE.EdgesGeometry(node.geometry),
+    new THREE.LineBasicMaterial({ color: 0xb9e8ff, transparent: true, opacity: 0.32 })
+  );
+  outline.userData.role = "algorithm-edge";
+  node.add(outline);
+  const glow = new THREE.Mesh(
+    new THREE.BoxGeometry(0.88, 0.88, 0.88),
+    new THREE.MeshBasicMaterial({
+      color: 0x19e4ff,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    })
+  );
+  glow.userData.role = "algorithm-glow";
+  node.add(glow);
+  return node;
+}
+
+function createAlgorithmLine(from: THREE.Vector3, to: THREE.Vector3, color = 0x9fb1c7) {
+  const direction = new THREE.Vector3().subVectors(to, from);
+  const length = direction.length();
+  const mesh = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.032, 0.032, length, 12),
+    new THREE.MeshStandardMaterial({
+      color,
+      emissive: color,
+      emissiveIntensity: 0.22,
+      roughness: 0.42,
+      metalness: 0.12,
+      transparent: true,
+      opacity: 0.72
+    })
+  );
+  mesh.position.copy(from).add(to).multiplyScalar(0.5);
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
+  return mesh;
+}
+
+function createAlgorithmNodeLabel(text: string) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 96;
+  const context = canvas.getContext("2d");
+  if (context) {
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    const gradient = context.createLinearGradient(28, 18, 228, 72);
+    gradient.addColorStop(0, "rgba(7, 22, 45, 0.92)");
+    gradient.addColorStop(1, "rgba(16, 45, 79, 0.88)");
+    context.shadowColor = "rgba(38, 230, 255, 0.48)";
+    context.shadowBlur = 18;
+    context.fillStyle = gradient;
+    context.strokeStyle = "rgba(92, 236, 255, 0.62)";
+    context.lineWidth = 3;
+    context.roundRect(28, 18, 200, 54, 14);
+    context.fill();
+    context.stroke();
+    context.shadowBlur = 0;
+    context.fillStyle = "#f4fbff";
+    context.font = "800 28px Arial, sans-serif";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText(text, 128, 47);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
+  sprite.scale.set(1.18, 0.44, 1);
+  return sprite;
+}
+
+function createAlgorithmBackdrop(scene: THREE.Scene) {
+  const grid = new THREE.GridHelper(7.2, 28, 0x22dcff, 0x244365);
+  grid.position.y = -0.08;
+  const gridMaterial = grid.material as THREE.Material | THREE.Material[];
+  const gridMaterials = Array.isArray(gridMaterial) ? gridMaterial : [gridMaterial];
+  gridMaterials.forEach((material) => {
+    material.transparent = true;
+    material.opacity = 0.26;
+  });
+  scene.add(grid);
+
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(2.85, 0.012, 8, 160),
+    new THREE.MeshBasicMaterial({
+      color: 0x28e2ff,
+      transparent: true,
+      opacity: 0.34,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    })
+  );
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = -0.04;
+  ring.userData.spin = 0.0024;
+  scene.add(ring);
+
+  const platform = new THREE.Mesh(
+    new THREE.CylinderGeometry(3.18, 3.42, 0.08, 96),
+    new THREE.MeshStandardMaterial({
+      color: 0x0b1930,
+      emissive: 0x041a30,
+      emissiveIntensity: 0.55,
+      roughness: 0.62,
+      metalness: 0.18,
+      transparent: true,
+      opacity: 0.82
+    })
+  );
+  platform.position.y = -0.14;
+  scene.add(platform);
+
+  const points = new Float32Array(96 * 3);
+  for (let index = 0; index < 96; index += 1) {
+    const angle = index * 2.399963;
+    const radius = 2.2 + ((index * 37) % 42) / 18;
+    points[index * 3] = Math.cos(angle) * radius;
+    points[index * 3 + 1] = 0.18 + ((index * 19) % 38) / 18;
+    points[index * 3 + 2] = Math.sin(angle) * radius;
+  }
+  const particles = new THREE.Points(
+    new THREE.BufferGeometry().setAttribute("position", new THREE.BufferAttribute(points, 3)),
+    new THREE.PointsMaterial({
+      color: 0x75eaff,
+      size: 0.028,
+      transparent: true,
+      opacity: 0.42,
+      depthWrite: false
+    })
+  );
+  particles.userData.spin = -0.0008;
+  scene.add(particles);
+}
+
+function gridPosition(id: string) {
+  const [xRaw, zRaw] = id.split(",");
+  const x = Number.parseInt(xRaw, 10);
+  const z = Number.parseInt(zRaw, 10);
+  return new THREE.Vector3((Number.isFinite(x) ? x : 0) * 0.72 - 1.45, 0.32, (Number.isFinite(z) ? z : 0) * 0.72 - 1.45);
+}
+
+function treePosition(id: string) {
+  const positions: Record<string, THREE.Vector3> = {
+    A: new THREE.Vector3(0, 1.5, -0.3),
+    B: new THREE.Vector3(-1.45, 0.55, -0.05),
+    C: new THREE.Vector3(1.45, 0.55, -0.05),
+    D: new THREE.Vector3(-2.05, -0.35, 0.3),
+    E: new THREE.Vector3(-0.85, -0.35, 0.3),
+    F: new THREE.Vector3(1.45, -0.35, 0.3)
+  };
+  return positions[id] ?? new THREE.Vector3(0, 0, 0);
+}
+
+function buildAlgorithmSceneObjects(scene: THREE.Scene, asset: AlgorithmSceneAsset) {
+  const nodes = new Map<string, THREE.Mesh>();
+  const labels = new Map<string, THREE.Sprite>();
+  const baseMaterial = new THREE.MeshStandardMaterial({ color: 0xdce5ef, roughness: 0.7, metalness: 0.03, transparent: true, opacity: 0.52 });
+
+  function addNode(id: string, position: THREE.Vector3) {
+    const node = createAlgorithmNode(0xdce5ef, 0.52);
+    node.position.copy(position);
+    node.userData.baseY = position.y;
+    node.userData.nodeId = id;
+    scene.add(node);
+    nodes.set(id, node);
+
+    const label = createAlgorithmNodeLabel(id);
+    label.position.copy(position).add(new THREE.Vector3(0, 0.58, 0));
+    scene.add(label);
+    labels.set(id, label);
+  }
+
+  if (asset.sceneType === "grid_bfs" || asset.sceneType === "grid_dfs") {
+    const floor = createTownBox(4.2, 0.04, 4.2, 0x123457, 0.46);
+    floor.position.y = -0.02;
+    scene.add(floor);
+    const grid = new THREE.GridHelper(4.1, 8, 0x32e6ff, 0x2f5f8b);
+    grid.position.y = 0.02;
+    const gridMaterial = grid.material as THREE.Material | THREE.Material[];
+    (Array.isArray(gridMaterial) ? gridMaterial : [gridMaterial]).forEach((material) => {
+      material.transparent = true;
+      material.opacity = 0.58;
+    });
+    scene.add(grid);
+    for (let x = 0; x < 5; x += 1) {
+      for (let z = 0; z < 5; z += 1) {
+        const id = `${x},${z}`;
+        addNode(id, gridPosition(id));
+      }
+    }
+    const start = nodes.get("0,0");
+    const end = nodes.get("4,4");
+    if (start) start.scale.setScalar(1.12);
+    if (end) end.scale.setScalar(1.12);
+  } else if (asset.sceneType === "binary_tree") {
+    ["A", "B", "C", "D", "E", "F"].forEach((id) => addNode(id, treePosition(id)));
+    [["A", "B"], ["A", "C"], ["B", "D"], ["B", "E"], ["C", "F"]].forEach(([from, to]) => {
+      scene.add(createAlgorithmLine(treePosition(from), treePosition(to), 0xb6c4d6));
+    });
+  } else if (asset.sceneType === "stack") {
+    ["(", "[", "]", ")"].forEach((id, index) => {
+      const node = createAlgorithmNode(0xe5edf7, 0.72);
+      node.position.set(-1.2 + index * 0.78, 0.4, -1.15);
+      node.userData.baseY = node.position.y;
+      node.userData.nodeId = id;
+      scene.add(node);
+      nodes.set(id, node);
+      const label = createAlgorithmNodeLabel(id);
+      label.position.copy(node.position).add(new THREE.Vector3(0, 0.58, 0));
+      scene.add(label);
+      labels.set(id, label);
+    });
+    for (let index = 0; index < 4; index += 1) {
+      const node = createAlgorithmNode(0xdce5ef, 0.38);
+      node.position.set(1.7, 0.32 + index * 0.56, 0.45);
+      node.scale.set(1.16, 0.74, 1.16);
+      scene.add(node);
+      nodes.set(`stack-${index}`, node);
+    }
+  } else {
+    ["head", "prev", "target", "next", "tail"].forEach((id, index) => {
+      const position = new THREE.Vector3(-1.9 + index * 0.96, 0.42, 0);
+      addNode(id, position);
+      if (index > 0) {
+        scene.add(createAlgorithmLine(new THREE.Vector3(-1.9 + (index - 1) * 0.96 + 0.32, 0.42, 0), new THREE.Vector3(position.x - 0.32, 0.42, 0), 0x91a7c0));
+      }
+    });
+  }
+
+  return { nodes, labels, baseMaterial };
+}
+
+function updateAlgorithmSceneObjects(asset: AlgorithmSceneAsset, stepIndex: number, nodes: Map<string, THREE.Mesh>, labels: Map<string, THREE.Sprite>) {
+  const step = asset.steps[stepIndex] ?? asset.steps[0];
+  const active = new Set(step.activeNodes);
+  const visited = new Set(step.visitedNodes);
+  const stackValues = new Set(step.stack ?? []);
+  nodes.forEach((node, nodeId) => {
+    const material = node.material as THREE.MeshStandardMaterial;
+    const glow = node.children.find((child) => child.userData.role === "algorithm-glow") as THREE.Mesh | undefined;
+    const edge = node.children.find((child) => child.userData.role === "algorithm-edge") as THREE.LineSegments | undefined;
+    const glowMaterial = glow?.material as THREE.MeshBasicMaterial | undefined;
+    const edgeMaterial = edge?.material as THREE.LineBasicMaterial | undefined;
+    node.userData.highlight = active.has(nodeId);
+    node.position.y = node.userData.baseY ?? node.position.y;
+    node.scale.setScalar(nodeId.startsWith("stack-") ? 1 : 1);
+    if (active.has(nodeId)) {
+      material.color.setHex(0xffa22e);
+      material.emissive.setHex(0xff7d1a);
+      material.emissiveIntensity = 0.78;
+      material.opacity = 1;
+      material.transparent = false;
+      node.scale.setScalar(1.18);
+      if (glowMaterial) {
+        glowMaterial.color.setHex(0xff9d22);
+        glowMaterial.opacity = 0.32;
+      }
+      if (edgeMaterial) {
+        edgeMaterial.color.setHex(0xfff4b0);
+        edgeMaterial.opacity = 0.96;
+      }
+    } else if (visited.has(nodeId)) {
+      material.color.setHex(0xffdf5a);
+      material.emissive.setHex(0xcaa929);
+      material.emissiveIntensity = 0.26;
+      material.opacity = 0.88;
+      material.transparent = true;
+      if (glowMaterial) {
+        glowMaterial.color.setHex(0xffdf5a);
+        glowMaterial.opacity = 0.12;
+      }
+      if (edgeMaterial) {
+        edgeMaterial.color.setHex(0xffe994);
+        edgeMaterial.opacity = 0.58;
+      }
+    } else if (nodeId.startsWith("stack-")) {
+      material.color.setHex(0xd8e3f0);
+      material.emissive.setHex(0x18314d);
+      material.emissiveIntensity = 0.08;
+      material.opacity = 0.32;
+      material.transparent = true;
+      if (glowMaterial) glowMaterial.opacity = 0;
+      if (edgeMaterial) edgeMaterial.opacity = 0.24;
+    } else {
+      material.color.setHex(0xacc3db);
+      material.emissive.setHex(0x153b60);
+      material.emissiveIntensity = 0.12;
+      material.opacity = 0.36;
+      material.transparent = true;
+      if (glowMaterial) glowMaterial.opacity = 0;
+      if (edgeMaterial) {
+        edgeMaterial.color.setHex(0x89dfff);
+        edgeMaterial.opacity = 0.24;
+      }
+    }
+    const label = labels.get(nodeId);
+    if (label) {
+      label.scale.set(active.has(nodeId) ? 1.36 : 1.18, active.has(nodeId) ? 0.52 : 0.44, 1);
+    }
+  });
+
+  if (asset.sceneType === "stack") {
+    const slots = Array.from(nodes.entries()).filter(([nodeId]) => nodeId.startsWith("stack-"));
+    slots.forEach(([nodeId, node], index) => {
+      const value = step.stack?.[index];
+      const material = node.material as THREE.MeshStandardMaterial;
+      material.color.setHex(value ? 0x54c68c : 0xd8e3f0);
+      material.emissive.setHex(value ? 0x1a7d62 : 0x18314d);
+      material.emissiveIntensity = value ? 0.38 : 0.08;
+      material.opacity = value ? 0.9 : 0.32;
+      node.userData.highlight = Boolean(value && stackValues.has(value));
+      labels.get(nodeId)?.removeFromParent();
+    });
+  }
+}
+
+function AlgorithmSceneCanvas({
+  asset,
+  stepIndex,
+  resetViewKey
+}: {
+  asset: AlgorithmSceneAsset;
+  stepIndex: number;
+  resetViewKey: number;
+}) {
+  const mountRef = useRef<HTMLDivElement | null>(null);
+  const viewRef = useRef({
+    yaw: -0.72,
+    pitch: 0.72,
+    distance: 6.1,
+    dragging: false,
+    lastX: 0,
+    lastY: 0
+  });
+  const sceneRef = useRef<{
+    camera: THREE.PerspectiveCamera;
+    renderer: THREE.WebGLRenderer;
+    nodes: Map<string, THREE.Mesh>;
+    labels: Map<string, THREE.Sprite>;
+  } | null>(null);
+
+  useEffect(() => {
+    const host = mountRef.current;
+    if (!host) return undefined;
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x071022);
+    scene.fog = new THREE.FogExp2(0x071022, 0.08);
+    const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.domElement.className = "algorithm-scene-canvas";
+    host.appendChild(renderer.domElement);
+
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x26344e, 2.5));
+    const keyLight = new THREE.DirectionalLight(0xffffff, 2.2);
+    keyLight.position.set(4, 7, 5);
+    scene.add(keyLight);
+    const rimLight = new THREE.DirectionalLight(0x3be7ff, 1.6);
+    rimLight.position.set(-5, 4, -3);
+    scene.add(rimLight);
+
+    createAlgorithmBackdrop(scene);
+    const { nodes, labels } = buildAlgorithmSceneObjects(scene, asset);
+    sceneRef.current = { camera, renderer, nodes, labels };
+
+    function updateCamera() {
+      const view = viewRef.current;
+      const y = Math.sin(view.pitch) * view.distance;
+      const radius = Math.cos(view.pitch) * view.distance;
+      camera.position.set(Math.sin(view.yaw) * radius, y, Math.cos(view.yaw) * radius);
+      camera.lookAt(0, 0.32, 0);
+    }
+
+    const resize = () => {
+      const width = Math.max(220, host.clientWidth);
+      const height = Math.max(220, host.clientHeight);
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height, false);
+    };
+    const observer = new ResizeObserver(resize);
+    observer.observe(host);
+    resize();
+    updateCamera();
+    updateAlgorithmSceneObjects(asset, stepIndex, nodes, labels);
+
+    let frame = 0;
+    const animate = (time: number) => {
+      frame = window.requestAnimationFrame(animate);
+      updateCamera();
+      nodes.forEach((node) => {
+        if (node.userData.highlight) {
+          node.position.y = (node.userData.baseY ?? 0) + Math.sin(time / 160) * 0.08;
+        }
+      });
+      labels.forEach((label) => {
+        label.material.opacity = 0.92 + Math.sin(time / 260) * 0.04;
+      });
+      scene.children.forEach((child) => {
+        if (child.userData.spin) {
+          child.rotation.y += child.userData.spin;
+        }
+      });
+      renderer.render(scene, camera);
+    };
+    frame = window.requestAnimationFrame(animate);
+
+    const onPointerDown = (event: globalThis.PointerEvent) => {
+      viewRef.current.dragging = true;
+      viewRef.current.lastX = event.clientX;
+      viewRef.current.lastY = event.clientY;
+      renderer.domElement.setPointerCapture(event.pointerId);
+    };
+    const onPointerMove = (event: globalThis.PointerEvent) => {
+      const view = viewRef.current;
+      if (!view.dragging) return;
+      const dx = event.clientX - view.lastX;
+      const dy = event.clientY - view.lastY;
+      view.lastX = event.clientX;
+      view.lastY = event.clientY;
+      view.yaw -= dx * 0.008;
+      view.pitch = clamp(view.pitch + dy * 0.006, 0.18, 1.15);
+    };
+    const onPointerUp = (event: globalThis.PointerEvent) => {
+      viewRef.current.dragging = false;
+      try {
+        renderer.domElement.releasePointerCapture(event.pointerId);
+      } catch {
+        // Pointer capture may already be released by the browser.
+      }
+    };
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      viewRef.current.distance = clamp(viewRef.current.distance + event.deltaY * 0.006, 3.6, 9.2);
+    };
+    renderer.domElement.addEventListener("pointerdown", onPointerDown);
+    renderer.domElement.addEventListener("pointermove", onPointerMove);
+    renderer.domElement.addEventListener("pointerup", onPointerUp);
+    renderer.domElement.addEventListener("pointercancel", onPointerUp);
+    renderer.domElement.addEventListener("wheel", onWheel, { passive: false });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer.disconnect();
+      renderer.domElement.removeEventListener("pointerdown", onPointerDown);
+      renderer.domElement.removeEventListener("pointermove", onPointerMove);
+      renderer.domElement.removeEventListener("pointerup", onPointerUp);
+      renderer.domElement.removeEventListener("pointercancel", onPointerUp);
+      renderer.domElement.removeEventListener("wheel", onWheel);
+      sceneRef.current = null;
+      disposeThreeObject(scene);
+      renderer.dispose();
+      renderer.domElement.remove();
+    };
+  }, [asset.id]);
+
+  useEffect(() => {
+    const sceneState = sceneRef.current;
+    if (!sceneState) return;
+    updateAlgorithmSceneObjects(asset, stepIndex, sceneState.nodes, sceneState.labels);
+  }, [asset, stepIndex]);
+
+  useEffect(() => {
+    viewRef.current.yaw = -0.72;
+    viewRef.current.pitch = 0.72;
+    viewRef.current.distance = 6.1;
+  }, [resetViewKey]);
+
+  return <div className="algorithm-scene-canvas-host" ref={mountRef} aria-label={`${asset.title} 三维算法演示`} />;
+}
+
+function AlgorithmScenePanel({
+  task,
+  asset,
+  generating,
+  progressText,
+  stepIndex,
+  playing,
+  expanded,
+  resetViewKey,
+  onGenerate,
+  onStepChange,
+  onTogglePlay,
+  onResetView,
+  onExpandedChange
+}: {
+  task: TaskDetail;
+  asset: AlgorithmSceneAsset | null;
+  generating: boolean;
+  progressText: string;
+  stepIndex: number;
+  playing: boolean;
+  expanded: boolean;
+  resetViewKey: number;
+  onGenerate: () => void;
+  onStepChange: (next: number) => void;
+  onTogglePlay: () => void;
+  onResetView: () => void;
+  onExpandedChange: (next: boolean) => void;
+}) {
+  const sceneType = asset?.sceneType ?? inferAlgorithmSceneType(task);
+  const currentStep = asset?.steps[stepIndex] ?? null;
+  const totalSteps = asset?.steps.length ?? 0;
+
+  useEffect(() => {
+    if (!expanded) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") onExpandedChange(false);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [expanded, onExpandedChange]);
+
+  function renderTimeline(target: "panel" | "bubble") {
+    if (!asset) return null;
+    return (
+      <div className={`algorithm-scene-timeline ${target === "bubble" ? "bubble" : ""}`} aria-label="算法演示步骤">
+        {asset.steps.map((step, index) => (
+          <button
+            className={index === stepIndex ? "active" : index < stepIndex ? "done" : ""}
+            key={`${target}-${step.id}`}
+            type="button"
+            title={step.title}
+            aria-label={`跳转到步骤 ${index + 1}: ${step.title}`}
+            onClick={() => onStepChange(index)}
+          >
+            <span />
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  function renderSceneStage(target: "panel" | "bubble") {
+    if (!asset) return null;
+    return (
+      <>
+        <section className={`algorithm-scene-stage ${target === "bubble" ? "bubble" : ""}`}>
+          <AlgorithmSceneCanvas asset={asset} stepIndex={stepIndex} resetViewKey={resetViewKey} />
+          <div className="algorithm-scene-beam" aria-hidden="true" />
+          <div className="algorithm-scene-hud">
+            <span><Box size={14} /> 已绑定本题</span>
+            <h3>{asset.algorithm}</h3>
+            <small>置信度 {Math.round(asset.confidence * 100)}% · {asset.citations.join(" / ")}</small>
+          </div>
+          {target === "panel" ? (
+            <button className="algorithm-scene-expand" type="button" aria-label="放大算法演示窗口" onClick={() => onExpandedChange(true)}>
+              <Maximize2 size={14} />
+              放大
+            </button>
+          ) : null}
+          {currentStep ? (
+            <div className="algorithm-scene-step-card">
+              <span>步骤 {stepIndex + 1}/{totalSteps}</span>
+              <strong>{currentStep.title}</strong>
+              <p>{currentStep.explanation}</p>
+              <code>{currentStep.codeFocus}</code>
+            </div>
+          ) : null}
+          {(currentStep?.queue?.length || currentStep?.stack?.length) ? (
+            <div className="algorithm-scene-state">
+              <strong>{currentStep.queue ? "当前 BFS 队列" : "当前栈 / 调用栈"}</strong>
+              <p>{(currentStep.queue ?? currentStep.stack ?? []).join(" -> ") || "空"}</p>
+            </div>
+          ) : null}
+          <div className="algorithm-scene-help"><MousePointer2 size={14} /> 拖动旋转 · 滚轮缩放 · 多角度观察</div>
+          <footer className="algorithm-scene-controls">
+            <button type="button" aria-label="上一步" onClick={() => onStepChange(Math.max(0, stepIndex - 1))} disabled={stepIndex <= 0}>
+              <SkipBack size={15} />
+            </button>
+            <button className="primary" type="button" onClick={onTogglePlay}>
+              {playing ? <Pause size={15} /> : <Play size={15} />}
+              {playing ? "暂停" : "播放"}
+            </button>
+            <button type="button" aria-label="下一步" onClick={() => onStepChange(Math.min(totalSteps - 1, stepIndex + 1))} disabled={stepIndex >= totalSteps - 1}>
+              <SkipForward size={15} />
+            </button>
+            <button type="button" aria-label="重置视角" onClick={onResetView}>
+              <RotateCcw size={15} />
+            </button>
+          </footer>
+        </section>
+        {renderTimeline(target)}
+      </>
+    );
+  }
+
+  return (
+    <div className="algorithm-scene-panel">
+      {!asset ? (
+        <section className="algorithm-scene-generate">
+          <span><Box size={20} /></span>
+          <h3>{sceneTypeLabel(sceneType)}</h3>
+          <p>首次查看需要由学生主动生成。生成后会绑定当前题目，后续进入本题可直接复用。</p>
+          <button className="primary" type="button" disabled={generating} onClick={onGenerate}>
+            {generating ? <Activity size={16} /> : <Box size={16} />}
+            {generating ? "生成中" : "生成算法演示"}
+          </button>
+          {generating ? <small>{progressText}</small> : <small>同名但新建的题目会作为新的题目实例重新生成。</small>}
+        </section>
+      ) : (
+        <>
+          {renderSceneStage("panel")}
+          {expanded ? (
+            <div className="algorithm-scene-popover-layer" role="presentation" onMouseDown={(event) => {
+              if (event.target === event.currentTarget) onExpandedChange(false);
+            }}>
+              <section className="algorithm-scene-popover" role="dialog" aria-modal="true" aria-label={`${asset.title} 放大演示窗口`}>
+                <header>
+                  <div>
+                    <span>算法演示窗口</span>
+                    <strong>{asset.title}</strong>
+                  </div>
+                  <button type="button" aria-label="关闭放大演示窗口" onClick={() => onExpandedChange(false)}>
+                    <X size={18} />
+                  </button>
+                </header>
+                <div className="algorithm-scene-popover-body">
+                  {renderSceneStage("bubble")}
+                </div>
+              </section>
+            </div>
+          ) : null}
+        </>
+      )}
+    </div>
+  );
 }
 
 function caseFields(testCase: TeacherTestCase | null) {
@@ -905,6 +1860,13 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
   const [agentRunError, setAgentRunError] = useState<string | null>(null);
   const [activeAgentStepId, setActiveAgentStepId] = useState<string | null>(null);
   const [activeExecutionId, setActiveExecutionId] = useState<string | null>(null);
+  const [algorithmScene, setAlgorithmScene] = useState<AlgorithmSceneAsset | null>(null);
+  const [algorithmSceneGenerating, setAlgorithmSceneGenerating] = useState(false);
+  const [algorithmSceneProgress, setAlgorithmSceneProgress] = useState("");
+  const [activeAlgorithmStepIndex, setActiveAlgorithmStepIndex] = useState(0);
+  const [algorithmScenePlaying, setAlgorithmScenePlaying] = useState(false);
+  const [algorithmSceneExpanded, setAlgorithmSceneExpanded] = useState(false);
+  const [algorithmSceneResetKey, setAlgorithmSceneResetKey] = useState(0);
   const gridRef = useRef<HTMLElement | null>(null);
   const centerRef = useRef<HTMLDivElement | null>(null);
 
@@ -921,6 +1883,12 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
     setAgentRunLoading(false);
     setAgentRunError(null);
     setActiveAgentStepId(null);
+    setAlgorithmScene(null);
+    setAlgorithmSceneGenerating(false);
+    setAlgorithmSceneProgress("");
+    setActiveAlgorithmStepIndex(0);
+    setAlgorithmScenePlaying(false);
+    setAlgorithmSceneExpanded(false);
     setActiveResultTab("cases");
     setSelectedCaseIndex(0);
 
@@ -936,6 +1904,7 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
           setSourceCode(nextTask.interface_spec.language_templates[defaultLanguage] ?? nextTask.interface_spec.student_template);
           setRunState("IDLE");
           setRunMessage("等待提交");
+          setAlgorithmScene(readAlgorithmSceneAsset(nextTask));
         } else {
           setError(studentErrorMessage(taskResult.reason, "任务详情加载失败，请返回任务列表后重试。"));
           setErrorDetail(studentErrorDetail(taskResult.reason));
@@ -956,6 +1925,21 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
   useEffect(() => {
     window.localStorage.setItem(WORKSPACE_LAYOUT_KEY, JSON.stringify(layout));
   }, [layout]);
+
+  useEffect(() => {
+    if (!algorithmScenePlaying || !algorithmScene) return undefined;
+    const timer = window.setInterval(() => {
+      setActiveAlgorithmStepIndex((current) => {
+        const next = current + 1;
+        if (next >= algorithmScene.steps.length) {
+          setAlgorithmScenePlaying(false);
+          return 0;
+        }
+        return next;
+      });
+    }, 1450);
+    return () => window.clearInterval(timer);
+  }, [algorithmScene, algorithmScenePlaying]);
 
   useEffect(() => {
     if (!activeExecutionId) return undefined;
@@ -1214,6 +2198,40 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
     }
   }
 
+  function openAlgorithmScene() {
+    setAiCollapsed(false);
+    setAiPanelMode("scene");
+  }
+
+  function generateAlgorithmScene() {
+    if (!task || algorithmSceneGenerating) return;
+    setAiCollapsed(false);
+    setAiPanelMode("scene");
+    setAlgorithmSceneGenerating(true);
+    setAlgorithmSceneProgress("读取当前题目、知识点和公开样例。");
+    setActiveAlgorithmStepIndex(0);
+    setAlgorithmScenePlaying(false);
+
+    const progressTimers = [
+      window.setTimeout(() => setAlgorithmSceneProgress("匹配算法模板并生成结构化步骤。"), 520),
+      window.setTimeout(() => setAlgorithmSceneProgress("构建可拖拽的 3D 教学场景。"), 1040),
+      window.setTimeout(() => {
+        const asset = createAlgorithmSceneAsset(task);
+        persistAlgorithmSceneAsset(asset);
+        setAlgorithmScene(asset);
+        setAlgorithmSceneProgress("已生成并绑定当前题目。");
+        setAlgorithmSceneGenerating(false);
+      }, 1480)
+    ];
+    return () => progressTimers.forEach((timer) => window.clearTimeout(timer));
+  }
+
+  function setAlgorithmStep(next: number) {
+    if (!algorithmScene) return;
+    setActiveAlgorithmStepIndex(clamp(next, 0, Math.max(0, algorithmScene.steps.length - 1)));
+    setAlgorithmScenePlaying(false);
+  }
+
   function startProblemResize(event: PointerEvent<HTMLDivElement>) {
     event.preventDefault();
     const grid = gridRef.current;
@@ -1343,8 +2361,14 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
                 />
                 <button className="program-back" type="button" onClick={onBack}><ArrowLeft size={16} /> 返回班级任务</button>
                 <div className="program-title-line">
-                  <h1>编程任务：{task.title}</h1>
-                  <span>状态：<b>{latestResult?.submission_status ?? task.current_progress.status}</b></span>
+                  <div>
+                    <h1>编程任务：{task.title}</h1>
+                    <span>状态：<b>{latestResult?.submission_status ?? task.current_progress.status}</b></span>
+                  </div>
+                  <button className="program-scene-shortcut" type="button" onClick={openAlgorithmScene}>
+                    <Box size={16} />
+                    {algorithmScene ? "查看算法演示" : "生成算法演示"}
+                  </button>
                 </div>
               </div>
             </section>
@@ -1519,6 +2543,7 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
                     <nav className="program-ai-tabs" aria-label="AI学习助手视图">
                       <button className={aiPanelMode === "hint" ? "active" : ""} type="button" onClick={() => setAiPanelMode("hint")}>文字提示</button>
                       <button className={aiPanelMode === "town" ? "active" : ""} type="button" onClick={() => setAiPanelMode("town")}>小镇提示</button>
+                      <button className={aiPanelMode === "scene" ? "active" : ""} type="button" onClick={() => setAiPanelMode("scene")}>算法演示</button>
                     </nav>
                     {aiPanelMode === "hint" ? (
                       <>
@@ -1557,7 +2582,7 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
                           <button className="primary" type="button" disabled={!diagnosis?.diagnosis_id} onClick={requestNextHint}><Lightbulb size={16} /> 获取下一层提示</button>
                         </footer>
                       </>
-                    ) : (
+                    ) : aiPanelMode === "town" ? (
                       <AgentTownView
                         run={agentRun}
                         loading={agentRunLoading}
@@ -1568,7 +2593,23 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
                         onSelectStep={setActiveAgentStepId}
                         onRequestHint={requestNextHint}
                       />
-                    )}
+                    ) : aiPanelMode === "scene" ? (
+                      <AlgorithmScenePanel
+                        task={task}
+                        asset={algorithmScene}
+                        generating={algorithmSceneGenerating}
+                        progressText={algorithmSceneProgress}
+                        stepIndex={activeAlgorithmStepIndex}
+                        playing={algorithmScenePlaying}
+                        expanded={algorithmSceneExpanded}
+                        resetViewKey={algorithmSceneResetKey}
+                        onGenerate={generateAlgorithmScene}
+                        onStepChange={setAlgorithmStep}
+                        onTogglePlay={() => setAlgorithmScenePlaying((value) => !value)}
+                        onResetView={() => setAlgorithmSceneResetKey((value) => value + 1)}
+                        onExpandedChange={setAlgorithmSceneExpanded}
+                      />
+                    ) : null}
                   </>
                 )}
               </aside>

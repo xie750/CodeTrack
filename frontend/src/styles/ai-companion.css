@@ -44,6 +44,10 @@
   font-family: var(--font-sans);
 }
 
+.ai-companion[data-route^="/workspace"] {
+  display: none;
+}
+
 .ai-companion * {
   box-sizing: border-box;
 }

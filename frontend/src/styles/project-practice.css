@@ -1865,7 +1865,8 @@
 
 @media (max-width: 1100px) {
   .practice-hero-card,
-  .practice-main-grid {
+  .practice-main-grid,
+  .practice-initial-shell {
     grid-template-columns: 1fr;
   }
 
@@ -1961,8 +1962,22 @@
   .practice-project-panel,
   .practice-stats-card,
   .practice-activity-card,
-  .practice-path-card {
+  .practice-path-card,
+  .practice-initial-panel,
+  .practice-readiness-panel {
     padding: 16px;
+  }
+
+  .practice-initial-panel {
+    min-height: auto;
+  }
+
+  .practice-initial-actions {
+    flex-direction: column;
+  }
+
+  .practice-initial-actions button {
+    width: 100%;
   }
 
   .practice-section-title {
