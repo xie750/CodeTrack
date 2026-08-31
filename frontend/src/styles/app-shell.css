@@ -18,7 +18,7 @@ body {
 }
 
 :root {
-  --app-visual-scale: 0.9375;
+  --app-visual-scale: 1;
   --app-page-content-max: 1480px;
   --app-viewport-width: calc(100vw / var(--app-visual-scale));
   --app-viewport-height: calc(100dvh / var(--app-visual-scale));

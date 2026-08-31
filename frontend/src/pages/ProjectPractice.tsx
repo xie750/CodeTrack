@@ -320,17 +320,19 @@ export default function ProjectPractice() {
               ? "将课程能力转化为真实的项目证据，构建完整的科研与工程能力体系。按照项目流程逐步完成任务，积累可展示、可复用的成果。"
               : pageData.readiness.description}
           </p>
-          <div className="practice-hero-actions">
-            <button type="button" disabled={startingProject} onClick={openRecommendedProject}>
-              {startingProject ? <Loader2 className="practice-spin-icon" size={18} /> : null}
-              {hasProjects ? "查看推荐项目" : pageData.readiness.primary_action_label}
-              {!startingProject ? <ArrowRight size={18} /> : null}
-            </button>
-            <button type="button" className="secondary" onClick={() => hasProjects ? openRecommendedProject() : navigate("/courses")}>
-              <CirclePlay size={18} />
-              {hasProjects ? "继续上次任务" : pageData.readiness.secondary_action_label}
-            </button>
-          </div>
+          {hasProjects ? (
+            <div className="practice-hero-actions">
+              <button type="button" disabled={startingProject} onClick={openRecommendedProject}>
+                {startingProject ? <Loader2 className="practice-spin-icon" size={18} /> : null}
+                查看推荐项目
+                {!startingProject ? <ArrowRight size={18} /> : null}
+              </button>
+              <button type="button" className="secondary" onClick={openRecommendedProject}>
+                <CirclePlay size={18} />
+                继续上次任务
+              </button>
+            </div>
+          ) : null}
         </div>
       </section>
 
@@ -418,11 +420,11 @@ export default function ProjectPractice() {
             <div className="practice-initial-actions">
               <button type="button" disabled={startingProject} onClick={startFirstProject}>
                 {startingProject ? <Loader2 className="practice-spin-icon" size={18} /> : <ArrowRight size={18} />}
-                {startingProject ? "正在开启" : "尝试第一个轻量项目"}
+                {startingProject ? "正在开启" : pageData.readiness.primary_action_label}
               </button>
               <button type="button" className="secondary" onClick={() => navigate("/courses")}>
                 <CirclePlay size={18} />
-                先完成课程任务
+                {pageData.readiness.secondary_action_label}
               </button>
             </div>
           </div>
