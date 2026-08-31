@@ -86,6 +86,27 @@ def test_practice_projects_are_scoped_to_student_courses():
         )
 
     assert home.status_code == 200
-    assert [project["id"] for project in home.json()["data"]["projects"]] == ["log-topk"]
+    home_data = home.json()["data"]
+    assert home_data["projects"] == []
+    assert home_data["recommended_project_id"] is None
+    assert home_data["readiness"]["status"] == "PREPARING"
     assert forbidden_detail.status_code == 404
     assert forbidden_detail.json()["error"]["code"] == "PRACTICE_PROJECT_NOT_FOUND"
+
+
+def test_student_can_start_first_lightweight_practice_project():
+    with TestClient(app) as client:
+        created = client.post("/api/v1/student/practice-projects/start-first", headers=OTHER_STUDENT_HEADERS)
+        home = client.get("/api/v1/student/practice-projects", headers=OTHER_STUDENT_HEADERS)
+
+    assert created.status_code == 201
+    created_data = created.json()["data"]
+    assert created_data["started"] is True
+    assert created_data["detail"]["project"]["id"] == "log-topk"
+    assert created_data["detail"]["project"]["status"] == "IN_PROGRESS"
+    assert created_data["detail"]["metrics"]["submission_count"] == 0
+
+    home_data = home.json()["data"]
+    assert [project["id"] for project in home_data["projects"]] == ["log-topk"]
+    assert home_data["recommended_project_id"] == "log-topk"
+    assert home_data["readiness"]["status"] == "ACTIVE"

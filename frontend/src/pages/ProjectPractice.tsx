@@ -136,6 +136,13 @@ const fallbackHome: PracticeProjectHome = {
   },
   activities: fallbackActivities,
   path_steps: fallbackPathSteps,
+  readiness: {
+    status: "ACTIVE",
+    title: "项目实战进行中",
+    description: "你已经进入项目实战阶段，可以继续推进当前项目并沉淀能力证据。",
+    primary_action_label: "继续项目",
+    secondary_action_label: "查看项目路径"
+  },
   proof_items: fallbackProofItems
 };
 
@@ -246,6 +253,7 @@ export default function ProjectPractice() {
   const [homeData, setHomeData] = useState<PracticeProjectHome | null>(null);
   const [homeLoading, setHomeLoading] = useState(false);
   const [homeError, setHomeError] = useState<string | null>(null);
+  const [startingProject, setStartingProject] = useState(false);
 
   useEffect(() => {
     if (projectId) return;
@@ -268,7 +276,29 @@ export default function ProjectPractice() {
   }, [projectId]);
 
   const pageData = homeData ?? fallbackHome;
-  const recommendedProjectId = pageData.recommended_project_id ?? pageData.projects[0]?.id ?? fallbackProjects[0].id;
+  const hasProjects = pageData.projects.length > 0;
+  const recommendedProjectId = pageData.recommended_project_id ?? pageData.projects[0]?.id ?? null;
+
+  async function startFirstProject() {
+    setStartingProject(true);
+    setHomeError(null);
+    try {
+      const result = await api.startFirstPracticeProject();
+      navigate(`/project-practice/projects/${result.detail.project.id}`);
+    } catch (error) {
+      setHomeError(apiErrorMessage(error));
+    } finally {
+      setStartingProject(false);
+    }
+  }
+
+  function openRecommendedProject() {
+    if (recommendedProjectId) {
+      navigate(`/project-practice/projects/${recommendedProjectId}`);
+      return;
+    }
+    void startFirstProject();
+  }
 
   if (projectId) {
     const fallbackProject = fallbackProjects.find((project) => project.id === projectId) ?? fallbackProjects[0];
@@ -282,16 +312,24 @@ export default function ProjectPractice() {
           <img src={practiceHeroArt} alt="" />
         </div>
         <div className="practice-hero-copy">
-          <h1 id="practice-home-title">开始你的科研项目实训之旅 <Sparkles size={25} /></h1>
-          <p>将课程能力转化为真实的项目证据，构建完整的科研与工程能力体系。按照项目流程逐步完成任务，积累可展示、可复用的成果。</p>
+          <h1 id="practice-home-title">
+            {hasProjects ? "开始你的科研项目实训之旅" : pageData.readiness.title}
+            <Sparkles size={25} />
+          </h1>
+          <p>
+            {hasProjects
+              ? "将课程能力转化为真实的项目证据，构建完整的科研与工程能力体系。按照项目流程逐步完成任务，积累可展示、可复用的成果。"
+              : pageData.readiness.description}
+          </p>
           <div className="practice-hero-actions">
-            <button type="button" onClick={() => navigate(`/project-practice/projects/${recommendedProjectId}`)}>
-              查看推荐项目
-              <ArrowRight size={18} />
+            <button type="button" disabled={startingProject} onClick={openRecommendedProject}>
+              {startingProject ? <Loader2 className="practice-spin-icon" size={18} /> : null}
+              {hasProjects ? "查看推荐项目" : pageData.readiness.primary_action_label}
+              {!startingProject ? <ArrowRight size={18} /> : null}
             </button>
-            <button type="button" className="secondary" onClick={() => navigate(`/project-practice/projects/${recommendedProjectId}`)}>
+            <button type="button" className="secondary" onClick={() => hasProjects ? openRecommendedProject() : navigate("/courses")}>
               <CirclePlay size={18} />
-              继续上次任务
+              {hasProjects ? "继续上次任务" : pageData.readiness.secondary_action_label}
             </button>
           </div>
         </div>
@@ -304,73 +342,111 @@ export default function ProjectPractice() {
         </div>
       ) : null}
 
-      <section className="practice-main-grid">
-        <div className="practice-project-panel">
-          <div className="practice-section-title">
-            <span><Layers3 size={19} /> 我的项目</span>
-            <button type="button" onClick={() => navigate(`/project-practice/projects/${recommendedProjectId}`)}>查看全部项目 <ArrowRight size={15} /></button>
-          </div>
-          <div className="practice-project-list">
-            {pageData.projects.map((project, index) => (
-              <button
-                type="button"
-                className={`practice-project-card ${recommendedProjectId === project.id ? "selected" : ""}`}
-                data-accent={project.accent}
-                key={project.id}
-                onClick={() => navigate(`/project-practice/projects/${project.id}`)}
-              >
-                <span className="practice-project-icon">{projectIcon(project, index)}</span>
-                <span className={`practice-project-status ${statusClass(project.status)}`}>{project.status_label}</span>
-                <strong>{project.title}</strong>
-                <small>{project.description}</small>
-                <span className="practice-progress-label">
-                  <em>项目进度</em>
-                  <b>{project.progress}%</b>
-                </span>
-                <i className="practice-progress-track"><b style={{ width: `${project.progress}%` }} /></i>
-                <span className="practice-project-footer">
-                  <span>{project.tags.map((tag) => <em key={tag}>{tag}</em>)}</span>
-                  <span className="practice-avatar-stack">
-                    {project.members.map((member) => <b key={member}>{member}</b>)}
-                    <b>+2</b>
+      {hasProjects ? (
+        <section className="practice-main-grid">
+          <div className="practice-project-panel">
+            <div className="practice-section-title">
+              <span><Layers3 size={19} /> 我的项目</span>
+              <button type="button" onClick={openRecommendedProject}>查看全部项目 <ArrowRight size={15} /></button>
+            </div>
+            <div className="practice-project-list">
+              {pageData.projects.map((project, index) => (
+                <button
+                  type="button"
+                  className={`practice-project-card ${recommendedProjectId === project.id ? "selected" : ""}`}
+                  data-accent={project.accent}
+                  key={project.id}
+                  onClick={() => navigate(`/project-practice/projects/${project.id}`)}
+                >
+                  <span className="practice-project-icon">{projectIcon(project, index)}</span>
+                  <span className={`practice-project-status ${statusClass(project.status)}`}>{project.status_label}</span>
+                  <strong>{project.title}</strong>
+                  <small>{project.description}</small>
+                  <span className="practice-progress-label">
+                    <em>项目进度</em>
+                    <b>{project.progress}%</b>
                   </span>
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <aside className="practice-side-column">
-          <section className="practice-stats-card">
-            <div className="practice-section-title compact">
-              <span><LineChart size={19} /> 学习统计</span>
-              <button type="button">本周 05.12 - 05.18 <ChevronDown size={14} /></button>
-            </div>
-            <div className="practice-stat-grid">
-              <div><span>项目数</span><strong>{pageData.stats.project_count}</strong><small>全部项目</small></div>
-              <div><span>进行中</span><strong>{pageData.stats.in_progress_count}</strong><small>较上周 <b>+{pageData.stats.project_delta}</b></small></div>
-              <div><span>已完成</span><strong>{pageData.stats.completed_count}</strong><small>较上周 <b>+{pageData.stats.completed_delta}</b></small></div>
-              <div><span>本周投入</span><strong>{pageData.stats.weekly_hours}h</strong><small>较上周 <b>+{pageData.stats.weekly_hours_delta}h</b></small></div>
-            </div>
-          </section>
-
-          <section className="practice-activity-card">
-            <div className="practice-section-title compact">
-              <span><ShieldCheck size={19} /> 最近动态</span>
-              <button type="button">查看全部 <ArrowRight size={14} /></button>
-            </div>
-            <div className="practice-activity-list">
-              {pageData.activities.map((activity) => (
-                <div className="practice-activity-row" data-type={activity.type} key={activity.id}>
-                  <i><CheckCircle2 size={13} /></i>
-                  <span>{activity.text}</span>
-                  <time>{activity.time}</time>
-                </div>
+                  <i className="practice-progress-track"><b style={{ width: `${project.progress}%` }} /></i>
+                  <span className="practice-project-footer">
+                    <span>{project.tags.map((tag) => <em key={tag}>{tag}</em>)}</span>
+                    <span className="practice-avatar-stack">
+                      {project.members.map((member) => <b key={member}>{member}</b>)}
+                      <b>+2</b>
+                    </span>
+                  </span>
+                </button>
               ))}
             </div>
-          </section>
-        </aside>
-      </section>
+          </div>
+
+          <aside className="practice-side-column">
+            <section className="practice-stats-card">
+              <div className="practice-section-title compact">
+                <span><LineChart size={19} /> 学习统计</span>
+                <button type="button">本周 05.12 - 05.18 <ChevronDown size={14} /></button>
+              </div>
+              <div className="practice-stat-grid">
+                <div><span>项目数</span><strong>{pageData.stats.project_count}</strong><small>全部项目</small></div>
+                <div><span>进行中</span><strong>{pageData.stats.in_progress_count}</strong><small>较上周 <b>+{pageData.stats.project_delta}</b></small></div>
+                <div><span>已完成</span><strong>{pageData.stats.completed_count}</strong><small>较上周 <b>+{pageData.stats.completed_delta}</b></small></div>
+                <div><span>本周投入</span><strong>{pageData.stats.weekly_hours}h</strong><small>较上周 <b>+{pageData.stats.weekly_hours_delta}h</b></small></div>
+              </div>
+            </section>
+
+            <section className="practice-activity-card">
+              <div className="practice-section-title compact">
+                <span><ShieldCheck size={19} /> 最近动态</span>
+                <button type="button">查看全部 <ArrowRight size={14} /></button>
+              </div>
+              <div className="practice-activity-list">
+                {pageData.activities.map((activity) => (
+                  <div className="practice-activity-row" data-type={activity.type} key={activity.id}>
+                    <i><CheckCircle2 size={13} /></i>
+                    <span>{activity.text}</span>
+                    <time>{activity.time}</time>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </aside>
+        </section>
+      ) : (
+        <section className="practice-initial-shell" aria-label="项目实战初始状态">
+          <div className="practice-initial-panel">
+            <span className="practice-initial-icon"><Layers3 size={24} /></span>
+            <span className="practice-initial-kicker">当前暂无项目记录</span>
+            <h2>先从一个轻量项目试做开始</h2>
+            <p>这里不会直接给学生一个很大的企业项目。系统会先根据课程任务、学习画像和薄弱能力点，开启一个范围可控的小项目，让学生在真实业务输入里练一个关键能力。</p>
+            <div className="practice-initial-actions">
+              <button type="button" disabled={startingProject} onClick={startFirstProject}>
+                {startingProject ? <Loader2 className="practice-spin-icon" size={18} /> : <ArrowRight size={18} />}
+                {startingProject ? "正在开启" : "尝试第一个轻量项目"}
+              </button>
+              <button type="button" className="secondary" onClick={() => navigate("/courses")}>
+                <CirclePlay size={18} />
+                先完成课程任务
+              </button>
+            </div>
+          </div>
+          <aside className="practice-readiness-panel">
+            <h2>开启条件</h2>
+            <div className="practice-readiness-list">
+              <article>
+                <span><CheckCircle2 size={16} /></span>
+                <div><strong>课程任务有记录</strong><p>已有作业、练习或自学行为进入学习画像。</p></div>
+              </article>
+              <article>
+                <span><ShieldCheck size={16} /></span>
+                <div><strong>能力进入瓶颈</strong><p>系统识别到单纯刷题难以继续提升的能力点。</p></div>
+              </article>
+              <article>
+                <span><Workflow size={16} /></span>
+                <div><strong>项目范围可控</strong><p>首个项目只绑定少量技能点和明确交付物。</p></div>
+              </article>
+            </div>
+          </aside>
+        </section>
+      )}
 
       <section className="practice-path-card">
         <div className="practice-section-title">

@@ -46,6 +46,7 @@ from backend.app.services.practice_projects import (
     create_practice_submission,
     get_practice_project_detail,
     list_practice_projects,
+    start_first_practice_project,
 )
 from backend.app.services.student_resources import (
     ensure_resource_preview,
@@ -347,6 +348,18 @@ def student_practice_project_detail(
     require_role(user, "STUDENT")
     administrative_class, _ = require_active_class(db, user)
     return ok(get_practice_project_detail(db, project_id=project_id, student_id=user.id, class_id=administrative_class.id))
+
+
+@router.post("/practice-projects/start-first", status_code=status.HTTP_201_CREATED)
+def student_start_first_practice_project(
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    administrative_class, _ = require_active_class(db, user)
+    result = start_first_practice_project(db, student=user, class_id=administrative_class.id)
+    db.commit()
+    return ok(result)
 
 
 @router.post("/practice-projects/{project_id}/submissions", status_code=status.HTTP_201_CREATED)
