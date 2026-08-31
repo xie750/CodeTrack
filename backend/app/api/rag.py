@@ -25,6 +25,7 @@ from backend.app.services.rag.documents import (
     start_processing_document,
     upload_document,
 )
+from backend.app.services.rag.graph_import import build_knowledge_graph_import_plan
 from backend.app.services.rag.utils import json_loads
 from backend.app.services.rag.rag_service import rag_query
 from backend.app.services.rag.retrieval import retrieve_chunks
@@ -334,6 +335,15 @@ def list_document_chunks(document_id: str, db: Session = Depends(get_db), user: 
             ]
         }
     )
+
+
+@router.get("/documents/{document_id}/knowledge-graph/import-plan")
+def document_knowledge_graph_import_plan(
+    document_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    return ok(build_knowledge_graph_import_plan(db, document_id, user.id))
 
 
 @router.post("/knowledge-bases/{kb_id}/retrieve")

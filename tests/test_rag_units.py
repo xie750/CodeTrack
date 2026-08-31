@@ -34,6 +34,24 @@ def test_file_profile_detects_upload_container_type():
     assert profile.parser_hint == "markdown"
 
 
+def test_markdown_extension_alias_is_parsed_as_markdown():
+    result = parse_document("lesson.markdown", "# 机器学习\n\n## 过拟合\n\n验证集表现下降。".encode("utf-8"))
+    profile = detect_file_profile("lesson.markdown", "text/markdown", b"# Lesson")
+
+    assert profile.file_type == "markdown"
+    assert result.parser_name == "markdown"
+    assert any(element.element_type == "heading" and element.text == "过拟合" for element in result.elements)
+
+
+def test_plain_text_parser_accepts_common_chinese_text_encoding():
+    content = "链表由节点和指针组成。\n头节点是链表入口。".encode("gb18030")
+
+    result = parse_document("linked-list.txt", content)
+
+    assert result.parser_name == "plain_text"
+    assert any("头节点是链表入口" in element.text for element in result.elements)
+
+
 def test_markdown_parser_and_profile_detect_code_exercise_strategy():
     content = """# 链表删除
 

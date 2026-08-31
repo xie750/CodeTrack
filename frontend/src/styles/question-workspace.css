@@ -988,6 +988,7 @@
   position: relative;
   z-index: 24;
   width: auto;
+  min-width: 0;
   height: 100%;
   min-height: 0;
   max-height: none;
@@ -995,7 +996,8 @@
   flex-direction: column;
   gap: 12px;
   padding: 18px 14px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   scrollbar-gutter: stable;
   border-right: 1px solid #e5ebf3;
   background: rgba(255, 255, 255, 0.94);
@@ -1029,6 +1031,7 @@
 }
 
 .student-window-title {
+  min-width: 0;
   display: flex;
   gap: 9px;
   align-items: center;
@@ -1036,9 +1039,15 @@
   border-bottom: 1px solid #edf2f7;
 }
 
+.student-window-title > div {
+  min-width: 0;
+}
+
 .student-window-title strong,
 .student-window-title small {
   display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .student-window-title strong {
@@ -1057,11 +1066,13 @@
 }
 
 .student-window-nav {
+  min-width: 0;
   display: grid;
   gap: 6px;
 }
 
 .student-window-nav a {
+  min-width: 0;
   min-height: 36px;
   padding: 0 9px;
   display: flex;
@@ -1073,6 +1084,13 @@
   font-size: 13px;
   font-weight: 850;
   transition: color 170ms var(--motion-soft), background 170ms var(--motion-soft), box-shadow 170ms var(--motion-soft);
+}
+
+.student-window-nav a span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .student-window-nav a:hover,
@@ -1088,7 +1106,8 @@
 .student-window-rail-toggle {
   position: absolute;
   top: 50%;
-  right: -16px;
+  left: calc(var(--student-window-sidebar-width) - 14px);
+  z-index: 30;
   width: 28px;
   height: 96px;
   padding: 0;
@@ -1129,7 +1148,8 @@
 
 .student-work-window.sidebar-collapsed .student-window-sidebar {
   padding-inline: 12px;
-  overflow: visible;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .student-work-window.sidebar-collapsed .student-window-back,
@@ -2292,6 +2312,51 @@
   cursor: pointer;
 }
 
+.student-graph-mastery-legend {
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #dbe6f3;
+  border-radius: 8px;
+  color: #64748b;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+  pointer-events: none;
+}
+
+.student-graph-mastery-legend strong,
+.student-graph-mastery-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+.student-graph-mastery-legend strong {
+  color: #172033;
+}
+
+.student-graph-mastery-legend i {
+  width: 12px;
+  height: 12px;
+  border: 1px solid #93c5fd;
+  border-radius: 999px;
+  background:
+    linear-gradient(to top, rgba(37, 99, 235, 0.5) 34%, #fff 34%);
+}
+
+.student-graph-mastery-legend span:last-child i {
+  background:
+    linear-gradient(to top, rgba(37, 99, 235, 0.62) 86%, #fff 86%);
+}
+
 .student-graph-canvas {
   height: 576px;
   min-height: 520px;
@@ -2469,9 +2534,43 @@
   background: #eff6ff;
 }
 
+.student-graph-node-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.student-graph-ai-button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 7px;
+  color: #1d4ed8;
+  background: #eff6ff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 950;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.student-graph-ai-button:hover,
+.student-graph-ai-button:focus-visible {
+  outline: 0;
+  border-color: #2563eb;
+  color: #fff;
+  background: #2563eb;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.16);
+}
+
 .student-graph-inspector-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0;
   margin-top: 16px;
   overflow: hidden;
@@ -2893,6 +2992,193 @@
   cursor: pointer;
 }
 
+.student-graph-diagnosis {
+  display: grid;
+  gap: 10px;
+}
+
+.student-graph-diagnosis-empty,
+.student-graph-diagnosis-running,
+.student-graph-diagnosis-score,
+.student-graph-diagnosis-list,
+.student-graph-diagnosis-practice {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #e4edf8;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.student-graph-diagnosis-empty,
+.student-graph-diagnosis-running {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+}
+
+.student-graph-diagnosis-empty > span,
+.student-graph-diagnosis-running > svg {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+.student-graph-diagnosis-running > svg {
+  animation: spin 900ms linear infinite;
+}
+
+.student-graph-diagnosis-empty strong,
+.student-graph-diagnosis-running strong,
+.student-graph-diagnosis-list > strong,
+.student-graph-diagnosis-practice strong {
+  color: #172033;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.student-graph-diagnosis-empty p,
+.student-graph-diagnosis-running p,
+.student-graph-diagnosis-score p,
+.student-graph-diagnosis-practice p {
+  margin: 0;
+  color: #657187;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.6;
+}
+
+.student-graph-diagnosis-score {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  border-color: #d7f0e2;
+  background: #f3fbf7;
+}
+
+.student-graph-diagnosis-score.weak {
+  border-color: #fde7bd;
+  background: #fff8eb;
+}
+
+.student-graph-diagnosis-score div {
+  min-height: 72px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 3px;
+  border-radius: 8px;
+  color: #147a42;
+  background: #fff;
+}
+
+.student-graph-diagnosis-score.weak div {
+  color: #9a5b00;
+}
+
+.student-graph-diagnosis-score strong {
+  font-size: 24px;
+  line-height: 1;
+  font-weight: 950;
+}
+
+.student-graph-diagnosis-score span {
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.student-graph-diagnosis-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.student-graph-diagnosis-metrics span {
+  min-height: 42px;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  padding: 8px;
+  border: 1px solid #e7eef7;
+  border-radius: 7px;
+  color: #64748b;
+  background: #fff;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.student-graph-diagnosis-metrics strong {
+  overflow: hidden;
+  color: #172033;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.student-graph-diagnosis-list ul {
+  display: grid;
+  gap: 7px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.student-graph-diagnosis-list li {
+  position: relative;
+  padding-left: 14px;
+  color: #52627a;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.55;
+}
+
+.student-graph-diagnosis-list li::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #2563eb;
+}
+
+.student-graph-diagnosis-practice {
+  display: grid;
+  gap: 8px;
+  border-color: #dbeafe;
+  background: #f8fbff;
+}
+
+.student-graph-diagnosis-practice button {
+  justify-self: start;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  color: #fff;
+  background: #2563eb;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (max-width: 1180px) {
   .student-work-window {
     width: min(calc(var(--app-viewport-width) - 32px), 100%);
@@ -3000,6 +3286,37 @@
     overflow: visible;
   }
 
+  .student-window-content .profile-page {
+    padding: 20px 0 28px;
+  }
+
+  .student-window-content .profile-hero {
+    min-height: auto;
+    grid-template-columns: minmax(0, 1fr);
+    padding: 24px;
+  }
+
+  .student-window-content .profile-hero h1 {
+    font-size: 28px;
+    line-height: 1.22;
+  }
+
+  .student-window-content .profile-hero p {
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
+  .student-window-content .profile-hero img {
+    display: none;
+  }
+
+  .student-window-content .profile-top-grid,
+  .student-window-content .profile-mid-grid,
+  .student-window-content .profile-bottom-grid,
+  .student-window-content .global-profile-metrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .student-window-sidebar {
     position: static;
     width: 100%;
@@ -3007,6 +3324,8 @@
     min-height: auto;
     margin: 0 -16px 14px;
     padding: 14px 16px;
+    overflow-x: hidden;
+    overflow-y: visible;
     border-right: 0;
     border-bottom: 1px solid #e5ebf3;
   }
@@ -3017,7 +3336,8 @@
 
   .student-work-window.sidebar-collapsed .student-window-sidebar {
     padding: 14px 16px;
-    overflow: auto;
+    overflow-x: hidden;
+    overflow-y: visible;
   }
 
   .student-work-window.sidebar-collapsed .student-window-back,

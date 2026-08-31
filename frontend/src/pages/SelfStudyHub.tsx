@@ -77,21 +77,21 @@ function SelfStudyShell({ children }: { children: ReactNode }) {
             <small>很棒哦，保持学习节奏！</small>
           </div>
         </div>
-        <button
-          className="student-window-rail-toggle"
-          type="button"
-          onClick={() => setSidebarCollapsed((current) => !current)}
-          aria-label={sidebarCollapsed ? "展开自主学习导航" : "收起自主学习导航"}
-          title={sidebarCollapsed ? "展开导航" : "收起导航"}
-        >
-          <span className="student-window-grip" aria-hidden="true">
-            <i />
-            <i />
-            <i />
-          </span>
-          {sidebarCollapsed ? <ChevronsRight size={16} /> : <ChevronsLeft size={16} />}
-        </button>
       </aside>
+      <button
+        className="student-window-rail-toggle"
+        type="button"
+        onClick={() => setSidebarCollapsed((current) => !current)}
+        aria-label={sidebarCollapsed ? "展开自主学习导航" : "收起自主学习导航"}
+        title={sidebarCollapsed ? "展开导航" : "收起导航"}
+      >
+        <span className="student-window-grip" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+        </span>
+        {sidebarCollapsed ? <ChevronsRight size={16} /> : <ChevronsLeft size={16} />}
+      </button>
       <main className="student-window-content">
         {activePath ? (
           <StudentRouteBreadcrumb

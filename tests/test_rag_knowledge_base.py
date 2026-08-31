@@ -198,6 +198,77 @@ def test_document_can_be_uploaded_then_confirmed_for_processing():
         assert chunks.json()["data"]["items"][0]["metadata"]["chunking_strategy"] == "plain_recursive"
 
 
+def test_ready_document_can_generate_knowledge_graph_import_plan():
+    with client() as c:
+        kb = c.post("/api/v1/knowledge-bases", json={"name": "Graph Import KB", "description": "test"})
+        assert kb.status_code == 200, kb.text
+        kb_id = kb.json()["data"]["id"]
+
+        created = c.post(
+            f"/api/v1/knowledge-bases/{kb_id}/documents/from-text?auto_process=false",
+            json={
+                "title": "linked-list-graph-note",
+                "content": """# 链表边界处理
+
+链表由节点和指针组成。头节点是链表入口，删除头节点时需要返回新的头指针。
+
+## 栈的应用
+
+栈遵循后进先出规则，括号匹配是栈的典型应用。""",
+            },
+        )
+        assert created.status_code == 202, created.text
+        document_id = created.json()["data"]["document_id"]
+
+        process = c.post(f"/api/v1/documents/{document_id}/process")
+        assert process.status_code == 200, process.text
+
+        plan = c.get(f"/api/v1/documents/{document_id}/knowledge-graph/import-plan")
+        assert plan.status_code == 200, plan.text
+        data = plan.json()["data"]
+
+        assert data["import_policy"]["mode"] == "preview_only"
+        assert data["import_policy"]["requires_confirmation"] is True
+        assert data["segmentation"]["source_layers"][1]["layer"] == "parent_chunk"
+        assert data["segmentation"]["source_layers"][2]["layer"] == "evidence_chunk"
+        assert data["segmentation"]["chunk_groups"]
+
+        node_names = {node["name"] for node in data["nodes"]}
+        assert {"链表", "头节点", "栈", "括号匹配"}.issubset(node_names)
+        linked_list = next(node for node in data["nodes"] if node["name"] == "链表")
+        assert linked_list["evidence"]
+        assert linked_list["evidence"][0]["chunk_id"] in linked_list["source_chunk_ids"]
+
+        relation_pairs = {(edge["source_name"], edge["target_name"], edge["type"]) for edge in data["edges"]}
+        assert ("链表", "头节点", "CONTAINS") in relation_pairs
+        assert ("栈", "括号匹配", "APPLIES_TO") in relation_pairs
+        assert data["quality"]["candidate_node_count"] >= 4
+
+
+def test_knowledge_graph_import_plan_requires_ready_document_and_owner():
+    with client() as c:
+        kb = c.post("/api/v1/knowledge-bases", json={"name": "Graph Import Pending KB", "description": "test"})
+        assert kb.status_code == 200, kb.text
+        kb_id = kb.json()["data"]["id"]
+        created = c.post(
+            f"/api/v1/knowledge-bases/{kb_id}/documents/from-text?auto_process=false",
+            json={"title": "pending-note", "content": "链表和头节点。"},
+        )
+        assert created.status_code == 202, created.text
+        document_id = created.json()["data"]["document_id"]
+
+        pending = c.get(f"/api/v1/documents/{document_id}/knowledge-graph/import-plan")
+        assert pending.status_code == 409
+        assert pending.json()["error"]["code"] == "DOCUMENT_NOT_READY"
+
+        denied = c.get(
+            f"/api/v1/documents/{document_id}/knowledge-graph/import-plan",
+            headers={"X-Demo-User-Id": "user_student_002"},
+        )
+        assert denied.status_code == 403
+        assert denied.json()["error"]["code"] == "KB_PERMISSION_DENIED"
+
+
 def test_deleted_document_can_be_uploaded_again_with_same_hash():
     with client() as c:
         kb = c.post("/api/v1/knowledge-bases", json={"name": "Delete Reupload KB", "description": "test"})

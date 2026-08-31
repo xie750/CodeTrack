@@ -639,6 +639,7 @@
 
 .student-window-streak {
   margin-top: auto;
+  min-width: 0;
   min-height: 64px;
   display: flex;
   align-items: center;
@@ -651,6 +652,7 @@
 }
 
 .student-window-streak span {
+  flex: 0 0 auto;
   width: 34px;
   height: 34px;
   display: inline-flex;
@@ -661,10 +663,16 @@
   background: #dffcf4;
 }
 
+.student-window-streak div {
+  min-width: 0;
+}
+
 .student-window-streak strong,
 .student-window-streak small {
   display: block;
+  overflow: hidden;
   letter-spacing: 0;
+  text-overflow: ellipsis;
 }
 
 .student-window-streak strong {

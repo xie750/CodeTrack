@@ -119,7 +119,12 @@ def upload_document(
         raise ApiError(413, "FILE_TOO_LARGE", "上传文件超过大小限制")
     extension = Path(filename).suffix.lower()
     if extension not in SUPPORTED_EXTENSIONS:
-        raise ApiError(400, "UNSUPPORTED_FILE_TYPE", "暂不支持该文件类型", {"extension": extension})
+        raise ApiError(
+            400,
+            "UNSUPPORTED_FILE_TYPE",
+            "暂不支持该文件类型。当前支持 Markdown、TXT、PDF、DOCX、PPTX。",
+            {"extension": extension, "supported_extensions": sorted(SUPPORTED_EXTENSIONS)},
+        )
 
     digest = sha256_bytes(content)
     file_profile = detect_file_profile(filename, mime_type, content)

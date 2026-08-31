@@ -5,6 +5,7 @@ import type { EChartsOption } from "echarts";
 import {
   ArrowRight,
   BookOpen,
+  BrainCircuit,
   CheckCircle2,
   ChevronDown,
   CircleDot,
@@ -26,7 +27,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { api, apiCache, StudentKnowledgeGraph, StudentKnowledgeGraphEdge, StudentKnowledgeGraphNode } from "../api";
+import { api, apiCache, StudentKnowledgeGraph, StudentKnowledgeGraphEdge, StudentKnowledgeGraphNode, type StudentProfile } from "../api";
 
 type KnowledgeMapProps = {
   scope?: "course" | "self-study";
@@ -44,7 +45,24 @@ type NodeDraft = {
 
 type RelationType = "前驱" | "后继" | "相关";
 
-type InspectorTab = "knowledge" | "resources" | "questions";
+type InspectorTab = "knowledge" | "resources" | "questions" | "diagnosis";
+
+type NodeDiagnosis = {
+  status: "running" | "ready";
+  nodeId: string;
+  masteryScore: number;
+  masteryLabel: string;
+  confidence: number;
+  summary: string;
+  evidence: string[];
+  riskFactors: string[];
+  misconceptions: string[];
+  prerequisites: string[];
+  nextActions: string[];
+  recommendedPractice: string;
+  profileUsed: boolean;
+  generatedAt: string;
+};
 
 type PendingRelation = {
   type: RelationType;
@@ -81,6 +99,7 @@ const inspectorTabs: { key: InspectorTab; label: string }[] = [
   { key: "knowledge", label: "知识" },
   { key: "resources", label: "资源" },
   { key: "questions", label: "题目" },
+  { key: "diagnosis", label: "诊断" },
 ];
 
 function clampDifficulty(value: number) {
@@ -126,6 +145,55 @@ function stateTone(score?: number) {
   return "blue";
 }
 
+function masteryLabel(score: number) {
+  if (score >= 85) return "掌握稳定";
+  if (score >= 70) return "基本掌握";
+  if (score >= 55) return "需要巩固";
+  return "薄弱预警";
+}
+
+function clampMastery(value: number) {
+  return Math.max(35, Math.min(96, Math.round(value)));
+}
+
+function estimateNodeMastery(node: StudentKnowledgeGraphNode, edges: StudentKnowledgeGraphEdge[] = []) {
+  const difficulty = clampDifficulty(node.difficulty);
+  return clampMastery(88 - difficulty * 8 - (node.description ? 0 : 8) + Math.min(8, edges.length * 2));
+}
+
+function rgbaFromHex(color: string, alpha: number) {
+  const normalized = color.trim();
+  const shortHex = normalized.match(/^#([0-9a-f]{3})$/i);
+  const fullHex = normalized.match(/^#([0-9a-f]{6})$/i);
+  const value = shortHex
+    ? shortHex[1].split("").map((item) => item + item).join("")
+    : fullHex?.[1];
+  if (!value) return normalized;
+  const red = Number.parseInt(value.slice(0, 2), 16);
+  const green = Number.parseInt(value.slice(2, 4), 16);
+  const blue = Number.parseInt(value.slice(4, 6), 16);
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+function masteryFill(color: string, score: number) {
+  const progress = Math.max(0, Math.min(1, score / 100));
+  const boundary = Math.max(0, Math.min(1, 1 - progress));
+  const nextBoundary = Math.min(1, boundary + 0.002);
+  return {
+    type: "linear",
+    x: 0,
+    y: 0,
+    x2: 0,
+    y2: 1,
+    colorStops: [
+      { offset: 0, color: "#ffffff" },
+      { offset: boundary, color: "#ffffff" },
+      { offset: nextBoundary, color: rgbaFromHex(color, 0.24) },
+      { offset: 1, color: rgbaFromHex(color, 0.68) },
+    ],
+  };
+}
+
 function edgeTitle(edge: StudentKnowledgeGraphEdge, nodesById: Map<string, StudentKnowledgeGraphNode>) {
   const source = nodesById.get(edge.source)?.label ?? edge.source;
   const target = nodesById.get(edge.target)?.label ?? edge.target;
@@ -164,6 +232,101 @@ function withGraphCounts(graph: StudentKnowledgeGraph): StudentKnowledgeGraph {
     node_count: graph.nodes.length,
     edge_count: graph.edges.length,
     updated_at: new Date().toISOString(),
+  };
+}
+
+function buildNodeDiagnosis({
+  node,
+  graph,
+  edges,
+  profile,
+  isSelfStudy,
+}: {
+  node: StudentKnowledgeGraphNode;
+  graph: StudentKnowledgeGraph;
+  edges: StudentKnowledgeGraphEdge[];
+  profile: StudentProfile | null;
+  isSelfStudy: boolean;
+}): NodeDiagnosis {
+  const knowledgeState = profile?.knowledge_states.find((item) => item.knowledge_point === node.label) ?? null;
+  const profileUsed = Boolean(knowledgeState);
+  const prereqCount = edges.filter((edge) => edge.target === node.id && edge.type === "前驱").length;
+  const nextCount = edges.filter((edge) => edge.source === node.id && edge.type === "后继").length;
+  const peerCount = edges.filter((edge) => edge.type === "相关").length;
+  const difficulty = clampDifficulty(node.difficulty);
+  const fallbackScore = estimateNodeMastery(node, edges);
+  const masteryScore = clampMastery(knowledgeState?.mastery_score ?? fallbackScore);
+  const weak = masteryScore < 70;
+  const highDifficulty = difficulty >= 4;
+  const hasDefinition = Boolean(node.description.trim());
+  const confidence = clampMastery((profileUsed ? 78 : 58) + Math.min(12, edges.length * 3) + (hasDefinition ? 6 : 0)) / 100;
+  const prerequisites = edges
+    .filter((edge) => edge.target === node.id && edge.type === "前驱")
+    .map((edge) => graph.nodes.find((item) => item.id === edge.source)?.label ?? edge.source)
+    .slice(0, 4);
+  const nextNodes = edges
+    .filter((edge) => edge.source === node.id && edge.type === "后继")
+    .map((edge) => graph.nodes.find((item) => item.id === edge.target)?.label ?? edge.target)
+    .slice(0, 3);
+  const relatedErrors = profile?.frequent_errors
+    .filter((item) => item.related_knowledge_points.includes(node.label))
+    .map((item) => `${item.label} ${item.count} 次`)
+    .slice(0, 3) ?? [];
+
+  const riskFactors = [
+    weak ? `掌握度 ${masteryScore}%，低于稳定线 70%。` : "",
+    highDifficulty ? "节点难度较高，适合拆成概念、例题和迁移练习三步巩固。" : "",
+    prereqCount === 0 ? "当前节点缺少前驱知识标注，学习路径可能不够清晰。" : "",
+    !hasDefinition ? "节点定义为空，AI 难以判断你是否能用自己的话解释。" : "",
+    relatedErrors.length ? `画像中关联错因：${relatedErrors.join("、")}。` : "",
+  ].filter(Boolean);
+
+  const misconceptions = [
+    node.label.includes("链表") || node.label.includes("头节点") ? "容易把“修改当前节点”误认为“更新链表入口”，删除头节点时需要特别检查返回值。" : "",
+    node.label.includes("栈") ? "容易只记住后进先出定义，却忽略它适合处理最近未闭合状态。" : "",
+    node.label.includes("队列") ? "容易把队列和栈的出入顺序混用，建议用连续操作手推验证。" : "",
+    node.label.includes("递归") || node.label.includes("遍历") || node.label.includes("二叉树") ? "容易只背遍历顺序，没有说清递归出口、访问时机和子问题边界。" : "",
+    node.label.includes("过拟合") || node.label.includes("正则化") ? "容易把训练集表现好当成模型真正掌握规律，需要结合验证集表现判断。" : "",
+    node.label.includes("Python") || node.label.includes("函数") ? "容易停在语法记忆，建议用参数、返回值和边界输入解释程序行为。" : "",
+  ].filter(Boolean);
+
+  if (!misconceptions.length) {
+    misconceptions.push("当前节点需要重点检查：能否说出定义、适用场景、一个反例，以及和相邻节点的关系。");
+  }
+
+  const nextActions = [
+    prerequisites.length ? `先复盘前驱：${prerequisites.join("、")}。` : "先补一条前驱知识或写下该节点依赖的基础概念。",
+    weak ? "完成 3 道基础题，优先验证定义和边界条件。" : "完成 1 道迁移题，验证能否在新场景中使用。",
+    nextNodes.length ? `再连接到后继：${nextNodes.join("、")}。` : "补充一个后继应用场景，避免知识点孤立。",
+    "把诊断结果整理成一张知识卡片，并在资料库中保留来源。",
+  ];
+
+  const evidence = [
+    profileUsed ? `学习画像：${knowledgeState?.state}，掌握度 ${masteryScore}%，证据 ${knowledgeState?.evidence_count ?? 0} 条。` : "暂无精确画像匹配，当前为结构化规则估算。",
+    `图谱结构：前驱 ${prereqCount} 个，后继 ${nextCount} 个，相关 ${peerCount} 个。`,
+    `节点属性：类型 ${node.type}，难度 ${difficulty} / 5，来源 ${node.source === "ai" ? "AI 草稿" : isSelfStudy ? "学生自定义" : "教师自定义"}。`,
+    graph.source_files.length ? `课程资料来源：${graph.source_files.length} 份。` : "当前节点暂无独立来源文件证据。",
+  ];
+
+  return {
+    status: "ready",
+    nodeId: node.id,
+    masteryScore,
+    masteryLabel: masteryLabel(masteryScore),
+    confidence,
+    summary: weak
+      ? `${node.label} 当前还需要巩固，建议先补齐前驱理解，再用小题验证边界和应用。`
+      : `${node.label} 当前学习状态较稳定，建议进入迁移练习或连接后继知识。`,
+    evidence,
+    riskFactors: riskFactors.length ? riskFactors : ["暂未发现明显风险，建议保持低频复盘。"],
+    misconceptions,
+    prerequisites: prerequisites.length ? prerequisites : ["暂无显式前驱节点"],
+    nextActions,
+    recommendedPractice: weak
+      ? `生成一组围绕“${node.label}”的基础诊断题，要求每题说明判断依据。`
+      : `生成一组围绕“${node.label}”的应用迁移题，要求关联相邻知识点。`,
+    profileUsed,
+    generatedAt: new Date().toISOString(),
   };
 }
 
@@ -229,6 +392,7 @@ function buildChartOption(
   graph: StudentKnowledgeGraph,
   selection: Selection,
   pendingRelation: PendingRelation | null,
+  masteryByNode: ReadonlyMap<string, number>,
 ): EChartsOption {
   const selectedId = selection?.id;
   const option = {
@@ -246,9 +410,11 @@ function buildChartOption(
         }
         const node = params.data;
         const difficulty = clampDifficulty(node?.raw?.difficulty ?? node?.value ?? 2);
+        const masteryScore = clampMastery(node?.masteryScore ?? 50);
         return [
           `<strong>${escapeHtml(node?.name ?? "")}</strong>`,
           `<div>类型：${escapeHtml(node?.raw?.type ?? "知识点")}</div>`,
+          `<div>掌握：${masteryScore}% · ${escapeHtml(masteryLabel(masteryScore))}</div>`,
           `<div>难度：${"★".repeat(difficulty)}${"☆".repeat(5 - difficulty)}</div>`,
           node?.raw?.description ? `<div>${escapeHtml(node.raw.description)}</div>` : "",
         ].filter(Boolean).join("");
@@ -262,6 +428,10 @@ function buildChartOption(
         layout: "force",
         data: graph.nodes.map((node) => {
           const color = node.color || nodeTypeColors[node.type] || "#2563eb";
+          const masteryScore = masteryByNode.get(node.id) ?? estimateNodeMastery(
+            node,
+            graph.edges.filter((edge) => edge.source === node.id || edge.target === node.id)
+          );
           const selected = selectedId === node.id;
           const relationSource = pendingRelation?.sourceNodeId === node.id;
           return {
@@ -271,9 +441,10 @@ function buildChartOption(
             x: node.x,
             y: node.y,
             raw: node,
+            masteryScore,
             symbolSize: symbolSize(node.difficulty),
             itemStyle: {
-              color: "#fff",
+              color: masteryFill(color, masteryScore),
               borderColor: relationSource ? "#f59e0b" : selected ? "#2563eb" : color,
               borderWidth: relationSource ? 4 : selected ? 4 : 1.5,
               shadowBlur: relationSource ? 18 : selected ? 16 : 8,
@@ -363,6 +534,7 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
   const chartContainerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
+  const diagnosisTimerRef = useRef<number | null>(null);
   const isSelfStudy = scope === "self-study";
   const [graph, setGraph] = useState<StudentKnowledgeGraph | null>(() => (
     isSelfStudy ? readSelfStudyGraph() : (courseId ? apiCache.peekStudentKnowledgeGraph(courseId) : null)
@@ -374,6 +546,8 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("knowledge");
   const [relationMenuOpen, setRelationMenuOpen] = useState(false);
   const [pendingRelation, setPendingRelation] = useState<PendingRelation | null>(null);
+  const [studentProfile, setStudentProfile] = useState<StudentProfile | null>(null);
+  const [diagnosesByNode, setDiagnosesByNode] = useState<Record<string, NodeDiagnosis>>({});
 
   function disposeChart(clearDom = false) {
     const chart = chartRef.current;
@@ -421,6 +595,24 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
     window.localStorage.setItem(selfStudyGraphStorageKey, JSON.stringify(withGraphCounts(graph)));
   }, [graph, isSelfStudy]);
 
+  useEffect(() => {
+    if (isSelfStudy || !courseId) {
+      setStudentProfile(null);
+      return undefined;
+    }
+    let alive = true;
+    api.getStudentProfile(courseId)
+      .then((profile) => {
+        if (alive) setStudentProfile(profile);
+      })
+      .catch(() => {
+        if (alive) setStudentProfile(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [courseId, isSelfStudy]);
+
   const nodesById = useMemo(() => new Map((graph?.nodes ?? []).map((node) => [node.id, node])), [graph]);
   const selectedNode = selection?.kind === "node" ? nodesById.get(selection.id) ?? null : null;
   const selectedEdge = selection?.kind === "edge" ? graph?.edges.find((edge) => edge.id === selection.id) ?? null : null;
@@ -432,6 +624,22 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
     if (!graph || !selectedNode) return [];
     return graph.edges.filter((edge) => edge.source === selectedNode.id || edge.target === selectedNode.id);
   }, [graph, selectedNode]);
+  const masteryByNode = useMemo(() => {
+    const scores = new Map<string, number>();
+    if (!graph) return scores;
+    const profileByKnowledgePoint = new Map(
+      (studentProfile?.knowledge_states ?? []).map((item) => [item.knowledge_point, item.mastery_score])
+    );
+    graph.nodes.forEach((node) => {
+      const diagnosis = diagnosesByNode[node.id];
+      const related = graph.edges.filter((edge) => edge.source === node.id || edge.target === node.id);
+      const score = diagnosis?.status === "ready"
+        ? diagnosis.masteryScore
+        : profileByKnowledgePoint.get(node.label) ?? estimateNodeMastery(node, related);
+      scores.set(node.id, clampMastery(score));
+    });
+    return scores;
+  }, [diagnosesByNode, graph, studentProfile]);
   const prereqEdges = relatedEdges.filter((edge) => edge.target === selectedNode?.id && edge.type === "前驱");
   const nextEdges = relatedEdges.filter((edge) => edge.source === selectedNode?.id && edge.type === "后继");
   const peerEdges = relatedEdges.filter((edge) => edge.type === "相关");
@@ -455,7 +663,7 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
     const container = chartContainerRef.current;
     const chart = chartRef.current ?? echarts.init(container, undefined, { renderer: "canvas" });
     chartRef.current = chart;
-    chart.setOption(buildChartOption(graph, selection, pendingRelation), true);
+    chart.setOption(buildChartOption(graph, selection, pendingRelation, masteryByNode), true);
 
     const handleClick = (params: any) => {
       if (params.dataType === "node" && params.data?.id) {
@@ -484,10 +692,13 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
       chart.off("click", handleClick);
       eventTypes.forEach((type) => container.removeEventListener(type, patchZoomedPointerEvent, { capture: true }));
     };
-  }, [graph, hasNodes, loading, pendingRelation, selection]);
+  }, [graph, hasNodes, loading, masteryByNode, pendingRelation, selection]);
 
   useEffect(() => {
     return () => {
+      if (diagnosisTimerRef.current) {
+        window.clearTimeout(diagnosisTimerRef.current);
+      }
       disposeChart();
     };
   }, []);
@@ -498,6 +709,11 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
   const edgeTargetNode = selectedEdge ? nodesById.get(selectedEdge.target) ?? null : null;
   const activeNode = selectedNode ?? graph?.nodes[0] ?? null;
   const selectedTone = stateTone(activeNode?.difficulty);
+  const activeDiagnosis = activeNode ? diagnosesByNode[activeNode.id] ?? null : null;
+  const matchedKnowledgeState = activeNode
+    ? studentProfile?.knowledge_states.find((item) => item.knowledge_point === activeNode.label)
+    : null;
+  const activeMasteryScore = activeNode ? masteryByNode.get(activeNode.id) ?? estimateNodeMastery(activeNode, relatedEdges) : 0;
 
   function selectNode(nodeId: string) {
     setSelection({ kind: "node", id: nodeId });
@@ -505,6 +721,51 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
     setPendingRelation(null);
     setRelationMenuOpen(false);
     setInspectorTab("knowledge");
+  }
+
+  function runNodeDiagnosis(node: StudentKnowledgeGraphNode) {
+    if (!graph) return;
+    if (diagnosisTimerRef.current) {
+      window.clearTimeout(diagnosisTimerRef.current);
+    }
+    setSelection({ kind: "node", id: node.id });
+    setNodeEditor(null);
+    setPendingRelation(null);
+    setRelationMenuOpen(false);
+    setInspectorTab("diagnosis");
+    setDiagnosesByNode((current) => ({
+      ...current,
+      [node.id]: {
+        status: "running",
+        nodeId: node.id,
+        masteryScore: 0,
+        masteryLabel: "分析中",
+        confidence: 0,
+        summary: "AI 正在读取节点掌握度、前驱后继关系、资源证据和学习画像。",
+        evidence: [],
+        riskFactors: [],
+        misconceptions: [],
+        prerequisites: [],
+        nextActions: [],
+        recommendedPractice: "",
+        profileUsed: false,
+        generatedAt: new Date().toISOString(),
+      },
+    }));
+    diagnosisTimerRef.current = window.setTimeout(() => {
+      const latestGraph = graph;
+      const latestRelatedEdges = latestGraph.edges.filter((edge) => edge.source === node.id || edge.target === node.id);
+      setDiagnosesByNode((current) => ({
+        ...current,
+        [node.id]: buildNodeDiagnosis({
+          node,
+          graph: latestGraph,
+          edges: latestRelatedEdges,
+          profile: studentProfile,
+          isSelfStudy,
+        }),
+      }));
+    }, 900);
   }
 
   function selectEdge(edge: StudentKnowledgeGraphEdge) {
@@ -844,6 +1105,13 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
                 <button type="button" onClick={() => setPendingRelation(null)}>取消</button>
               </div>
             ) : null}
+            {!loading && graph && hasNodes ? (
+              <div className="student-graph-mastery-legend" aria-hidden="true">
+                <strong>填充高度 = 掌握度</strong>
+                <span><i />低</span>
+                <span><i />高</span>
+              </div>
+            ) : null}
             {loading ? (
               <div key="graph-loading" className="student-graph-empty">
                 <Loader2 size={24} />
@@ -924,11 +1192,17 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
                     <h2>{activeNode.label}</h2>
                     <p>{activeNode.type} · {activeNode.source === "ai" ? "AI 草稿" : isSelfStudy ? "学生自定义" : "教师自定义"}</p>
                   </div>
-                  {isSelfStudy ? (
-                    <button type="button" className="student-graph-icon-button" aria-label="编辑节点" onClick={() => openEditNode(activeNode)}>
-                      <Pencil size={16} />
+                  <div className="student-graph-node-actions">
+                    <button type="button" className="student-graph-ai-button" onClick={() => runNodeDiagnosis(activeNode)}>
+                      <BrainCircuit size={15} />
+                      AI诊断
                     </button>
-                  ) : null}
+                    {isSelfStudy ? (
+                      <button type="button" className="student-graph-icon-button" aria-label="编辑节点" onClick={() => openEditNode(activeNode)}>
+                        <Pencil size={16} />
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
 
                 {nodeEditor ? (
@@ -1008,6 +1282,7 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
                           <div className="student-graph-section-label">属性</div>
                           <div className="student-graph-meta">
                             <span>类型 <strong>{activeNode.type}</strong></span>
+                            <span>掌握 <strong>{activeMasteryScore}% · {masteryLabel(activeMasteryScore)}</strong></span>
                             <span>难度 <strong>{clampDifficulty(activeNode.difficulty)} / 5</strong></span>
                             <span>来源 <strong>{activeNode.source === "ai" ? "AI 草稿" : isSelfStudy ? "学生自定义" : "教师自定义"}</strong></span>
                           </div>
@@ -1076,6 +1351,55 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
                           </article>
                         </div>
                       ) : null}
+
+                      {inspectorTab === "diagnosis" ? (
+                        <div className="student-graph-diagnosis">
+                          {!activeDiagnosis ? (
+                            <section className="student-graph-diagnosis-empty">
+                              <span><BrainCircuit size={18} /></span>
+                              <strong>等待 AI 诊断</strong>
+                              <p>点击右上角 AI诊断 后，系统会根据掌握度、关系结构、来源证据和学习画像生成分析。</p>
+                            </section>
+                          ) : activeDiagnosis.status === "running" ? (
+                            <section className="student-graph-diagnosis-running">
+                              <Loader2 size={20} />
+                              <strong>正在分析 {activeNode.label}</strong>
+                              <p>{activeDiagnosis.summary}</p>
+                            </section>
+                          ) : (
+                            <>
+                              <section className={`student-graph-diagnosis-score ${activeDiagnosis.masteryScore < 70 ? "weak" : "stable"}`}>
+                                <div>
+                                  <strong>{activeDiagnosis.masteryScore}%</strong>
+                                  <span>{activeDiagnosis.masteryLabel}</span>
+                                </div>
+                                <p>{activeDiagnosis.summary}</p>
+                              </section>
+
+                              <div className="student-graph-diagnosis-metrics">
+                                <span>置信度 <strong>{Math.round(activeDiagnosis.confidence * 100)}%</strong></span>
+                                <span>画像匹配 <strong>{activeDiagnosis.profileUsed ? "已使用" : "未匹配"}</strong></span>
+                                <span>证据数 <strong>{matchedKnowledgeState?.evidence_count ?? "估算"}</strong></span>
+                              </div>
+
+                              <DiagnosisList title="判断依据" items={activeDiagnosis.evidence} />
+                              <DiagnosisList title="风险信号" items={activeDiagnosis.riskFactors} />
+                              <DiagnosisList title="常见误区" items={activeDiagnosis.misconceptions} />
+                              <DiagnosisList title="前驱补齐" items={activeDiagnosis.prerequisites} />
+                              <DiagnosisList title="下一步动作" items={activeDiagnosis.nextActions} />
+
+                              <section className="student-graph-diagnosis-practice">
+                                <strong>推荐练习</strong>
+                                <p>{activeDiagnosis.recommendedPractice}</p>
+                                <button type="button" onClick={actionToSelfStudy}>
+                                  <Target size={15} />
+                                  去生成练习
+                                </button>
+                              </section>
+                            </>
+                          )}
+                        </div>
+                      ) : null}
                     </div>
                   </>
                 )}
@@ -1119,5 +1443,18 @@ function RelationGroup({
         );
       }) : <p>暂无</p>}
     </div>
+  );
+}
+
+function DiagnosisList({ title, items }: { title: string; items: string[] }) {
+  return (
+    <section className="student-graph-diagnosis-list">
+      <strong>{title}</strong>
+      <ul>
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </section>
   );
 }
