@@ -229,6 +229,14 @@ export type PracticeProjectProofItem = {
   icon: string;
 };
 
+export type PracticeProjectReadiness = {
+  status: "ACTIVE" | "PREPARING" | string;
+  title: string;
+  description: string;
+  primary_action_label: string;
+  secondary_action_label: string;
+};
+
 export type PracticeProjectHome = {
   projects: PracticeProjectSummary[];
   recommended_project_id: string | null;
@@ -243,6 +251,7 @@ export type PracticeProjectHome = {
   };
   activities: PracticeProjectActivity[];
   path_steps: PracticeProjectPathStep[];
+  readiness: PracticeProjectReadiness;
   proof_items: PracticeProjectProofItem[];
 };
 
@@ -1212,6 +1221,14 @@ export const api = {
     cachedGet<PracticeProjectHome>("/api/v1/student/practice-projects"),
   getPracticeProjectDetail: (projectId: string) =>
     cachedGet<PracticeProjectDetail>(studentPracticeProjectDetailUrl(projectId)),
+  startFirstPracticeProject: async () => {
+    const result = await request<{ started: boolean; detail: PracticeProjectDetail }>(
+      "/api/v1/student/practice-projects/start-first",
+      { method: "POST" }
+    );
+    clearApiCache((url) => url.startsWith("/api/v1/student/practice-projects"));
+    return result;
+  },
   listRagKnowledgeBases: () =>
     request<{ items: RagKnowledgeBaseListItem[] }>("/api/v1/knowledge-bases"),
   createRagKnowledgeBase: (name: string, description = "") =>

@@ -17,6 +17,16 @@ from backend.app.models.entities import utc_now
 from backend.app.services.submissions import iso, prefixed_id
 
 
+DEFAULT_PATH_STEPS = [
+    {"title": "课程积累", "description": "先完成课程任务，沉淀知识点、错因和提示使用记录"},
+    {"title": "画像判断", "description": "系统根据学习画像判断是否进入需要项目实战的能力瓶颈"},
+    {"title": "轻量试做", "description": "从小项目开始，聚焦一个真实业务问题和少量能力点"},
+    {"title": "过程留痕", "description": "记录资料、实验、提交和反馈，形成可复盘过程"},
+    {"title": "成果审核", "description": "提交代码、报告或截图，由平台生成反馈和能力证据"},
+    {"title": "能力进阶", "description": "通过首个项目后，再推荐更综合的企业能力场景"},
+]
+
+
 def safe_json_list(raw: str | None) -> list:
     if not raw:
         return []
@@ -108,6 +118,27 @@ def project_scope_query(student_id: str, class_id: str):
         select(PracticeProject, PracticeProjectEnrollment, Course)
         .join(Course, PracticeProject.course_id == Course.id)
         .join(
+            PracticeProjectEnrollment,
+            (PracticeProjectEnrollment.project_id == PracticeProject.id)
+            & (PracticeProjectEnrollment.student_id == student_id)
+            & (PracticeProjectEnrollment.class_id == class_id),
+        )
+        .join(
+            Enrollment,
+            (Enrollment.course_id == PracticeProject.course_id)
+            & (Enrollment.user_id == student_id)
+            & (Enrollment.role == "STUDENT"),
+        )
+        .where(PracticeProject.status == "ACTIVE")
+        .order_by(PracticeProject.sort_order.asc(), PracticeProject.id.asc())
+    )
+
+
+def starter_project_query(student_id: str):
+    return (
+        select(PracticeProject, Course)
+        .join(Course, PracticeProject.course_id == Course.id)
+        .join(
             Enrollment,
             (Enrollment.course_id == PracticeProject.course_id)
             & (Enrollment.user_id == student_id)
@@ -120,10 +151,28 @@ def project_scope_query(student_id: str, class_id: str):
         )
         .where(
             PracticeProject.status == "ACTIVE",
-            (PracticeProjectEnrollment.id.is_(None)) | (PracticeProjectEnrollment.class_id == class_id),
+            PracticeProjectEnrollment.id.is_(None),
         )
         .order_by(PracticeProject.sort_order.asc(), PracticeProject.id.asc())
     )
+
+
+def home_readiness(projects: list[dict]) -> dict:
+    if projects:
+        return {
+            "status": "ACTIVE",
+            "title": "项目实战进行中",
+            "description": "你已经进入项目实战阶段，可以继续推进当前项目并沉淀能力证据。",
+            "primary_action_label": "继续项目",
+            "secondary_action_label": "查看项目路径",
+        }
+    return {
+        "status": "PREPARING",
+        "title": "项目实战尚未开启",
+        "description": "当课程任务和学习画像显示你进入能力瓶颈时，系统会引导你从第一个轻量项目开始试做。",
+        "primary_action_label": "尝试第一个轻量项目",
+        "secondary_action_label": "先完成课程任务",
+    }
 
 
 def list_practice_projects(db: Session, student_id: str, class_id: str) -> dict:
@@ -163,14 +212,62 @@ def list_practice_projects(db: Session, student_id: str, class_id: str) -> dict:
         "path_steps": (
             safe_json_list(rows[0][0].path_steps_json)
             if rows
-            else []
+            else DEFAULT_PATH_STEPS
         ),
+        "readiness": home_readiness(projects),
         "proof_items": [
             {"title": "真实输入", "description": "用数据、日志、业务指标模拟企业任务。", "icon": "database"},
             {"title": "过程留痕", "description": "记录提交、调试、提示使用和阶段成果。", "icon": "folder"},
             {"title": "成果可交", "description": "沉淀代码、报告、测试和可复用文档。", "icon": "file-check"},
             {"title": "AI 辅导", "description": "提供分层提示，不替学生直接完成项目。", "icon": "bot"},
         ],
+    }
+
+
+def start_first_practice_project(db: Session, student: User, class_id: str) -> dict:
+    existing = db.execute(project_scope_query(student.id, class_id)).first()
+    if existing is not None:
+        project, _, _ = existing
+        return {
+            "started": False,
+            "detail": get_practice_project_detail(db, project.id, student.id, class_id),
+        }
+
+    row = db.execute(starter_project_query(student.id)).first()
+    if row is None:
+        raise ApiError(404, "PRACTICE_STARTER_NOT_AVAILABLE", "当前还没有适合你的项目模板，请先完成课程任务后再回来尝试。")
+
+    project, _ = row
+    now = utc_now()
+    enrollment = PracticeProjectEnrollment(
+        project_id=project.id,
+        student_id=student.id,
+        class_id=class_id,
+        status="IN_PROGRESS",
+        progress=1,
+        completed_stage_count=0,
+        experiment_record_count=0,
+        submission_count=0,
+        weekly_hours=0,
+        last_activity_summary="开启第一个项目尝试",
+        joined_at=now,
+        updated_at=now,
+    )
+    db.add(enrollment)
+    activity = PracticeProjectActivity(
+        id=prefixed_id("practice_activity"),
+        project_id=project.id,
+        student_id=student.id,
+        activity_type="join",
+        text=f"开启第一个项目「{project.title}」尝试",
+        time_label="刚刚",
+        created_at=now,
+    )
+    db.add(activity)
+    db.flush()
+    return {
+        "started": True,
+        "detail": get_practice_project_detail(db, project.id, student.id, class_id),
     }
 
 
@@ -233,22 +330,6 @@ def create_practice_submission(
     if row is None:
         raise ApiError(404, "PRACTICE_PROJECT_NOT_FOUND", "项目实训不存在或当前学生无权访问。")
     project, enrollment, _ = row
-    if enrollment is None:
-        enrollment = PracticeProjectEnrollment(
-            project_id=project.id,
-            student_id=student.id,
-            class_id=class_id,
-            status="IN_PROGRESS",
-            progress=0,
-            completed_stage_count=0,
-            experiment_record_count=0,
-            submission_count=0,
-            weekly_hours=0,
-            last_activity_summary="加入项目",
-        )
-        db.add(enrollment)
-        db.flush()
-
     now = utc_now()
     submission = PracticeProjectSubmission(
         id=prefixed_id("practice_submit"),
