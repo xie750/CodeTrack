@@ -560,7 +560,7 @@ function buildPracticePreviewHtml(resource: GeneratedResource, activeIndex: numb
       min-height: 100vh;
       color: #17243b;
       background: linear-gradient(180deg, #f8fbff 0%, #eef5fb 100%);
-      font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      font-family: "Inter Variable", "MiSans", "HarmonyOS Sans SC", "PingFang SC", "Noto Sans SC Variable", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
     }
     main {
       width: min(760px, calc(100% - 40px));

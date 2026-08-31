@@ -41,7 +41,7 @@
   z-index: 80;
   pointer-events: none;
   color: #10192f;
-  font-family: Inter, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  font-family: var(--font-sans);
 }
 
 .ai-companion * {

@@ -1065,6 +1065,107 @@ class StudentGeneratedResource(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
+class PracticeProject(Base):
+    __tablename__ = "practice_projects"
+    __table_args__ = (
+        Index("ix_practice_projects_course_status", "course_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id"), nullable=False)
+    title: Mapped[str] = mapped_column(String(180), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    long_description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    project_type: Mapped[str] = mapped_column(String(40), nullable=False, default="RESEARCH_PRACTICE")
+    difficulty: Mapped[str] = mapped_column(String(20), nullable=False, default="MEDIUM")
+    direction: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    period_label: Mapped[str] = mapped_column(String(40), nullable=False, default="")
+    current_stage: Mapped[str] = mapped_column(String(80), nullable=False, default="")
+    total_stage_count: Mapped[int] = mapped_column(Integer, nullable=False, default=6)
+    accent: Mapped[str] = mapped_column(String(20), nullable=False, default="blue")
+    tags_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    member_names_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    capability_points_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    path_steps_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    task_sections_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    submission_requirements_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    acceptance_criteria_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    mentor_tips_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    resources_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="ACTIVE")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    course: Mapped[Course] = relationship()
+
+
+class PracticeProjectEnrollment(Base):
+    __tablename__ = "practice_project_enrollments"
+    __table_args__ = (
+        UniqueConstraint("project_id", "student_id", name="uq_practice_project_student"),
+        Index("ix_practice_project_enrollments_student_status", "student_id", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("practice_projects.id"), nullable=False)
+    student_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    class_id: Mapped[str] = mapped_column(ForeignKey("classes.id"), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="IN_PROGRESS")
+    progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    completed_stage_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    experiment_record_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    submission_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    weekly_hours: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    last_activity_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    project: Mapped[PracticeProject] = relationship()
+    student: Mapped[User] = relationship()
+    administrative_class: Mapped[AdministrativeClass] = relationship()
+
+
+class PracticeProjectSubmission(Base):
+    __tablename__ = "practice_project_submissions"
+    __table_args__ = (
+        Index("ix_practice_project_submissions_project_student", "project_id", "student_id", "submitted_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("practice_projects.id"), nullable=False)
+    student_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    title: Mapped[str] = mapped_column(String(180), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="SUBMITTED")
+    review_comment: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    content_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    project: Mapped[PracticeProject] = relationship()
+    student: Mapped[User] = relationship()
+
+
+class PracticeProjectActivity(Base):
+    __tablename__ = "practice_project_activities"
+    __table_args__ = (
+        Index("ix_practice_project_activities_student_created", "student_id", "created_at"),
+        Index("ix_practice_project_activities_project_student", "project_id", "student_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    project_id: Mapped[str | None] = mapped_column(ForeignKey("practice_projects.id"))
+    student_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    activity_type: Mapped[str] = mapped_column(String(40), nullable=False, default="PROJECT_UPDATED")
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    time_label: Mapped[str] = mapped_column(String(40), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    project: Mapped[PracticeProject | None] = relationship()
+    student: Mapped[User] = relationship()
+
+
 class IdempotencyRecord(Base):
     __tablename__ = "idempotency_records"
     __table_args__ = (

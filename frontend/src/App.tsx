@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ChartNoAxesColumnIncreasing, ChevronDown, FolderOpen, LayoutDashboard, LogOut, UserRound } from "lucide-react";
 import { ConfigProvider, Dropdown, type MenuProps } from "antd";
@@ -10,6 +10,7 @@ import CourseTasks from "./pages/CourseTasks";
 import TaskWorkspace from "./pages/TaskWorkspace";
 import QuestionWorkspace from "./pages/QuestionWorkspace";
 import SelfStudyHub from "./pages/SelfStudyHub";
+import ProjectPractice from "./pages/ProjectPractice";
 import LoginPage from "./pages/LoginPage";
 import AICompanion from "./components/AICompanion";
 import AdminApp from "./admin/App";
@@ -26,7 +27,9 @@ export type TaskOpenTarget = {
   taskType?: string;
 };
 
-const routeOrder = ["/", "/courses", "/workspace", "/question-workspace", "/self-study"];
+const routeOrder = ["/", "/courses", "/workspace", "/question-workspace", "/self-study", "/project-practice"];
+const APP_FONT_FAMILY =
+  "'Inter Variable', 'MiSans', 'HarmonyOS Sans SC', 'PingFang SC', 'Noto Sans SC Variable', 'Noto Sans SC', 'Microsoft YaHei', system-ui, sans-serif";
 
 function routeGroup(pathname: string) {
   if (pathname.startsWith("/workspace")) return "/workspace";
@@ -34,6 +37,7 @@ function routeGroup(pathname: string) {
   if (pathname.startsWith("/courses")) return "/courses";
   if (pathname.startsWith("/tasks")) return "/tasks";
   if (pathname.startsWith("/self-study")) return "/self-study";
+  if (pathname.startsWith("/project-practice")) return "/project-practice";
   if (pathname.startsWith("/ai-tutor")) return "/ai-tutor";
   if (pathname.startsWith("/library")) return "/library";
   if (pathname.startsWith("/profile")) return "/profile";
@@ -113,11 +117,13 @@ function AccountMenu({
 function StudentAppTopbar({
   authUser,
   onLogout,
-  onNavigate
+  onNavigate,
+  centerSlot
 }: {
   authUser: AuthUser;
   onLogout: () => void;
   onNavigate: (path: string) => void;
+  centerSlot?: ReactNode;
 }) {
   return (
     <header className="student-app-topbar">
@@ -128,6 +134,7 @@ function StudentAppTopbar({
           <small>学生助学空间</small>
         </span>
       </button>
+      {centerSlot}
       <AccountMenu authUser={authUser} onLogout={onLogout} onNavigate={onNavigate} />
     </header>
   );
@@ -169,7 +176,8 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
       aiTutor: "/self-study/ai",
       library: "/self-study/library",
       tasks: "/courses",
-      profile: "/self-study/profile"
+      profile: "/self-study/profile",
+      projectPractice: "/project-practice"
     };
     transitionTo(aliases[page] ?? page);
   }
@@ -195,7 +203,21 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
   return (
     <>
       <div className="student-direct-window" data-route={activeRouteGroup}>
-        <StudentAppTopbar authUser={authUser} onLogout={onLogout} onNavigate={transitionTo} />
+        <StudentAppTopbar
+          authUser={authUser}
+          onLogout={onLogout}
+          onNavigate={transitionTo}
+          centerSlot={activeRouteGroup === "/project-practice" ? (
+            <nav className="project-practice-top-tabs" aria-label="项目实训页面导航">
+              <button type="button" className={location.pathname === "/project-practice" ? "active" : ""} onClick={() => transitionTo("/project-practice")}>
+                实训首页
+              </button>
+              <button type="button" className={location.pathname.startsWith("/project-practice/projects") ? "active" : ""} onClick={() => transitionTo("/project-practice/projects/sales-cleaning")}>
+                我的项目
+              </button>
+            </nav>
+          ) : undefined}
+        />
         <div className="route-stage" key={activeRouteGroup}>
           <Routes location={location}>
             <Route path="/learning-home" element={<LearningHome onNavigate={handleNavigate} onOpenWorkspace={openTask} />} />
@@ -206,6 +228,8 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
             <Route path="/workspace/:taskId" element={<TaskWorkspaceWrapper onBack={() => transitionTo(workspaceBackPath)} />} />
             <Route path="/question-workspace/:assignmentId" element={<QuestionWorkspaceWrapper onBack={() => transitionTo(workspaceBackPath)} />} />
             <Route path="/self-study/*" element={<SelfStudyHub />} />
+            <Route path="/project-practice" element={<ProjectPractice />} />
+            <Route path="/project-practice/projects/:projectId" element={<ProjectPractice />} />
             <Route path="/ai-tutor" element={<Navigate to="/self-study/ai" replace />} />
             <Route path="/library" element={<Navigate to="/self-study/library" replace />} />
             <Route path="/profile" element={<Navigate to="/self-study/profile" replace />} />
@@ -299,7 +323,7 @@ export default function App() {
         token: {
           colorPrimary: "#176cf5",
           borderRadius: 8,
-          fontFamily: "Inter, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif"
+          fontFamily: APP_FONT_FAMILY
         }
       }}
     >

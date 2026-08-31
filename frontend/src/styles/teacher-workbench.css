@@ -2009,7 +2009,7 @@
   border-radius: 8px;
   color: #61231d;
   background: #fffdfc;
-  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-family: var(--font-code);
   line-height: 1.5;
 }
 

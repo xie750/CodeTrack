@@ -1,0 +1,22 @@
+:root {
+  --font-sans: "Inter Variable", "MiSans", "HarmonyOS Sans SC", "PingFang SC", "Noto Sans SC Variable", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-code: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", ui-monospace, monospace;
+}
+
+body,
+button,
+input,
+textarea,
+select {
+  font-family: var(--font-sans);
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+code,
+kbd,
+pre,
+samp {
+  font-family: var(--font-code);
+}

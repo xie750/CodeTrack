@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
-import { ArrowRight, BookOpenCheck, CalendarClock, CheckCircle2, FlaskConical, Loader2, LockKeyhole, Microscope, Sparkles, X } from "lucide-react";
+import { ArrowRight, BookOpenCheck, BriefcaseBusiness, CalendarClock, CheckCircle2, Code2, FlaskConical, Loader2, LockKeyhole, Microscope, Sparkles, Target, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api, apiCache, type LearningContext, type StudentTaskCard } from "../api";
 import type { AuthUser } from "../authSession";
@@ -267,6 +267,27 @@ function SelfStudyIllustration() {
   );
 }
 
+function ProjectPracticeIllustration() {
+  return (
+    <div className="teacher-card-visual practice-visual" aria-hidden="true">
+      <span className="visual-practice-board">
+        <i><BriefcaseBusiness size={28} strokeWidth={2.1} /></i>
+        <b />
+        <b />
+        <b />
+      </span>
+      <span className="visual-practice-code">
+        <Code2 size={36} strokeWidth={2} />
+      </span>
+      <span className="visual-practice-target">
+        <Target size={25} strokeWidth={2.2} />
+      </span>
+      <span className="visual-dot dot-a" />
+      <span className="visual-dot dot-b" />
+    </div>
+  );
+}
+
 function latestTaskLabel(tasks: StudentTaskCard[]) {
   const task = tasks.find((item) => item.status !== "COMPLETED") ?? tasks[0];
   return task?.title ?? "等待教师下发课程任务";
@@ -442,6 +463,16 @@ export default function StudentEntryPortal({ authUser, accountSlot }: StudentEnt
             <p>进入知识点学习、个人画像、资源中心、知识图谱与 AI 助手</p>
             <button type="button" onClick={() => navigate("/self-study")}>
               进入自学
+              <ArrowRight size={24} strokeWidth={2.2} />
+            </button>
+          </article>
+
+          <article className="teacher-entry-card" onPointerMove={handleCardPointerMove} onPointerLeave={resetCardTilt}>
+            <ProjectPracticeIllustration />
+            <h2>项目实训</h2>
+            <p>根据学习画像匹配企业型微项目，补齐岗位能力证据</p>
+            <button type="button" onClick={() => navigate("/project-practice")}>
+              进入实训
               <ArrowRight size={24} strokeWidth={2.2} />
             </button>
           </article>

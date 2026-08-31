@@ -1,7 +1,7 @@
 :root {
   color: #19221b;
   background: #f7f9f6;
-  font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: var(--font-sans);
   font-synthesis: none;
 }
 

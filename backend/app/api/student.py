@@ -42,6 +42,11 @@ from backend.app.services.question_workflow import (
     save_question_draft,
     submit_question_answers,
 )
+from backend.app.services.practice_projects import (
+    create_practice_submission,
+    get_practice_project_detail,
+    list_practice_projects,
+)
 from backend.app.services.student_resources import (
     ensure_resource_preview,
     generate_learning_resource,
@@ -103,6 +108,12 @@ class StudentResourceGenerateRequest(BaseModel):
 
 class StudentPodcastListenedRequest(BaseModel):
     completed_segment_count: int | None = Field(default=None, ge=0, le=50)
+
+
+class PracticeProjectSubmissionRequest(BaseModel):
+    title: str = Field(default="", max_length=180)
+    description: str = Field(default="", max_length=2000)
+    materials: list[str] = Field(default_factory=list, max_length=12)
 
 
 def task_knowledge_points(task: Task) -> list[str]:
@@ -318,6 +329,46 @@ def learning_context(db: Session = Depends(get_db), user: User = Depends(current
             "courses": courses,
         }
     )
+
+
+@router.get("/practice-projects")
+def student_practice_projects(db: Session = Depends(get_db), user: User = Depends(current_user)):
+    require_role(user, "STUDENT")
+    administrative_class, _ = require_active_class(db, user)
+    return ok(list_practice_projects(db, student_id=user.id, class_id=administrative_class.id))
+
+
+@router.get("/practice-projects/{project_id}")
+def student_practice_project_detail(
+    project_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    administrative_class, _ = require_active_class(db, user)
+    return ok(get_practice_project_detail(db, project_id=project_id, student_id=user.id, class_id=administrative_class.id))
+
+
+@router.post("/practice-projects/{project_id}/submissions", status_code=status.HTTP_201_CREATED)
+def student_create_practice_project_submission(
+    project_id: str,
+    payload: PracticeProjectSubmissionRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    administrative_class, _ = require_active_class(db, user)
+    result = create_practice_submission(
+        db,
+        project_id=project_id,
+        student=user,
+        class_id=administrative_class.id,
+        title=payload.title,
+        description=payload.description,
+        materials=payload.materials,
+    )
+    db.commit()
+    return ok(result)
 
 
 @router.post("/ai-chat")
