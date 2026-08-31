@@ -37,20 +37,6 @@ export class ApiRequestError extends Error {
   }
 }
 
-export type TaskListItem = {
-  task_id: string;
-  course_id: string;
-  course_name: string;
-  title: string;
-  language: string;
-  status: string;
-  progress_status: string;
-  latest_submission_id: string | null;
-  latest_version_id: string | null;
-  last_submitted_at: string | null;
-  passed_at: string | null;
-};
-
 export type LearningContext = {
   student: {
     id: string;
@@ -564,25 +550,11 @@ export type GeneratedResource = {
   saved_at: string | null;
 };
 
-export type GeneratePptResourceResponse = {
+export type GenerateResourceResponse = {
   resource: GeneratedResource;
   session: StudentAiChatSession;
   user_message_id: string;
   assistant_message_id: string;
-};
-
-export type GenerateResourceResponse = GeneratePptResourceResponse;
-
-export type PptRendererConfig = {
-  requested: string;
-  active: string;
-  available: {
-    presenton: boolean;
-    ppt_master: boolean;
-    ppt_master_bridge?: boolean;
-    local_pptx: boolean;
-  };
-  fallback: boolean;
 };
 
 export type StudentAiChatSession = {
@@ -801,72 +773,6 @@ export type AgentWorkflowRun = {
   input_summary: unknown;
   output_summary: unknown;
   steps: AgentWorkflowStep[];
-};
-
-export type VersionHistoryItem = {
-  version_id: string;
-  version_no: number;
-  language: string;
-  source_code: string;
-  code_hash: string;
-  created_at: string;
-  submission_status: string;
-  execution_status: string;
-  passed_count: number;
-  total_required_count: number;
-  highest_hint_level: number;
-  is_latest: boolean;
-  is_final: boolean;
-};
-
-export type Summary = {
-  submission_id: string;
-  task_id: string;
-  final_status: string;
-  version_count: number;
-  highest_hint_level: number;
-  started_at: string;
-  passed_at: string | null;
-  total_duration_ms: number | null;
-  next_step_suggestion: string;
-  test_comparison: Array<{ test_case_id: string; name: string; first_status: string; final_status: string }>;
-  capability_evidence: null | {
-    evidence_id: string;
-    capability_code: string;
-    strength: string;
-    evidence_type: string;
-    explanation: string;
-  };
-};
-
-export type TeacherSubmission = {
-  submission_id: string;
-  task_id: string;
-  task_title: string;
-  student_id: string;
-  student_name: string;
-  status: string;
-  version_count: number;
-  latest_version_id: string | null;
-  highest_hint_level: number;
-  latest_diagnosis_type: string | null;
-  passed_at: string | null;
-};
-
-export type TeacherTimeline = {
-  submission_id: string;
-  student_id: string;
-  student_name: string;
-  task_id: string;
-  task_title: string;
-  events: Array<{
-    event_id: string;
-    type: string;
-    version_id: string;
-    execution_id?: string;
-    occurred_at: string | null;
-    summary: string;
-  }>;
 };
 
 const GET_CACHE_TTL_MS = 2 * 60 * 1000;
@@ -1199,14 +1105,13 @@ export const api = {
       token_type: string;
       expires_in: number;
       user: AuthUser;
-    }>("/api/v1/auth/login", {
+  }>("/api/v1/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password })
-    }),
+  }),
   me: () => request<AuthUser>("/api/v1/auth/me"),
   logout: () => request<{ logged_out: boolean }>("/api/v1/auth/logout", { method: "POST" }),
-  listTasks: () => request<TaskListItem[]>("/api/v1/tasks"),
   getTask: (taskId: string, assignmentId?: string) => request<TaskDetail>(`/api/v1/tasks/${taskId}${assignmentId ? `?assignment_id=${encodeURIComponent(assignmentId)}` : ''}`),
   getQuestionWorkspace: (assignmentId: string) =>
     request<QuestionWorkspace>(`/api/v1/student/assignments/${assignmentId}/workspace`),
@@ -1269,21 +1174,6 @@ export const api = {
       `/api/v1/documents/${encodeURIComponent(documentId)}/process`,
       { method: "POST" }
     ),
-  getRagDocument: (documentId: string) =>
-    request<{
-      id: string;
-      name: string;
-      status: string;
-      progress: number;
-      stage: string;
-      active_version_id: string | null;
-      file_profile: RagFileProfile | Record<string, never>;
-      content_profile: RagContentProfile | Record<string, never>;
-      cleaning_strategy: string | null;
-      chunking_strategy: string | null;
-      stats: { elements: number; parents: number; children: number; embedded_children: number };
-      error: null | { code: string; message: string; stage: string | null };
-    }>(`/api/v1/documents/${encodeURIComponent(documentId)}`),
   listRagChunks: (documentId: string) =>
     request<{ items: RagKnowledgeChunk[] }>(`/api/v1/documents/${encodeURIComponent(documentId)}/chunks`),
   getRagIngestionRun: (documentId: string) =>
@@ -1322,12 +1212,6 @@ export const api = {
       `/api/v1/student/ai-chat/sessions/${encodeURIComponent(sessionId)}`,
       { method: "DELETE" }
     ),
-  generatePptResource: (message: string, courseId?: string, sessionId?: string | null) =>
-    request<GeneratePptResourceResponse>("/api/v1/student/resources/ppt/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message, course_id: courseId, session_id: sessionId })
-    }),
   generateResource: (resourceType: GeneratedResourceType | string, message: string, courseId?: string, sessionId?: string | null) =>
     request<GenerateResourceResponse>("/api/v1/student/resources/generate", {
       method: "POST",
@@ -1344,8 +1228,6 @@ export const api = {
     const suffix = params.toString() ? `?${params.toString()}` : "";
     return request<{ items: GeneratedResource[] }>(`/api/v1/student/resources/generated${suffix}`);
   },
-  getGeneratedResource: (resourceId: string) =>
-    request<GeneratedResource>(`/api/v1/student/resources/${encodeURIComponent(resourceId)}`),
   getGeneratedPracticeWorkspace: (resourceId: string) =>
     request<GeneratedPracticeWorkspace>(`/api/v1/student/resources/${encodeURIComponent(resourceId)}/practice`),
   submitGeneratedPractice: async (resourceId: string, answers: Array<{ question_id: string; selected_option_ids: string[] }>) => {
@@ -1390,8 +1272,6 @@ export const api = {
     `/api/v1/student/resources/${encodeURIComponent(resourceId)}/download`,
   generatedResourcePreviewUrl: (resourceId: string) =>
     `/api/v1/student/resources/${encodeURIComponent(resourceId)}/preview`,
-  getPptRendererConfig: () =>
-    request<PptRendererConfig>("/api/v1/student/resources/ppt/renderers"),
   submitCode: async (taskId: string, language: string, sourceCode: string, assignmentId?: string) => {
     const result = await request<SubmitResponse>(`/api/v1/tasks/${taskId}/submissions${assignmentId ? `?assignment_id=${encodeURIComponent(assignmentId)}` : ''}`, {
       method: "POST",
@@ -1442,15 +1322,7 @@ export const api = {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({ requested_level: requestedLevel })
-    }),
-  getVersions: (submissionId: string) =>
-    request<VersionHistoryItem[]>(`/api/v1/submissions/${submissionId}/versions`),
-  getSummary: (submissionId: string) =>
-    request<Summary>(`/api/v1/submissions/${submissionId}/summary`),
-  listTeacherSubmissions: () =>
-    request<TeacherSubmission[]>("/api/v1/teacher/courses/course_ds_001/submissions"),
-  getTeacherTimeline: (submissionId: string) =>
-    request<TeacherTimeline>(`/api/v1/teacher/submissions/${submissionId}/timeline`)
+    })
 };
 
 export const apiCache = {
