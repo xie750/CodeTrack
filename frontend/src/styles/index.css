@@ -1,7 +1,9 @@
+@import './typography.css';
 @import './question-workspace.css';
 @import './app-shell.css';
 @import './student-knowledge-base.css';
 @import './self-study.css';
+@import './project-practice.css';
 @import './legacy-components.css';
 @import './teacher-entry.css';
 @import './teacher-workbench.css';

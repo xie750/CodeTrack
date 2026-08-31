@@ -188,6 +188,106 @@ export type StudentKnowledgeGraph = {
   published_at: string | null;
 };
 
+export type PracticeProjectSummary = {
+  id: string;
+  course_id: string;
+  course_name: string;
+  title: string;
+  status: string;
+  status_label: string;
+  description: string;
+  long_description: string;
+  progress: number;
+  accent: "blue" | "cyan" | "violet" | string;
+  tags: string[];
+  members: string[];
+  period: string;
+  stage: string;
+  direction: string;
+  capability_points: string[];
+  last_activity_summary: string;
+  weekly_hours: number;
+};
+
+export type PracticeProjectActivity = {
+  id: string;
+  project_id: string | null;
+  type: string;
+  text: string;
+  time: string;
+  created_at: string | null;
+};
+
+export type PracticeProjectPathStep = {
+  title: string;
+  description: string;
+};
+
+export type PracticeProjectProofItem = {
+  title: string;
+  description: string;
+  icon: string;
+};
+
+export type PracticeProjectHome = {
+  projects: PracticeProjectSummary[];
+  recommended_project_id: string | null;
+  stats: {
+    project_count: number;
+    in_progress_count: number;
+    completed_count: number;
+    weekly_hours: number;
+    project_delta: number;
+    completed_delta: number;
+    weekly_hours_delta: number;
+  };
+  activities: PracticeProjectActivity[];
+  path_steps: PracticeProjectPathStep[];
+  proof_items: PracticeProjectProofItem[];
+};
+
+export type PracticeProjectTaskSection = {
+  title: string;
+  description: string;
+  action?: string;
+  icon?: string;
+};
+
+export type PracticeProjectResource = {
+  title: string;
+  meta: string;
+};
+
+export type PracticeProjectSubmission = {
+  id: string;
+  project_id: string;
+  title: string;
+  description: string;
+  status: string;
+  status_label: string;
+  review_comment: string;
+  content: Record<string, unknown>;
+  submitted_at: string | null;
+  created_at: string | null;
+};
+
+export type PracticeProjectDetail = {
+  project: PracticeProjectSummary;
+  metrics: {
+    completed_stage_count: number;
+    total_stage_count: number;
+    experiment_record_count: number;
+    submission_count: number;
+  };
+  task_sections: PracticeProjectTaskSection[];
+  submission_requirements: string[];
+  acceptance_criteria: string[];
+  mentor_tips: string[];
+  resources: PracticeProjectResource[];
+  submissions: PracticeProjectSubmission[];
+  activities: PracticeProjectActivity[];
+};
+
 export type RagKnowledgeBaseListItem = {
   id: string;
   name: string;
@@ -874,6 +974,10 @@ function studentKnowledgeGraphUrl(courseId: string) {
   return `/api/v1/student/courses/${encodeURIComponent(courseId)}/knowledge-graph`;
 }
 
+function studentPracticeProjectDetailUrl(projectId: string) {
+  return `/api/v1/student/practice-projects/${encodeURIComponent(projectId)}`;
+}
+
 function getCacheKey(url: string) {
   return `${getAccessToken() ?? "anonymous"}:${url}`;
 }
@@ -1104,6 +1208,10 @@ export const api = {
     cachedGet<StudentProfile>(studentProfileUrl(courseId)),
   getStudentKnowledgeGraph: (courseId: string) =>
     cachedGet<StudentKnowledgeGraph>(studentKnowledgeGraphUrl(courseId)),
+  getPracticeProjectHome: () =>
+    cachedGet<PracticeProjectHome>("/api/v1/student/practice-projects"),
+  getPracticeProjectDetail: (projectId: string) =>
+    cachedGet<PracticeProjectDetail>(studentPracticeProjectDetailUrl(projectId)),
   listRagKnowledgeBases: () =>
     request<{ items: RagKnowledgeBaseListItem[] }>("/api/v1/knowledge-bases"),
   createRagKnowledgeBase: (name: string, description = "") =>
@@ -1230,6 +1338,21 @@ export const api = {
       body: JSON.stringify({ answers })
     });
     clearApiCache((url) => url.startsWith("/api/v1/student/"));
+    return result;
+  },
+  submitPracticeProject: async (
+    projectId: string,
+    payload: { title?: string; description?: string; materials?: string[] }
+  ) => {
+    const result = await request<{ submission: PracticeProjectSubmission; detail: PracticeProjectDetail }>(
+      `/api/v1/student/practice-projects/${encodeURIComponent(projectId)}/submissions`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      }
+    );
+    clearApiCache((url) => url.startsWith("/api/v1/student/practice-projects"));
     return result;
   },
   markGeneratedPodcastListened: async (resourceId: string, completedSegmentCount?: number) => {

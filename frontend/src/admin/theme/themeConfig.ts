@@ -41,6 +41,9 @@ export const colors = {
   },
 } as const
 
+const fontFamily =
+  "'Inter Variable', 'MiSans', 'HarmonyOS Sans SC', 'PingFang SC', 'Noto Sans SC Variable', 'Noto Sans SC', 'Microsoft YaHei', system-ui, sans-serif"
+
 export const themeConfig: ThemeConfig = {
   token: {
     colorPrimary: colors.primary,
@@ -60,8 +63,7 @@ export const themeConfig: ThemeConfig = {
     borderRadiusLG: 16,
     fontSize: 14,
     controlHeight: 36,
-    fontFamily:
-      "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif",
+    fontFamily,
     boxShadow: '0 1px 2px rgba(0, 0, 0, 0.03)',
     boxShadowSecondary: '0 4px 12px rgba(0, 0, 0, 0.06)',
   },

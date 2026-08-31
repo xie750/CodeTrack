@@ -17,6 +17,10 @@ from backend.app.models import (
     LearnerEvent,
     LearnerKnowledgeState,
     LearnerProfileSnapshot,
+    PracticeProject,
+    PracticeProjectActivity,
+    PracticeProjectEnrollment,
+    PracticeProjectSubmission,
     Question,
     QuestionOption,
     Recommendation,
@@ -169,6 +173,21 @@ def ensure_student_knowledge_graph_table(db: Session) -> None:
     StudentKnowledgeGraph.__table__.create(bind=db.bind, checkfirst=True)
 
 
+def ensure_practice_project_tables(db: Session) -> None:
+    PracticeProject.__table__.create(bind=db.bind, checkfirst=True)
+    PracticeProjectEnrollment.__table__.create(bind=db.bind, checkfirst=True)
+    PracticeProjectSubmission.__table__.create(bind=db.bind, checkfirst=True)
+    PracticeProjectActivity.__table__.create(bind=db.bind, checkfirst=True)
+    columns = {column["name"] for column in inspect(db.bind).get_columns("practice_projects")}
+    additions = [
+        ("member_names_json", "TEXT NOT NULL DEFAULT '[]'"),
+    ]
+    for name, ddl in additions:
+        if name not in columns:
+            db.execute(text(f"ALTER TABLE practice_projects ADD COLUMN {name} {ddl}"))
+    db.commit()
+
+
 def ensure_rag_profile_columns(db: Session) -> None:
     """补齐 RAG 文档策略字段，兜住本地开发库未跑 Alembic 的情况。"""
     inspector = inspect(db.bind)
@@ -195,6 +214,7 @@ def seed_demo_data(db: Session) -> None:
     ensure_task_workspace_columns(db)
     ensure_knowledge_source_columns(db)
     ensure_student_knowledge_graph_table(db)
+    ensure_practice_project_tables(db)
     ensure_rag_profile_columns(db)
     users = {
         "user_teacher_001": {
@@ -1629,6 +1649,268 @@ def seed_demo_data(db: Session) -> None:
     }
     for profile_id, values in profile_snapshots.items():
         upsert(db, LearnerProfileSnapshot, profile_id, values)
+
+    practice_path_steps = [
+        {"title": "需求理解", "description": "明确项目背景与目标，梳理需求与验收标准"},
+        {"title": "资料调研", "description": "收集相关资料，调研技术方案与实现路径"},
+        {"title": "方案设计", "description": "设计整体方案与技术架构，制定实施计划"},
+        {"title": "开发实现", "description": "编码实现核心功能，完成项目开发"},
+        {"title": "测试验证", "description": "进行测试与验证，确保功能正确与性能达标"},
+        {"title": "成果沉淀", "description": "整理项目文档与成果，形成可复用的能力证据"},
+    ]
+    practice_projects = {
+        "sales-cleaning": {
+            "course_id": "course_arch_001",
+            "title": "基于公开数据集的图像分类对比研究",
+            "description": "通过 CIFAR-10 公开数据集完成多种模型训练与对比，形成实验记录和研究结论。",
+            "long_description": "通过对公开数据集进行多种模型的训练与对比分析，完成效果评估、数据解读与建模优化，形成可复用的科研过程与研究结论。",
+            "project_type": "RESEARCH_PRACTICE",
+            "difficulty": "MEDIUM",
+            "direction": "AI方向 + 自主完成",
+            "period_label": "2 周",
+            "current_stage": "P3 模型训练",
+            "total_stage_count": 6,
+            "accent": "blue",
+            "tags_json": json.dumps(["机器学习", "模型训练", "对比分析"], ensure_ascii=False),
+            "member_names_json": json.dumps(["王", "李"], ensure_ascii=False),
+            "capability_points_json": json.dumps(["公开数据集理解", "模型训练", "指标评估", "实验记录", "对比分析"], ensure_ascii=False),
+            "path_steps_json": json.dumps(practice_path_steps, ensure_ascii=False),
+            "task_sections_json": json.dumps(
+                [
+                    {
+                        "title": "当前任务说明",
+                        "description": "在 ResNet-18 与 EfficientNet-B0 上完成模型训练与对比，记录训练过程与关键实验指标，分析模型性能差异，并撰写对比分析结论。",
+                        "icon": "bot",
+                    },
+                    {
+                        "title": "数据集 / 研究对象",
+                        "description": "CIFAR-10 图像分类数据集，共 60,000 张，10 类。",
+                        "action": "查看数据集详情",
+                        "icon": "database",
+                    },
+                    {
+                        "title": "方法要求",
+                        "description": "使用深度学习框架实现训练模型，至少包含训练过程、验证指标、召回率、F1 等指标评估。",
+                        "icon": "workflow",
+                    },
+                    {
+                        "title": "输出物要求",
+                        "description": "代码、训练日志、模型性能对比表格、可视化图表、对比分析报告。",
+                        "icon": "file-check",
+                    },
+                ],
+                ensure_ascii=False,
+            ),
+            "submission_requirements_json": json.dumps(
+                ["上传代码 / 文档", "运行结果截图", "实验记录", "其他补充材料（可选）"],
+                ensure_ascii=False,
+            ),
+            "acceptance_criteria_json": json.dumps(
+                ["模型在测试集 Top-1 准确率不低于 80%", "完整的实验记录与结果可复现", "对比分析结论清晰，图表规范"],
+                ensure_ascii=False,
+            ),
+            "mentor_tips_json": json.dumps(
+                ["关键模型对比思路与实验设计建议", "优化建议 Accuracy / Recall / F1", "实验结果解读与图表建议"],
+                ensure_ascii=False,
+            ),
+            "resources_json": json.dumps(
+                [
+                    {"title": "图像分类实验指南", "meta": "PDF · 1.2 MB"},
+                    {"title": "2种模型结构对比综述", "meta": "PDF · 890 KB"},
+                    {"title": "CIFAR-10 数据集说明", "meta": "PDF · 650 KB"},
+                ],
+                ensure_ascii=False,
+            ),
+            "status": "ACTIVE",
+            "sort_order": 1,
+        },
+        "log-topk": {
+            "course_id": "course_ds_001",
+            "title": "服务日志 Top-K 问题定位",
+            "description": "基于服务日志识别并定位 Top-K 异常问题，输出分析报告与优化建议。",
+            "long_description": "基于接口日志识别高频异常路径，比较哈希表、排序与堆结构的实现取舍，输出可复查的异常定位报告。",
+            "project_type": "BUSINESS_PRACTICE",
+            "difficulty": "BASIC",
+            "direction": "后端排障 + 引导完成",
+            "period_label": "1 周",
+            "current_stage": "P2 算法实现",
+            "total_stage_count": 6,
+            "accent": "cyan",
+            "tags_json": json.dumps(["数据结构", "分析", "后端"], ensure_ascii=False),
+            "member_names_json": json.dumps(["陈", "赵"], ensure_ascii=False),
+            "capability_points_json": json.dumps(["哈希统计", "复杂度分析", "日志阅读", "问题定位"], ensure_ascii=False),
+            "path_steps_json": json.dumps(practice_path_steps, ensure_ascii=False),
+            "task_sections_json": json.dumps(
+                [
+                    {"title": "当前任务说明", "description": "读取简化服务日志，统计高频异常接口并解释可能原因。", "icon": "bot"},
+                    {"title": "数据集 / 研究对象", "description": "脱敏后的接口访问日志，包含路径、状态码、耗时和错误摘要。", "icon": "database"},
+                    {"title": "方法要求", "description": "使用哈希表或堆结构完成 Top-K 统计，并给出复杂度说明。", "icon": "workflow"},
+                    {"title": "输出物要求", "description": "统计代码、异常接口列表、复杂度说明和定位报告。", "icon": "file-check"},
+                ],
+                ensure_ascii=False,
+            ),
+            "submission_requirements_json": json.dumps(["上传代码 / 文档", "运行结果截图", "分析报告", "其他补充材料（可选）"], ensure_ascii=False),
+            "acceptance_criteria_json": json.dumps(["Top-K 结果正确", "复杂度说明清楚", "异常定位结论有日志依据"], ensure_ascii=False),
+            "mentor_tips_json": json.dumps(["Top-K 数据结构选择建议", "日志字段筛选建议", "复杂度表达建议"], ensure_ascii=False),
+            "resources_json": json.dumps(
+                [
+                    {"title": "Top-K 问题实现指南", "meta": "PDF · 720 KB"},
+                    {"title": "服务日志字段说明", "meta": "DOC · 420 KB"},
+                    {"title": "哈希表与堆结构复习", "meta": "PDF · 680 KB"},
+                ],
+                ensure_ascii=False,
+            ),
+            "status": "ACTIVE",
+            "sort_order": 2,
+        },
+        "retention-dashboard": {
+            "course_id": "course_network_001",
+            "title": "用户留存分析与可视化看板",
+            "description": "分析用户留存数据并构建可视化看板，洞察用户行为趋势与关键影响因素。",
+            "long_description": "围绕用户行为数据构建留存分析指标，完成趋势分析、图表表达和业务解释，沉淀可展示的产品分析成果。",
+            "project_type": "BUSINESS_PRACTICE",
+            "difficulty": "MEDIUM",
+            "direction": "AI 方向 + 自主完成",
+            "period_label": "3 周",
+            "current_stage": "P3 指标解释",
+            "total_stage_count": 6,
+            "accent": "violet",
+            "tags_json": json.dumps(["SQL", "分析", "图表"], ensure_ascii=False),
+            "member_names_json": json.dumps(["周", "吴"], ensure_ascii=False),
+            "capability_points_json": json.dumps(["指标口径", "SQL 查询", "数据可视化", "业务解释"], ensure_ascii=False),
+            "path_steps_json": json.dumps(practice_path_steps, ensure_ascii=False),
+            "task_sections_json": json.dumps(
+                [
+                    {"title": "当前任务说明", "description": "构建次日和 7 日留存指标，解释不同渠道用户留存差异。", "icon": "bot"},
+                    {"title": "数据集 / 研究对象", "description": "模拟用户行为明细，包含注册、访问、学习和提交事件。", "icon": "database"},
+                    {"title": "方法要求", "description": "使用 SQL 或 Python 完成指标计算，并生成趋势图和渠道对比图。", "icon": "workflow"},
+                    {"title": "输出物要求", "description": "指标口径文档、查询脚本、图表和分析结论。", "icon": "file-check"},
+                ],
+                ensure_ascii=False,
+            ),
+            "submission_requirements_json": json.dumps(["上传代码 / 文档", "图表截图", "指标口径说明", "其他补充材料（可选）"], ensure_ascii=False),
+            "acceptance_criteria_json": json.dumps(["留存指标口径一致", "图表表达清晰", "结论能解释关键波动"], ensure_ascii=False),
+            "mentor_tips_json": json.dumps(["留存口径检查建议", "图表表达建议", "业务结论组织建议"], ensure_ascii=False),
+            "resources_json": json.dumps(
+                [
+                    {"title": "留存指标口径说明", "meta": "PDF · 760 KB"},
+                    {"title": "SQL 分组聚合示例", "meta": "MD · 320 KB"},
+                    {"title": "数据看板表达规范", "meta": "PDF · 840 KB"},
+                ],
+                ensure_ascii=False,
+            ),
+            "status": "ACTIVE",
+            "sort_order": 3,
+        },
+    }
+    for project_id, values in practice_projects.items():
+        upsert(db, PracticeProject, project_id, values)
+
+    practice_enrollments = [
+        (
+            {"project_id": "sales-cleaning", "student_id": "user_student_001"},
+            {
+                "class_id": "class_se_001",
+                "status": "IN_PROGRESS",
+                "progress": 62,
+                "completed_stage_count": 3,
+                "experiment_record_count": 8,
+                "submission_count": 2,
+                "weekly_hours": 6.2,
+                "last_activity_summary": "提交了 v1.2 实验记录",
+            },
+        ),
+        (
+            {"project_id": "log-topk", "student_id": "user_student_001"},
+            {
+                "class_id": "class_se_001",
+                "status": "NOT_STARTED",
+                "progress": 12,
+                "completed_stage_count": 0,
+                "experiment_record_count": 0,
+                "submission_count": 0,
+                "weekly_hours": 1.1,
+                "last_activity_summary": "加入项目团队",
+            },
+        ),
+        (
+            {"project_id": "retention-dashboard", "student_id": "user_student_001"},
+            {
+                "class_id": "class_se_001",
+                "status": "IN_PROGRESS",
+                "progress": 86,
+                "completed_stage_count": 5,
+                "experiment_record_count": 11,
+                "submission_count": 4,
+                "weekly_hours": 7.3,
+                "last_activity_summary": "老师在项目中留言",
+            },
+        ),
+    ]
+    for filters, values in practice_enrollments:
+        upsert_one(db, PracticeProjectEnrollment, filters, values)
+
+    practice_submissions = {
+        "practice_submit_sales_001": {
+            "project_id": "sales-cleaning",
+            "student_id": "user_student_001",
+            "title": "v1.1 模型训练代码",
+            "description": "提交内容：ResNet-18 基线训练代码与初步日志。",
+            "status": "APPROVED",
+            "review_comment": "训练流程完整，建议补充模型对比维度。",
+            "content_json": json.dumps({"items": ["代码", "训练日志"]}, ensure_ascii=False),
+            "submitted_at": datetime(2026, 5, 16, 18, 20, tzinfo=timezone.utc),
+        },
+        "practice_submit_sales_002": {
+            "project_id": "sales-cleaning",
+            "student_id": "user_student_001",
+            "title": "v1.2 实验记录",
+            "description": "提交内容：ResNet-18 训练结果与学习曲线；评审意见：指标达标，建议补充 EfficientNet-B0 对比分析。",
+            "status": "APPROVED",
+            "review_comment": "指标达标，建议补充 EfficientNet-B0 对比分析。",
+            "content_json": json.dumps({"items": ["实验记录", "学习曲线"]}, ensure_ascii=False),
+            "submitted_at": datetime(2026, 5, 17, 14, 32, tzinfo=timezone.utc),
+        },
+    }
+    for submission_id, values in practice_submissions.items():
+        upsert(db, PracticeProjectSubmission, submission_id, values)
+
+    practice_activities = {
+        "practice_activity_sales_submit": {
+            "project_id": "sales-cleaning",
+            "student_id": "user_student_001",
+            "activity_type": "submit",
+            "text": "你提交了 v1.2 实验记录",
+            "time_label": "今天 16:42",
+            "created_at": datetime(2026, 5, 17, 16, 42, tzinfo=timezone.utc),
+        },
+        "practice_activity_sales_ai": {
+            "project_id": "sales-cleaning",
+            "student_id": "user_student_001",
+            "activity_type": "success",
+            "text": "AI 助手生成了对比图表示例",
+            "time_label": "今天 15:30",
+            "created_at": datetime(2026, 5, 17, 15, 30, tzinfo=timezone.utc),
+        },
+        "practice_activity_retention_comment": {
+            "project_id": "retention-dashboard",
+            "student_id": "user_student_001",
+            "activity_type": "comment",
+            "text": "老师在项目「用户留存分析与看板」中留言",
+            "time_label": "昨天 18:37",
+            "created_at": datetime(2026, 5, 16, 18, 37, tzinfo=timezone.utc),
+        },
+        "practice_activity_log_join": {
+            "project_id": "log-topk",
+            "student_id": "user_student_001",
+            "activity_type": "join",
+            "text": "加入项目「服务日志 Top-K 问题定位」团队",
+            "time_label": "05-16 15:42",
+            "created_at": datetime(2026, 5, 16, 15, 42, tzinfo=timezone.utc),
+        },
+    }
+    for activity_id, values in practice_activities.items():
+        upsert(db, PracticeProjectActivity, activity_id, values)
 
     knowledge_states = [
         (

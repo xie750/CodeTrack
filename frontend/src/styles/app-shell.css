@@ -14,7 +14,7 @@ body {
   overflow: hidden;
   background: #f7f9fc;
   color: #17243b;
-  font-family: Inter, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  font-family: var(--font-sans);
 }
 
 :root {

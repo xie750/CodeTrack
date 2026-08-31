@@ -2,17 +2,24 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   AlertTriangle,
+  Building2,
   CheckCircle2,
   Clipboard,
   Clock3,
+  Database,
   FileText,
+  FileSearch,
   FileUp,
   Folder,
+  ListChecks,
+  Map,
   MoreHorizontal,
+  Network,
   Plus,
   PlayCircle,
   RefreshCw,
   Search,
+  ShieldCheck,
   Trash2,
   UploadCloud,
   X
@@ -27,6 +34,7 @@ import {
 } from "../api";
 
 type KnowledgeBaseStatus = "READY" | "PARTIAL_READY" | "PROCESSING" | "FAILED" | "DRAFT";
+type TraceViewMode = "timeline" | "town";
 type DocumentStatus =
   | "UPLOADED"
   | "QUEUED"
@@ -59,6 +67,35 @@ type KnowledgeBaseView = {
   documentCount: number;
   chunkCount: number;
 };
+
+const expectedRagAgentSteps = [
+  { name: "file_intake_agent", icon: FileUp, zone: "接入站", agent: "接收员", badge: "INTAKE" },
+  { name: "document_parser_agent", icon: FileSearch, zone: "解析塔", agent: "解析师", badge: "PARSE" },
+  { name: "content_profile_agent", icon: Building2, zone: "画像馆", agent: "画像师", badge: "PROFILE" },
+  { name: "cleaning_strategy_agent", icon: ShieldCheck, zone: "清洗厂", agent: "清洗员", badge: "CLEAN" },
+  { name: "chunk_planner_agent", icon: Map, zone: "规划所", agent: "规划师", badge: "PLAN" },
+  { name: "chunk_builder_agent", icon: Network, zone: "切片坊", agent: "切片工", badge: "CHUNK" },
+  { name: "retrieval_quality_agent", icon: CheckCircle2, zone: "质检站", agent: "质检员", badge: "QA" },
+  { name: "embedding_agent", icon: Database, zone: "向量港", agent: "向量员", badge: "VECTOR" },
+  { name: "index_agent", icon: Folder, zone: "索引库", agent: "归档员", badge: "INDEX" }
+] as const;
+
+const activeStepByDocumentStatus: Partial<Record<DocumentStatus, string>> = {
+  QUEUED: "file_intake_agent",
+  PARSING: "document_parser_agent",
+  NORMALIZING: "cleaning_strategy_agent",
+  CHUNKING: "chunk_builder_agent",
+  EMBEDDING: "embedding_agent",
+  INDEXING: "index_agent"
+};
+
+function activeTownAgentName(run: RagIngestionRun | null, doc: KnowledgeDocumentView) {
+  if (doc.status === "READY") return "index_agent";
+  const activeByStatus = activeStepByDocumentStatus[doc.status];
+  if (activeByStatus) return activeByStatus;
+  const lastStep = run?.steps[run.steps.length - 1];
+  return lastStep?.name ?? "file_intake_agent";
+}
 
 function statusText(status: KnowledgeBaseStatus | DocumentStatus) {
   const map: Record<string, string> = {
@@ -164,6 +201,37 @@ function agentRunDuration(run: RagIngestionRun | null) {
   return `${seconds.toFixed(seconds < 10 ? 1 : 0)} 秒`;
 }
 
+function cyberTownStationState(name: string, run: RagIngestionRun | null, doc: KnowledgeDocumentView) {
+  const recorded = run?.steps.find((step) => step.name === name);
+  if (recorded?.status === "FAILED") return "failed";
+  if (recorded?.status === "WARNING") return "warning";
+  if (recorded) return "done";
+  if (doc.status === "FAILED" || doc.status === "QUEUE_FAILED") return "failed";
+  if (activeStepByDocumentStatus[doc.status] === name) return "active";
+  return "pending";
+}
+
+function cyberTownStationSummary(name: string, run: RagIngestionRun | null) {
+  const recorded = run?.steps.find((step) => step.name === name);
+  if (recorded) return agentStepSummary(recorded);
+  return "等待上一站数据流入";
+}
+
+function townAgentIndex(name: string) {
+  return Math.max(0, expectedRagAgentSteps.findIndex((station) => station.name === name));
+}
+
+function townAgentSpeech(name: string, run: RagIngestionRun | null, doc: KnowledgeDocumentView) {
+  const step = run?.steps.find((item) => item.name === name);
+  if (step) {
+    if (step.status === "WARNING") return `我完成了这一站，但发现需要关注：${agentStepSummary(step)}`;
+    return `我已经完成：${agentStepSummary(step)}`;
+  }
+  if (activeStepByDocumentStatus[doc.status] === name) return "我正在处理这一站，完成后会把结果交给下一位智能体。";
+  if (doc.status === "UPLOADED") return "文件还在小镇入口外，点击处理入库后我会开始工作。";
+  return "我在等上游智能体把资料交过来。";
+}
+
 function fileIconClass(fileType: string) {
   if (fileType === "PDF") return "pdf";
   if (fileType === "DOCX") return "docx";
@@ -243,6 +311,10 @@ export default function StudentKnowledgeBase() {
   const [activeBaseId, setActiveBaseId] = useState("");
   const [activeDocumentId, setActiveDocumentId] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [traceView, setTraceView] = useState<TraceViewMode>("timeline");
+  const [selectedTownAgent, setSelectedTownAgent] = useState("");
+  const [townPlaybackActive, setTownPlaybackActive] = useState(false);
+  const [townPlaybackIndex, setTownPlaybackIndex] = useState(0);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
@@ -310,21 +382,61 @@ export default function StudentKnowledgeBase() {
     const timer = window.setInterval(() => {
       loadDocuments(activeBaseId)
         .then((nextDocs) => {
-          const visibleDoc = nextDocs.find((doc) => doc.id === activeDocumentId && isProcessing(doc.status));
-          if (visibleDoc) {
-            void loadIngestionRun(visibleDoc.id);
+          if (drawerOpen && activeDocumentId && nextDocs.some((doc) => doc.id === activeDocumentId)) {
+            void loadIngestionRun(activeDocumentId);
           }
         })
         .catch((error) => setMessage(error instanceof Error ? error.message : "文档状态刷新失败"));
     }, 1500);
     return () => window.clearInterval(timer);
-  }, [activeBaseId, activeDocumentId, documentsByBase]);
+  }, [activeBaseId, activeDocumentId, documentsByBase, drawerOpen]);
+
+  useEffect(() => {
+    if (!drawerOpen || !activeDocumentId) return;
+    void loadIngestionRun(activeDocumentId);
+  }, [drawerOpen, activeDocumentId, documentsByBase]);
+
+  useEffect(() => {
+    document.body.classList.toggle("kb-preview-drawer-open", drawerOpen);
+    return () => {
+      document.body.classList.remove("kb-preview-drawer-open");
+    };
+  }, [drawerOpen]);
+
+  useEffect(() => {
+    setSelectedTownAgent("");
+    setTownPlaybackActive(false);
+    setTownPlaybackIndex(0);
+  }, [activeDocumentId]);
+
+  useEffect(() => {
+    if (traceView !== "town") {
+      setTownPlaybackActive(false);
+    }
+  }, [traceView]);
+
+  useEffect(() => {
+    if (!townPlaybackActive) return undefined;
+    if (townPlaybackIndex >= expectedRagAgentSteps.length - 1) {
+      const doneTimer = window.setTimeout(() => setTownPlaybackActive(false), 900);
+      return () => window.clearTimeout(doneTimer);
+    }
+    const timer = window.setTimeout(() => {
+      setTownPlaybackIndex((current) => Math.min(current + 1, expectedRagAgentSteps.length - 1));
+    }, 1050);
+    return () => window.clearTimeout(timer);
+  }, [townPlaybackActive, townPlaybackIndex]);
 
   const activeBase = knowledgeBases.find((item) => item.id === activeBaseId) ?? knowledgeBases[0];
   const documents = activeBase ? documentsByBase[activeBase.id] ?? [] : [];
   const activeDocument = documents.find((item) => item.id === activeDocumentId) ?? documents[0];
   const activeDocumentChunks = activeDocument ? chunksByDocument[activeDocument.id] ?? [] : [];
   const activeIngestionRun = activeDocument ? runsByDocument[activeDocument.id] ?? null : null;
+  const currentTownAgentName = activeDocument ? activeTownAgentName(activeIngestionRun, activeDocument) : "file_intake_agent";
+  const playbackTownAgentName = townPlaybackActive ? expectedRagAgentSteps[townPlaybackIndex]?.name ?? "" : "";
+  const focusedTownAgentName = selectedTownAgent || playbackTownAgentName || currentTownAgentName;
+  const focusedTownAgent = expectedRagAgentSteps.find((station) => station.name === focusedTownAgentName) ?? expectedRagAgentSteps[0];
+  const courierAgentIndex = townPlaybackActive ? townPlaybackIndex : townAgentIndex(currentTownAgentName);
   const pendingDeleteDocument = documents.find((item) => item.id === pendingDeleteDocumentId);
 
   const visibleKnowledgeBases = useMemo(() => {
@@ -383,6 +495,12 @@ export default function StudentKnowledgeBase() {
     } catch {
       setRunsByDocument((current) => ({ ...current, [documentId]: null }));
     }
+  }
+
+  function replayTownWorkflow() {
+    setSelectedTownAgent("");
+    setTownPlaybackIndex(0);
+    setTownPlaybackActive(true);
   }
 
   async function createKnowledgeBase() {
@@ -647,29 +765,135 @@ export default function StudentKnowledgeBase() {
                   <strong>协同处理轨迹</strong>
                   <small>{activeIngestionRun ? `${activeIngestionRun.steps.length} 个代理步骤 · ${agentRunDuration(activeIngestionRun)}` : "等待处理任务启动"}</small>
                 </div>
-                <span className={`kb-agent-run-status ${activeIngestionRun?.status.toLowerCase() || "pending"}`}>
-                  {activeIngestionRun?.status === "SUCCEEDED" ? "已完成" : activeIngestionRun?.status === "FAILED" ? "失败" : "运行中"}
-                </span>
+                <div className="kb-agent-trace-tools">
+                  <span className={`kb-agent-run-status ${activeIngestionRun?.status.toLowerCase() || "pending"}`}>
+                    {activeIngestionRun?.status === "SUCCEEDED" ? "已完成" : activeIngestionRun?.status === "FAILED" ? "失败" : "运行中"}
+                  </span>
+                  <span className="kb-trace-toggle" role="group" aria-label="切换处理轨迹呈现方式">
+                    <button type="button" className={traceView === "timeline" ? "active" : ""} onClick={() => setTraceView("timeline")}>
+                      <ListChecks size={14} />
+                      列表
+                    </button>
+                    <button type="button" className={traceView === "town" ? "active" : ""} onClick={() => setTraceView("town")}>
+                      <Map size={14} />
+                      小镇
+                    </button>
+                  </span>
+                </div>
               </div>
-              <div className="kb-agent-step-list">
-                {activeIngestionRun?.steps.length ? activeIngestionRun.steps.map((step) => (
-                  <article key={step.id} className={step.status.toLowerCase()}>
-                    <span>{String(step.order).padStart(2, "0")}</span>
+              {traceView === "timeline" ? (
+                <div className="kb-agent-step-list">
+                  {activeIngestionRun?.steps.length ? activeIngestionRun.steps.map((step) => (
+                    <article key={step.id} className={step.status.toLowerCase()}>
+                      <span>{String(step.order).padStart(2, "0")}</span>
+                      <div>
+                        <strong>{agentStepText(step.name)}</strong>
+                        <small>{agentStepSummary(step)}</small>
+                      </div>
+                    </article>
+                  )) : (
+                    <article className="pending">
+                      <span>00</span>
+                      <div>
+                        <strong>{activeDocument.status === "UPLOADED" ? "尚未开始" : "任务排队中"}</strong>
+                        <small>{activeDocument.status === "UPLOADED" ? "确认处理后会展示解析、清洗、切分、向量化和索引步骤" : "后台任务启动后会持续刷新处理轨迹"}</small>
+                      </div>
+                    </article>
+                  )}
+                </div>
+              ) : (
+                <div className={`kb-cyber-town ${isProcessing(activeDocument.status) ? "running" : ""} ${townPlaybackActive ? "replaying" : ""}`} aria-label="赛博小镇处理视图">
+                  <div className="kb-town-titlebar">
                     <div>
-                      <strong>{agentStepText(step.name)}</strong>
-                      <small>{agentStepSummary(step)}</small>
+                      <strong>斯坦福式 AI 小镇 · RAG 入库沙盒</strong>
+                      <small>{focusedTownAgent.agent} 正在负责 {focusedTownAgent.zone}</small>
                     </div>
-                  </article>
-                )) : (
-                  <article className="pending">
-                    <span>00</span>
+                    <button type="button" className="kb-town-replay" onClick={replayTownWorkflow} disabled={!activeIngestionRun?.steps.length && activeDocument.status === "UPLOADED"}>
+                      <PlayCircle size={14} />
+                      {townPlaybackActive ? "播放中" : "回放协作"}
+                    </button>
+                  </div>
+                  <div className="kb-town-skyline" aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                  <div className="kb-town-road primary" />
+                  <div className="kb-town-road secondary" />
+                  <div className="kb-town-road ring" />
+                  <div className="kb-town-core">
+                    <Network size={22} />
+                    <strong>RAG 中枢</strong>
+                    <small>{activeDocument.status === "READY" ? "知识已接入检索网络" : workflowText(activeDocument)}</small>
+                  </div>
+                  <div className={`kb-town-courier route-${courierAgentIndex + 1} ${townPlaybackActive || isProcessing(activeDocument.status) ? "active" : ""}`} aria-hidden="true">
+                    <i className="head" />
+                    <i className="body" />
+                    <i className="pack" />
+                  </div>
+                  <div className="kb-town-stations">
+                    {expectedRagAgentSteps.map((station, index) => {
+                      const Icon = station.icon;
+                      const state = cyberTownStationState(station.name, activeIngestionRun, activeDocument);
+                      const isFocused = station.name === focusedTownAgentName;
+                      const isCurrent = station.name === currentTownAgentName;
+                      const isPlayback = station.name === playbackTownAgentName;
+                      const wasPlayed = townPlaybackActive && index < townPlaybackIndex;
+                      return (
+                        <button
+                          key={station.name}
+                          type="button"
+                          className={`kb-town-station station-${index + 1} ${state} ${isFocused ? "focused" : ""} ${isCurrent ? "current" : ""} ${isPlayback ? "handoff" : ""} ${wasPlayed ? "played" : ""}`}
+                          onClick={() => {
+                            setTownPlaybackActive(false);
+                            setSelectedTownAgent(station.name);
+                          }}
+                        >
+                          <span className="kb-town-building">
+                            <Icon size={17} />
+                            <i />
+                          </span>
+                          <span className="kb-town-agent" aria-hidden="true">
+                            <i className="head" />
+                            <i className="body" />
+                            <i className="leg left" />
+                            <i className="leg right" />
+                          </span>
+                          <div>
+                            <strong>{station.zone}</strong>
+                            <small>{agentStepText(station.name)}</small>
+                          </div>
+                          <b>{station.badge}</b>
+                          <em>{cyberTownStationSummary(station.name, activeIngestionRun)}</em>
+                          <small className="kb-town-agent-name">{station.agent}</small>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="kb-town-dialogue">
+                    <span className="kb-dialogue-avatar" aria-hidden="true">
+                      <i className="head" />
+                      <i className="body" />
+                    </span>
                     <div>
-                      <strong>{activeDocument.status === "UPLOADED" ? "尚未开始" : "任务排队中"}</strong>
-                      <small>{activeDocument.status === "UPLOADED" ? "确认处理后会展示解析、清洗、切分、向量化和索引步骤" : "后台任务启动后会持续刷新处理轨迹"}</small>
+                      <strong>{focusedTownAgent.agent} · {focusedTownAgent.zone}</strong>
+                      <p>{townAgentSpeech(focusedTownAgent.name, activeIngestionRun, activeDocument)}</p>
                     </div>
-                  </article>
-                )}
-              </div>
+                  </div>
+                  <div className="kb-town-chat-lines" aria-hidden="true">
+                    <span className="line-1" />
+                    <span className="line-2" />
+                    <span className="line-3" />
+                    <span className="line-4" />
+                  </div>
+                  <div className="kb-town-packets" aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                </div>
+              )}
             </section>
 
             <div className="kb-preview-list">
