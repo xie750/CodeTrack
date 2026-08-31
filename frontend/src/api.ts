@@ -375,6 +375,85 @@ export type RagIngestionRun = {
   steps: RagIngestionStep[];
 };
 
+export type RagKnowledgeGraphImportNode = {
+  id: string;
+  name: string;
+  type: string;
+  definition: string;
+  aliases: string[];
+  confidence: number;
+  source_chunk_ids: string[];
+  evidence: Array<{
+    chunk_id: string;
+    chunk_index: number;
+    heading_path: string[];
+    page_start: number | null;
+    page_end: number | null;
+    slide_start: number | null;
+    slide_end: number | null;
+    excerpt: string;
+  }>;
+  properties: Record<string, unknown>;
+};
+
+export type RagKnowledgeGraphImportEdge = {
+  id: string;
+  source: string;
+  target: string;
+  source_name: string;
+  target_name: string;
+  type: string;
+  label: string;
+  rationale: string;
+  confidence: number;
+  evidence_chunk_ids: string[];
+};
+
+export type RagKnowledgeGraphImportPlan = {
+  document: {
+    id: string;
+    name: string;
+    knowledge_base_id: string;
+    active_version_id: string;
+    status: string;
+  };
+  import_policy: {
+    mode: string;
+    requires_confirmation: boolean;
+    auto_publish: boolean;
+    boundary: string;
+  };
+  segmentation: {
+    strategy: string;
+    cleaning_strategy: string;
+    content_profile: Record<string, unknown>;
+    source_layers: Array<{ layer: string; count: number; role: string }>;
+    chunk_groups: Array<{
+      parent_chunk_id: string | null;
+      parent_index: number;
+      heading_path: string[];
+      child_count: number;
+      child_chunk_ids: string[];
+      split_reason: string | null;
+      page_start: number | null;
+      page_end: number | null;
+      slide_start: number | null;
+      slide_end: number | null;
+    }>;
+  };
+  nodes: RagKnowledgeGraphImportNode[];
+  edges: RagKnowledgeGraphImportEdge[];
+  quality: {
+    status: string;
+    risk_flags: string[];
+    chunk_coverage: number;
+    candidate_node_count: number;
+    candidate_edge_count: number;
+    suggestion: string;
+  };
+  market_reference_pattern: string[];
+};
+
 export type StudentAiChatCitation = {
   source_id: string;
   title: string;
@@ -1178,6 +1257,8 @@ export const api = {
     request<{ items: RagKnowledgeChunk[] }>(`/api/v1/documents/${encodeURIComponent(documentId)}/chunks`),
   getRagIngestionRun: (documentId: string) =>
     request<{ run: RagIngestionRun | null }>(`/api/v1/documents/${encodeURIComponent(documentId)}/ingestion-run`),
+  getRagKnowledgeGraphImportPlan: (documentId: string) =>
+    request<RagKnowledgeGraphImportPlan>(`/api/v1/documents/${encodeURIComponent(documentId)}/knowledge-graph/import-plan`),
   deleteRagDocument: (documentId: string) =>
     request<{ deleted: boolean }>(`/api/v1/documents/${encodeURIComponent(documentId)}`, { method: "DELETE" }),
   sendStudentAiChat: (

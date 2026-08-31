@@ -157,21 +157,21 @@ function CourseHubShell({ courseId, children }: { courseId: string; children: Re
             </NavLink>
           ))}
         </nav>
-        <button
-          className="student-window-rail-toggle"
-          type="button"
-          onClick={() => setSidebarCollapsed((current) => !current)}
-          aria-label={sidebarCollapsed ? "展开课程导航" : "收起课程导航"}
-          title={sidebarCollapsed ? "展开导航" : "收起导航"}
-        >
-          <span className="student-window-grip" aria-hidden="true">
-            <i />
-            <i />
-            <i />
-          </span>
-          {sidebarCollapsed ? <ChevronsRight size={16} /> : <ChevronsLeft size={16} />}
-        </button>
       </aside>
+      <button
+        className="student-window-rail-toggle"
+        type="button"
+        onClick={() => setSidebarCollapsed((current) => !current)}
+        aria-label={sidebarCollapsed ? "展开课程导航" : "收起课程导航"}
+        title={sidebarCollapsed ? "展开导航" : "收起导航"}
+      >
+        <span className="student-window-grip" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+        </span>
+        {sidebarCollapsed ? <ChevronsRight size={16} /> : <ChevronsLeft size={16} />}
+      </button>
       <main className="student-window-content">
         <StudentRouteBreadcrumb
           items={[

@@ -27,6 +27,7 @@ import {
   api,
   type RagIngestionRun,
   type RagIngestionStep,
+  type RagKnowledgeGraphImportPlan,
   type RagKnowledgeBaseListItem,
   type RagKnowledgeChunk,
   type RagKnowledgeDocument
@@ -78,6 +79,17 @@ const expectedRagAgentSteps = [
   { name: "embedding_agent", icon: Database, zone: "向量港", agent: "向量员", badge: "VECTOR" },
   { name: "index_agent", icon: Folder, zone: "索引库", agent: "归档员", badge: "INDEX" }
 ] as const;
+
+const supportedUploadExtensions = [".md", ".markdown", ".txt", ".pdf", ".docx", ".pptx"];
+const supportedUploadAccept = [
+  ...supportedUploadExtensions,
+  "text/markdown",
+  "text/plain",
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+].join(",");
+const supportedUploadText = "Markdown / TXT / PDF / DOCX / PPTX";
 
 const activeStepByDocumentStatus: Partial<Record<DocumentStatus, string>> = {
   QUEUED: "file_intake_agent",
@@ -234,6 +246,7 @@ function townAgentSpeech(name: string, run: RagIngestionRun | null, doc: Knowled
 function fileIconClass(fileType: string) {
   if (fileType === "PDF") return "pdf";
   if (fileType === "DOCX") return "docx";
+  if (fileType === "PPTX") return "pptx";
   if (fileType === "TXT") return "txt";
   return "md";
 }
@@ -244,10 +257,24 @@ function formatFileSize(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function fileTypeFromExtension(extension?: string | null) {
+  const normalized = extension?.trim().toLowerCase();
+  if (normalized === ".pdf") return "PDF";
+  if (normalized === ".docx") return "DOCX";
+  if (normalized === ".txt") return "TXT";
+  if (normalized === ".md" || normalized === ".markdown") return "MD";
+  if (normalized === ".pptx") return "PPTX";
+  return "";
+}
+
 function fileTypeFromName(filename: string) {
-  const ext = filename.split(".").pop()?.toUpperCase();
-  if (ext === "PDF" || ext === "DOCX" || ext === "TXT" || ext === "MD" || ext === "PPTX") return ext;
-  return "TXT";
+  const ext = filename.includes(".") ? `.${filename.split(".").pop()?.toLowerCase()}` : "";
+  return fileTypeFromExtension(ext) || "TXT";
+}
+
+function uploadExtensionOf(filename: string) {
+  if (!filename.includes(".")) return "";
+  return `.${filename.split(".").pop()?.toLowerCase()}`;
 }
 
 function normalizeDocumentStatus(status: string): DocumentStatus {
@@ -286,7 +313,7 @@ function mapDocument(item: RagKnowledgeDocument): KnowledgeDocumentView {
     id: item.id,
     title: item.title || item.filename,
     filename: item.filename,
-    fileType: fileTypeFromName(item.filename),
+    fileType: fileTypeFromExtension(item.extension) || fileTypeFromName(item.filename),
     size: formatFileSize(item.size_bytes),
     status: normalizeDocumentStatus(item.status),
     progress: item.progress,
@@ -307,6 +334,8 @@ export default function StudentKnowledgeBase() {
   const [documentsByBase, setDocumentsByBase] = useState<Record<string, KnowledgeDocumentView[]>>({});
   const [chunksByDocument, setChunksByDocument] = useState<Record<string, RagKnowledgeChunk[]>>({});
   const [runsByDocument, setRunsByDocument] = useState<Record<string, RagIngestionRun | null>>({});
+  const [graphPlansByDocument, setGraphPlansByDocument] = useState<Record<string, RagKnowledgeGraphImportPlan | null>>({});
+  const [graphPlanLoadingByDocument, setGraphPlanLoadingByDocument] = useState<Record<string, boolean>>({});
   const [activeBaseId, setActiveBaseId] = useState("");
   const [activeDocumentId, setActiveDocumentId] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -431,12 +460,21 @@ export default function StudentKnowledgeBase() {
   const activeDocument = documents.find((item) => item.id === activeDocumentId) ?? documents[0];
   const activeDocumentChunks = activeDocument ? chunksByDocument[activeDocument.id] ?? [] : [];
   const activeIngestionRun = activeDocument ? runsByDocument[activeDocument.id] ?? null : null;
+  const activeGraphPlan = activeDocument ? graphPlansByDocument[activeDocument.id] ?? null : null;
+  const activeGraphPlanLoading = activeDocument ? Boolean(graphPlanLoadingByDocument[activeDocument.id]) : false;
   const currentTownAgentName = activeDocument ? activeTownAgentName(activeIngestionRun, activeDocument) : "file_intake_agent";
   const playbackTownAgentName = townPlaybackActive ? expectedRagAgentSteps[townPlaybackIndex]?.name ?? "" : "";
   const focusedTownAgentName = selectedTownAgent || playbackTownAgentName || currentTownAgentName;
   const focusedTownAgent = expectedRagAgentSteps.find((station) => station.name === focusedTownAgentName) ?? expectedRagAgentSteps[0];
   const courierAgentIndex = townPlaybackActive ? townPlaybackIndex : townAgentIndex(currentTownAgentName);
   const pendingDeleteDocument = documents.find((item) => item.id === pendingDeleteDocumentId);
+
+  useEffect(() => {
+    if (!drawerOpen || !activeDocument || activeDocument.status !== "READY") return;
+    if (Object.prototype.hasOwnProperty.call(graphPlansByDocument, activeDocument.id)) return;
+    if (graphPlanLoadingByDocument[activeDocument.id]) return;
+    void loadGraphImportPlan(activeDocument.id);
+  }, [drawerOpen, activeDocument?.id, activeDocument?.status, graphPlansByDocument, graphPlanLoadingByDocument]);
 
   const visibleKnowledgeBases = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -485,6 +523,12 @@ export default function StudentKnowledgeBase() {
       setChunksByDocument((current) => ({ ...current, [documentId]: [] }));
       setMessage(error instanceof Error ? error.message : "切片加载失败");
     }
+    const selectedDoc = documents.find((doc) => doc.id === documentId);
+    if (selectedDoc?.status === "READY") {
+      await loadGraphImportPlan(documentId);
+    } else {
+      setGraphPlansByDocument((current) => ({ ...current, [documentId]: null }));
+    }
   }
 
   async function loadIngestionRun(documentId: string) {
@@ -493,6 +537,18 @@ export default function StudentKnowledgeBase() {
       setRunsByDocument((current) => ({ ...current, [documentId]: result.run }));
     } catch {
       setRunsByDocument((current) => ({ ...current, [documentId]: null }));
+    }
+  }
+
+  async function loadGraphImportPlan(documentId: string) {
+    setGraphPlanLoadingByDocument((current) => ({ ...current, [documentId]: true }));
+    try {
+      const result = await api.getRagKnowledgeGraphImportPlan(documentId);
+      setGraphPlansByDocument((current) => ({ ...current, [documentId]: result }));
+    } catch {
+      setGraphPlansByDocument((current) => ({ ...current, [documentId]: null }));
+    } finally {
+      setGraphPlanLoadingByDocument((current) => ({ ...current, [documentId]: false }));
     }
   }
 
@@ -535,6 +591,12 @@ export default function StudentKnowledgeBase() {
     const file = files?.[0];
     if (!file || !activeBase) return;
     setMessage(null);
+    const extension = uploadExtensionOf(file.name);
+    if (!supportedUploadExtensions.includes(extension)) {
+      setMessage(`暂不支持 ${extension || "无后缀"} 文件。当前支持 ${supportedUploadText}。`);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
     try {
       const created = await api.uploadRagDocument(activeBase.id, file);
       await loadDocuments(activeBase.id);
@@ -559,11 +621,17 @@ export default function StudentKnowledgeBase() {
         delete next[documentId];
         return next;
       });
+      setGraphPlansByDocument((current) => {
+        const next = { ...current };
+        delete next[documentId];
+        return next;
+      });
       await loadDocuments(activeBase.id);
       if (drawerOpen && activeDocumentId === documentId) {
         await loadIngestionRun(documentId);
         const result = await api.listRagChunks(documentId);
         setChunksByDocument((current) => ({ ...current, [documentId]: result.items }));
+        await loadGraphImportPlan(documentId);
       }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "处理入库失败，请确认 worker / Docker 服务是否已启动");
@@ -583,6 +651,11 @@ export default function StudentKnowledgeBase() {
       await api.deleteRagDocument(documentId);
       setPendingDeleteDocumentId("");
       setChunksByDocument((current) => {
+        const next = { ...current };
+        delete next[documentId];
+        return next;
+      });
+      setGraphPlansByDocument((current) => {
         const next = { ...current };
         delete next[documentId];
         return next;
@@ -646,7 +719,7 @@ export default function StudentKnowledgeBase() {
             <div className="kb-design-upload">
               <UploadCloud size={42} />
               <strong>上传学习资料</strong>
-              <p>先上传为待处理文件，确认无误后再处理入库<br />当前优先处理 TXT / MD</p>
+              <p>先上传为待处理文件，确认无误后再处理入库<br />支持 {supportedUploadText}</p>
               <div className="kb-upload-actions">
                 <button type="button" onClick={() => fileInputRef.current?.click()} disabled={!activeBase}>
                   <FileUp size={16} />
@@ -660,7 +733,7 @@ export default function StudentKnowledgeBase() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".md,.txt,.pdf,.docx,.pptx"
+                accept={supportedUploadAccept}
                 onChange={(event) => handleFileSelected(event.currentTarget.files)}
                 hidden
               />
@@ -891,6 +964,91 @@ export default function StudentKnowledgeBase() {
                 </div>
               )}
             </section>
+
+            {activeDocument.status === "READY" ? (
+              <section className="kb-graph-import-preview">
+                <div className="kb-graph-import-head">
+                  <div>
+                    <strong>图谱导入预检</strong>
+                    <small>
+                      {activeGraphPlan
+                        ? `${activeGraphPlan.nodes.length} 个候选节点 · ${activeGraphPlan.edges.length} 条候选关系`
+                        : activeGraphPlanLoading
+                          ? "正在分析切片证据"
+                          : "基于已入库切片生成候选，正式写入前仍需确认"}
+                    </small>
+                  </div>
+                  <button type="button" onClick={() => loadGraphImportPlan(activeDocument.id)} disabled={activeGraphPlanLoading}>
+                    <Network size={14} />
+                    {activeGraphPlanLoading ? "分析中" : "刷新预检"}
+                  </button>
+                </div>
+
+                {activeGraphPlan ? (
+                  <>
+                    <div className="kb-graph-layer-strip">
+                      {activeGraphPlan.segmentation.source_layers.map((layer) => (
+                        <article key={layer.layer}>
+                          <span>{layer.count}</span>
+                          <strong>{layer.layer}</strong>
+                          <small>{layer.role}</small>
+                        </article>
+                      ))}
+                    </div>
+
+                    <div className="kb-graph-import-grid">
+                      <div>
+                        <h3>候选节点</h3>
+                        <div className="kb-graph-node-list">
+                          {activeGraphPlan.nodes.slice(0, 6).map((node) => (
+                            <article key={node.id}>
+                              <div>
+                                <strong>{node.name}</strong>
+                                <small>{String(node.properties.suggested_node_label ?? node.type)} · {Math.round(node.confidence * 100)}%</small>
+                              </div>
+                              <p>{node.definition}</p>
+                              <em>{node.source_chunk_ids.length} 个证据切片</em>
+                            </article>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <h3>候选关系</h3>
+                        <div className="kb-graph-edge-list">
+                          {activeGraphPlan.edges.slice(0, 6).map((edge) => (
+                            <article key={edge.id}>
+                              <strong>{edge.source_name} <span>{edge.label}</span> {edge.target_name}</strong>
+                              <p>{edge.rationale}</p>
+                              <small>{edge.evidence_chunk_ids.length || "待补充"} 个证据切片</small>
+                            </article>
+                          ))}
+                          {!activeGraphPlan.edges.length ? (
+                            <article>
+                              <strong>暂无关系候选</strong>
+                              <p>当前文档只识别出孤立节点，建议补充更多上下文或人工确认关系。</p>
+                            </article>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className={`kb-graph-quality ${activeGraphPlan.quality.status.toLowerCase()}`}>
+                      <ShieldCheck size={16} />
+                      <p>
+                        {activeGraphPlan.quality.status === "PASSED" ? "预检通过" : "需要复核"}：
+                        覆盖 {Math.round(activeGraphPlan.quality.chunk_coverage * 100)}% 证据切片。
+                        {activeGraphPlan.quality.suggestion}
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <div className="kb-graph-import-empty">
+                    <Network size={20} />
+                    <p>{activeGraphPlanLoading ? "正在从切片中识别知识点、定义和关系。" : "点击刷新预检，查看该资料如何被切分成图谱候选。"}</p>
+                  </div>
+                )}
+              </section>
+            ) : null}
 
             <div className="kb-preview-list">
               {activeDocumentChunks.length ? activeDocumentChunks.map((chunk) => (

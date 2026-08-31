@@ -26,14 +26,15 @@ class ParseResult:
     elements: list[ParsedElement]
 
 
-SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".pptx", ".txt", ".md", ".markdown"}
+TEXT_EXTENSIONS = {".txt", ".md", ".markdown"}
+SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".pptx", *TEXT_EXTENSIONS}
 
 
 def parse_document(filename: str, content: bytes) -> ParseResult:
     extension = Path(filename).suffix.lower()
     if extension not in SUPPORTED_EXTENSIONS:
         raise ValueError(f"unsupported file type: {extension}")
-    if extension in {".txt", ".md", ".markdown"}:
+    if extension in TEXT_EXTENSIONS:
         return parse_text_document(filename, content)
     if extension == ".pdf":
         return parse_pdf_document(content)
@@ -45,7 +46,7 @@ def parse_document(filename: str, content: bytes) -> ParseResult:
 
 
 def parse_text_document(filename: str, content: bytes) -> ParseResult:
-    text = content.decode("utf-8-sig")
+    text = _decode_text_content(content)
     extension = Path(filename).suffix.lower()
     is_markdown = extension in {".md", ".markdown"}
     heading_path: list[str] = []
@@ -173,6 +174,15 @@ def parse_text_document(filename: str, content: bytes) -> ParseResult:
         parser_version="1",
         elements=elements,
     )
+
+
+def _decode_text_content(content: bytes) -> str:
+    for encoding in ("utf-8-sig", "utf-8", "gb18030"):
+        try:
+            return content.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return content.decode("utf-8", errors="replace")
 
 
 def _is_markdown_table_line(line: str) -> bool:
