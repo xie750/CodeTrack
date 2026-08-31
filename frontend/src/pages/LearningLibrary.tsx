@@ -8,7 +8,6 @@ import {
   Clock3,
   Code2,
   FileText,
-  Filter,
   Heart,
   Pencil,
   PlusCircle,
@@ -290,15 +289,10 @@ export default function LearningLibrary({ initialCourseId = "", scope = "global"
             ))}
           </div>
           <div className="library-tools">
-            <button type="button" className="library-select library-sort">
+            <span className="library-select library-sort">
               最近下发
-              <ChevronDown size={17} />
-            </button>
-            <button type="button" className="library-filter">
-              <Filter size={17} />
-              筛选
-              <ChevronDown size={15} />
-            </button>
+            </span>
+            <span className="library-filter">按当前条件筛选</span>
           </div>
         </section>
 
@@ -427,7 +421,7 @@ export default function LearningLibrary({ initialCourseId = "", scope = "global"
           <AdviceItem tone="blue" icon={<BarChart3 size={22} />} title="先复盘收藏任务" text="收藏夹里的题目都来自当前班级任务，可以直接回到任务工作区继续练习。" />
           <AdviceItem tone="green" icon={<Target size={22} />} title="强化薄弱知识点" text={`${weakPoint} 需要结合任务诊断和收藏题目复盘。`} />
           <AdviceItem tone="orange" icon={<Clock3 size={22} />} title="定期清理收藏" text="取消收藏会即时更新统计，便于演示收藏状态联动。" />
-          <button type="button" className="plan-button">
+          <button type="button" className="plan-button" onClick={() => navigate("/self-study/ai")}>
             生成个性化学习计划
           </button>
         </section>

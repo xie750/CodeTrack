@@ -210,10 +210,10 @@ function StudentPortalTopbar({
 }) {
   return (
     <header className="teacher-entry-topbar">
-      <button className="teacher-entry-brand" type="button" aria-label="CodeTrack Student">
+      <div className="teacher-entry-brand student-entry-brand-static" aria-label="CodeTrack Student">
         <span className="teacher-entry-logo" aria-hidden="true" />
         <strong>CodeTrack Student</strong>
-      </button>
+      </div>
       <div className="teacher-entry-userline">
         <span className="teacher-entry-status">
           <i aria-hidden="true" />

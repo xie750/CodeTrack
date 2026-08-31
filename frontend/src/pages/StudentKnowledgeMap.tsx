@@ -1072,7 +1072,7 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
                               <strong>向 AI 提问</strong>
                               <p>带着当前节点上下文进入助学问答。</p>
                             </div>
-                            <button type="button">提问</button>
+                            <button type="button" onClick={actionToSelfStudy}>提问</button>
                           </article>
                         </div>
                       ) : null}

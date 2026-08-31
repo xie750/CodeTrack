@@ -14,3 +14,105 @@
 @import './teacher-tasks.css';
 @import './teacher-resources.css';
 @import './ai-companion.css';
+
+html,
+body,
+#root,
+body * {
+  cursor: default;
+  user-select: none;
+}
+
+body :where(
+  input:not([type]),
+  input[type="date"],
+  input[type="datetime-local"],
+  input[type="email"],
+  input[type="month"],
+  input[type="number"],
+  input[type="password"],
+  input[type="search"],
+  input[type="tel"],
+  input[type="text"],
+  input[type="time"],
+  input[type="url"],
+  input[type="week"],
+  textarea,
+  [contenteditable=""],
+  [contenteditable="true"],
+  [contenteditable=""] *,
+  [contenteditable="true"] *,
+  .monaco-editor,
+  .monaco-editor *,
+  .monaco-editor textarea,
+  .monaco-editor .view-line,
+  .monaco-mouse-cursor-text
+) {
+  cursor: text;
+  user-select: text;
+}
+
+body :where(
+  a[href],
+  button:not(:disabled),
+  select:not(:disabled),
+  summary,
+  [role="button"]:not([aria-disabled="true"]),
+  [role="menuitem"]:not([aria-disabled="true"]),
+  [role="option"]:not([aria-disabled="true"]),
+  [role="tab"]:not([aria-disabled="true"]),
+  input[type="button"]:not(:disabled),
+  input[type="checkbox"]:not(:disabled),
+  input[type="color"]:not(:disabled),
+  input[type="file"]:not(:disabled),
+  input[type="radio"]:not(:disabled),
+  input[type="range"]:not(:disabled),
+  input[type="reset"]:not(:disabled),
+  input[type="submit"]:not(:disabled),
+  label[for],
+  .ant-btn:not(:disabled),
+  .ant-checkbox-wrapper,
+  .ant-dropdown-trigger,
+  .ant-menu-item,
+  .ant-picker,
+  .ant-radio-wrapper,
+  .ant-select,
+  .ant-slider,
+  .ant-switch,
+  .ant-tabs-tab
+) {
+  cursor: pointer;
+}
+
+body :where(
+  button:disabled,
+  input:disabled,
+  select:disabled,
+  textarea:disabled,
+  [aria-disabled="true"],
+  .ant-btn-disabled,
+  .ant-select-disabled,
+  .ant-picker-disabled
+) {
+  cursor: not-allowed;
+}
+
+body :where(.program-splitter.vertical, .program-splitter.vertical *) {
+  cursor: col-resize;
+}
+
+body :where(.program-splitter.horizontal, .program-splitter.horizontal *) {
+  cursor: row-resize;
+}
+
+body :where(.ai-panel-drag-handle) {
+  cursor: move;
+}
+
+body :where(.ai-floating-drag-handle, .ai-mindmap-kernel .map-container) {
+  cursor: grab;
+}
+
+body :where(.ai-floating-drag-handle:active, .ai-mindmap-kernel .map-container:active) {
+  cursor: grabbing;
+}

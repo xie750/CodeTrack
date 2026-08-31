@@ -50,6 +50,8 @@
   background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 8px 22px rgba(30, 44, 66, 0.055);
   backdrop-filter: blur(14px);
+  cursor: default;
+  user-select: none;
 }
 
 .program-brand {
@@ -61,6 +63,8 @@
   gap: 9px;
   border-radius: 8px;
   color: #172033;
+  cursor: default;
+  user-select: none;
 }
 
 .program-brand-mark {
@@ -165,6 +169,8 @@
   border: 1px solid #e1e9f2;
   color: #172033;
   background: #ffffff;
+  cursor: default;
+  user-select: none;
 }
 
 .program-account-copy {
@@ -224,6 +230,8 @@
   justify-content: space-between;
   gap: 18px;
   background: #f7f9fc;
+  cursor: default;
+  user-select: none;
 }
 
 .program-back {
@@ -248,11 +256,14 @@
   display: flex;
   align-items: center;
   gap: 16px;
+  cursor: default;
+  user-select: none;
 }
 
 .program-title-line h1 {
   font-size: 24px;
   font-weight: 900;
+  cursor: default;
 }
 
 .program-title-line span {
@@ -263,6 +274,7 @@
   background: #fff3df;
   font-size: 12px;
   font-weight: 800;
+  cursor: default;
 }
 
 .program-title-line b {

@@ -188,6 +188,7 @@ function CourseHubShell({ courseId, children }: { courseId: string; children: Re
 }
 
 function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOpenWorkspace: (target?: TaskOpenTarget | string) => void }) {
+  const navigate = useNavigate();
   const cachedContext = apiCache.peekLearningContext();
   const cachedTasks = apiCache.peekStudentTasks(courseId);
   const cachedProfile = apiCache.peekStudentProfile(courseId);
@@ -313,7 +314,7 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
         <article className="course-dashboard-card course-dashboard-tasks">
           <header>
             <h2>最近任务</h2>
-            <button type="button">查看全部 <ArrowRight size={14} /></button>
+            <button type="button" onClick={() => navigate(coursePath(courseId, "tasks"))}>查看全部 <ArrowRight size={14} /></button>
           </header>
           {loading ? <div className="skeleton-block course-task-skeleton" /> : visibleTasks.length ? (
             <div className="course-dashboard-task-list">
@@ -333,7 +334,7 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
                   <em className={task.status === "COMPLETED" ? "done" : ""}>{statusLabel(task.status)}</em>
                 </button>
               ))}
-              <button className="course-dashboard-all" type="button">
+              <button className="course-dashboard-all" type="button" onClick={() => navigate(coursePath(courseId, "tasks"))}>
                 查看全部任务
                 <ArrowRight size={14} />
               </button>
@@ -358,7 +359,6 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
           <article className="course-dashboard-card course-dashboard-notices">
             <header>
               <h2>课程公告</h2>
-              <button type="button">查看全部 <ArrowRight size={14} /></button>
             </header>
             <ul>
               {announcements.map((item) => (
@@ -369,7 +369,6 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
                 </li>
               ))}
             </ul>
-            <button className="course-dashboard-all" type="button">查看更多公告 <ArrowRight size={14} /></button>
           </article>
         </div>
 
@@ -395,7 +394,7 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
                 <strong>{item.value}%</strong>
               </div>
             ))}
-            <button className="course-dashboard-all" type="button">查看学情分析 <ArrowRight size={14} /></button>
+            <button className="course-dashboard-all" type="button" onClick={() => navigate(coursePath(courseId, "profile"))}>查看学情分析 <ArrowRight size={14} /></button>
           </div>
         </article>
 

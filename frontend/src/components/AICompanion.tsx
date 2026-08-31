@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
+import { createPortal } from "react-dom";
 import { Rnd, type DraggableData, type Position } from "react-rnd";
 import {
   ChevronRight,
@@ -228,6 +229,33 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
   const isChat = mode === "chat";
   const minChatSize = chatMinSize();
 
+  useEffect(() => {
+    function syncFrameToViewport() {
+      setChatSize((currentSize) => {
+        const nextSize = normalizeChatSize(currentSize);
+        if (nextSize.width !== currentSize.width || nextSize.height !== currentSize.height) {
+          saveJson(CHAT_SIZE_STORAGE_KEY, nextSize);
+        }
+        return nextSize;
+      });
+      setFrame((currentFrame) => {
+        const normalized = normalizeFrame(currentFrame);
+        if (
+          normalized.x !== currentFrame.x ||
+          normalized.y !== currentFrame.y ||
+          normalized.width !== currentFrame.width ||
+          normalized.height !== currentFrame.height
+        ) {
+          saveJson(COMPANION_FRAME_STORAGE_KEY, normalized);
+        }
+        return normalized;
+      });
+    }
+
+    window.addEventListener("resize", syncFrameToViewport);
+    return () => window.removeEventListener("resize", syncFrameToViewport);
+  }, []);
+
   function persistFrame(nextFrame: CompanionFrame) {
     const normalized = normalizeFrame(nextFrame);
     setFrame(normalized);
@@ -406,14 +434,14 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
     openExpanded();
   }
 
-  return (
+  const companionNode = (
     <aside
       className={`ai-companion ai-companion-${mode}${transitioning ? " morphing" : ""}`}
       data-route={routePath}
       aria-label="CodeTrack AI 助手"
     >
       <Rnd
-        bounds="window"
+        bounds="parent"
         className="ai-companion-rnd"
         position={{ x: frame.x, y: frame.y }}
         size={{ width: frame.width, height: frame.height }}
@@ -590,4 +618,6 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
       </Rnd>
     </aside>
   );
+
+  return createPortal(companionNode, document.body);
 }

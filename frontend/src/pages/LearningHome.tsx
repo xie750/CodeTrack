@@ -280,7 +280,6 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
         <section className="home-card right-card today-goal">
           <div className="home-card-header">
             <h2>今日目标</h2>
-            <button className="text-link" type="button">编辑</button>
           </div>
           {isLoading ? <div className="side-skeleton skeleton-block" /> : profile ? <>
           <div className="goal-ring">
@@ -300,7 +299,6 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
         <section className="home-card right-card">
           <div className="home-card-header">
             <h2>近期提醒</h2>
-            <button className="text-link" type="button">查看全部</button>
           </div>
           <div className="reminder-list">
             {isLoading ? (
