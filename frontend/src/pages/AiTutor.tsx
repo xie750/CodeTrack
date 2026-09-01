@@ -5,6 +5,7 @@ import {
   Bookmark,
   BookOpen,
   Check,
+  Cpu,
   FileQuestion,
   FileText,
   History,
@@ -31,6 +32,7 @@ import {
   type StudentAiChatMessage,
   type StudentAiChatResponse,
   type StudentAiChatSession,
+  type StudentAiModelOption,
   type StudentProfile
 } from "../api";
 import robotImg from "../assets/ui-home/ai-tutor-bot.png";
@@ -59,6 +61,8 @@ type AiChatTurn = {
   sourceUsed?: boolean;
   safetyNote?: string;
   modelName?: string;
+  modelKey?: string;
+  modelLabel?: string;
   resource?: GeneratedResource;
   resourceSaving?: boolean;
 };
@@ -70,6 +74,25 @@ type AiTutorRouteState = {
 } | null;
 
 const fallbackSuggestedActions = ["继续解释", "生成练习", "保存为笔记", "只给一级提示"];
+const AI_MODEL_STORAGE_KEY = "codetrack.aiTutor.modelKey.v1";
+const fallbackModelOptions: StudentAiModelOption[] = [
+  {
+    key: "default",
+    label: "通用模型",
+    provider: "OPENAI_COMPATIBLE",
+    model_name: "默认配置",
+    configured: true,
+    description: "保留当前通用模型配置，适合常规助学问答。"
+  },
+  {
+    key: "fine_tuned",
+    label: "微调模型",
+    provider: "OPENAI_COMPATIBLE",
+    model_name: "/models/codetrack-q4_k_m.gguf",
+    configured: true,
+    description: "使用你训练后的本地微调模型，适合对比专业场景回答效果。"
+  }
+];
 const resourceOutputActions: Array<{ label: string; type: GeneratedResourceType; icon: JSX.Element }> = [
   { label: "PPT", type: "PPT", icon: <Presentation size={15} /> },
   { label: "思维导图", type: "MIND_MAP", icon: <Waypoints size={15} /> },
@@ -84,6 +107,9 @@ const openingPrompts = [
   "二叉树遍历方式对比",
   "动态规划的核心思想"
 ];
+const selfStudyScopeLabel = "综合技能维度";
+const selfStudyKnowledgeScopeLabel = "跨课程知识库";
+const selfStudySkillSummary = "覆盖编程基础、算法结构与 AI 专业能力";
 const previewLimit = 76;
 
 function nowLabel() {
@@ -154,7 +180,9 @@ function responseToTurn(id: string, result: StudentAiChatResponse): AiChatTurn {
     profileUsed: result.profile_used,
     sourceUsed: result.source_used,
     safetyNote: result.safety_note,
-    modelName: result.model_name
+    modelName: result.model_name,
+    modelKey: result.model_key,
+    modelLabel: result.model_label
   };
 }
 
@@ -195,8 +223,56 @@ function messageToTurn(message: StudentAiChatMessage): AiChatTurn {
     sourceUsed: typeof metadata.source_used === "boolean" ? metadata.source_used : undefined,
     safetyNote: typeof metadata.safety_note === "string" ? metadata.safety_note : undefined,
     modelName: typeof metadata.model_name === "string" ? metadata.model_name : undefined,
+    modelKey: typeof metadata.model_key === "string" ? metadata.model_key : undefined,
+    modelLabel: typeof metadata.model_label === "string" ? metadata.model_label : undefined,
     resource: metadata.resource
   };
+}
+
+function readInitialModelKey() {
+  try {
+    const stored = window.localStorage.getItem(AI_MODEL_STORAGE_KEY);
+    return stored === "fine_tuned" ? "fine_tuned" : "default";
+  } catch {
+    return "default";
+  }
+}
+
+function ModelSwitcher({
+  options,
+  selectedKey,
+  disabled,
+  onChange
+}: {
+  options: StudentAiModelOption[];
+  selectedKey: string;
+  disabled?: boolean;
+  onChange: (key: string) => void;
+}) {
+  return (
+    <div className="ai-model-switcher" aria-label="AI 助学模型切换">
+      <div className="ai-model-switcher-label">
+        <Cpu size={16} />
+        <span>当前模型</span>
+      </div>
+      <div className="ai-model-switcher-tabs" role="group" aria-label="选择 AI 模型">
+        {options.map((option) => (
+          <button
+            type="button"
+            key={option.key}
+            className={option.key === selectedKey ? "active" : ""}
+            aria-pressed={option.key === selectedKey}
+            disabled={disabled || !option.configured}
+            title={option.configured ? option.description : `${option.label}尚未配置`}
+            onClick={() => onChange(option.key)}
+          >
+            <strong>{option.label}</strong>
+            <small>{option.model_name || "未配置"}</small>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function resourceToTurn(id: string, resource: GeneratedResource): AiChatTurn {
@@ -240,7 +316,7 @@ function resourceToTurn(id: string, resource: GeneratedResource): AiChatTurn {
     sourceUsed: Boolean(resource.citations.length),
     safetyNote: notes.length
       ? notes.join(" ")
-      : "AI 生成资源已基于课程资料进行引用校验，建议结合课堂讲义复核关键概念。",
+      : "AI 生成资源已基于学习资料进行引用校验，建议结合个人资料库和任务证据复核关键概念。",
     modelName,
     resource
   };
@@ -293,12 +369,12 @@ function resourcePreviewSubtitle(resource: GeneratedResource) {
 
 function AiRunSummary({
   turn,
-  courseName,
+  knowledgeScopeLabel,
   activePoint,
   frequentError
 }: {
   turn: AiChatTurn;
-  courseName: string;
+  knowledgeScopeLabel: string;
   activePoint: string;
   frequentError: string;
 }) {
@@ -319,8 +395,8 @@ function AiRunSummary({
       <article className={sourceState}>
         <span><BookOpen size={15} /></span>
         <div>
-          <strong>{turn.loading ? "检索课程知识库" : citationCount ? `引用 ${citationCount} 个来源` : "未命中课程引用"}</strong>
-          <small>{turn.loading ? courseName : citationCount ? courseName : "先用通用讲解兜底"}</small>
+          <strong>{turn.loading ? "检索跨课程知识库" : citationCount ? `引用 ${citationCount} 个来源` : "未命中知识库引用"}</strong>
+          <small>{turn.loading || citationCount ? knowledgeScopeLabel : "先用通用讲解兜底"}</small>
         </div>
       </article>
       <article className={profileState}>
@@ -441,6 +517,8 @@ export default function AiTutor() {
   const [sessions, setSessions] = useState<StudentAiChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [turns, setTurns] = useState<AiChatTurn[]>([]);
+  const [modelOptions, setModelOptions] = useState<StudentAiModelOption[]>(fallbackModelOptions);
+  const [selectedModelKey, setSelectedModelKey] = useState(readInitialModelKey);
   const [activeResourceType, setActiveResourceType] = useState<GeneratedResourceType | null>(null);
   const [previewResource, setPreviewResource] = useState<GeneratedResource | null>(null);
   const hydratedRef = useRef(false);
@@ -453,9 +531,13 @@ export default function AiTutor() {
 
   const activePoint = weakestPoint?.knowledge_point ?? "边界测试";
   const courseId = profile?.course.id ?? context?.courses[0]?.course_id;
-  const courseName = profile?.course.name ?? context?.courses[0]?.course_name ?? "机器学习";
+  const learningScopeLabel = context?.courses.length
+    ? `${selfStudyKnowledgeScopeLabel} · 已接入 ${context.courses.length} 门学习上下文`
+    : selfStudyKnowledgeScopeLabel;
   const frequentError = profile?.frequent_errors[0]?.label ?? "只验证普通用例";
   const contextUnavailable = Boolean(error && !loadingContext && !context && !profile && !turns.length);
+  const selectedModel = modelOptions.find((item) => item.key === selectedModelKey) ?? modelOptions[0];
+  const selectedModelUnavailable = Boolean(selectedModel && !selectedModel.configured);
 
   const filteredSessions = useMemo(() => {
     const keyword = historyQuery.trim().toLowerCase();
@@ -466,6 +548,15 @@ export default function AiTutor() {
 
   useEffect(() => {
     let alive = true;
+    api.listStudentAiChatModels().then((data) => {
+      if (!alive) return;
+      setModelOptions(data.items.length ? data.items : fallbackModelOptions);
+      if (data.items.length) {
+        setSelectedModelKey((current) => data.items.some((item) => item.key === current) ? current : data.items[0].key);
+      }
+    }).catch(() => {
+      if (alive) setModelOptions(fallbackModelOptions);
+    });
     setLoadingContext(true);
     setError(null);
     setErrorDetail(null);
@@ -481,7 +572,7 @@ export default function AiTutor() {
         if (alive) setProfile(profileData);
       }).catch((err) => {
         if (!alive) return;
-        setError("学习画像暂时不可用，AI 助学导师会先使用课程知识库回答。");
+        setError("学习画像暂时不可用，AI 助学导师会先使用综合知识库回答。");
         setErrorDetail(studentErrorDetail(err));
       }).finally(() => {
         if (alive) setLoadingContext(false);
@@ -496,6 +587,15 @@ export default function AiTutor() {
       alive = false;
     };
   }, []);
+
+  function updateSelectedModel(key: string) {
+    setSelectedModelKey(key);
+    try {
+      window.localStorage.setItem(AI_MODEL_STORAGE_KEY, key);
+    } catch {
+      // 浏览器隐私模式下可能禁用 localStorage，切换状态留在当前页面即可。
+    }
+  }
 
   useEffect(() => {
     const thread = threadRef.current;
@@ -593,7 +693,7 @@ export default function AiTutor() {
       return;
     }
     const message = (messageOverride ?? draft).trim();
-    if (!message || sending) return;
+    if (!message || sending || selectedModelUnavailable) return;
     const userTurn: AiChatTurn = {
       id: `student_${Date.now()}`,
       role: "student",
@@ -606,7 +706,10 @@ export default function AiTutor() {
       role: "assistant",
       content: "",
       time: nowLabel(),
-      loading: true
+      loading: true,
+      modelKey: selectedModelKey,
+      modelLabel: selectedModel?.label,
+      modelName: selectedModel?.model_name
     };
     const localHistory = turns
       .filter((turn) => !turn.loading && !turn.error)
@@ -624,6 +727,7 @@ export default function AiTutor() {
           message,
           courseId,
           sessionId: currentSessionId,
+          modelKey: selectedModelKey,
           history: localHistory
         },
         (streamEvent) => {
@@ -770,14 +874,32 @@ export default function AiTutor() {
           <div>
             <span>AI 助学 / 自主学习导师</span>
             <h1>和 AI 助学导师持续追问、生成资料、沉淀学习证据</h1>
-            <p>专注数据结构与程序设计 · 构建扎实的知识与能力</p>
+            <p>{selfStudySkillSummary}</p>
           </div>
         </div>
-        <button type="button" className="ai-history-entry" onClick={() => setHistoryOpen(true)}>
-          <History size={17} />
-          历史会话
-        </button>
+        <div className="ai-workspace-tools">
+          <ModelSwitcher
+            options={modelOptions}
+            selectedKey={selectedModelKey}
+            disabled={sending}
+            onChange={updateSelectedModel}
+          />
+          <button type="button" className="ai-history-entry" onClick={() => setHistoryOpen(true)}>
+            <History size={17} />
+            历史会话
+          </button>
+        </div>
       </header>
+
+      {selectedModelUnavailable ? (
+        <StudentInlineNotice
+          className="ai-workspace-alert"
+          kind="degraded"
+          title={`${selectedModel?.label ?? "当前模型"}尚未配置`}
+          description="请先切回通用模型，或在后端环境变量里补齐这个模型的接口地址、模型名和 API Key。"
+          actions={[{ label: "切回通用模型", variant: "primary", onClick: () => updateSelectedModel("default") }]}
+        />
+      ) : null}
 
       {error && !contextUnavailable ? (
         <StudentInlineNotice
@@ -798,7 +920,7 @@ export default function AiTutor() {
             <StudentState
               kind="unavailable"
               title="AI 助学上下文暂不可用"
-              description="当前没有读到课程、画像或历史会话数据。你可以刷新重试；如果正在本地开发，请先确认后端服务已经启动。"
+              description="当前没有读到学习上下文、画像或历史会话数据。你可以刷新重试；如果正在本地开发，请先确认后端服务已经启动。"
               detail={errorDetail ?? error}
               actions={[{ label: "刷新重试", variant: "primary", onClick: () => window.location.reload() }]}
               className="ai-context-state"
@@ -814,7 +936,7 @@ export default function AiTutor() {
               <p>提出问题，获取思路，生成资料，深入探索知识</p>
               <div className="ai-empty-prompts">
                 {openingPrompts.map((prompt) => (
-                  <button type="button" key={prompt} onClick={() => sendMessage(prompt)} disabled={sending || loadingContext}>
+                  <button type="button" key={prompt} onClick={() => sendMessage(prompt)} disabled={sending || loadingContext || selectedModelUnavailable}>
                     {prompt.includes("代码") ? <FileText size={17} /> : prompt.includes("总结") ? <PenLine size={17} /> : <Search size={17} />}
                     {prompt}
                   </button>
@@ -840,7 +962,7 @@ export default function AiTutor() {
                     <strong>AI 助学导师</strong>
                     <span><Check size={14} /> {turn.loading ? (turn.content ? "回答中" : "思考中") : turn.error ? "需要处理" : "思考完成"}</span>
                   </header>
-                  <AiRunSummary turn={turn} courseName={courseName} activePoint={activePoint} frequentError={frequentError} />
+                  <AiRunSummary turn={turn} knowledgeScopeLabel={learningScopeLabel} activePoint={activePoint} frequentError={frequentError} />
 
                   {turn.loading && !turn.content ? (
                     <div className="ai-answer-loading">
@@ -877,6 +999,7 @@ export default function AiTutor() {
                             <span>{confidenceBadge(turn)}</span>
                             <span>{turn.profileUsed ? "已结合学习画像" : "未使用学习画像"}</span>
                             <span>{turn.sourceUsed ? "已引用资料" : "未引用资料"}</span>
+                            {turn.modelLabel ? <span>{turn.modelLabel}</span> : null}
                             {turn.modelName ? <span>模型 {turn.modelName}</span> : null}
                           </div>
                         </section>
@@ -947,14 +1070,14 @@ export default function AiTutor() {
                   sendMessage();
                 }
               }}
-              placeholder={activeResourceType ? `输入${resourceTypeLabels[activeResourceType] ?? "资源"}生成要求，例如：帮我生成关于队列的讲解${resourceTypeLabels[activeResourceType] ?? "资源"}` : `有问题，尽管问 AI 助学导师。当前课程：${courseName}；薄弱点：${activePoint}；常见错因：${frequentError}`}
+              placeholder={activeResourceType ? `输入${resourceTypeLabels[activeResourceType] ?? "资源"}生成要求，例如：帮我生成关于队列的讲解${resourceTypeLabels[activeResourceType] ?? "资源"}` : `有问题，尽管问 AI 助学导师。${selfStudyScopeLabel}：${activePoint}；常见错因：${frequentError}`}
               rows={2}
               disabled={sending || loadingSession}
             />
             <div className="ai-composer-actions">
               <button type="button" aria-label="添加附件" disabled={sending}><Paperclip size={18} /></button>
               <button type="button" aria-label="更多能力" disabled={sending}><MoreHorizontal size={18} /></button>
-              <button type="button" className="ai-send" disabled={!draft.trim() || sending || loadingContext || loadingSession} aria-label="发送" onClick={() => sendMessage()}>
+              <button type="button" className="ai-send" disabled={!draft.trim() || sending || loadingContext || loadingSession || (!activeResourceType && selectedModelUnavailable)} aria-label="发送" onClick={() => sendMessage()}>
                 <SendHorizontal size={19} />
               </button>
             </div>

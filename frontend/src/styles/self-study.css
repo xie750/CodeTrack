@@ -2294,6 +2294,112 @@ button.student-generated-thumb:hover {
   font-weight: 750;
 }
 
+.ai-workspace-tools {
+  min-width: min(100%, 430px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.ai-model-switcher {
+  min-width: 280px;
+  padding: 7px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #dce5f1;
+  border-radius: 8px;
+  color: #24324a;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(10px);
+}
+
+.ai-model-switcher-label {
+  min-height: 34px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #52627a;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.ai-model-switcher-label span {
+  margin: 0;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.ai-model-switcher-tabs {
+  min-width: 0;
+  min-height: 34px;
+  padding: 2px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+  border-radius: 7px;
+  background: #eef4fb;
+}
+
+.ai-model-switcher-tabs button {
+  min-width: 0;
+  min-height: 30px;
+  padding: 4px 8px;
+  display: grid;
+  align-content: center;
+  gap: 1px;
+  border: 0;
+  border-radius: 6px;
+  color: #64748b;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: color 160ms var(--motion-soft), background 160ms var(--motion-soft), box-shadow 160ms var(--motion-soft);
+}
+
+.ai-model-switcher-tabs button strong,
+.ai-model-switcher-tabs button small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-model-switcher-tabs button strong {
+  color: inherit;
+  font-size: 12px;
+  line-height: 1.2;
+  font-weight: 950;
+}
+
+.ai-model-switcher-tabs button small {
+  color: inherit;
+  opacity: 0.78;
+  font-size: 10px;
+  line-height: 1.2;
+  font-weight: 750;
+}
+
+.ai-model-switcher-tabs button.active {
+  color: #0f5ed7;
+  background: #ffffff;
+  box-shadow: 0 6px 14px rgba(15, 94, 215, 0.12);
+}
+
+.ai-model-switcher-tabs button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.ai-model-switcher-tabs button:focus-visible {
+  outline: 2px solid rgba(23, 108, 245, 0.42);
+  outline-offset: 2px;
+}
+
 .ai-history-entry {
   min-width: 112px;
   min-height: 40px;
@@ -5088,6 +5194,25 @@ button.student-generated-thumb:hover {
   .ai-workspace-header {
     padding: 16px;
     flex-direction: column;
+  }
+
+  .ai-workspace-tools {
+    width: 100%;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    justify-content: stretch;
+  }
+
+  .ai-model-switcher {
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ai-model-switcher-label {
+    min-height: 24px;
+    padding: 0 2px;
   }
 
   .ai-history-entry {

@@ -4,7 +4,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import FileResponse
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -31,6 +31,7 @@ from backend.app.services.ai_tutor import (
     ensure_ai_tutor_session,
     generate_student_ai_reply,
     get_ai_tutor_session,
+    list_ai_tutor_model_options,
     list_ai_tutor_messages,
     list_ai_tutor_sessions,
     serialize_ai_tutor_message,
@@ -82,9 +83,12 @@ class AiChatHistoryItem(BaseModel):
 
 
 class StudentAiChatRequest(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     message: str = Field(min_length=1, max_length=2000)
     course_id: str | None = None
     session_id: str | None = None
+    model_key: str | None = Field(default=None, max_length=40)
     page_context: dict[str, Any] = Field(default_factory=dict)
     history: list[AiChatHistoryItem] = Field(default_factory=list, max_length=12)
 
@@ -416,6 +420,7 @@ async def student_ai_chat(
         class_id=administrative_class.id,
         course=course,
         message=payload.message.strip(),
+        model_key=payload.model_key,
         page_context=payload.page_context,
         history=history or [item.model_dump() for item in payload.history],
     )
@@ -435,6 +440,8 @@ async def student_ai_chat(
             "safety_note": result["safety_note"],
             "model_provider": result["model_provider"],
             "model_name": result["model_name"],
+            "model_key": result.get("model_key"),
+            "model_label": result.get("model_label"),
         },
         run_id=result["run_id"],
     )
@@ -443,6 +450,12 @@ async def student_ai_chat(
     result["user_message_id"] = user_message.id
     result["assistant_message_id"] = assistant_message.id
     return ok(result)
+
+
+@router.get("/ai-chat/models")
+def student_ai_chat_models(user: User = Depends(current_user)):
+    require_role(user, "STUDENT")
+    return ok({"items": list_ai_tutor_model_options()})
 
 
 @router.get("/ai-chat/sessions")
@@ -829,6 +842,7 @@ async def student_ai_chat_stream(
                 class_id=class_id,
                 course=stream_course,
                 message=message_text,
+                model_key=payload.model_key,
                 page_context=payload.page_context,
                 history=history or [item.model_dump() for item in payload.history],
             ):
@@ -854,6 +868,8 @@ async def student_ai_chat_stream(
                     "safety_note": result["safety_note"],
                     "model_provider": result["model_provider"],
                     "model_name": result["model_name"],
+                    "model_key": result.get("model_key"),
+                    "model_label": result.get("model_label"),
                 },
                 run_id=result["run_id"],
             )

@@ -105,6 +105,91 @@ def test_student_ai_chat_calls_openai_compatible_model(monkeypatch):
         db.close()
 
 
+def test_student_ai_chat_lists_switchable_models(monkeypatch):
+    monkeypatch.setenv("CODETRACK_MODEL_API_KEY", "sk-general")
+    monkeypatch.setenv("CODETRACK_MODEL_NAME", "general-chat-model")
+    monkeypatch.setenv("CODETRACK_MODEL_API_BASE_URL", "https://general.model/v1")
+    monkeypatch.setenv("CODETRACK_MODEL_GATEWAY_URL", "")
+    monkeypatch.setenv("CODETRACK_FINE_TUNED_MODEL_API_KEY", "sk-fine")
+    monkeypatch.setenv("CODETRACK_FINE_TUNED_MODEL_NAME", "/models/codetrack-q4_k_m.gguf")
+    monkeypatch.setenv("CODETRACK_FINE_TUNED_MODEL_API_BASE_URL", "http://codetrack-model:8080/v1")
+    monkeypatch.setenv("CODETRACK_FINE_TUNED_MODEL_LABEL", "CodeTrack 微调模型")
+    get_settings.cache_clear()
+
+    with TestClient(app) as client:
+        response = client.get("/api/v1/student/ai-chat/models", headers=STUDENT)
+
+    assert response.status_code == 200
+    items = response.json()["data"]["items"]
+    assert [item["key"] for item in items] == ["default", "fine_tuned"]
+    assert items[0]["label"] == "通用模型"
+    assert items[0]["configured"] is True
+    assert items[0]["model_name"] == "general-chat-model"
+    assert items[1]["label"] == "CodeTrack 微调模型"
+    assert items[1]["configured"] is True
+    assert items[1]["model_name"] == "/models/codetrack-q4_k_m.gguf"
+
+
+def test_student_ai_chat_can_use_fine_tuned_model(monkeypatch):
+    calls = []
+    monkeypatch.setenv("CODETRACK_MODEL_API_KEY", "sk-general")
+    monkeypatch.setenv("CODETRACK_MODEL_NAME", "general-chat-model")
+    monkeypatch.setenv("CODETRACK_MODEL_API_BASE_URL", "https://general.model/v1")
+    monkeypatch.setenv("CODETRACK_MODEL_GATEWAY_URL", "")
+    monkeypatch.setenv("CODETRACK_FINE_TUNED_MODEL_API_KEY", "sk-fine")
+    monkeypatch.setenv("CODETRACK_FINE_TUNED_MODEL_NAME", "/models/codetrack-q4_k_m.gguf")
+    monkeypatch.setenv("CODETRACK_FINE_TUNED_MODEL_API_BASE_URL", "http://codetrack-model:8080/v1")
+    monkeypatch.setenv("CODETRACK_FINE_TUNED_MODEL_LABEL", "CodeTrack 微调模型")
+    get_settings.cache_clear()
+
+    async def fake_post(url, *, json, headers=None, timeout=llm_client.DEFAULT_TIMEOUT):
+        calls.append({"url": url, "body": json, "headers": headers})
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json_module.dumps(
+                            {
+                                "answer": "微调模型会优先按课程任务场景解释边界测试。",
+                                "confidence": 0.82,
+                                "knowledge_source_ids": ["kb_boundary_test_reasoning"],
+                                "suggested_actions": ["对比通用模型", "生成练习"],
+                                "profile_used": True,
+                                "source_used": True,
+                                "safety_note": "",
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ],
+            "usage": {"prompt_tokens": 120, "completion_tokens": 28},
+        }
+
+    json_module = json
+    monkeypatch.setattr(llm_client, "_post_json", fake_post)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/student/ai-chat",
+            headers=STUDENT,
+            json={
+                "message": "边界测试为什么要结合等价类？",
+                "course_id": "course_ds_001",
+                "model_key": "fine_tuned",
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["model_key"] == "fine_tuned"
+    assert data["model_label"] == "CodeTrack 微调模型"
+    assert data["model_name"] == "/models/codetrack-q4_k_m.gguf"
+    assert calls[0]["url"] == "http://codetrack-model:8080/v1/chat/completions"
+    assert calls[0]["headers"] == {"Authorization": "Bearer sk-fine"}
+    assert calls[0]["body"]["model"] == "/models/codetrack-q4_k_m.gguf"
+
+
 def test_student_ai_chat_can_cite_personal_knowledge_base(monkeypatch):
     calls = []
     monkeypatch.setenv("CODETRACK_MODEL_API_KEY", "sk-test")
