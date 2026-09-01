@@ -125,6 +125,18 @@ export type StudentProfile = {
     related_knowledge_points: string[];
     suggested_action: string;
   }>;
+  behavior_events?: Array<{
+    id: string;
+    event_type: string;
+    occurred_at: string | null;
+    knowledge_points: string[];
+    error_type: string | null;
+    payload: Record<string, unknown>;
+    activity_minutes: number;
+    quality_score: number;
+    summary: string;
+    source: string;
+  }>;
 };
 
 export type StudentKnowledgeGraphNode = {

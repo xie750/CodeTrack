@@ -142,7 +142,7 @@
 
 .teacher-entry-userline .account-avatar {
   color: #ffffff;
-  background: linear-gradient(135deg, #95dd48 0%, #249d76 100%);
+  background: linear-gradient(135deg, #4a9eff 0%, #20b89a 100%);
   border-color: rgba(255, 255, 255, 0.9);
 }
 
@@ -849,7 +849,7 @@
   position: relative;
   width: min(440px, calc(var(--app-viewport-width) - 28px));
   height: var(--app-viewport-height);
-  padding: 24px;
+  padding: 22px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -866,11 +866,12 @@
 }
 
 .student-course-drawer header {
+  flex: 0 0 auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 40px;
   gap: 14px;
   align-items: start;
-  padding-bottom: 18px;
+  padding-bottom: 16px;
   border-bottom: 1px solid #e5ecf4;
 }
 
@@ -912,18 +913,21 @@
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
-  gap: 14px;
+  gap: 12px;
   align-content: start;
-  padding-top: 18px;
-  overflow: auto;
+  padding-top: 16px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   scrollbar-gutter: stable;
 }
 
 .student-course-drawer-card {
-  min-height: 216px;
-  padding: 16px;
+  min-height: 0;
+  padding: 14px;
   display: grid;
-  gap: 13px;
+  grid-template-rows: auto auto auto auto minmax(40px, auto);
+  gap: 10px;
   border: 1px solid #e1e8f2;
   border-radius: 8px;
   background: #ffffff;
@@ -933,8 +937,8 @@
 .student-course-drawer-card-head {
   min-width: 0;
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
-  gap: 12px;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 10px;
   align-items: center;
 }
 
@@ -955,9 +959,13 @@
 
 .student-course-drawer-card-head small {
   margin-top: 4px;
+  overflow: hidden;
   color: #64748b;
   font-size: 12px;
   font-weight: 800;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .student-course-drawer-meta {
@@ -1006,15 +1014,19 @@
 }
 
 .student-course-drawer-next {
-  min-height: 42px;
+  min-height: 0;
   margin: 0;
+  display: -webkit-box;
+  overflow: hidden;
   color: #526174;
   font-size: 13px;
   line-height: 1.6;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .student-course-drawer-card > button {
-  min-height: 42px;
+  min-height: 40px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1025,7 +1037,42 @@
   background: #176cf5;
   font-weight: 900;
   cursor: pointer;
+  align-self: end;
   transition: transform 170ms var(--motion-soft), box-shadow 170ms var(--motion-soft);
+}
+
+.teacher-exact-entry-page.student-entry-page .teacher-entry-cards {
+  width: min(860px, 100%);
+  margin: 48px auto 0;
+  grid-template-columns: repeat(2, minmax(0, 386px));
+  justify-content: center;
+  align-items: stretch;
+  gap: 32px;
+}
+
+.teacher-exact-entry-page.student-entry-page .teacher-entry-card {
+  width: 100%;
+  min-height: 464px;
+  padding: 42px 40px 38px;
+  display: grid;
+  grid-template-rows: 172px auto minmax(58px, auto) 56px;
+  justify-items: center;
+  align-items: start;
+}
+
+.teacher-exact-entry-page.student-entry-page .teacher-card-visual {
+  margin: 0;
+  align-self: center;
+}
+
+.teacher-exact-entry-page.student-entry-page .teacher-entry-card p {
+  max-width: 292px;
+  min-height: 52px;
+  margin: 14px 0 24px;
+}
+
+.teacher-exact-entry-page.student-entry-page .teacher-entry-card > button {
+  align-self: end;
 }
 
 .student-course-drawer-card > button:hover {

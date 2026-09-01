@@ -1,13 +1,14 @@
 import type { ReactNode } from 'react'
-import { Avatar, Badge, Breadcrumb, Button, Dropdown, Select, Space, Tag, Tooltip, Typography } from 'antd'
+import { Badge, Breadcrumb, Button, Select, Space, Tag, Tooltip, Typography } from 'antd'
 import {
-  ArrowLeft, Bell, BookOpen, Bot, BrainCircuit, ChevronDown, ChevronRight, ClipboardList, FileText,
-  GraduationCap, Home, LineChart, LogOut, MessageSquareText, Network, Settings, Users,
+  ArrowLeft, Bell, BookOpen, Bot, BrainCircuit, ChevronRight, ClipboardList, FileText,
+  GraduationCap, Home, LineChart, MessageSquareText, Network, Settings, Users,
   ListTree,
 } from 'lucide-react'
 
 import type { ApiClass, ApiCourse } from '../api'
-import { getCurrentUserName } from '../api'
+import AccountMenu from '../../components/AccountMenu'
+import type { AuthUser } from '../../authSession'
 
 const { Text } = Typography
 
@@ -48,6 +49,7 @@ export function CourseBreadcrumb({ current, onNavigate, parent }: {
 }
 
 interface ShellProps {
+  authUser: AuthUser
   view: ExactView
   courseMode: boolean
   courses: ApiCourse[]
@@ -94,20 +96,23 @@ function SideButton(props: {
 export function ExactShell(props: ShellProps) {
   const items = props.courseMode ? courseItems : globalItems
   const currentCourse = props.courses.find((item) => item.id === props.courseId)
-  const userMenuItems = [
-    ...(props.courseMode ? [{
+  const userMenuItems = props.courseMode ? [{
       key: 'discussion',
       icon: <MessageSquareText size={14} />,
       label: '课堂讨论',
-      onClick: () => props.onNavigate('discussion'),
-    }, { type: 'divider' as const }] : []),
-    ...(props.onLogout ? [{
-      key: 'logout',
-      icon: <LogOut size={14} />,
-      label: '退出登录',
-      onClick: props.onLogout,
-    }] : []),
-  ]
+    }] : []
+
+  function handleAccountNavigate(path: string) {
+    if (path === '/teacher/dashboard') {
+      props.onNavigate('dashboard')
+      return
+    }
+    if (path === '/teacher/materials') {
+      props.onNavigate('materials')
+      return
+    }
+    if (path === '/teacher/settings') props.onNavigate('settings')
+  }
 
   return <div className="exact-shell">
     <header className="exact-topbar">
@@ -118,13 +123,17 @@ export function ExactShell(props: ShellProps) {
           <Badge count={props.notificationCount} size="small"><Button type="text" icon={<Bell size={18} />} onClick={props.onNotifications} /></Badge>
         </Tooltip>
         {props.view !== 'dashboard' && <Button className="exact-back-dashboard" icon={<Home size={15} />} onClick={() => props.onNavigate('dashboard')}>回到工作台首页</Button>}
-        <Dropdown menu={{ items: userMenuItems }} trigger={['click']} placement="bottomRight">
-          <button type="button" className="exact-user-menu">
-            <Avatar size={27} className="exact-avatar">{getCurrentUserName().slice(0, 1)}</Avatar>
-            <Text strong>{getCurrentUserName()}</Text>
-            <ChevronDown size={14} />
-          </button>
-        </Dropdown>
+        <AccountMenu
+          authUser={props.authUser}
+          leadingItems={userMenuItems}
+          onLogout={props.onLogout ?? (() => undefined)}
+          onNavigate={handleAccountNavigate}
+          onMenuSelect={(key) => {
+            if (key !== 'discussion') return false
+            props.onNavigate('discussion')
+            return true
+          }}
+        />
       </div>
     </header>
     <aside className={'exact-sidebar ' + (props.courseMode ? 'course-mode' : '')}>

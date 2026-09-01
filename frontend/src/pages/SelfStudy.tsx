@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { api, StudentProfile } from "../api";
 import { StudentInlineNotice, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
-import selfStudyHeroArt from "../assets/self-study/self-study-ai-hero.jpg";
+import selfStudyHeroArt from "../assets/self-study/self-study-ai-hero-wide.jpg";
 
 type TaskState = "done" | "active" | "pending";
 

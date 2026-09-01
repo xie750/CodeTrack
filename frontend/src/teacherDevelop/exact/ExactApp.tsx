@@ -16,6 +16,7 @@ import { ExactGraphV2 } from './ExactGraphV2'
 import { ExactCourseContent } from './ExactCourseContent'
 import { ExactTeacherAiAssistant } from './ExactTeacherAiAssistant'
 import { matchTeacherRoute, teacherPath } from '../routes/routeConfig'
+import type { AuthUser } from '../../authSession'
 import './exact.css'
 
 const { Text } = Typography
@@ -25,7 +26,7 @@ const courseOnlyViews: ExactView[] = [
   'monitor', 'grading', 'analytics', 'ai-assistant', 'reviews', 'discussion', 'course-settings',
 ]
 
-export default function ExactApp({ loggedIn, onLogin, onLogout }: { loggedIn: boolean; onLogin: (userId: string, name: string) => void; onLogout: () => void }) {
+export default function ExactApp({ authUser, loggedIn, onLogin, onLogout }: { authUser: AuthUser; loggedIn: boolean; onLogin: (userId: string, name: string) => void; onLogout: () => void }) {
   const location = useLocation()
   const routerNavigate = useNavigate()
   const matchedRoute = useMemo(() => matchTeacherRoute(location.pathname), [location.pathname])
@@ -122,10 +123,15 @@ export default function ExactApp({ loggedIn, onLogin, onLogout }: { loggedIn: bo
   }
 
   if (!loggedIn || !entered) return <ExactPortal
+    authUser={authUser}
     loggedIn={loggedIn}
     onLogin={(userId, name) => { onLogin(userId, name); routerNavigate('/', { replace: true }) }}
     onLogout={onLogout}
     onEnter={() => { setEntered(true); routerNavigate('/teacher/dashboard') }}
+    onNavigate={(path) => {
+      setEntered(true)
+      routerNavigate(path === '/teacher/materials' ? teacherPath('materials', courseIdRef.current, true) : path)
+    }}
   />
 
   if (loading && !bootstrap) {
@@ -187,6 +193,7 @@ export default function ExactApp({ loggedIn, onLogin, onLogout }: { loggedIn: bo
   return <>
     {contextHolder}
     <ExactShell
+      authUser={authUser}
       view={new URLSearchParams(location.search).get('discussion') === '1' ? 'discussion' : view}
       courseMode={matchedRoute.courseMode}
       courses={bootstrap.courses}

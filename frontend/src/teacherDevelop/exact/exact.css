@@ -167,20 +167,27 @@ button { cursor: pointer; }
 .teacher-exact-entry-page .teacher-entry-brand,
 .teacher-exact-entry-page .teacher-entry-status,
 .teacher-exact-entry-page .student-entry-theme-toggle,
-.teacher-exact-entry-page .exact-portal-account {
+.teacher-exact-entry-page .teacher-entry-userline .account-trigger {
   border-color: var(--student-entry-border);
   background: var(--student-entry-panel);
   backdrop-filter: blur(18px);
 }
 
-.teacher-exact-entry-page .exact-portal-account {
+.teacher-exact-entry-page .teacher-entry-userline .account-trigger {
   min-height: 42px;
-  padding: 0 12px 0 8px;
+  padding: 3px 9px 3px 3px;
   border: 1px solid var(--student-entry-border);
-  border-radius: 999px;
+  border-radius: 8px;
 }
 
-.teacher-exact-entry-page .exact-portal-account strong,
+.teacher-exact-entry-page .teacher-entry-userline .account-avatar {
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #4a9eff 0%, #20b89a 100%);
+  font-size: 17px;
+}
+
+.teacher-exact-entry-page .teacher-entry-userline .account-trigger-copy strong,
 .teacher-exact-entry-page .teacher-entry-brand strong {
   color: var(--student-entry-text);
 }
@@ -218,19 +225,32 @@ button { cursor: pointer; }
 }
 
 .teacher-exact-entry-page .teacher-entry-cards {
-  width: min(1010px, 100%);
-  margin-top: 48px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 36px;
+  width: min(860px, 100%);
+  margin: 48px auto 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 386px));
+  justify-content: center;
+  align-items: stretch;
+  gap: 32px;
 }
 
 .teacher-exact-entry-page .teacher-entry-card {
-  min-height: 444px;
-  padding: 40px 42px 38px;
+  width: 100%;
+  min-height: 464px;
+  padding: 42px 40px 38px;
+  display: grid;
+  grid-template-rows: 172px auto minmax(58px, auto) 56px;
+  justify-items: center;
+  align-items: start;
   border-color: var(--student-entry-border);
   border-radius: 32px;
   background: var(--student-entry-panel);
   box-shadow: 0 24px 64px color-mix(in srgb, var(--student-entry-accent) 12%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.teacher-exact-entry-page .teacher-card-visual {
+  margin: 0;
+  align-self: center;
 }
 
 .teacher-exact-entry-page .teacher-entry-card:hover {
@@ -251,14 +271,16 @@ button { cursor: pointer; }
 
 .teacher-exact-entry-page .teacher-entry-card p {
   position: relative;
-  min-height: 32px;
-  margin: 16px 0 30px;
+  max-width: 292px;
+  min-height: 52px;
+  margin: 14px 0 24px;
   color: var(--student-entry-muted);
   font-size: 16px;
   line-height: 1.65;
 }
 
 .teacher-exact-entry-page .teacher-entry-card > button {
+  align-self: end;
   min-width: 222px;
   min-height: 56px;
   padding: 0 30px;
@@ -4255,6 +4277,31 @@ button { cursor: pointer; }
 
 .ant-dropdown .ant-dropdown-menu-item-danger:hover {
   background: #fff1f0 !important;
+}
+
+.account-dropdown-overlay .ant-dropdown-menu {
+  min-width: 196px;
+  padding: 8px;
+  border: 1px solid rgba(21, 37, 64, 0.08);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 40px rgba(7, 19, 43, 0.18);
+}
+
+.account-dropdown-overlay .ant-dropdown-menu-item {
+  min-height: 38px;
+  border-radius: 6px;
+  color: #22314a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.account-dropdown-overlay .ant-dropdown-menu-item .ant-dropdown-menu-item-icon {
+  color: #5a6f8f;
+}
+
+.account-dropdown-overlay .ant-dropdown-menu-item-danger {
+  color: #cf1322;
 }
 
 .exact-shell .ant-switch,
