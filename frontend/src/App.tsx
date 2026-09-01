@@ -1,7 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ChartNoAxesColumnIncreasing, ChevronDown, FolderOpen, LayoutDashboard, LogOut, UserRound } from "lucide-react";
-import { ConfigProvider, Dropdown, type MenuProps } from "antd";
+import { ConfigProvider } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import LearningHome from "./pages/LearningHome";
 import StudentEntryPortal from "./pages/StudentEntryPortal";
@@ -13,6 +12,7 @@ import SelfStudyHub from "./pages/SelfStudyHub";
 import ProjectPractice from "./pages/ProjectPractice";
 import LoginPage from "./pages/LoginPage";
 import AICompanion from "./components/AICompanion";
+import AccountMenu from "./components/AccountMenu";
 import AdminApp from "./admin/App";
 import TeacherDevelopApp from "./teacherDevelop/exact/ExactApp";
 import { setCurrentUser as setTeacherDevelopUser } from "./teacherDevelop/api";
@@ -57,61 +57,6 @@ function homePathForRole(role: string) {
   if (role === "TEACHER") return "/teacher";
   if (role === "STUDENT") return "/";
   return "/unauthorized";
-}
-
-function avatarInitial(user: AuthUser) {
-  const source = (user.display_name || user.username || "").trim();
-  const [firstChar] = Array.from(source);
-  return firstChar?.toLocaleUpperCase("zh-CN") ?? "用";
-}
-
-function AccountMenu({
-  authUser,
-  onLogout,
-  onNavigate
-}: {
-  authUser: AuthUser;
-  onLogout: () => void;
-  onNavigate: (path: string) => void;
-}) {
-  const roleLabel = authUser.role === "STUDENT" ? "学生账号" : authUser.role === "TEACHER" ? "教师账号" : "账号";
-  const isStudent = authUser.role === "STUDENT";
-  const menuItems: MenuProps["items"] = isStudent
-    ? [
-        { key: "/self-study/profile", label: "学习者画像", icon: <ChartNoAxesColumnIncreasing size={16} strokeWidth={2.2} /> },
-        { key: "/self-study/library", label: "资源中心", icon: <FolderOpen size={16} strokeWidth={2.2} /> },
-        { key: "account", label: "账号信息", icon: <UserRound size={16} strokeWidth={2.2} />, disabled: true },
-        { type: "divider" },
-        { key: "logout", label: "退出登录", icon: <LogOut size={16} strokeWidth={2.2} />, danger: true }
-      ]
-    : [
-        { key: "/teacher/dashboard", label: "教学首页", icon: <LayoutDashboard size={16} strokeWidth={2.2} /> },
-        { key: "/teacher/resources", label: "资料中心", icon: <FolderOpen size={16} strokeWidth={2.2} /> },
-        { key: "account", label: "账号信息", icon: <UserRound size={16} strokeWidth={2.2} />, disabled: true },
-        { type: "divider" },
-        { key: "logout", label: "退出登录", icon: <LogOut size={16} strokeWidth={2.2} />, danger: true }
-      ];
-
-  function handleMenuClick({ key }: { key: string }) {
-    if (key === "logout") {
-      onLogout();
-      return;
-    }
-    if (key.startsWith("/")) onNavigate(key);
-  }
-
-  return (
-    <Dropdown menu={{ items: menuItems, onClick: handleMenuClick }} trigger={["click"]} placement="bottomRight" overlayClassName="account-dropdown-overlay">
-      <button type="button" className="top-user account-trigger" aria-label={`${authUser.display_name}账号菜单`}>
-        <span className="account-avatar" aria-hidden="true">{avatarInitial(authUser)}</span>
-        <span className="account-trigger-copy">
-          <strong>{authUser.display_name}</strong>
-          <small>{roleLabel}</small>
-        </span>
-        <ChevronDown className="account-chevron" size={16} strokeWidth={2.4} aria-hidden="true" />
-      </button>
-    </Dropdown>
-  );
 }
 
 function StudentAppTopbar({
@@ -253,6 +198,7 @@ function TeacherDevelopRoute({ authUser, onLogout }: { authUser: AuthUser; onLog
 
   return (
     <TeacherDevelopApp
+      authUser={authUser}
       loggedIn
       onLogin={(userId, name) => setTeacherDevelopUser(userId, name)}
       onLogout={onLogout}

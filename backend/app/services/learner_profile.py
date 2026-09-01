@@ -18,6 +18,7 @@ from backend.app.models import (
     AdministrativeClass,
     Course,
     LearnerErrorStat,
+    LearnerEvent,
     LearnerKnowledgeState,
     LearnerProfileSnapshot,
     Recommendation,
@@ -34,6 +35,112 @@ def loads_list(value: str) -> list:
     except json.JSONDecodeError:
         return []
     return parsed if isinstance(parsed, list) else []
+
+
+def loads_dict(value: str) -> dict:
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _event_activity_minutes(event_type: str, payload: dict) -> int:
+    duration = payload.get("duration_minutes")
+    if isinstance(duration, (int, float)) and duration > 0:
+        return int(duration)
+    weights = {
+        "HINT_VIEWED": 12,
+        "QUESTION_SET_SUBMITTED": 28,
+        "GENERATED_PRACTICE_SUBMITTED": 32,
+        "PODCAST_LISTENED": 24,
+        "artifact_saved": 16,
+        "EXECUTION_FINISHED": 20,
+        "DIAGNOSIS_CREATED": 18,
+    }
+    return weights.get(event_type, 14)
+
+
+def _event_quality_score(event_type: str, payload: dict) -> float:
+    score = payload.get("score_percent")
+    if isinstance(score, (int, float)):
+        return round(max(0, min(100, float(score))), 1)
+    completion = payload.get("completion_ratio")
+    if isinstance(completion, (int, float)):
+        return round(max(0, min(100, float(completion) * 100)), 1)
+    defaults = {
+        "HINT_VIEWED": 62,
+        "QUESTION_SET_SUBMITTED": 74,
+        "GENERATED_PRACTICE_SUBMITTED": 78,
+        "PODCAST_LISTENED": 82,
+        "artifact_saved": 76,
+        "EXECUTION_FINISHED": 70,
+        "DIAGNOSIS_CREATED": 68,
+    }
+    return defaults.get(event_type, 66)
+
+
+def _event_summary(event_type: str, knowledge_points: list, payload: dict) -> str:
+    topic = "、".join(str(item) for item in knowledge_points[:2]) or "当前课程"
+    resource_title = payload.get("resource_title")
+    if event_type == "HINT_VIEWED":
+        level = payload.get("hint_level")
+        return f"查看 {topic} 的第 {level or 1} 层提示，系统记录为提示依赖与错因复盘证据。"
+    if event_type == "GENERATED_PRACTICE_SUBMITTED":
+        score = payload.get("score_percent")
+        score_text = f"，得分 {round(float(score))}%" if isinstance(score, (int, float)) else ""
+        return f"完成 {topic} 生成练习{score_text}，结果已进入画像更新。"
+    if event_type == "QUESTION_SET_SUBMITTED":
+        score = payload.get("score_percent")
+        score_text = f"，得分 {round(float(score))}%" if isinstance(score, (int, float)) else ""
+        return f"提交 {topic} 题组{score_text}，用于校准知识掌握度。"
+    if event_type == "PODCAST_LISTENED":
+        return f"听完{resource_title or topic}学习内容，作为自主学习持续性证据。"
+    if event_type == "artifact_saved":
+        return f"保存{resource_title or topic}学习资料，沉淀为可回看学习产物。"
+    if event_type == "EXECUTION_FINISHED":
+        return f"完成 {topic} 代码运行验证，测试结果进入任务行为记录。"
+    return f"产生 {topic} 学习行为，已纳入学习画像。"
+
+
+def serialize_behavior_events(
+    db: Session,
+    *,
+    student_id: str,
+    course_id: str,
+    class_id: str,
+    limit: int = 240,
+) -> list[dict]:
+    """学生画像页趋势图的业务事件输入。
+
+    前端负责按日、月、年分桶展示；这里返回已经过权限和课程范围过滤的事实事件。
+    没有足够事件时，前端会根据画像快照生成低置信度兜底桶，避免把空白误读成真实零值。
+    """
+    events = db.scalars(
+        select(LearnerEvent)
+        .where(
+            LearnerEvent.student_id == student_id,
+            LearnerEvent.course_id == course_id,
+            LearnerEvent.class_id == class_id,
+        )
+        .order_by(LearnerEvent.created_at.desc(), LearnerEvent.id.desc())
+        .limit(limit)
+    ).all()
+    return [
+        {
+            "id": item.id,
+            "event_type": item.event_type,
+            "occurred_at": iso(item.created_at),
+            "knowledge_points": loads_list(item.knowledge_points),
+            "error_type": item.error_type,
+            "payload": loads_dict(item.payload),
+            "activity_minutes": _event_activity_minutes(item.event_type, loads_dict(item.payload)),
+            "quality_score": _event_quality_score(item.event_type, loads_dict(item.payload)),
+            "summary": _event_summary(item.event_type, loads_list(item.knowledge_points), loads_dict(item.payload)),
+            "source": "learner_events",
+        }
+        for item in events
+    ]
 
 
 def find_profile_snapshot(
@@ -160,4 +267,10 @@ def serialize_learner_profile(
             }
             for item in recommendations
         ],
+        "behavior_events": serialize_behavior_events(
+            db,
+            student_id=student_id,
+            course_id=profile.course_id,
+            class_id=profile.class_id,
+        ),
     }

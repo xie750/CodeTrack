@@ -1,18 +1,20 @@
 import { useEffect, useMemo, useState, type PointerEvent } from 'react'
 import {
-  Alert, Avatar, Button, Checkbox, Col, DatePicker, Dropdown, Form, Input, InputNumber, message, Modal, Pagination, Progress,
+  Alert, Button, Checkbox, Col, DatePicker, Dropdown, Form, Input, InputNumber, message, Modal, Pagination, Progress,
   Row, Segmented, Select, Space, Steps, Switch, Tag, Typography, Upload,
 } from 'antd'
 import {
   Archive, ArrowRight, Bell, BookOpen, Bot, Edit3, Eye, Check, CheckCircle2, ChevronLeft, ChevronRight,
   CalendarDays, CircleHelp, ClipboardCheck, Clock3, Code2, EyeOff, FileText, FlaskConical, GraduationCap, ImageUp, Info, KeyRound, Lightbulb,
-  ListChecks, Lock, LogIn, LogOut, MessageSquareText, Microscope, MoreVertical, Plus, RefreshCw, Search, Settings2, Sparkles, Trash2, User, Users,
+  ListChecks, Lock, LogIn, MessageSquareText, Microscope, MoreVertical, Plus, RefreshCw, Search, Settings2, Sparkles, Trash2, User, Users,
 } from 'lucide-react'
 
 import { api, type ApiClass, type ApiCourse, type ApiTeacher, getCurrentUserName } from '../api'
 import type { ExactView } from './components'
 import { PageLoader } from './components'
 import { StudentEntryMotionBackdrop, type StudentEntryTheme } from '../../pages/StudentEntryPortal'
+import AccountMenu from '../../components/AccountMenu'
+import type { AuthUser } from '../../authSession'
 
 const { Text, Title, Paragraph } = Typography
 const TEACHER_ENTRY_THEME_KEY = 'codetrack.teacher.entry.theme'
@@ -35,7 +37,7 @@ function resetEntryCardTilt(event: PointerEvent<HTMLElement>) {
   event.currentTarget.style.setProperty('--tilt-y', '0deg')
 }
 
-export function ExactPortal({ loggedIn, onLogin, onLogout, onEnter }: { loggedIn: boolean; onLogin: (userId: string, name: string) => void; onLogout: () => void; onEnter: () => void }) {
+export function ExactPortal({ authUser, loggedIn, onLogin, onLogout, onEnter, onNavigate }: { authUser: AuthUser; loggedIn: boolean; onLogin: (userId: string, name: string) => void; onLogout: () => void; onEnter: () => void; onNavigate: (path: string) => void }) {
   const teacherName = getCurrentUserName()
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
@@ -124,9 +126,7 @@ export function ExactPortal({ loggedIn, onLogin, onLogout, onEnter }: { loggedIn
           <button type="button" className={entryTheme === 'starmap' ? 'active' : ''} aria-pressed={entryTheme === 'starmap'} onClick={() => changeEntryTheme('starmap')}>星图</button>
           <button type="button" className={entryTheme === 'cloud' ? 'active' : ''} aria-pressed={entryTheme === 'cloud'} onClick={() => changeEntryTheme('cloud')}>云图</button>
         </div>
-        <Dropdown trigger={['click']} menu={{ items: [{ key: 'logout', icon: <LogOut size={14} />, label: '退出登录', onClick: onLogout }] }}>
-          <button type="button" className="exact-portal-account"><Avatar size={28} className="exact-avatar">{teacherName.slice(0, 1)}</Avatar><Text strong>{teacherName}</Text><ChevronRight size={13} /></button>
-        </Dropdown>
+        <AccountMenu authUser={authUser} onLogout={onLogout} onNavigate={onNavigate} />
       </div>
     </header>
     <section className="teacher-entry-hero">

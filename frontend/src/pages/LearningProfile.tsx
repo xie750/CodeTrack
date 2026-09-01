@@ -5,6 +5,8 @@ import {
   Bot,
   CalendarDays,
   ChartNoAxesColumnIncreasing,
+  ChevronLeft,
+  ChevronRight,
   ClipboardCheck,
   Code2,
   Database,
@@ -15,12 +17,14 @@ import {
   Layers3,
   ListChecks,
   Medal,
+  Maximize2,
   Network,
   NotebookTabs,
   RefreshCw,
   ShieldCheck,
   Sparkles,
   Triangle,
+  X,
 } from "lucide-react";
 import { api, LearningContext, StudentAiChatResponse, StudentProfile } from "../api";
 import heroArt from "../assets/ui-home/hero-art.png";
@@ -270,6 +274,471 @@ function buildAiAdvicePrompt(profile: StudentProfile, dimensions: CourseProfileD
   ].join("\n").slice(0, 1900);
 }
 
+type BehaviorTrendMode = "day" | "month" | "year";
+
+type BehaviorTrendEvent = NonNullable<StudentProfile["behavior_events"]>[number];
+
+type BehaviorTrendPoint = {
+  key: string;
+  label: string;
+  title: string;
+  activityIndex: number;
+  qualityScore: number;
+  taskCompletionRate: number;
+  compileErrorRate: number;
+  logicErrorRate: number;
+  peakPeriod: string;
+  eventCount: number;
+  summary: string;
+  source: string;
+  confidence: number;
+  nextAction: string;
+};
+
+const behaviorModeOptions: Array<{ key: BehaviorTrendMode; label: string }> = [
+  { key: "day", label: "日" },
+  { key: "month", label: "月" },
+  { key: "year", label: "年" },
+];
+
+const behaviorModeCopy: Record<BehaviorTrendMode, { subtitle: string; previous: string; next: string }> = {
+  day: { subtitle: "近 7 天", previous: "前一天", next: "后一天" },
+  month: { subtitle: "本月逐日", previous: "上月", next: "下月" },
+  year: { subtitle: "本年逐月", previous: "上一年", next: "下一年" },
+};
+
+function profilePercent(value: number) {
+  const normalized = value <= 1 ? value * 100 : value;
+  return Math.max(0, Math.min(100, normalized));
+}
+
+function formatProfilePercent(value: number) {
+  const normalized = profilePercent(value);
+  return `${Number.isInteger(normalized) ? normalized.toFixed(0) : normalized.toFixed(1)}%`;
+}
+
+function parseProfileDate(value?: string | null) {
+  if (!value) return new Date();
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+}
+
+function pad2(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+function dateKey(date: Date) {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+function monthKey(date: Date) {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}`;
+}
+
+function addDays(date: Date, days: number) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days, 12);
+}
+
+function addMonths(date: Date, months: number) {
+  return new Date(date.getFullYear(), date.getMonth() + months, 1, 12);
+}
+
+function addYears(date: Date, years: number) {
+  return new Date(date.getFullYear() + years, 0, 1, 12);
+}
+
+function daysInMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+}
+
+function formatAxisDate(date: Date) {
+  return `${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+function formatWindowLabel(mode: BehaviorTrendMode, anchorDate: Date) {
+  if (mode === "day") {
+    return `截至 ${formatAxisDate(anchorDate)}`;
+  }
+  if (mode === "month") {
+    return `${anchorDate.getFullYear()}年${pad2(anchorDate.getMonth() + 1)}月`;
+  }
+  return `${anchorDate.getFullYear()}年`;
+}
+
+function shiftBehaviorDate(date: Date, mode: BehaviorTrendMode, delta: number) {
+  if (mode === "day") return addDays(date, delta);
+  if (mode === "month") return addMonths(date, delta);
+  return addYears(date, delta);
+}
+
+function hashText(value: string) {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) % 9973;
+  }
+  return hash;
+}
+
+function averageNumber(values: number[], fallback = 0) {
+  if (!values.length) return fallback;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function eventDate(event: BehaviorTrendEvent) {
+  const date = parseProfileDate(event.occurred_at);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function eventInRange(event: BehaviorTrendEvent, start: Date, end: Date) {
+  const date = eventDate(event);
+  return date ? date >= start && date < end : false;
+}
+
+function formatPeakPeriod(events: BehaviorTrendEvent[]) {
+  const dated = events
+    .map((event) => ({ event, date: eventDate(event) }))
+    .filter((item): item is { event: BehaviorTrendEvent; date: Date } => Boolean(item.date));
+  if (!dated.length) return "20:00 - 22:00";
+  const strongest = dated.reduce((best, item) => (
+    item.event.activity_minutes > best.event.activity_minutes ? item : best
+  ));
+  const start = Math.max(0, strongest.date.getHours() - 1);
+  const end = Math.min(23, strongest.date.getHours() + 1);
+  return `${pad2(start)}:00 - ${pad2(end)}:00`;
+}
+
+function summarizeBucket(title: string, events: BehaviorTrendEvent[], weakPoint: string, fallbackSummary: string) {
+  if (!events.length) {
+    return `${title}暂无直接行为事件，图表使用画像快照推断趋势：${fallbackSummary}`;
+  }
+  const topics = Array.from(new Set(events.flatMap((event) => event.knowledge_points))).slice(0, 3).join("、") || weakPoint;
+  const topEvent = [...events].sort((a, b) => b.activity_minutes - a.activity_minutes)[0];
+  return `${title}共记录 ${events.length} 条学习行为，主要围绕${topics}；${topEvent.summary}`;
+}
+
+function bucketEvents(
+  events: BehaviorTrendEvent[],
+  mode: BehaviorTrendMode,
+  anchorDate: Date
+): Array<{ key: string; label: string; title: string; start: Date; end: Date }> {
+  if (mode === "day") {
+    return Array.from({ length: 7 }, (_, index) => {
+      const date = addDays(anchorDate, index - 6);
+      const start = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0);
+      return {
+        key: dateKey(date),
+        label: formatAxisDate(date),
+        title: `${date.getFullYear()}年${pad2(date.getMonth() + 1)}月${pad2(date.getDate())}日`,
+        start,
+        end: new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1, 0),
+      };
+    });
+  }
+  if (mode === "month") {
+    const count = daysInMonth(anchorDate);
+    return Array.from({ length: count }, (_, index) => {
+      const date = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), index + 1, 12);
+      const start = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0);
+      return {
+        key: dateKey(date),
+        label: pad2(index + 1),
+        title: `${date.getFullYear()}年${pad2(date.getMonth() + 1)}月${pad2(date.getDate())}日`,
+        start,
+        end: new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1, 0),
+      };
+    });
+  }
+  return Array.from({ length: 12 }, (_, index) => {
+    const date = new Date(anchorDate.getFullYear(), index, 1, 12);
+    const start = new Date(date.getFullYear(), date.getMonth(), 1, 0);
+    return {
+      key: monthKey(date),
+      label: `${index + 1}月`,
+      title: `${date.getFullYear()}年${index + 1}月`,
+      start,
+      end: addMonths(start, 1),
+    };
+  });
+}
+
+function buildBehaviorTrend(profile: StudentProfile, mode: BehaviorTrendMode, anchorDate: Date): BehaviorTrendPoint[] {
+  const events = profile.behavior_events ?? [];
+  const knowledgeAverage = averageNumber(profile.knowledge_states.map((item) => item.mastery_score), profile.overview.overall_progress);
+  const weakPoint = profile.knowledge_states.find((item) => item.state === "WEAK" || item.mastery_score < 70)?.knowledge_point
+    || profile.knowledge_states[0]?.knowledge_point
+    || profile.course.name;
+  const primaryError = profile.frequent_errors[0]?.label || "阶段性错因";
+  const completionBase = profilePercent(profile.overview.recent_task_completion);
+  const compileBase = profilePercent(profile.overview.compile_error_rate);
+  const logicBase = profilePercent(profile.overview.logic_error_rate);
+  const fallbackSummary = profile.overview.summary || profile.overview.recommendation;
+
+  return bucketEvents(events, mode, anchorDate).map((bucket, index) => {
+    const matchedEvents = events.filter((event) => eventInRange(event, bucket.start, bucket.end));
+    const noise = (hashText(`${profile.student.id}-${profile.course.id}-${bucket.key}`) % 21) - 10;
+    const scale = mode === "year" ? 0.32 : 1.45;
+    const activityIndex = matchedEvents.length
+      ? clampScore(Math.min(120, matchedEvents.reduce((sum, event) => sum + event.activity_minutes, 0) * scale))
+      : clampScore(44 + knowledgeAverage * 0.42 + completionBase * 0.24 + Math.sin((index + 1) * 1.35) * 11 + noise);
+    const qualityScore = matchedEvents.length
+      ? clampScore(averageNumber(matchedEvents.map((event) => event.quality_score), knowledgeAverage))
+      : clampScore(knowledgeAverage * 0.55 + completionBase * 0.28 + (100 - logicBase) * 0.16 + noise * 0.8);
+    return {
+      key: bucket.key,
+      label: bucket.label,
+      title: bucket.title,
+      activityIndex,
+      qualityScore,
+      taskCompletionRate: clampScore(completionBase + (matchedEvents.length ? matchedEvents.length * 2 : noise * 0.25)),
+      compileErrorRate: Math.max(0, Math.min(100, compileBase + (matchedEvents.some((event) => event.error_type) ? 3 : -1))),
+      logicErrorRate: Math.max(0, Math.min(100, logicBase + (matchedEvents.some((event) => event.error_type) ? 4 : -2))),
+      peakPeriod: formatPeakPeriod(matchedEvents),
+      eventCount: matchedEvents.length,
+      summary: summarizeBucket(bucket.title, matchedEvents, weakPoint, fallbackSummary),
+      source: matchedEvents.length ? "learner_events" : "learner_profile_snapshots",
+      confidence: matchedEvents.length ? 0.88 : 0.62,
+      nextAction: matchedEvents.length
+        ? `继续围绕${weakPoint}做一次复盘，并检查${primaryError}是否下降。`
+        : `补一条${weakPoint}练习或资料保存记录，让画像趋势更可靠。`,
+    };
+  });
+}
+
+function summarizeTrend(points: BehaviorTrendPoint[]) {
+  const peak = [...points].sort((a, b) => b.activityIndex - a.activityIndex)[0];
+  return {
+    peak,
+    averageQuality: clampScore(averageNumber(points.map((point) => point.qualityScore), 0)),
+    compileErrorRate: averageNumber(points.map((point) => point.compileErrorRate), 0),
+    logicErrorRate: averageNumber(points.map((point) => point.logicErrorRate), 0),
+    taskCompletionRate: averageNumber(points.map((point) => point.taskCompletionRate), 0),
+    eventCount: points.reduce((sum, point) => sum + point.eventCount, 0),
+    sourceCount: points.filter((point) => point.source === "learner_events").length,
+  };
+}
+
+function BehaviorTrendChart({
+  points,
+  large = false,
+  showTooltip = false,
+}: {
+  points: BehaviorTrendPoint[];
+  large?: boolean;
+  showTooltip?: boolean;
+}) {
+  const latestKey = points.length ? points[points.length - 1].key : "";
+  const [activeKey, setActiveKey] = useState(latestKey);
+
+  useEffect(() => {
+    setActiveKey(points.length ? points[points.length - 1].key : "");
+  }, [points]);
+
+  const width = 500;
+  const height = large ? 260 : 210;
+  const left = 48;
+  const right = 28;
+  const top = large ? 34 : 28;
+  const bottom = 34;
+  const plotWidth = width - left - right;
+  const plotHeight = height - top - bottom;
+  const maxValue = 120;
+  const labelEvery = Math.max(1, Math.ceil(points.length / (large ? 10 : 7)));
+  const coords = points.map((point, index) => {
+    const x = points.length === 1 ? left + plotWidth / 2 : left + (plotWidth / (points.length - 1)) * index;
+    return {
+      point,
+      x,
+      activityY: top + (1 - point.activityIndex / maxValue) * plotHeight,
+      qualityY: top + (1 - point.qualityScore / maxValue) * plotHeight,
+    };
+  });
+  const active = coords.find((item) => item.point.key === activeKey) ?? (coords.length ? coords[coords.length - 1] : undefined);
+  const activityPoints = coords.map((item) => `${item.x.toFixed(1)},${item.activityY.toFixed(1)}`).join(" ");
+  const qualityPoints = coords.map((item) => `${item.x.toFixed(1)},${item.qualityY.toFixed(1)}`).join(" ");
+  const zoneWidth = points.length > 1 ? plotWidth / (points.length - 1) : plotWidth;
+
+  return (
+    <div className={`behavior-chart-stage${large ? " large" : ""}`} onMouseLeave={() => setActiveKey(points.length ? points[points.length - 1].key : "")}>
+      <svg className="line-chart behavior-trend-svg" viewBox={`0 0 ${width} ${height}`} aria-label="学习行为趋势图">
+        <g stroke="#e7edf6" strokeWidth="1">
+          {[120, 90, 60, 30].map((tick) => {
+            const y = top + (1 - tick / maxValue) * plotHeight;
+            return <line key={tick} x1={left} y1={y} x2={width - right} y2={y} />;
+          })}
+        </g>
+        <g fill="#748198" fontSize="11">
+          {[120, 90, 60, 30].map((tick) => {
+            const y = top + (1 - tick / maxValue) * plotHeight + 4;
+            return <text key={tick} x={tick === 120 ? 22 : 28} y={y}>{tick}</text>;
+          })}
+          {coords.map((item, index) => (
+            index % labelEvery === 0 || index === coords.length - 1
+              ? <text key={item.point.key} x={item.x - 12} y={height - 9}>{item.point.label}</text>
+              : null
+          ))}
+        </g>
+        <polyline points={activityPoints} fill="none" stroke="#176cf5" strokeWidth={large ? 4 : 3.5} strokeLinecap="round" strokeLinejoin="round" strokeDasharray="8 8" />
+        <polyline points={qualityPoints} fill="none" stroke="#20bd79" strokeWidth={large ? 4 : 3.5} strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4 7" />
+        {active ? (
+          <line x1={active.x} y1={top - 5} x2={active.x} y2={height - bottom + 4} stroke="#b9c9e4" strokeWidth="1.3" strokeDasharray="5 6" />
+        ) : null}
+        {coords.map((item) => (
+          <g key={item.point.key}>
+            <rect
+              x={item.x - zoneWidth / 2}
+              y={top - 10}
+              width={zoneWidth}
+              height={plotHeight + 20}
+              fill="transparent"
+              onMouseEnter={() => setActiveKey(item.point.key)}
+              onFocus={() => setActiveKey(item.point.key)}
+            />
+            <circle
+              cx={item.x}
+              cy={item.activityY}
+              r={large ? 8 + item.point.activityIndex / 34 : 4.5}
+              fill="rgba(23,108,245,.22)"
+              stroke="#176cf5"
+              strokeWidth={large ? 2.5 : 2}
+            />
+            <circle cx={item.x} cy={item.qualityY} r={large ? 6.5 : 4} fill="#20bd79" stroke="#ffffff" strokeWidth="2" />
+          </g>
+        ))}
+      </svg>
+      <div className="behavior-legend">
+        <span><i className="activity" />学习活跃度</span>
+        <span><i className="quality" />完成质量</span>
+      </div>
+      {showTooltip && active ? (
+        <div
+          className="behavior-tooltip"
+          style={{
+            left: `${Math.min(78, Math.max(18, (active.x / width) * 100))}%`,
+            top: `${Math.min(70, Math.max(12, (Math.min(active.activityY, active.qualityY) / height) * 100))}%`,
+          }}
+        >
+          <strong>{active.point.title}</strong>
+          <span>活跃度 {active.point.activityIndex} · 完成质量 {active.point.qualityScore}</span>
+          <p>{active.point.summary}</p>
+          <em>来源：{active.point.source} · 置信度 {Math.round(active.point.confidence * 100)}%</em>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function BehaviorTrendCard({ profile, title }: { profile: StudentProfile; title: string }) {
+  const [mode, setMode] = useState<BehaviorTrendMode>("day");
+  const [anchorDate, setAnchorDate] = useState(() => parseProfileDate(profile.overview.updated_at));
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    setAnchorDate(parseProfileDate(profile.overview.updated_at));
+  }, [profile.course.id, profile.overview.updated_at]);
+
+  useEffect(() => {
+    if (!expanded) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setExpanded(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [expanded]);
+
+  const points = useMemo(() => buildBehaviorTrend(profile, mode, anchorDate), [profile, mode, anchorDate]);
+  const stats = useMemo(() => summarizeTrend(points), [points]);
+  const modeCopy = behaviorModeCopy[mode];
+
+  return (
+    <article className="profile-card chart-card behavior-trend-card">
+      <div className="profile-section-head behavior-chart-head">
+        <h2>{title} <span>（{modeCopy.subtitle}）</span></h2>
+        <div className="behavior-chart-controls">
+          <div className="behavior-window-control" aria-label="切换时间窗口">
+            <button type="button" onClick={() => setAnchorDate((date) => shiftBehaviorDate(date, mode, -1))} title={modeCopy.previous}>
+              <ChevronLeft size={15} />
+            </button>
+            <strong>{formatWindowLabel(mode, anchorDate)}</strong>
+            <button type="button" onClick={() => setAnchorDate((date) => shiftBehaviorDate(date, mode, 1))} title={modeCopy.next}>
+              <ChevronRight size={15} />
+            </button>
+          </div>
+          <div className="behavior-mode-switch" role="group" aria-label="趋势粒度">
+            {behaviorModeOptions.map((item) => (
+              <button
+                type="button"
+                key={item.key}
+                className={mode === item.key ? "active" : ""}
+                onClick={() => setMode(item.key)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <button className="behavior-icon-button" type="button" onClick={() => setExpanded(true)} title="放大学习行为趋势">
+            <Maximize2 size={16} />
+          </button>
+        </div>
+      </div>
+      <div className="behavior-layout">
+        <BehaviorTrendChart points={points} />
+        <div className="behavior-stats">
+          <span>学习高峰时段<strong>{stats.peak?.peakPeriod ?? "20:00 - 22:00"}</strong></span>
+          <span>平均完成质量<strong>{stats.averageQuality}</strong></span>
+          <span>编译错误率<strong>{formatProfilePercent(stats.compileErrorRate)}</strong></span>
+          <span>逻辑错误率<strong>{formatProfilePercent(stats.logicErrorRate)}</strong></span>
+          <span>任务完成率 <b>{formatProfilePercent(stats.taskCompletionRate)}</b></span>
+          <span className="behavior-source">真实事件桶<strong>{stats.sourceCount}/{points.length}</strong></span>
+        </div>
+      </div>
+      {expanded ? (
+        <div className="behavior-modal-backdrop" role="presentation" onMouseDown={() => setExpanded(false)}>
+          <article className="behavior-modal" role="dialog" aria-modal="true" aria-label="放大学习行为趋势" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="behavior-modal-head">
+              <div>
+                <h2>{title}</h2>
+                <p>{formatWindowLabel(mode, anchorDate)} · {modeCopy.subtitle} · 悬浮气泡查看当天简介</p>
+              </div>
+              <div className="behavior-chart-controls">
+                <div className="behavior-window-control">
+                  <button type="button" onClick={() => setAnchorDate((date) => shiftBehaviorDate(date, mode, -1))} title={modeCopy.previous}>
+                    <ChevronLeft size={16} />
+                  </button>
+                  <strong>{formatWindowLabel(mode, anchorDate)}</strong>
+                  <button type="button" onClick={() => setAnchorDate((date) => shiftBehaviorDate(date, mode, 1))} title={modeCopy.next}>
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+                <div className="behavior-mode-switch" role="group" aria-label="放大趋势粒度">
+                  {behaviorModeOptions.map((item) => (
+                    <button
+                      type="button"
+                      key={item.key}
+                      className={mode === item.key ? "active" : ""}
+                      onClick={() => setMode(item.key)}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+                <button className="behavior-icon-button" type="button" onClick={() => setExpanded(false)} title="关闭放大图">
+                  <X size={17} />
+                </button>
+              </div>
+            </div>
+            <BehaviorTrendChart points={points} large showTooltip />
+            <div className="behavior-modal-foot">
+              <span>事件数：{stats.eventCount}</span>
+              <span>任务完成率：{formatProfilePercent(stats.taskCompletionRate)}</span>
+              <span>下一步：{stats.peak?.nextAction}</span>
+            </div>
+          </article>
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
 type LearningProfileProps = {
   initialCourseId?: string;
 };
@@ -419,9 +888,6 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
       time: formatTime(overview.updated_at)
     }));
   const progress = overview.overall_progress;
-  const compileRate = overview.compile_error_rate;
-  const logicRate = overview.logic_error_rate;
-  const completion = overview.recent_task_completion;
 
   function openSelfStudyForPoint(knowledgePoint?: string) {
     navigate("/self-study", {
@@ -662,30 +1128,7 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
               </div>
             </article>
 
-            <article className="profile-card chart-card">
-              <h2>学习行为 <span>（近 7 天）</span></h2>
-              <div className="behavior-layout">
-                <svg className="line-chart" viewBox="0 0 500 210" aria-label="近七天学习行为趋势">
-                  <g stroke="#e7edf6" strokeWidth="1">
-                    <line x1="48" y1="30" x2="460" y2="30" /><line x1="48" y1="75" x2="460" y2="75" /><line x1="48" y1="120" x2="460" y2="120" /><line x1="48" y1="165" x2="460" y2="165" />
-                  </g>
-                  <g fill="#748198" fontSize="11">
-                    <text x="24" y="33">120</text><text x="30" y="78">90</text><text x="30" y="123">60</text><text x="30" y="168">30</text>
-                    {["05-11", "05-12", "05-13", "05-14", "05-15", "05-16", "05-17"].map((day, idx) => <text key={day} x={62 + idx * 58} y="198">{day}</text>)}
-                  </g>
-                  <polyline points="62,130 120,97 178,127 236,145 294,112 352,98 410,126" fill="none" stroke="#176cf5" strokeWidth="4" strokeLinecap="round" />
-                  <polyline points="62,132 120,146 178,104 236,96 294,86 352,117 410,151" fill="none" stroke="#20bd79" strokeWidth="4" strokeLinecap="round" />
-                  {[62,120,178,236,294,352,410].map((x, idx) => <circle key={`b-${x}`} cx={x} cy={[130,97,127,145,112,98,126][idx]} r="4" fill="#176cf5" />)}
-                  {[62,120,178,236,294,352,410].map((x, idx) => <circle key={`g-${x}`} cx={x} cy={[132,146,104,96,86,117,151][idx]} r="4" fill="#20bd79" />)}
-                </svg>
-                <div className="behavior-stats">
-                  <span>学习高峰时间<strong>20:00 - 22:00</strong></span>
-                  <span>编译错误率<strong>{compileRate}%</strong></span>
-                  <span>逻辑错误率<strong>{logicRate}%</strong></span>
-                  <span>任务完成率 <b>{completion}%</b></span>
-                </div>
-              </div>
-            </article>
+            <BehaviorTrendCard profile={activeProfile} title="学习行为" />
           </div>
 
           <article className="profile-card profile-pad global-advice-card">
@@ -880,30 +1323,7 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
       </section>
 
       <section className="profile-bottom-grid">
-        <article className="profile-card chart-card">
-          <h2>学习行为画像 <span>（近 7 天）</span></h2>
-          <div className="behavior-layout">
-            <svg className="line-chart" viewBox="0 0 500 210" aria-label="近七天学习时长和正确率趋势">
-              <g stroke="#e7edf6" strokeWidth="1">
-                <line x1="48" y1="30" x2="460" y2="30" /><line x1="48" y1="75" x2="460" y2="75" /><line x1="48" y1="120" x2="460" y2="120" /><line x1="48" y1="165" x2="460" y2="165" />
-              </g>
-              <g fill="#748198" fontSize="11">
-                <text x="24" y="33">120</text><text x="30" y="78">90</text><text x="30" y="123">60</text><text x="30" y="168">30</text>
-                {["05-11", "05-12", "05-13", "05-14", "05-15", "05-16", "05-17"].map((day, idx) => <text key={day} x={62 + idx * 58} y="198">{day}</text>)}
-              </g>
-              <polyline points="62,130 120,97 178,127 236,145 294,112 352,98 410,126" fill="none" stroke="#176cf5" strokeWidth="4" strokeLinecap="round" />
-              <polyline points="62,132 120,146 178,104 236,96 294,86 352,117 410,151" fill="none" stroke="#20bd79" strokeWidth="4" strokeLinecap="round" />
-              {[62,120,178,236,294,352,410].map((x, idx) => <circle key={`b-${x}`} cx={x} cy={[130,97,127,145,112,98,126][idx]} r="4" fill="#176cf5" />)}
-              {[62,120,178,236,294,352,410].map((x, idx) => <circle key={`g-${x}`} cx={x} cy={[132,146,104,96,86,117,151][idx]} r="4" fill="#20bd79" />)}
-            </svg>
-            <div className="behavior-stats">
-              <span>学习高峰时间<strong>20:00 - 22:00</strong></span>
-              <span>编译错误率<strong>{compileRate}%</strong></span>
-              <span>逻辑错误率<strong>{logicRate}%</strong></span>
-              <span>任务完成率 <b>{completion}%</b></span>
-            </div>
-          </div>
-        </article>
+        <BehaviorTrendCard profile={activeProfile} title="学习行为画像" />
 
         <article className="profile-card chart-card">
           <h2>近期学习记录</h2>
