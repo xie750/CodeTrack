@@ -476,10 +476,21 @@ export type StudentAiChatResponse = {
   safety_note: string;
   model_provider: string;
   model_name: string;
+  model_key?: string;
+  model_label?: string;
   run_id: string;
   session?: StudentAiChatSession;
   user_message_id?: string;
   assistant_message_id?: string;
+};
+
+export type StudentAiModelOption = {
+  key: "default" | "fine_tuned" | string;
+  label: string;
+  provider: string;
+  model_name: string;
+  configured: boolean;
+  description: string;
 };
 
 export type GeneratedResourceCitation = StudentAiChatCitation;
@@ -1133,6 +1144,7 @@ async function streamStudentAiChat(
     message: string;
     courseId?: string;
     sessionId?: string | null;
+    modelKey?: string;
     pageContext?: Record<string, unknown>;
     history?: Array<{ role: "student" | "assistant"; content: string }>;
   },
@@ -1148,6 +1160,7 @@ async function streamStudentAiChat(
       message: payload.message,
       course_id: payload.courseId,
       session_id: payload.sessionId,
+      model_key: payload.modelKey,
       page_context: payload.pageContext ?? {},
       history: payload.history ?? []
     })
@@ -1265,14 +1278,17 @@ export const api = {
     message: string,
     courseId?: string,
     history?: Array<{ role: "student" | "assistant"; content: string }>,
-    pageContext?: Record<string, unknown>
+    pageContext?: Record<string, unknown>,
+    modelKey?: string
   ) =>
     request<StudentAiChatResponse>("/api/v1/student/ai-chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message, course_id: courseId, history: history ?? [], page_context: pageContext ?? {} })
+      body: JSON.stringify({ message, course_id: courseId, history: history ?? [], page_context: pageContext ?? {}, model_key: modelKey })
     }),
   streamStudentAiChat,
+  listStudentAiChatModels: () =>
+    request<{ items: StudentAiModelOption[] }>("/api/v1/student/ai-chat/models"),
   listStudentAiChatSessions: (courseId?: string, query?: string) => {
     const params = new URLSearchParams();
     if (courseId) params.set("course_id", courseId);

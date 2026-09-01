@@ -94,6 +94,7 @@ const relationStyles: Record<string, { color: string; width: number; type?: "sol
 };
 
 const relationTypes: RelationType[] = ["前驱", "后继", "相关"];
+const selfStudyImportNodeLimit = 48;
 
 const inspectorTabs: { key: InspectorTab; label: string }[] = [
   { key: "knowledge", label: "知识" },
@@ -101,6 +102,15 @@ const inspectorTabs: { key: InspectorTab; label: string }[] = [
   { key: "questions", label: "题目" },
   { key: "diagnosis", label: "诊断" },
 ];
+
+type SelfStudyImportFormat = "json" | "markdown" | "text";
+
+type ParsedTextNode = {
+  label: string;
+  description: string;
+  depth: number;
+  type: string;
+};
 
 function clampDifficulty(value: number) {
   return Math.max(1, Math.min(5, Number.isFinite(value) ? value : 2));
@@ -152,13 +162,8 @@ function masteryLabel(score: number) {
   return "薄弱预警";
 }
 
-function clampMastery(value: number) {
-  return Math.max(35, Math.min(96, Math.round(value)));
-}
-
-function estimateNodeMastery(node: StudentKnowledgeGraphNode, edges: StudentKnowledgeGraphEdge[] = []) {
-  const difficulty = clampDifficulty(node.difficulty);
-  return clampMastery(88 - difficulty * 8 - (node.description ? 0 : 8) + Math.min(8, edges.length * 2));
+function clampKnownMastery(value: number) {
+  return Math.max(0, Math.min(100, Math.round(Number.isFinite(value) ? value : 0)));
 }
 
 function rgbaFromHex(color: string, alpha: number) {
@@ -254,12 +259,13 @@ function buildNodeDiagnosis({
   const nextCount = edges.filter((edge) => edge.source === node.id && edge.type === "后继").length;
   const peerCount = edges.filter((edge) => edge.type === "相关").length;
   const difficulty = clampDifficulty(node.difficulty);
-  const fallbackScore = estimateNodeMastery(node, edges);
-  const masteryScore = clampMastery(knowledgeState?.mastery_score ?? fallbackScore);
-  const weak = masteryScore < 70;
+  const masteryScore = profileUsed ? clampKnownMastery(knowledgeState?.mastery_score ?? 0) : 0;
+  const weak = !profileUsed || masteryScore < 70;
   const highDifficulty = difficulty >= 4;
   const hasDefinition = Boolean(node.description.trim());
-  const confidence = clampMastery((profileUsed ? 78 : 58) + Math.min(12, edges.length * 3) + (hasDefinition ? 6 : 0)) / 100;
+  const confidence = profileUsed
+    ? clampKnownMastery(78 + Math.min(12, edges.length * 3) + (hasDefinition ? 6 : 0)) / 100
+    : Math.min(0.45, (32 + Math.min(8, edges.length * 2) + (hasDefinition ? 4 : 0)) / 100);
   const prerequisites = edges
     .filter((edge) => edge.target === node.id && edge.type === "前驱")
     .map((edge) => graph.nodes.find((item) => item.id === edge.source)?.label ?? edge.source)
@@ -274,7 +280,8 @@ function buildNodeDiagnosis({
     .slice(0, 3) ?? [];
 
   const riskFactors = [
-    weak ? `掌握度 ${masteryScore}%，低于稳定线 70%。` : "",
+    !profileUsed ? "暂无学习画像或提交证据匹配该节点，不能判定真实掌握度。" : "",
+    profileUsed && weak ? `掌握度 ${masteryScore}%，低于稳定线 70%。` : "",
     highDifficulty ? "节点难度较高，适合拆成概念、例题和迁移练习三步巩固。" : "",
     prereqCount === 0 ? "当前节点缺少前驱知识标注，学习路径可能不够清晰。" : "",
     !hasDefinition ? "节点定义为空，AI 难以判断你是否能用自己的话解释。" : "",
@@ -302,19 +309,21 @@ function buildNodeDiagnosis({
   ];
 
   const evidence = [
-    profileUsed ? `学习画像：${knowledgeState?.state}，掌握度 ${masteryScore}%，证据 ${knowledgeState?.evidence_count ?? 0} 条。` : "暂无精确画像匹配，当前为结构化规则估算。",
+    profileUsed ? `学习画像：${knowledgeState?.state}，掌握度 ${masteryScore}%，证据 ${knowledgeState?.evidence_count ?? 0} 条。` : "暂无精确画像匹配，未输出掌握度分数。",
     `图谱结构：前驱 ${prereqCount} 个，后继 ${nextCount} 个，相关 ${peerCount} 个。`,
     `节点属性：类型 ${node.type}，难度 ${difficulty} / 5，来源 ${node.source === "ai" ? "AI 草稿" : isSelfStudy ? "学生自定义" : "教师自定义"}。`,
-    graph.source_files.length ? `课程资料来源：${graph.source_files.length} 份。` : "当前节点暂无独立来源文件证据。",
+    graph.source_files.length ? `${isSelfStudy ? "学习资料" : "课程资料"}来源：${graph.source_files.length} 份。` : "当前节点暂无独立来源文件证据。",
   ];
 
   return {
     status: "ready",
     nodeId: node.id,
     masteryScore,
-    masteryLabel: masteryLabel(masteryScore),
+    masteryLabel: profileUsed ? masteryLabel(masteryScore) : "暂无真实证据",
     confidence,
-    summary: weak
+    summary: !profileUsed
+      ? `${node.label} 当前只有图谱结构和导入内容，还没有真实学习证据。建议先生成练习或完成相关任务，让系统形成画像后再判断掌握度。`
+      : weak
       ? `${node.label} 当前还需要巩固，建议先补齐前驱理解，再用小题验证边界和应用。`
       : `${node.label} 当前学习状态较稳定，建议进入迁移练习或连接后继知识。`,
     evidence,
@@ -352,6 +361,211 @@ function readSelfStudyGraph(): StudentKnowledgeGraph {
   } catch {
     return createEmptySelfStudyGraph();
   }
+}
+
+function selfStudyImportFormat(file: File): SelfStudyImportFormat {
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".md") || name.endsWith(".markdown") || file.type === "text/markdown") return "markdown";
+  if (name.endsWith(".txt") || file.type === "text/plain") return "text";
+  return "json";
+}
+
+function selfStudyImportFormatLabel(format: SelfStudyImportFormat) {
+  if (format === "markdown") return "Markdown";
+  if (format === "text") return "TXT";
+  return "JSON";
+}
+
+function titleFromFilename(filename: string) {
+  const withoutExt = filename.replace(/\.[^.]+$/, "").trim();
+  return withoutExt || "导入的自学主题";
+}
+
+function cleanMarkdownText(value: string) {
+  return value
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/[*_~>#|]/g, "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function compactNodeLabel(value: string) {
+  const cleaned = cleanMarkdownText(value);
+  if (cleaned.length <= 28) return cleaned;
+  const naturalBreak = cleaned.match(/^(.{6,28}?)[，,：:。；;]/);
+  return `${(naturalBreak?.[1] ?? cleaned.slice(0, 28)).trim()}...`;
+}
+
+function nodeTypeFromLabel(label: string, fallback = "知识点") {
+  if (/公式|定理|函数|模型/.test(label)) return "公式";
+  if (/方法|流程|步骤|算法|策略/.test(label)) return "方法";
+  if (/案例|项目|实验|应用/.test(label)) return "案例";
+  if (/能力|目标|产出/.test(label)) return "能力";
+  if (/概念|定义|原理/.test(label)) return "概念";
+  return fallback;
+}
+
+function parseTextSegments(rawText: string) {
+  const lines = rawText
+    .split(/\r?\n/)
+    .map((line) => cleanMarkdownText(line))
+    .filter(Boolean);
+
+  if (lines.length > 1) return lines;
+
+  return rawText
+    .split(/[。！？；;.!?]/)
+    .map((line) => cleanMarkdownText(line))
+    .filter((line) => line.length >= 4);
+}
+
+function parseMarkdownNodes(rawText: string): ParsedTextNode[] {
+  const nodes: ParsedTextNode[] = [];
+  for (const line of rawText.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (/^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(trimmed)) continue;
+
+    const heading = trimmed.match(/^(#{1,6})\s+(.+)$/);
+    if (heading) {
+      const label = compactNodeLabel(heading[2]);
+      if (label) {
+        nodes.push({
+          label,
+          description: cleanMarkdownText(heading[2]),
+          depth: heading[1].length,
+          type: heading[1].length <= 2 ? "概念" : "知识点",
+        });
+      }
+      continue;
+    }
+
+    const bullet = line.match(/^(\s*)(?:[-*+]|\d+[.)])\s+(.+)$/);
+    if (bullet) {
+      const label = compactNodeLabel(bullet[2]);
+      if (label) {
+        nodes.push({
+          label,
+          description: cleanMarkdownText(bullet[2]),
+          depth: Math.floor(bullet[1].replace(/\t/g, "  ").length / 2) + 3,
+          type: nodeTypeFromLabel(label),
+        });
+      }
+      continue;
+    }
+
+    const paragraph = cleanMarkdownText(trimmed);
+    if (paragraph && nodes.length) {
+      const previous = nodes[nodes.length - 1];
+      previous.description = previous.description === paragraph ? previous.description : `${previous.description} ${paragraph}`.trim();
+    }
+  }
+
+  if (nodes.length) return nodes;
+  return parseTextSegments(rawText).map((segment, index) => ({
+    label: compactNodeLabel(segment),
+    description: segment,
+    depth: index === 0 ? 1 : 2,
+    type: nodeTypeFromLabel(segment),
+  }));
+}
+
+function parsePlainTextNodes(rawText: string): ParsedTextNode[] {
+  return parseTextSegments(rawText).map((segment, index) => {
+    const pair = segment.match(/^(.{2,28}?)[：:]\s*(.+)$/);
+    const label = compactNodeLabel(pair?.[1] ?? segment);
+    const description = cleanMarkdownText(pair?.[2] ?? segment);
+    return {
+      label,
+      description,
+      depth: index === 0 ? 1 : 2,
+      type: nodeTypeFromLabel(label),
+    };
+  });
+}
+
+function buildSelfStudyGraphFromText(file: File, rawText: string, format: Exclude<SelfStudyImportFormat, "json">) {
+  const parsedNodes = (format === "markdown" ? parseMarkdownNodes(rawText) : parsePlainTextNodes(rawText))
+    .filter((node) => node.label);
+  if (!parsedNodes.length) {
+    throw new Error("empty imported text");
+  }
+
+  const now = new Date().toISOString();
+  const formatLabel = selfStudyImportFormatLabel(format);
+  const title = titleFromFilename(file.name);
+  const baseId = `self_import_${Date.now()}`;
+  const rootId = `${baseId}_root`;
+  const usedLabels = new Set<string>();
+  const importedItems = parsedNodes
+    .filter((node) => {
+      const key = node.label.toLowerCase();
+      if (usedLabels.has(key)) return false;
+      usedLabels.add(key);
+      return true;
+    })
+    .slice(0, selfStudyImportNodeLimit);
+
+  const nodes: StudentKnowledgeGraphNode[] = [
+    {
+      id: rootId,
+      label: title,
+      type: "概念",
+      description: `从 ${formatLabel} 文件导入的自学主题。`,
+      difficulty: 2,
+      x: 360,
+      y: 80,
+      color: nodeTypeColors.概念,
+      source: "custom",
+    },
+    ...importedItems.map((node, index) => ({
+      id: `${baseId}_node_${index + 1}`,
+      label: node.label,
+      type: node.type,
+      description: node.description || node.label,
+      difficulty: Math.min(5, Math.max(1, node.depth >= 4 ? 3 : 2)),
+      x: 120 + (index % 4) * 170,
+      y: 220 + Math.floor(index / 4) * 130,
+      color: nodeTypeColors[node.type] || nodeTypeColors.知识点,
+      source: "custom",
+    })),
+  ];
+
+  const edges: StudentKnowledgeGraphEdge[] = [];
+  const hierarchyStack: Array<{ depth: number; id: string }> = [{ depth: 0, id: rootId }];
+  importedItems.forEach((node, index) => {
+    const nodeId = `${baseId}_node_${index + 1}`;
+    while (hierarchyStack.length > 1 && hierarchyStack[hierarchyStack.length - 1].depth >= node.depth) {
+      hierarchyStack.pop();
+    }
+    const parent = hierarchyStack[hierarchyStack.length - 1] ?? { depth: 0, id: rootId };
+    edges.push({
+      id: `${baseId}_edge_${index + 1}`,
+      source: parent.id,
+      target: nodeId,
+      type: "后继",
+      label: parent.id === rootId ? "主题包含" : "后继",
+    });
+    hierarchyStack.push({ depth: node.depth, id: nodeId });
+  });
+
+  return withGraphCounts({
+    ...createEmptySelfStudyGraph(),
+    id: "self_study_graph_local",
+    title: `${title}知识图谱`,
+    description: `从 ${file.name} 生成的自学知识图谱，可继续调整节点和关系。`,
+    source_files: [{
+      filename: file.name,
+      mime_type: file.type || (format === "markdown" ? "text/markdown" : "text/plain"),
+      size_bytes: file.size,
+    }],
+    source_summary: `从本地 ${formatLabel} 导入 ${nodes.length} 个节点、${edges.length} 条关系。${parsedNodes.length > importedItems.length ? `已按前 ${selfStudyImportNodeLimit} 个有效条目生成图谱。` : ""}`,
+    nodes,
+    edges,
+    updated_at: now,
+  });
 }
 
 function nodeToDraft(node: StudentKnowledgeGraphNode | null): NodeDraft {
@@ -410,11 +624,13 @@ function buildChartOption(
         }
         const node = params.data;
         const difficulty = clampDifficulty(node?.raw?.difficulty ?? node?.value ?? 2);
-        const masteryScore = clampMastery(node?.masteryScore ?? 50);
+        const masteryScore = typeof node?.masteryScore === "number" ? clampKnownMastery(node.masteryScore) : null;
         return [
           `<strong>${escapeHtml(node?.name ?? "")}</strong>`,
           `<div>类型：${escapeHtml(node?.raw?.type ?? "知识点")}</div>`,
-          `<div>掌握：${masteryScore}% · ${escapeHtml(masteryLabel(masteryScore))}</div>`,
+          masteryScore === null
+            ? "<div>掌握：暂无真实画像</div>"
+            : `<div>掌握：${masteryScore}% · ${escapeHtml(masteryLabel(masteryScore))}</div>`,
           `<div>难度：${"★".repeat(difficulty)}${"☆".repeat(5 - difficulty)}</div>`,
           node?.raw?.description ? `<div>${escapeHtml(node.raw.description)}</div>` : "",
         ].filter(Boolean).join("");
@@ -428,10 +644,7 @@ function buildChartOption(
         layout: "force",
         data: graph.nodes.map((node) => {
           const color = node.color || nodeTypeColors[node.type] || "#2563eb";
-          const masteryScore = masteryByNode.get(node.id) ?? estimateNodeMastery(
-            node,
-            graph.edges.filter((edge) => edge.source === node.id || edge.target === node.id)
-          );
+          const masteryScore = masteryByNode.get(node.id);
           const selected = selectedId === node.id;
           const relationSource = pendingRelation?.sourceNodeId === node.id;
           return {
@@ -441,10 +654,10 @@ function buildChartOption(
             x: node.x,
             y: node.y,
             raw: node,
-            masteryScore,
+            masteryScore: typeof masteryScore === "number" ? clampKnownMastery(masteryScore) : null,
             symbolSize: symbolSize(node.difficulty),
             itemStyle: {
-              color: masteryFill(color, masteryScore),
+              color: masteryFill(color, typeof masteryScore === "number" ? masteryScore : 0),
               borderColor: relationSource ? "#f59e0b" : selected ? "#2563eb" : color,
               borderWidth: relationSource ? 4 : selected ? 4 : 1.5,
               shadowBlur: relationSource ? 18 : selected ? 16 : 8,
@@ -596,12 +809,18 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
   }, [graph, isSelfStudy]);
 
   useEffect(() => {
-    if (isSelfStudy || !courseId) {
-      setStudentProfile(null);
-      return undefined;
-    }
     let alive = true;
-    api.getStudentProfile(courseId)
+    const profileRequest = isSelfStudy
+      ? api.getLearningContext()
+          .then((context) => {
+            const profileCourseId = context.courses[0]?.course_id;
+            return profileCourseId ? api.getStudentProfile(profileCourseId) : null;
+          })
+      : courseId
+      ? api.getStudentProfile(courseId)
+      : Promise.resolve(null);
+
+    profileRequest
       .then((profile) => {
         if (alive) setStudentProfile(profile);
       })
@@ -632,11 +851,12 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
     );
     graph.nodes.forEach((node) => {
       const diagnosis = diagnosesByNode[node.id];
-      const related = graph.edges.filter((edge) => edge.source === node.id || edge.target === node.id);
-      const score = diagnosis?.status === "ready"
+      const score = diagnosis?.status === "ready" && diagnosis.profileUsed
         ? diagnosis.masteryScore
-        : profileByKnowledgePoint.get(node.label) ?? estimateNodeMastery(node, related);
-      scores.set(node.id, clampMastery(score));
+        : profileByKnowledgePoint.get(node.label);
+      if (typeof score === "number") {
+        scores.set(node.id, clampKnownMastery(score));
+      }
     });
     return scores;
   }, [diagnosesByNode, graph, studentProfile]);
@@ -713,7 +933,7 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
   const matchedKnowledgeState = activeNode
     ? studentProfile?.knowledge_states.find((item) => item.knowledge_point === activeNode.label)
     : null;
-  const activeMasteryScore = activeNode ? masteryByNode.get(activeNode.id) ?? estimateNodeMastery(activeNode, relatedEdges) : 0;
+  const activeMasteryScore = activeNode ? masteryByNode.get(activeNode.id) : undefined;
 
   function selectNode(nodeId: string) {
     setSelection({ kind: "node", id: nodeId });
@@ -953,30 +1173,47 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
     event.target.value = "";
     if (!file || !isSelfStudy) return;
     const reader = new FileReader();
+    const format = selfStudyImportFormat(file);
     reader.onload = () => {
       try {
-        const parsed = JSON.parse(String(reader.result)) as Partial<StudentKnowledgeGraph>;
-        if (!Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) {
-          throw new Error("invalid graph");
-        }
-        const imported = withGraphCounts({
-          ...createEmptySelfStudyGraph(),
-          ...parsed,
-          status: "draft",
-          teacher_name: "学生自定义",
-          course_name: "自主学习",
-          nodes: parsed.nodes,
-          edges: parsed.edges,
-          source_files: [],
-          source_summary: parsed.source_summary || "从本地 JSON 导入的学生自学知识图谱。",
-          published_at: null,
-        });
+        const rawText = String(reader.result ?? "");
+        const imported = format === "json"
+          ? (() => {
+              const parsed = JSON.parse(rawText) as Partial<StudentKnowledgeGraph>;
+              if (!Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) {
+                throw new Error("invalid graph");
+              }
+              return withGraphCounts({
+                ...createEmptySelfStudyGraph(),
+                ...parsed,
+                status: "draft",
+                teacher_name: "学生自定义",
+                course_name: "自主学习",
+                nodes: parsed.nodes,
+                edges: parsed.edges,
+                source_files: Array.isArray(parsed.source_files) ? parsed.source_files : [],
+                source_summary: parsed.source_summary || "从本地 JSON 导入的学生自学知识图谱。",
+                published_at: null,
+              });
+            })()
+          : buildSelfStudyGraphFromText(file, rawText, format);
         setGraph(imported);
         setSelection(imported.nodes[0] ? { kind: "node", id: imported.nodes[0].id } : null);
-        setMessage("图谱已导入，可继续编辑节点。");
+        setInspectorTab("knowledge");
+        setPendingRelation(null);
+        setRelationMenuOpen(false);
+        setNodeEditor(null);
+        setMessage(`已从 ${selfStudyImportFormatLabel(format)} 导入图谱，可继续编辑节点和关系。`);
       } catch {
-        setMessage("导入失败：请选择包含 nodes 和 edges 的知识图谱 JSON 文件。");
+        setMessage(
+          format === "json"
+            ? "导入失败：请选择包含 nodes 和 edges 的知识图谱 JSON 文件。"
+            : "导入失败：Markdown/TXT 中没有识别到可生成节点的标题、列表或文本行。"
+        );
       }
+    };
+    reader.onerror = () => {
+      setMessage("导入失败：文件读取异常，请重新选择文件。");
     };
     reader.readAsText(file);
   }
@@ -1000,7 +1237,13 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
               <Upload size={17} />
               导入图谱
             </button>
-            <input ref={importInputRef} type="file" accept="application/json,.json" hidden onChange={importSelfStudyGraph} />
+            <input
+              ref={importInputRef}
+              type="file"
+              accept="application/json,.json,text/markdown,.md,.markdown,text/plain,.txt"
+              hidden
+              onChange={importSelfStudyGraph}
+            />
           </div>
         ) : (
           <button type="button" disabled={!graph} onClick={actionToSelfStudy}>
@@ -1107,9 +1350,10 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
             ) : null}
             {!loading && graph && hasNodes ? (
               <div className="student-graph-mastery-legend" aria-hidden="true">
-                <strong>填充高度 = 掌握度</strong>
+                <strong>填充高度 = 画像掌握度</strong>
                 <span><i />低</span>
                 <span><i />高</span>
+                <span>空白为暂无证据</span>
               </div>
             ) : null}
             {loading ? (
@@ -1130,7 +1374,7 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
                   <span><BookOpen size={22} /></span>
                 </div>
                 <strong>开始搭建你的自学知识图谱</strong>
-                <p>当前还没有节点。你可以先创建一个知识点，也可以导入已有 JSON 图谱，后续再补充关系和学习资料。</p>
+                <p>当前还没有节点。你可以先创建一个知识点，也可以导入 JSON、Markdown 或 TXT，后续再补充关系和学习资料。</p>
                 <div className="student-graph-empty-actions">
                   <button type="button" onClick={openCreateNode}>
                     <Plus size={15} />
@@ -1282,7 +1526,14 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
                           <div className="student-graph-section-label">属性</div>
                           <div className="student-graph-meta">
                             <span>类型 <strong>{activeNode.type}</strong></span>
-                            <span>掌握 <strong>{activeMasteryScore}% · {masteryLabel(activeMasteryScore)}</strong></span>
+                            <span>
+                              掌握
+                              <strong>
+                                {typeof activeMasteryScore === "number"
+                                  ? `${activeMasteryScore}% · ${masteryLabel(activeMasteryScore)}`
+                                  : "暂无真实画像"}
+                              </strong>
+                            </span>
                             <span>难度 <strong>{clampDifficulty(activeNode.difficulty)} / 5</strong></span>
                             <span>来源 <strong>{activeNode.source === "ai" ? "AI 草稿" : isSelfStudy ? "学生自定义" : "教师自定义"}</strong></span>
                           </div>
@@ -1368,9 +1619,9 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
                             </section>
                           ) : (
                             <>
-                              <section className={`student-graph-diagnosis-score ${activeDiagnosis.masteryScore < 70 ? "weak" : "stable"}`}>
+                              <section className={`student-graph-diagnosis-score ${!activeDiagnosis.profileUsed || activeDiagnosis.masteryScore < 70 ? "weak" : "stable"}`}>
                                 <div>
-                                  <strong>{activeDiagnosis.masteryScore}%</strong>
+                                  <strong>{activeDiagnosis.profileUsed ? `${activeDiagnosis.masteryScore}%` : "暂无"}</strong>
                                   <span>{activeDiagnosis.masteryLabel}</span>
                                 </div>
                                 <p>{activeDiagnosis.summary}</p>
@@ -1379,7 +1630,7 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
                               <div className="student-graph-diagnosis-metrics">
                                 <span>置信度 <strong>{Math.round(activeDiagnosis.confidence * 100)}%</strong></span>
                                 <span>画像匹配 <strong>{activeDiagnosis.profileUsed ? "已使用" : "未匹配"}</strong></span>
-                                <span>证据数 <strong>{matchedKnowledgeState?.evidence_count ?? "估算"}</strong></span>
+                                <span>证据数 <strong>{matchedKnowledgeState?.evidence_count ?? "暂无"}</strong></span>
                               </div>
 
                               <DiagnosisList title="判断依据" items={activeDiagnosis.evidence} />

@@ -1,5 +1,6 @@
 import json
 import re
+from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
@@ -31,6 +32,8 @@ MIN_COURSE_RELEVANCE = 0.28
 GENERAL_ANSWER_CONFIDENCE = 0.42
 PERSONAL_SOURCE_CONFIDENCE_FLOOR = 0.86
 COURSE_SOURCE_CONFIDENCE_FLOOR = 0.72
+DEFAULT_MODEL_KEY = "default"
+FINE_TUNED_MODEL_KEY = "fine_tuned"
 LOW_VALUE_QUERY_TERMS = {
     "的",
     "了",
@@ -73,6 +76,101 @@ LOW_VALUE_QUERY_TERMS = {
     "为什么",
     "怎么",
 }
+
+
+@dataclass(frozen=True)
+class AiTutorModelConfig:
+    key: str
+    label: str
+    provider: str
+    model_name: str | None
+    api_key: str | None = None
+    base_url: str | None = None
+    gateway_url: str | None = None
+
+    @property
+    def configured(self) -> bool:
+        if self.gateway_url:
+            return True
+        return bool(self.api_key and self.base_url and self.model_name)
+
+
+def normalize_ai_tutor_model_key(model_key: str | None) -> str:
+    key = (model_key or DEFAULT_MODEL_KEY).strip().lower().replace("-", "_")
+    if key in {"default", "general", "deepseek", "builtin"}:
+        return DEFAULT_MODEL_KEY
+    if key in {"fine_tuned", "finetuned", "custom", "codetrack", "local"}:
+        return FINE_TUNED_MODEL_KEY
+    raise ApiError(
+        400,
+        "AI_MODEL_NOT_SUPPORTED",
+        "当前 AI 助学模型选项不存在。",
+        details={"model_key": model_key, "supported": [DEFAULT_MODEL_KEY, FINE_TUNED_MODEL_KEY]},
+    )
+
+
+def _default_model_config(settings: Any) -> AiTutorModelConfig:
+    provider = "MODEL_GATEWAY" if settings.model_gateway_url else "OPENAI_COMPATIBLE"
+    return AiTutorModelConfig(
+        key=DEFAULT_MODEL_KEY,
+        label="通用模型",
+        provider=provider,
+        model_name=settings.model_name,
+        api_key=settings.model_api_key,
+        base_url=settings.model_api_base_url,
+        gateway_url=settings.model_gateway_url,
+    )
+
+
+def _fine_tuned_model_config(settings: Any) -> AiTutorModelConfig:
+    return AiTutorModelConfig(
+        key=FINE_TUNED_MODEL_KEY,
+        label=settings.fine_tuned_model_label or "微调模型",
+        provider="OPENAI_COMPATIBLE",
+        model_name=settings.fine_tuned_model_name,
+        api_key=settings.fine_tuned_model_api_key,
+        base_url=settings.fine_tuned_model_api_base_url,
+    )
+
+
+def resolve_ai_tutor_model(settings: Any, model_key: str | None) -> AiTutorModelConfig:
+    normalized = normalize_ai_tutor_model_key(model_key)
+    return _fine_tuned_model_config(settings) if normalized == FINE_TUNED_MODEL_KEY else _default_model_config(settings)
+
+
+def list_ai_tutor_model_options() -> list[dict[str, Any]]:
+    get_settings.cache_clear()
+    settings = get_settings()
+    options = [_default_model_config(settings), _fine_tuned_model_config(settings)]
+    return [
+        {
+            "key": option.key,
+            "label": option.label,
+            "provider": option.provider,
+            "model_name": option.model_name or "",
+            "configured": option.configured,
+            "description": (
+                "保留当前通用模型配置，适合常规助学问答。"
+                if option.key == DEFAULT_MODEL_KEY
+                else "使用你训练后的本地微调模型，适合对比专业场景回答效果。"
+            ),
+        }
+        for option in options
+    ]
+
+
+def _missing_model_config(model_config: AiTutorModelConfig) -> list[str]:
+    if model_config.gateway_url:
+        return []
+    prefix = "CODETRACK_MODEL" if model_config.key == DEFAULT_MODEL_KEY else "CODETRACK_FINE_TUNED_MODEL"
+    missing: list[str] = []
+    if not model_config.api_key:
+        missing.append(f"{prefix}_API_KEY")
+    if not model_config.base_url:
+        missing.append(f"{prefix}_API_BASE_URL")
+    if not model_config.model_name:
+        missing.append(f"{prefix}_NAME")
+    return missing
 LOW_VALUE_QUERY_PHRASES = [
     "帮我",
     "请你",
@@ -870,18 +968,15 @@ async def generate_student_ai_reply(
     class_id: str,
     course: Course,
     message: str,
+    model_key: str | None = None,
     page_context: dict[str, Any] | None = None,
     history: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     get_settings.cache_clear()
     settings = get_settings()
-    use_gateway = bool(settings.model_gateway_url)
-    missing: list[str] = []
-    if not use_gateway:
-        if not settings.model_api_key:
-            missing.append("CODETRACK_MODEL_API_KEY")
-        if not settings.model_name:
-            missing.append("CODETRACK_MODEL_NAME")
+    model_config = resolve_ai_tutor_model(settings, model_key)
+    use_gateway = bool(model_config.gateway_url)
+    missing = _missing_model_config(model_config)
     if missing:
         raise ApiError(
             503,
@@ -889,7 +984,9 @@ async def generate_student_ai_reply(
             "AI 模型配置还不完整，暂时不能发起对话。",
             details={
                 "missing": missing,
-                "optional": ["CODETRACK_MODEL_API_BASE_URL"],
+                "model_key": model_config.key,
+                "model_label": model_config.label,
+                "optional": ["CODETRACK_MODEL_API_BASE_URL"] if model_config.key == DEFAULT_MODEL_KEY else [],
             },
         )
 
@@ -898,8 +995,8 @@ async def generate_student_ai_reply(
     personal_sources = _load_personal_knowledge_sources(db, user, message)
     allowed_personal_sources = {source["source_id"]: source for source in personal_sources}
     profile = serialize_learner_profile(db, student_id=user.id, course_id=course.id, class_id=class_id)
-    fallback_model_name = settings.model_name or "configured-model"
-    default_provider = "MODEL_GATEWAY" if use_gateway else "OPENAI_COMPATIBLE"
+    fallback_model_name = model_config.model_name or "configured-model"
+    default_provider = model_config.provider
     payload = build_ai_tutor_payload(
         user=user,
         course=course,
@@ -927,6 +1024,7 @@ async def generate_student_ai_reply(
             "knowledge_source_ids": [source.id for source in sources],
             "personal_knowledge_source_ids": [source["source_id"] for source in personal_sources],
             "profile_available": profile is not None,
+            "model_key": model_config.key,
         },
         model_provider=default_provider,
         model_name=fallback_model_name,
@@ -945,7 +1043,7 @@ async def generate_student_ai_reply(
     try:
         if use_gateway:
             llm_result = await request_json(
-                settings.model_gateway_url or "",
+                model_config.gateway_url or "",
                 payload=payload,
                 validator=validator,
                 timeout=35,
@@ -966,8 +1064,8 @@ async def generate_student_ai_reply(
                     },
                 ],
                 model=fallback_model_name,
-                api_key=settings.model_api_key,
-                base_url=settings.model_api_base_url,
+                api_key=model_config.api_key,
+                base_url=model_config.base_url or settings.model_api_base_url,
                 validator=validator,
                 timeout=45,
                 retries=1,
@@ -994,6 +1092,8 @@ async def generate_student_ai_reply(
 
     result: dict[str, Any] = llm_result.data
     result["run_id"] = run.id
+    result["model_key"] = model_config.key
+    result["model_label"] = model_config.label
     finish_run(
         db,
         run,
@@ -1031,24 +1131,26 @@ async def stream_student_ai_reply(
     class_id: str,
     course: Course,
     message: str,
+    model_key: str | None = None,
     page_context: dict[str, Any] | None = None,
     history: list[dict[str, str]] | None = None,
 ):
     get_settings.cache_clear()
     settings = get_settings()
-    use_gateway = bool(settings.model_gateway_url)
-    missing: list[str] = []
-    if not use_gateway:
-        if not settings.model_api_key:
-            missing.append("CODETRACK_MODEL_API_KEY")
-        if not settings.model_name:
-            missing.append("CODETRACK_MODEL_NAME")
+    model_config = resolve_ai_tutor_model(settings, model_key)
+    use_gateway = bool(model_config.gateway_url)
+    missing = _missing_model_config(model_config)
     if missing:
         raise ApiError(
             503,
             "AI_MODEL_NOT_CONFIGURED",
             "AI 模型配置还不完整，暂时不能发起对话。",
-            details={"missing": missing, "optional": ["CODETRACK_MODEL_API_BASE_URL"]},
+            details={
+                "missing": missing,
+                "model_key": model_config.key,
+                "model_label": model_config.label,
+                "optional": ["CODETRACK_MODEL_API_BASE_URL"] if model_config.key == DEFAULT_MODEL_KEY else [],
+            },
         )
 
     if use_gateway:
@@ -1058,6 +1160,7 @@ async def stream_student_ai_reply(
             class_id=class_id,
             course=course,
             message=message,
+            model_key=model_config.key,
             page_context=page_context,
             history=history,
         )
@@ -1070,8 +1173,8 @@ async def stream_student_ai_reply(
     personal_sources = _load_personal_knowledge_sources(db, user, message)
     allowed_personal_sources = {source["source_id"]: source for source in personal_sources}
     profile = serialize_learner_profile(db, student_id=user.id, course_id=course.id, class_id=class_id)
-    fallback_model_name = settings.model_name or "configured-model"
-    default_provider = "OPENAI_COMPATIBLE"
+    fallback_model_name = model_config.model_name or "configured-model"
+    default_provider = model_config.provider
     payload = build_ai_tutor_payload(
         user=user,
         course=course,
@@ -1099,6 +1202,7 @@ async def stream_student_ai_reply(
             "personal_knowledge_source_ids": [source["source_id"] for source in personal_sources],
             "profile_available": profile is not None,
             "stream": True,
+            "model_key": model_config.key,
         },
         model_provider=default_provider,
         model_name=fallback_model_name,
@@ -1110,8 +1214,8 @@ async def stream_student_ai_reply(
         async for chunk in chat_text_stream(
             build_ai_tutor_stream_messages(payload),
             model=fallback_model_name,
-            api_key=settings.model_api_key,
-            base_url=settings.model_api_base_url,
+            api_key=model_config.api_key,
+            base_url=model_config.base_url or settings.model_api_base_url,
             timeout=45,
             temperature=0.2,
         ):
@@ -1134,8 +1238,8 @@ async def stream_student_ai_reply(
         metadata_result = await chat_json(
             build_ai_tutor_metadata_messages(payload, answer),
             model=fallback_model_name,
-            api_key=settings.model_api_key,
-            base_url=settings.model_api_base_url,
+            api_key=model_config.api_key,
+            base_url=model_config.base_url or settings.model_api_base_url,
             validator=metadata_validator,
             timeout=30,
             retries=1,
@@ -1178,6 +1282,8 @@ async def stream_student_ai_reply(
 
     result: dict[str, Any] = metadata_result.data
     result["run_id"] = run.id
+    result["model_key"] = model_config.key
+    result["model_label"] = model_config.label
     finish_run(
         db,
         run,

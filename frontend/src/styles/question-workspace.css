@@ -2067,6 +2067,7 @@
 }
 
 .student-graph-page {
+  --student-graph-workspace-height: clamp(660px, calc(var(--app-viewport-height) - var(--student-app-topbar-height) - 18px), 760px);
   gap: 14px;
 }
 
@@ -2094,10 +2095,14 @@
 
 .student-graph-layout {
   grid-template-columns: minmax(0, 1fr) 330px;
+  align-items: start;
 }
 
 .student-graph-main {
+  height: var(--student-graph-workspace-height);
   min-width: 0;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   border: 1px solid #e5ebf3;
   border-radius: 8px;
@@ -2259,7 +2264,8 @@
 
 .student-graph-canvas-shell {
   position: relative;
-  min-height: 600px;
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 12px;
   background:
     linear-gradient(#e9f0f8 1px, transparent 1px) 0 0 / 32px 32px,
@@ -2358,16 +2364,16 @@
 }
 
 .student-graph-canvas {
-  height: 576px;
-  min-height: 520px;
+  height: 100%;
+  min-height: 0;
   border: 1px solid #dfe8f3;
   border-radius: 8px;
   background: #fff;
 }
 
 .student-graph-empty {
-  height: 576px;
-  min-height: 520px;
+  height: 100%;
+  min-height: 0;
   display: grid;
   place-items: center;
   align-content: center;
@@ -2476,14 +2482,22 @@
 }
 
 .student-graph-side {
+  min-width: 0;
+  align-self: start;
   gap: 14px;
 }
 
 .student-graph-inspector {
-  min-height: 250px;
+  display: flex;
+  flex-direction: column;
+  height: var(--student-graph-workspace-height);
+  min-height: var(--student-graph-workspace-height);
+  max-height: var(--student-graph-workspace-height);
+  overflow: hidden;
 }
 
 .student-graph-node-head {
+  flex: 0 0 auto;
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr) auto;
   align-items: center;
@@ -2569,6 +2583,7 @@
 }
 
 .student-graph-inspector-tabs {
+  flex: 0 0 auto;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0;
@@ -2602,13 +2617,38 @@
 }
 
 .student-graph-tab-body {
+  flex: 1 1 auto;
+  min-height: 0;
   display: grid;
+  align-content: start;
+  grid-auto-rows: max-content;
   gap: 12px;
   padding: 14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid #e4edf8;
   border-top: 0;
   border-radius: 0 0 8px 8px;
   background: #fff;
+  scrollbar-gutter: stable;
+}
+
+.student-graph-tab-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.student-graph-tab-body::-webkit-scrollbar-thumb {
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  background: #cbd8e8;
+}
+
+.student-graph-tab-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.student-graph-tab-body > * {
+  align-self: start;
 }
 
 .student-graph-relation-summary {
@@ -2889,11 +2929,32 @@
 }
 
 .student-graph-relations {
+  min-height: 0;
+  max-height: min(360px, 38vh);
   display: grid;
   gap: 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
+}
+
+.student-graph-relations::-webkit-scrollbar {
+  width: 8px;
+}
+
+.student-graph-relations::-webkit-scrollbar-thumb {
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  background: #cbd8e8;
+}
+
+.student-graph-relations::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .student-graph-relations > div {
+  min-width: 0;
   display: grid;
   gap: 7px;
 }
@@ -2905,6 +2966,7 @@
 }
 
 .student-graph-relations button {
+  min-width: 0;
   min-height: 34px;
   display: flex;
   align-items: center;
@@ -2919,7 +2981,15 @@
   text-align: left;
 }
 
+.student-graph-relations button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .student-graph-relations small {
+  flex: 0 0 auto;
   color: #657187;
   font-size: 11px;
   font-weight: 800;
@@ -2934,10 +3004,13 @@
 
 .student-graph-resource-list {
   margin-top: 0;
+  align-content: start;
 }
 
 .student-graph-question-list {
   display: grid;
+  align-content: start;
+  grid-auto-rows: max-content;
   gap: 10px;
 }
 
@@ -2993,7 +3066,11 @@
 }
 
 .student-graph-diagnosis {
+  min-width: 0;
+  min-height: 0;
   display: grid;
+  align-content: start;
+  grid-auto-rows: max-content;
   gap: 10px;
 }
 
@@ -3054,7 +3131,7 @@
 
 .student-graph-diagnosis-score {
   display: grid;
-  grid-template-columns: 88px minmax(0, 1fr);
+  grid-template-columns: 78px minmax(0, 1fr);
   align-items: center;
   gap: 12px;
   border-color: #d7f0e2;
@@ -3067,7 +3144,7 @@
 }
 
 .student-graph-diagnosis-score div {
-  min-height: 72px;
+  min-height: 68px;
   display: grid;
   align-content: center;
   justify-items: center;
@@ -3082,7 +3159,7 @@
 }
 
 .student-graph-diagnosis-score strong {
-  font-size: 24px;
+  font-size: 22px;
   line-height: 1;
   font-weight: 950;
 }
@@ -3190,6 +3267,18 @@
 
   .student-graph-layout {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .student-graph-inspector {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .student-graph-tab-body {
+    max-height: none;
+    overflow: visible;
   }
 
   .student-graph-stats {
