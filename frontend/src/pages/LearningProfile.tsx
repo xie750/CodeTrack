@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import {
   BookOpenCheck,
@@ -347,6 +348,18 @@ function addYears(date: Date, years: number) {
   return new Date(date.getFullYear() + years, 0, 1, 12);
 }
 
+function startOfDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0);
+}
+
+function isSameMonth(leftDate: Date, rightDate: Date) {
+  return leftDate.getFullYear() === rightDate.getFullYear() && leftDate.getMonth() === rightDate.getMonth();
+}
+
+function isSameYear(leftDate: Date, rightDate: Date) {
+  return leftDate.getFullYear() === rightDate.getFullYear();
+}
+
 function daysInMonth(date: Date) {
   return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
 }
@@ -371,6 +384,25 @@ function shiftBehaviorDate(date: Date, mode: BehaviorTrendMode, delta: number) {
   return addYears(date, delta);
 }
 
+function clampBehaviorAnchor(date: Date, mode: BehaviorTrendMode, now = new Date()) {
+  if (mode === "day") {
+    return startOfDay(date) > startOfDay(now) ? now : date;
+  }
+  if (mode === "month") {
+    const monthStart = new Date(date.getFullYear(), date.getMonth(), 1, 12);
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1, 12);
+    return monthStart > currentMonthStart ? currentMonthStart : monthStart;
+  }
+  const yearStart = new Date(date.getFullYear(), 0, 1, 12);
+  const currentYearStart = new Date(now.getFullYear(), 0, 1, 12);
+  return yearStart > currentYearStart ? currentYearStart : yearStart;
+}
+
+function canShiftBehaviorNext(date: Date, mode: BehaviorTrendMode, now = new Date()) {
+  const nextDate = shiftBehaviorDate(date, mode, 1);
+  return clampBehaviorAnchor(nextDate, mode, now).getTime() === nextDate.getTime();
+}
+
 function hashText(value: string) {
   let hash = 0;
   for (let index = 0; index < value.length; index += 1) {
@@ -389,9 +421,9 @@ function eventDate(event: BehaviorTrendEvent) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function eventInRange(event: BehaviorTrendEvent, start: Date, end: Date) {
+function eventInRange(event: BehaviorTrendEvent, start: Date, end: Date, now = new Date()) {
   const date = eventDate(event);
-  return date ? date >= start && date < end : false;
+  return date ? date <= now && date >= start && date < end : false;
 }
 
 function formatPeakPeriod(events: BehaviorTrendEvent[]) {
@@ -419,11 +451,13 @@ function summarizeBucket(title: string, events: BehaviorTrendEvent[], weakPoint:
 function bucketEvents(
   events: BehaviorTrendEvent[],
   mode: BehaviorTrendMode,
-  anchorDate: Date
+  anchorDate: Date,
+  now = new Date()
 ): Array<{ key: string; label: string; title: string; start: Date; end: Date }> {
+  const visibleAnchorDate = clampBehaviorAnchor(anchorDate, mode, now);
   if (mode === "day") {
     return Array.from({ length: 7 }, (_, index) => {
-      const date = addDays(anchorDate, index - 6);
+      const date = addDays(visibleAnchorDate, index - 6);
       const start = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0);
       return {
         key: dateKey(date),
@@ -435,9 +469,9 @@ function bucketEvents(
     });
   }
   if (mode === "month") {
-    const count = daysInMonth(anchorDate);
+    const count = isSameMonth(visibleAnchorDate, now) ? now.getDate() : daysInMonth(visibleAnchorDate);
     return Array.from({ length: count }, (_, index) => {
-      const date = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), index + 1, 12);
+      const date = new Date(visibleAnchorDate.getFullYear(), visibleAnchorDate.getMonth(), index + 1, 12);
       const start = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0);
       return {
         key: dateKey(date),
@@ -448,8 +482,9 @@ function bucketEvents(
       };
     });
   }
-  return Array.from({ length: 12 }, (_, index) => {
-    const date = new Date(anchorDate.getFullYear(), index, 1, 12);
+  const monthCount = isSameYear(visibleAnchorDate, now) ? now.getMonth() + 1 : 12;
+  return Array.from({ length: monthCount }, (_, index) => {
+    const date = new Date(visibleAnchorDate.getFullYear(), index, 1, 12);
     const start = new Date(date.getFullYear(), date.getMonth(), 1, 0);
     return {
       key: monthKey(date),
@@ -462,7 +497,11 @@ function bucketEvents(
 }
 
 function buildBehaviorTrend(profile: StudentProfile, mode: BehaviorTrendMode, anchorDate: Date): BehaviorTrendPoint[] {
-  const events = profile.behavior_events ?? [];
+  const now = new Date();
+  const events = (profile.behavior_events ?? []).filter((event) => {
+    const date = eventDate(event);
+    return date ? date <= now : false;
+  });
   const knowledgeAverage = averageNumber(profile.knowledge_states.map((item) => item.mastery_score), profile.overview.overall_progress);
   const weakPoint = profile.knowledge_states.find((item) => item.state === "WEAK" || item.mastery_score < 70)?.knowledge_point
     || profile.knowledge_states[0]?.knowledge_point
@@ -473,8 +512,8 @@ function buildBehaviorTrend(profile: StudentProfile, mode: BehaviorTrendMode, an
   const logicBase = profilePercent(profile.overview.logic_error_rate);
   const fallbackSummary = profile.overview.summary || profile.overview.recommendation;
 
-  return bucketEvents(events, mode, anchorDate).map((bucket, index) => {
-    const matchedEvents = events.filter((event) => eventInRange(event, bucket.start, bucket.end));
+  return bucketEvents(events, mode, anchorDate, now).map((bucket, index) => {
+    const matchedEvents = events.filter((event) => eventInRange(event, bucket.start, bucket.end, now));
     const noise = (hashText(`${profile.student.id}-${profile.course.id}-${bucket.key}`) % 21) - 10;
     const scale = mode === "year" ? 0.32 : 1.45;
     const activityIndex = matchedEvents.length
@@ -517,6 +556,38 @@ function summarizeTrend(points: BehaviorTrendPoint[]) {
   };
 }
 
+function smoothSvgPath(coords: Array<{ x: number; y: number }>) {
+  if (!coords.length) return "";
+  if (coords.length === 1) return `M ${coords[0].x.toFixed(1)} ${coords[0].y.toFixed(1)}`;
+  const path = [`M ${coords[0].x.toFixed(1)} ${coords[0].y.toFixed(1)}`];
+  for (let index = 0; index < coords.length - 1; index += 1) {
+    const current = coords[index];
+    const next = coords[index + 1];
+    const previous = coords[index - 1] ?? current;
+    const afterNext = coords[index + 2] ?? next;
+    const controlOne = {
+      x: current.x + (next.x - previous.x) / 6,
+      y: current.y + (next.y - previous.y) / 6,
+    };
+    const controlTwo = {
+      x: next.x - (afterNext.x - current.x) / 6,
+      y: next.y - (afterNext.y - current.y) / 6,
+    };
+    path.push(
+      `C ${controlOne.x.toFixed(1)} ${controlOne.y.toFixed(1)}, ${controlTwo.x.toFixed(1)} ${controlTwo.y.toFixed(1)}, ${next.x.toFixed(1)} ${next.y.toFixed(1)}`
+    );
+  }
+  return path.join(" ");
+}
+
+function smoothAreaPath(coords: Array<{ x: number; y: number }>, baseline: number) {
+  if (!coords.length) return "";
+  const line = smoothSvgPath(coords);
+  const first = coords[0];
+  const last = coords[coords.length - 1];
+  return `${line} L ${last.x.toFixed(1)} ${baseline.toFixed(1)} L ${first.x.toFixed(1)} ${baseline.toFixed(1)} Z`;
+}
+
 function BehaviorTrendChart({
   points,
   large = false,
@@ -553,13 +624,28 @@ function BehaviorTrendChart({
     };
   });
   const active = coords.find((item) => item.point.key === activeKey) ?? (coords.length ? coords[coords.length - 1] : undefined);
-  const activityPoints = coords.map((item) => `${item.x.toFixed(1)},${item.activityY.toFixed(1)}`).join(" ");
-  const qualityPoints = coords.map((item) => `${item.x.toFixed(1)},${item.qualityY.toFixed(1)}`).join(" ");
+  const activityCoords = coords.map((item) => ({ x: item.x, y: item.activityY }));
+  const qualityCoords = coords.map((item) => ({ x: item.x, y: item.qualityY }));
+  const activityPath = smoothSvgPath(activityCoords);
+  const qualityPath = smoothSvgPath(qualityCoords);
+  const activityAreaPath = smoothAreaPath(activityCoords, height - bottom);
   const zoneWidth = points.length > 1 ? plotWidth / (points.length - 1) : plotWidth;
+  const gradientId = useId().replace(/:/g, "");
 
   return (
     <div className={`behavior-chart-stage${large ? " large" : ""}`} onMouseLeave={() => setActiveKey(points.length ? points[points.length - 1].key : "")}>
       <svg className="line-chart behavior-trend-svg" viewBox={`0 0 ${width} ${height}`} aria-label="学习行为趋势图">
+        <defs>
+          <linearGradient id={`${gradientId}-activity-area`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#176cf5" stopOpacity="0.22" />
+            <stop offset="58%" stopColor="#37a2ff" stopOpacity="0.08" />
+            <stop offset="100%" stopColor="#176cf5" stopOpacity="0" />
+          </linearGradient>
+          <linearGradient id={`${gradientId}-activity-line`} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#1677ff" />
+            <stop offset="100%" stopColor="#26a0ff" />
+          </linearGradient>
+        </defs>
         <g stroke="#e7edf6" strokeWidth="1">
           {[120, 90, 60, 30].map((tick) => {
             const y = top + (1 - tick / maxValue) * plotHeight;
@@ -577,10 +663,11 @@ function BehaviorTrendChart({
               : null
           ))}
         </g>
-        <polyline points={activityPoints} fill="none" stroke="#176cf5" strokeWidth={large ? 4 : 3.5} strokeLinecap="round" strokeLinejoin="round" strokeDasharray="8 8" />
-        <polyline points={qualityPoints} fill="none" stroke="#20bd79" strokeWidth={large ? 4 : 3.5} strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4 7" />
+        <path d={activityAreaPath} fill={`url(#${gradientId}-activity-area)`} />
+        <path d={qualityPath} fill="none" stroke="#20bd79" strokeWidth={large ? 3.2 : 2.6} strokeLinecap="round" strokeLinejoin="round" opacity="0.85" />
+        <path d={activityPath} fill="none" stroke={`url(#${gradientId}-activity-line)`} strokeWidth={large ? 4.6 : 3.8} strokeLinecap="round" strokeLinejoin="round" />
         {active ? (
-          <line x1={active.x} y1={top - 5} x2={active.x} y2={height - bottom + 4} stroke="#b9c9e4" strokeWidth="1.3" strokeDasharray="5 6" />
+          <line x1={active.x} y1={top - 5} x2={active.x} y2={height - bottom + 4} stroke="#c2d2e8" strokeWidth="1.2" strokeDasharray="4 5" />
         ) : null}
         {coords.map((item) => (
           <g key={item.point.key}>
@@ -593,15 +680,13 @@ function BehaviorTrendChart({
               onMouseEnter={() => setActiveKey(item.point.key)}
               onFocus={() => setActiveKey(item.point.key)}
             />
-            <circle
-              cx={item.x}
-              cy={item.activityY}
-              r={large ? 8 + item.point.activityIndex / 34 : 4.5}
-              fill="rgba(23,108,245,.22)"
-              stroke="#176cf5"
-              strokeWidth={large ? 2.5 : 2}
-            />
-            <circle cx={item.x} cy={item.qualityY} r={large ? 6.5 : 4} fill="#20bd79" stroke="#ffffff" strokeWidth="2" />
+            {active?.point.key === item.point.key || large ? (
+              <>
+                <circle cx={item.x} cy={item.activityY} r={large ? 7.5 : 6} fill="#ffffff" stroke="#176cf5" strokeWidth={large ? 3 : 2.5} />
+                <circle cx={item.x} cy={item.activityY} r={large ? 3.2 : 2.6} fill="#176cf5" />
+                <circle cx={item.x} cy={item.qualityY} r={large ? 5.2 : 4.2} fill="#ffffff" stroke="#20bd79" strokeWidth="2.2" />
+              </>
+            ) : null}
           </g>
         ))}
       </svg>
@@ -629,11 +714,13 @@ function BehaviorTrendChart({
 
 function BehaviorTrendCard({ profile, title }: { profile: StudentProfile; title: string }) {
   const [mode, setMode] = useState<BehaviorTrendMode>("day");
-  const [anchorDate, setAnchorDate] = useState(() => parseProfileDate(profile.overview.updated_at));
+  const [anchorDate, setAnchorDate] = useState(() => clampBehaviorAnchor(parseProfileDate(profile.overview.updated_at), "day"));
   const [expanded, setExpanded] = useState(false);
+  const now = useMemo(() => new Date(), [profile.course.id, profile.overview.updated_at]);
+  const visibleAnchorDate = useMemo(() => clampBehaviorAnchor(anchorDate, mode, now), [anchorDate, mode, now]);
 
   useEffect(() => {
-    setAnchorDate(parseProfileDate(profile.overview.updated_at));
+    setAnchorDate(clampBehaviorAnchor(parseProfileDate(profile.overview.updated_at), mode, now));
   }, [profile.course.id, profile.overview.updated_at]);
 
   useEffect(() => {
@@ -645,9 +732,67 @@ function BehaviorTrendCard({ profile, title }: { profile: StudentProfile; title:
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [expanded]);
 
-  const points = useMemo(() => buildBehaviorTrend(profile, mode, anchorDate), [profile, mode, anchorDate]);
+  const points = useMemo(() => buildBehaviorTrend(profile, mode, visibleAnchorDate), [profile, mode, visibleAnchorDate]);
   const stats = useMemo(() => summarizeTrend(points), [points]);
   const modeCopy = behaviorModeCopy[mode];
+  const canGoNext = canShiftBehaviorNext(visibleAnchorDate, mode, now);
+
+  function shiftWindow(delta: number) {
+    setAnchorDate((date) => {
+      const baseDate = clampBehaviorAnchor(date, mode, now);
+      return clampBehaviorAnchor(shiftBehaviorDate(baseDate, mode, delta), mode, now);
+    });
+  }
+
+  function switchMode(nextMode: BehaviorTrendMode) {
+    setMode(nextMode);
+    setAnchorDate((date) => clampBehaviorAnchor(date, nextMode, now));
+  }
+
+  const expandedModal = (
+    <div className="behavior-modal-backdrop" role="presentation" onMouseDown={() => setExpanded(false)}>
+      <article className="behavior-modal" role="dialog" aria-modal="true" aria-label="放大学习行为趋势" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="behavior-modal-head">
+          <div>
+            <h2>{title}</h2>
+            <p>{formatWindowLabel(mode, visibleAnchorDate)} · {modeCopy.subtitle} · 悬浮气泡查看当天简介</p>
+          </div>
+          <div className="behavior-chart-controls">
+            <div className="behavior-window-control">
+              <button type="button" onClick={() => shiftWindow(-1)} title={modeCopy.previous}>
+                <ChevronLeft size={16} />
+              </button>
+              <strong>{formatWindowLabel(mode, visibleAnchorDate)}</strong>
+              <button type="button" onClick={() => shiftWindow(1)} disabled={!canGoNext} title={modeCopy.next}>
+                <ChevronRight size={16} />
+              </button>
+            </div>
+            <div className="behavior-mode-switch" role="group" aria-label="放大趋势粒度">
+              {behaviorModeOptions.map((item) => (
+                <button
+                  type="button"
+                  key={item.key}
+                  className={mode === item.key ? "active" : ""}
+                  onClick={() => switchMode(item.key)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            <button className="behavior-icon-button" type="button" onClick={() => setExpanded(false)} title="关闭放大图">
+              <X size={17} />
+            </button>
+          </div>
+        </div>
+        <BehaviorTrendChart points={points} large showTooltip />
+        <div className="behavior-modal-foot">
+          <span>事件数：{stats.eventCount}</span>
+          <span>任务完成率：{formatProfilePercent(stats.taskCompletionRate)}</span>
+          <span>下一步：{stats.peak?.nextAction}</span>
+        </div>
+      </article>
+    </div>
+  );
 
   return (
     <article className="profile-card chart-card behavior-trend-card">
@@ -655,11 +800,11 @@ function BehaviorTrendCard({ profile, title }: { profile: StudentProfile; title:
         <h2>{title} <span>（{modeCopy.subtitle}）</span></h2>
         <div className="behavior-chart-controls">
           <div className="behavior-window-control" aria-label="切换时间窗口">
-            <button type="button" onClick={() => setAnchorDate((date) => shiftBehaviorDate(date, mode, -1))} title={modeCopy.previous}>
+            <button type="button" onClick={() => shiftWindow(-1)} title={modeCopy.previous}>
               <ChevronLeft size={15} />
             </button>
-            <strong>{formatWindowLabel(mode, anchorDate)}</strong>
-            <button type="button" onClick={() => setAnchorDate((date) => shiftBehaviorDate(date, mode, 1))} title={modeCopy.next}>
+            <strong>{formatWindowLabel(mode, visibleAnchorDate)}</strong>
+            <button type="button" onClick={() => shiftWindow(1)} disabled={!canGoNext} title={modeCopy.next}>
               <ChevronRight size={15} />
             </button>
           </div>
@@ -669,7 +814,7 @@ function BehaviorTrendCard({ profile, title }: { profile: StudentProfile; title:
                 type="button"
                 key={item.key}
                 className={mode === item.key ? "active" : ""}
-                onClick={() => setMode(item.key)}
+                onClick={() => switchMode(item.key)}
               >
                 {item.label}
               </button>
@@ -691,50 +836,7 @@ function BehaviorTrendCard({ profile, title }: { profile: StudentProfile; title:
           <span className="behavior-source">真实事件桶<strong>{stats.sourceCount}/{points.length}</strong></span>
         </div>
       </div>
-      {expanded ? (
-        <div className="behavior-modal-backdrop" role="presentation" onMouseDown={() => setExpanded(false)}>
-          <article className="behavior-modal" role="dialog" aria-modal="true" aria-label="放大学习行为趋势" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="behavior-modal-head">
-              <div>
-                <h2>{title}</h2>
-                <p>{formatWindowLabel(mode, anchorDate)} · {modeCopy.subtitle} · 悬浮气泡查看当天简介</p>
-              </div>
-              <div className="behavior-chart-controls">
-                <div className="behavior-window-control">
-                  <button type="button" onClick={() => setAnchorDate((date) => shiftBehaviorDate(date, mode, -1))} title={modeCopy.previous}>
-                    <ChevronLeft size={16} />
-                  </button>
-                  <strong>{formatWindowLabel(mode, anchorDate)}</strong>
-                  <button type="button" onClick={() => setAnchorDate((date) => shiftBehaviorDate(date, mode, 1))} title={modeCopy.next}>
-                    <ChevronRight size={16} />
-                  </button>
-                </div>
-                <div className="behavior-mode-switch" role="group" aria-label="放大趋势粒度">
-                  {behaviorModeOptions.map((item) => (
-                    <button
-                      type="button"
-                      key={item.key}
-                      className={mode === item.key ? "active" : ""}
-                      onClick={() => setMode(item.key)}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-                <button className="behavior-icon-button" type="button" onClick={() => setExpanded(false)} title="关闭放大图">
-                  <X size={17} />
-                </button>
-              </div>
-            </div>
-            <BehaviorTrendChart points={points} large showTooltip />
-            <div className="behavior-modal-foot">
-              <span>事件数：{stats.eventCount}</span>
-              <span>任务完成率：{formatProfilePercent(stats.taskCompletionRate)}</span>
-              <span>下一步：{stats.peak?.nextAction}</span>
-            </div>
-          </article>
-        </div>
-      ) : null}
+      {expanded && typeof document !== "undefined" ? createPortal(expandedModal, document.body) : null}
     </article>
   );
 }

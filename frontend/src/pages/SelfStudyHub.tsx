@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Bot, BookOpen, ChartNoAxesColumnIncreasing, ChevronsLeft, ChevronsRight, Database, Flame, FolderOpen, Network, Route as RouteIcon } from "lucide-react";
+import { ArrowLeft, Bot, BookOpen, ChartNoAxesColumnIncreasing, ChevronsLeft, ChevronsRight, Database, FolderOpen, Network, Route as RouteIcon } from "lucide-react";
 import StudentRouteBreadcrumb from "../components/StudentRouteBreadcrumb";
+import StudentBehaviorPopover from "../components/StudentBehaviorPopover";
 import SelfStudy from "./SelfStudy";
 import LearningProfile from "./LearningProfile";
 import AiTutor from "./AiTutor";
@@ -70,13 +71,7 @@ function SelfStudyShell({ children }: { children: ReactNode }) {
             </NavLink>
           ))}
         </nav>
-        <div className="student-window-streak">
-          <span><Flame size={17} /></span>
-          <div>
-            <strong>连续学习 7 天</strong>
-            <small>很棒哦，保持学习节奏！</small>
-          </div>
-        </div>
+        <StudentBehaviorPopover />
       </aside>
       <button
         className="student-window-rail-toggle"

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import {
   Archive,
@@ -16,6 +17,7 @@ import {
   FileText,
   Folder,
   FolderArchive,
+  FolderPlus,
   Github,
   GraduationCap,
   Grid2X2,
@@ -32,13 +34,13 @@ import {
   Waypoints,
   Wrench
 } from "lucide-react";
-import { api, type GeneratedResource } from "../api";
+import { api, type GeneratedResource, type StudentResourceFolder } from "../api";
 import { authHeaders } from "../authSession";
 import GeneratedResourcePreviewModal from "../components/GeneratedResourcePreviewModal";
 import { StudentInlineNotice, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
 
 type ResourceType = "官方文档" | "外部文章" | "视频教程" | "工具网站" | "知识卡片" | "AI 生成";
-type ResourceFolder = "全部收藏" | "课程资料" | "外部文章" | "视频教程" | "工具网站" | "知识卡片" | "已归档";
+type ResourceFolder = string;
 type ResourceSource = "全部" | "官方" | "社区" | "视频平台" | "AI 生成";
 type SortMode = "收藏时间" | "标题";
 type SortOrder = "降序" | "升序";
@@ -48,7 +50,7 @@ type ExternalResourceItem = {
   kind: "external";
   id: string;
   type: Exclude<ResourceType, "AI 生成">;
-  folder: Exclude<ResourceFolder, "全部收藏">;
+  folder: ResourceFolder;
   title: string;
   source: Exclude<ResourceSource, "全部" | "AI 生成">;
   domain: string;
@@ -63,7 +65,7 @@ type GeneratedResourceItem = {
   kind: "generated";
   id: string;
   type: "AI 生成";
-  folder: "知识卡片";
+  folder: ResourceFolder;
   title: string;
   source: "AI 生成";
   domain: string;
@@ -75,7 +77,7 @@ type GeneratedResourceItem = {
 
 type ResourceListItem = ExternalResourceItem | GeneratedResourceItem;
 
-const folderOptions: ResourceFolder[] = ["全部收藏", "课程资料", "外部文章", "视频教程", "工具网站", "知识卡片", "已归档"];
+const defaultFolderOptions: ResourceFolder[] = ["全部收藏", "课程资料", "外部文章", "视频教程", "工具网站", "知识卡片", "已归档"];
 const resourceTypeOptions: Array<"全部" | ResourceType> = ["全部", "官方文档", "外部文章", "视频教程", "工具网站", "知识卡片", "AI 生成"];
 const sourceOptions: ResourceSource[] = ["全部", "官方", "社区", "视频平台", "AI 生成"];
 const sortModeOptions: SortMode[] = ["收藏时间", "标题"];
@@ -284,6 +286,8 @@ export default function StudentResourceCenter() {
   const [previewResource, setPreviewResource] = useState<GeneratedResource | null>(null);
   const [previewExternal, setPreviewExternal] = useState<ExternalResourceItem | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [customFolders, setCustomFolders] = useState<StudentResourceFolder[]>([]);
+  const [folderBusy, setFolderBusy] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -303,12 +307,37 @@ export default function StudentResourceCenter() {
     };
   }, [reloadKey]);
 
+  useEffect(() => {
+    let alive = true;
+    api.listStudentResourceFolders()
+      .then((result) => {
+        if (alive) setCustomFolders(Array.isArray(result.items) ? result.items : []);
+      })
+      .catch((err) => {
+        if (!alive) return;
+        setActionNotice(studentErrorMessage(err, "文件夹接口暂时不可用，当前先展示系统内置分类。"));
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const generatedItems = useMemo(() => generatedResources.map(generatedToResource), [generatedResources]);
+
+  const folderOptions = useMemo<ResourceFolder[]>(() => {
+    const folders = [...defaultFolderOptions];
+    for (const folder of customFolders) {
+      if (folder.status === "ACTIVE" && folder.name && !folders.includes(folder.name)) {
+        folders.push(folder.name);
+      }
+    }
+    return folders;
+  }, [customFolders]);
 
   const allItems = useMemo<ResourceListItem[]>(() => {
     const externalItems = externalResources.map((item) => ({
       ...item,
-      folder: (folderOverrides[item.id] ?? item.folder) as ExternalResourceItem["folder"]
+      folder: folderOverrides[item.id] ?? item.folder
     }));
     return [...generatedItems, ...externalItems];
   }, [folderOverrides, generatedItems]);
@@ -322,7 +351,7 @@ export default function StudentResourceCenter() {
       folder,
       count: folder === "全部收藏" ? allItems.length : allItems.filter((item) => item.folder === folder).length
     }));
-  }, [allItems]);
+  }, [allItems, folderOptions]);
 
   const tagCounts = useMemo(() => {
     return allTags.slice(1, 7).map((item) => ({
@@ -379,6 +408,30 @@ export default function StudentResourceCenter() {
     setQuery("");
     setCurrentPage(1);
     setActionNotice("筛选条件已清空。");
+  }
+
+  async function createFolder() {
+    const name = window.prompt("请输入文件夹名称", "自学资料");
+    if (name === null) return;
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setActionNotice("文件夹名称不能为空。");
+      return;
+    }
+    setFolderBusy(true);
+    try {
+      const folder = await api.createStudentResourceFolder(trimmedName);
+      setCustomFolders((current) => current.some((item) => item.id === folder.id) ? current : [...current, folder]);
+      const refreshed = await api.listStudentResourceFolders();
+      const nextFolders = Array.isArray(refreshed.items) ? refreshed.items : [];
+      setCustomFolders(nextFolders.some((item) => item.id === folder.id) ? nextFolders : [...nextFolders, folder]);
+      setActiveFolder(folder.name);
+      setActionNotice(`已添加文件夹“${folder.name}”。`);
+    } catch (err) {
+      setActionNotice(studentErrorMessage(err, "添加文件夹失败，请稍后再试。"));
+    } finally {
+      setFolderBusy(false);
+    }
   }
 
   function goToPage(page: number) {
@@ -487,8 +540,8 @@ export default function StudentResourceCenter() {
             <header>
               <h2>我的资源</h2>
               <div>
-                <button type="button" aria-label="新增资源" onClick={() => setActionNotice("新增外部资源接口暂未接入，入口已预留。")}>
-                  <Folder size={16} />
+                <button type="button" aria-label="添加文件夹" onClick={createFolder} disabled={folderBusy}>
+                  <FolderPlus size={16} />
                 </button>
                 <button type="button" aria-label="分类设置" onClick={() => setActionNotice("分类设置接口暂未接入，入口已预留。")}>
                   <Settings2 size={16} />
@@ -519,7 +572,7 @@ export default function StudentResourceCenter() {
               </button>
             </header>
             {tagCounts.map((item) => (
-              <button key={item.label} type="button" className={tag === item.label ? "active" : ""} onClick={() => setTag(item.label)}>
+              <button key={item.label} type="button" className={tag === item.label ? "active" : ""} onClick={() => setTag((current) => current === item.label ? "全部" : item.label)}>
                 <span>{item.label}</span>
                 <b>{item.count}</b>
               </button>
@@ -683,7 +736,7 @@ export default function StudentResourceCenter() {
         </main>
       </div>
 
-      {previewExternal ? (
+      {previewExternal ? createPortal(
         <div className="student-resource-preview" role="dialog" aria-modal="true" aria-label="外部资源预览">
           <button type="button" className="student-resource-preview-mask" aria-label="关闭预览" onClick={() => setPreviewExternal(null)} />
           <section>
@@ -707,7 +760,8 @@ export default function StudentResourceCenter() {
               </button>
             </footer>
           </section>
-        </div>
+        </div>,
+        document.body
       ) : null}
 
       <GeneratedResourcePreviewModal

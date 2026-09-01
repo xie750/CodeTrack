@@ -69,6 +69,7 @@ type AiChatTurn = {
 
 type AiTutorRouteState = {
   initialMessage?: string;
+  initialResourceType?: GeneratedResourceType;
   focusKnowledgePoint?: string;
   fromCourseId?: string;
 } | null;
@@ -522,15 +523,16 @@ export default function AiTutor() {
   const [activeResourceType, setActiveResourceType] = useState<GeneratedResourceType | null>(null);
   const [previewResource, setPreviewResource] = useState<GeneratedResource | null>(null);
   const hydratedRef = useRef(false);
-  const routeDraftHydratedRef = useRef(false);
+  const routeDraftHydratedKeyRef = useRef<string | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
+  const routeState = location.state as AiTutorRouteState;
 
   const weakestPoint = useMemo(() => {
     return profile?.knowledge_states.find((item) => item.state === "WEAK") ?? profile?.knowledge_states[0];
   }, [profile]);
 
   const activePoint = weakestPoint?.knowledge_point ?? "边界测试";
-  const courseId = profile?.course.id ?? context?.courses[0]?.course_id;
+  const courseId = routeState?.fromCourseId ?? profile?.course.id ?? context?.courses[0]?.course_id;
   const learningScopeLabel = context?.courses.length
     ? `${selfStudyKnowledgeScopeLabel} · 已接入 ${context.courses.length} 门学习上下文`
     : selfStudyKnowledgeScopeLabel;
@@ -560,10 +562,13 @@ export default function AiTutor() {
     setLoadingContext(true);
     setError(null);
     setErrorDetail(null);
+    const requestedCourseId = routeState?.fromCourseId;
     api.getLearningContext().then((data) => {
       if (!alive) return;
       setContext(data);
-      const nextCourseId = data.courses[0]?.course_id;
+      const nextCourseId = requestedCourseId && data.courses.some((course) => course.course_id === requestedCourseId)
+        ? requestedCourseId
+        : data.courses[0]?.course_id;
       if (!nextCourseId) {
         setLoadingContext(false);
         return;
@@ -604,13 +609,15 @@ export default function AiTutor() {
   }, [turns]);
 
   useEffect(() => {
-    if (routeDraftHydratedRef.current) return;
-    const routeState = location.state as AiTutorRouteState;
     const initialMessage = routeState?.initialMessage?.trim();
-    if (!initialMessage) return;
-    routeDraftHydratedRef.current = true;
-    setDraft(initialMessage);
-  }, [location.state]);
+    const initialResourceType = routeState?.initialResourceType;
+    const hydrationKey = `${location.key}:${initialMessage ?? ""}:${initialResourceType ?? ""}`;
+    if (routeDraftHydratedKeyRef.current === hydrationKey) return;
+    if (!initialMessage && !initialResourceType) return;
+    routeDraftHydratedKeyRef.current = hydrationKey;
+    if (initialMessage) setDraft(initialMessage);
+    if (initialResourceType) setActiveResourceType(initialResourceType);
+  }, [location.key, routeState]);
 
   useEffect(() => {
     if (!courseId || hydratedRef.current) return;

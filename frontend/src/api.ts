@@ -652,6 +652,16 @@ export type GeneratedResource = {
   saved_at: string | null;
 };
 
+export type StudentResourceFolder = {
+  id: string;
+  student_id: string;
+  name: string;
+  sort_order: number;
+  status: string;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
 export type GenerateResourceResponse = {
   resource: GeneratedResource;
   session: StudentAiChatSession;
@@ -1337,6 +1347,14 @@ export const api = {
     const suffix = params.toString() ? `?${params.toString()}` : "";
     return request<{ items: GeneratedResource[] }>(`/api/v1/student/resources/generated${suffix}`);
   },
+  listStudentResourceFolders: () =>
+    request<{ items: StudentResourceFolder[] }>("/api/v1/student/resources/folders", { cache: "no-store" }),
+  createStudentResourceFolder: (name: string) =>
+    request<StudentResourceFolder>("/api/v1/student/resources/folders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name })
+    }),
   getGeneratedPracticeWorkspace: (resourceId: string) =>
     request<GeneratedPracticeWorkspace>(`/api/v1/student/resources/${encodeURIComponent(resourceId)}/practice`),
   submitGeneratedPractice: async (resourceId: string, answers: Array<{ question_id: string; selected_option_ids: string[] }>) => {

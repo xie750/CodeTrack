@@ -26,6 +26,7 @@ from backend.app.models import (
     Recommendation,
     StudentClassMembership,
     StudentKnowledgeGraph,
+    StudentResourceFolder,
     StudentTaskProgress,
     Task,
     TaskAssignment,
@@ -188,6 +189,10 @@ def ensure_practice_project_tables(db: Session) -> None:
     db.commit()
 
 
+def ensure_student_resource_folder_table(db: Session) -> None:
+    StudentResourceFolder.__table__.create(bind=db.bind, checkfirst=True)
+
+
 def ensure_rag_profile_columns(db: Session) -> None:
     """补齐 RAG 文档策略字段，兜住本地开发库未跑 Alembic 的情况。"""
     inspector = inspect(db.bind)
@@ -215,6 +220,7 @@ def seed_demo_data(db: Session) -> None:
     ensure_knowledge_source_columns(db)
     ensure_student_knowledge_graph_table(db)
     ensure_practice_project_tables(db)
+    ensure_student_resource_folder_table(db)
     ensure_rag_profile_columns(db)
     users = {
         "user_teacher_001": {

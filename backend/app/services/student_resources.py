@@ -27,6 +27,7 @@ from backend.app.models import (
     LearnerProfileSnapshot,
     Recommendation,
     StudentGeneratedResource,
+    StudentResourceFolder,
     User,
 )
 from backend.app.models.entities import utc_now
@@ -76,6 +77,16 @@ RESOURCE_TYPE_LABELS = {
     "PRACTICE_SET": "练习题",
     "KNOWLEDGE_CARD": "知识卡片",
     "PODCAST_SCRIPT": "播客稿",
+}
+
+DEFAULT_RESOURCE_FOLDER_NAMES = {
+    "全部收藏",
+    "课程资料",
+    "外部文章",
+    "视频教程",
+    "工具网站",
+    "知识卡片",
+    "已归档",
 }
 
 
@@ -2072,6 +2083,69 @@ def _serialize_resource(resource: StudentGeneratedResource) -> dict[str, Any]:
 
 def serialize_generated_resource(resource: StudentGeneratedResource) -> dict[str, Any]:
     return _serialize_resource(resource)
+
+
+def serialize_student_resource_folder(folder: StudentResourceFolder) -> dict[str, Any]:
+    return {
+        "id": folder.id,
+        "student_id": folder.student_id,
+        "name": folder.name,
+        "sort_order": folder.sort_order,
+        "status": folder.status,
+        "created_at": iso(folder.created_at),
+        "updated_at": iso(folder.updated_at),
+    }
+
+
+def list_student_resource_folders(db: Session, *, student_id: str) -> list[dict[str, Any]]:
+    folders = list(
+        db.scalars(
+            select(StudentResourceFolder)
+            .where(
+                StudentResourceFolder.student_id == student_id,
+                StudentResourceFolder.status == "ACTIVE",
+            )
+            .order_by(StudentResourceFolder.sort_order.asc(), StudentResourceFolder.created_at.asc())
+        ).all()
+    )
+    return [serialize_student_resource_folder(folder) for folder in folders]
+
+
+def create_student_resource_folder(db: Session, *, student_id: str, name: str) -> dict[str, Any]:
+    normalized_name = re.sub(r"\s+", " ", name).strip()
+    if not normalized_name:
+        raise ApiError(422, "RESOURCE_FOLDER_NAME_EMPTY", "文件夹名称不能为空。")
+    if len(normalized_name) > 40:
+        raise ApiError(422, "RESOURCE_FOLDER_NAME_TOO_LONG", "文件夹名称不能超过 40 个字符。")
+    if normalized_name in DEFAULT_RESOURCE_FOLDER_NAMES:
+        raise ApiError(409, "RESOURCE_FOLDER_RESERVED", "该名称是系统内置分类，请换一个文件夹名称。")
+    existing = db.scalar(
+        select(StudentResourceFolder).where(
+            StudentResourceFolder.student_id == student_id,
+            StudentResourceFolder.name == normalized_name,
+        )
+    )
+    if existing is not None:
+        raise ApiError(409, "RESOURCE_FOLDER_EXISTS", "同名文件夹已存在。")
+    max_order = db.scalar(
+        select(StudentResourceFolder.sort_order)
+        .where(StudentResourceFolder.student_id == student_id)
+        .order_by(StudentResourceFolder.sort_order.desc())
+        .limit(1)
+    )
+    now = utc_now()
+    folder = StudentResourceFolder(
+        id=_new_id("res_folder"),
+        student_id=student_id,
+        name=normalized_name,
+        sort_order=(max_order or 0) + 1,
+        status="ACTIVE",
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(folder)
+    db.flush()
+    return serialize_student_resource_folder(folder)
 
 
 def _create_run_node(db: Session, state: PptResourceState) -> PptResourceState:
