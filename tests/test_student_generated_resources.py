@@ -60,6 +60,34 @@ def test_student_can_generate_save_and_download_ppt_resource(monkeypatch):
         assert len(downloaded.content) > 1000
 
 
+def test_student_can_create_resource_folder():
+    with TestClient(app) as client:
+        before = client.get("/api/v1/student/resources/folders", headers=STUDENT)
+        assert before.status_code == 200
+
+        created = client.post(
+            "/api/v1/student/resources/folders",
+            headers=STUDENT,
+            json={"name": "自学资料夹"},
+        )
+        assert created.status_code == 201
+        folder = created.json()["data"]
+        assert folder["name"] == "自学资料夹"
+        assert folder["student_id"] == "user_student_001"
+
+        listing = client.get("/api/v1/student/resources/folders", headers=STUDENT)
+        assert listing.status_code == 200
+        assert "自学资料夹" in {item["name"] for item in listing.json()["data"]["items"]}
+
+        reserved = client.post(
+            "/api/v1/student/resources/folders",
+            headers=STUDENT,
+            json={"name": "课程资料"},
+        )
+        assert reserved.status_code == 409
+        assert reserved.json()["error"]["code"] == "RESOURCE_FOLDER_RESERVED"
+
+
 def test_student_profile_and_generated_resources_are_scoped_to_current_user(monkeypatch):
     monkeypatch.setenv("CODETRACK_MODEL_API_KEY", "")
     monkeypatch.setenv("CODETRACK_MODEL_NAME", "")

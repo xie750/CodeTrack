@@ -30,6 +30,12 @@ type AICompanionProps = {
   routeGroup: string;
 };
 
+type AICompanionOpenEventDetail = {
+  mode?: CompanionMode;
+  draft?: string;
+  reset?: boolean;
+};
+
 type CompanionFrame = Position & {
   width: number;
   height: number;
@@ -282,6 +288,26 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
       messageListRef.current?.scrollTo({ top: messageListRef.current.scrollHeight, behavior: "smooth" });
     });
   }
+
+  useEffect(() => {
+    function handleCompanionOpen(event: Event) {
+      const detail = (event as CustomEvent<AICompanionOpenEventDetail>).detail ?? {};
+      if (detail.reset) {
+        resetConversation();
+      }
+      if (typeof detail.draft === "string") {
+        setInput(detail.draft);
+      }
+      if (detail.mode === "chat") {
+        openChat();
+        return;
+      }
+      openExpanded();
+    }
+
+    window.addEventListener("codetrack:ai-companion-open", handleCompanionOpen);
+    return () => window.removeEventListener("codetrack:ai-companion-open", handleCompanionOpen);
+  }, [chatSize, frame, routeGroup]);
 
   function minimize() {
     startMorph("floating", LAUNCHER_SIZE);

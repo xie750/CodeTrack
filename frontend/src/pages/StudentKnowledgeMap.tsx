@@ -27,7 +27,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { api, apiCache, StudentKnowledgeGraph, StudentKnowledgeGraphEdge, StudentKnowledgeGraphNode, type StudentProfile } from "../api";
+import { api, apiCache, StudentKnowledgeGraph, StudentKnowledgeGraphEdge, StudentKnowledgeGraphNode, type GeneratedResourceType, type StudentProfile } from "../api";
 
 type KnowledgeMapProps = {
   scope?: "course" | "self-study";
@@ -68,6 +68,8 @@ type PendingRelation = {
   type: RelationType;
   sourceNodeId: string;
 };
+
+type KnowledgeGraphAiAction = "practice" | "document" | "question";
 
 const selfStudyGraphStorageKey = "codetrack.selfStudyKnowledgeGraph.v1";
 
@@ -999,6 +1001,97 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
     navigate("/self-study", { state: { knowledgePoint: activeNode?.label, fromCourseId: courseId } });
   }
 
+  function relationLabels(node: StudentKnowledgeGraphNode, type: RelationType) {
+    if (!graph) return [];
+    if (type === "前驱") {
+      return graph.edges
+        .filter((edge) => edge.target === node.id && edge.type === "前驱")
+        .map((edge) => nodesById.get(edge.source)?.label ?? edge.source)
+        .slice(0, 5);
+    }
+    if (type === "后继") {
+      return graph.edges
+        .filter((edge) => edge.source === node.id && edge.type === "后继")
+        .map((edge) => nodesById.get(edge.target)?.label ?? edge.target)
+        .slice(0, 5);
+    }
+    return graph.edges
+      .filter((edge) => edge.type === "相关" && (edge.source === node.id || edge.target === node.id))
+      .map((edge) => nodesById.get(edge.source === node.id ? edge.target : edge.source)?.label ?? (edge.source === node.id ? edge.target : edge.source))
+      .slice(0, 5);
+  }
+
+  function nodeMasterySummary(node: StudentKnowledgeGraphNode) {
+    const state = studentProfile?.knowledge_states.find((item) => item.knowledge_point === node.label) ?? null;
+    if (!state) {
+      return "画像中暂未匹配到该节点的真实学习证据，请按“诊断型低起点”处理，先确认定义、边界和前驱关系。";
+    }
+    const score = clampKnownMastery(state.mastery_score);
+    return `画像掌握度 ${score}%（${masteryLabel(score)}，状态 ${state.state}），证据 ${state.evidence_count} 条，最近证据：${state.last_evidence || "暂无"}。`;
+  }
+
+  function relatedErrorSummary(node: StudentKnowledgeGraphNode) {
+    const errors = studentProfile?.frequent_errors
+      .filter((item) => item.related_knowledge_points.includes(node.label))
+      .map((item) => `${item.label} ${item.count} 次，严重度 ${item.severity}`)
+      .slice(0, 3) ?? [];
+    return errors.length ? errors.join("；") : "暂无直接关联错因，请重点检查定义、应用场景和相邻节点迁移。";
+  }
+
+  function buildNodeAiPrompt(action: KnowledgeGraphAiAction, node: StudentKnowledgeGraphNode) {
+    const prerequisites = relationLabels(node, "前驱");
+    const successors = relationLabels(node, "后继");
+    const related = relationLabels(node, "相关");
+    const difficulty = clampDifficulty(node.difficulty);
+    const diagnosis = diagnosesByNode[node.id]?.status === "ready" ? diagnosesByNode[node.id] : null;
+    const sharedContext = [
+      `当前页面：${isSelfStudy ? "自学知识图谱" : "课程知识图谱"}`,
+      `课程/范围：${displayCourseName}`,
+      `当前节点：${node.label}`,
+      `节点类型：${node.type}；难度：${difficulty}/5`,
+      `节点定义：${node.description.trim() || "暂无完整定义，请先基于课程知识库补齐准确解释。"}`,
+      `前驱节点：${prerequisites.length ? prerequisites.join("、") : "暂无显式前驱"}`,
+      `后继节点：${successors.length ? successors.join("、") : "暂无显式后继"}`,
+      `相关节点：${related.length ? related.join("、") : "暂无"}`,
+      `学习画像：${nodeMasterySummary(node)}`,
+      `关联错因：${relatedErrorSummary(node)}`,
+      diagnosis ? `当前诊断：${diagnosis.summary} 推荐练习：${diagnosis.recommendedPractice}` : "当前诊断：尚未生成或未命中该节点，请根据画像和图谱结构自行判断难度梯度。",
+    ].join("\n");
+
+    if (action === "practice") {
+      return `${sharedContext}\n\n请帮我生成一组“${node.label}”相关练习题，要求：\n1. 题目难度根据画像掌握度自适应：薄弱或无证据时先出基础诊断题，掌握稳定时增加迁移应用题。\n2. 共 5 题，包含 2 道概念判断/选择、2 道应用或代码阅读、1 道综合追问。\n3. 每题标注考查目标、关联前驱/后继、参考答案和解析。\n4. 解析要指出容易混淆的点，并说明这道题如何帮助更新学习画像。\n5. 不要泛泛而谈，题干必须围绕当前节点和相邻节点展开。`;
+    }
+
+    if (action === "document") {
+      return `${sharedContext}\n\n请生成一份“${node.label}”学习讲解文档，要求：\n1. 文档结构包含：学习目标、核心定义、前驱知识补齐、典型例子、与后继节点的连接、常见误区、自测清单和下一步学习建议。\n2. 根据画像掌握度调整讲解深度：薄弱或无证据时多用直观例子和步骤拆解，掌握稳定时增加迁移场景和对比分析。\n3. 明确引用课程知识库或当前图谱中的关系信息，不要编造来源。\n4. 输出要适合保存到资源中心，语言清晰、分段明确，可直接作为复习文档草稿。\n5. 最后给出 3 个可验证掌握度的小问题。`;
+    }
+
+    return `${sharedContext}\n\n我想围绕“${node.label}”向 AI 助手提问。请先帮我检查：我应该优先补齐哪些前驱概念？这个节点最容易和哪些概念混淆？如果要在 10 分钟内复习它，应该按什么顺序学习？回答请结合我的学习画像、节点掌握程度和图谱上下文。`;
+  }
+
+  function openAiTutorWithNodeResource(resourceType: GeneratedResourceType) {
+    if (!activeNode) return;
+    const action: KnowledgeGraphAiAction = resourceType === "PRACTICE_SET" ? "practice" : "document";
+    navigate("/self-study/ai", {
+      state: {
+        initialMessage: buildNodeAiPrompt(action, activeNode),
+        initialResourceType: resourceType,
+        focusKnowledgePoint: activeNode.label,
+        fromCourseId: courseId || graph?.course_id,
+      },
+    });
+  }
+
+  function openCompanionWithNodeQuestion() {
+    if (!activeNode || typeof window === "undefined") return;
+    window.dispatchEvent(new CustomEvent("codetrack:ai-companion-open", {
+      detail: {
+        mode: "chat",
+        draft: buildNodeAiPrompt("question", activeNode),
+      },
+    }));
+  }
+
   function openCreateNode() {
     if (!isSelfStudy) return;
     setGraph((current) => {
@@ -1582,7 +1675,7 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
                               <strong>生成练习</strong>
                               <p>围绕当前活动节点生成巩固题和追问。</p>
                             </div>
-                            <button type="button" onClick={actionToSelfStudy}>开始</button>
+                            <button type="button" onClick={() => openAiTutorWithNodeResource("PRACTICE_SET")}>开始</button>
                           </article>
                           <article>
                             <span><Sparkles size={16} /></span>
@@ -1590,7 +1683,7 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
                               <strong>生成讲解</strong>
                               <p>把节点定义、前驱和后继整合成学习材料。</p>
                             </div>
-                            <button type="button" onClick={actionToSelfStudy}>生成</button>
+                            <button type="button" onClick={() => openAiTutorWithNodeResource("DOCUMENT")}>生成</button>
                           </article>
                           <article>
                             <span><MessageSquareText size={16} /></span>
@@ -1598,7 +1691,7 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
                               <strong>向 AI 提问</strong>
                               <p>带着当前节点上下文进入助学问答。</p>
                             </div>
-                            <button type="button" onClick={actionToSelfStudy}>提问</button>
+                            <button type="button" onClick={openCompanionWithNodeQuestion}>提问</button>
                           </article>
                         </div>
                       ) : null}
@@ -1642,7 +1735,7 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
                               <section className="student-graph-diagnosis-practice">
                                 <strong>推荐练习</strong>
                                 <p>{activeDiagnosis.recommendedPractice}</p>
-                                <button type="button" onClick={actionToSelfStudy}>
+                                <button type="button" onClick={() => openAiTutorWithNodeResource("PRACTICE_SET")}>
                                   <Target size={15} />
                                   去生成练习
                                 </button>

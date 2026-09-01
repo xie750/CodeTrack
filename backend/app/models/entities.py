@@ -1065,6 +1065,24 @@ class StudentGeneratedResource(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
+class StudentResourceFolder(Base):
+    __tablename__ = "student_resource_folders"
+    __table_args__ = (
+        UniqueConstraint("student_id", "name", name="uq_student_resource_folder_name"),
+        Index("ix_student_resource_folders_student_status", "student_id", "status", "sort_order"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    student_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(80), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="ACTIVE")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    student: Mapped[User] = relationship()
+
+
 class PracticeProject(Base):
     __tablename__ = "practice_projects"
     __table_args__ = (

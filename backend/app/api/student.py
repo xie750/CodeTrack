@@ -50,11 +50,13 @@ from backend.app.services.practice_projects import (
     start_first_practice_project,
 )
 from backend.app.services.student_resources import (
+    create_student_resource_folder,
     ensure_resource_preview,
     generate_learning_resource,
     generate_ppt_resource,
     get_generated_resource,
     practice_workspace_payload,
+    list_student_resource_folders,
     list_saved_generated_resources,
     ppt_renderer_config_payload,
     record_generated_podcast_listened,
@@ -109,6 +111,10 @@ class StudentResourceGenerateRequest(BaseModel):
     resource_type: str = Field(min_length=1, max_length=40)
     course_id: str | None = None
     session_id: str | None = None
+
+
+class StudentResourceFolderCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=40)
 
 
 class StudentPodcastListenedRequest(BaseModel):
@@ -663,6 +669,29 @@ async def student_generate_resource(
 def student_ppt_renderers(user: User = Depends(current_user)):
     require_role(user, "STUDENT")
     return ok(ppt_renderer_config_payload())
+
+
+@router.get("/resources/folders")
+def student_resource_folders(
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    require_active_class(db, user)
+    return ok({"items": list_student_resource_folders(db, student_id=user.id)})
+
+
+@router.post("/resources/folders", status_code=status.HTTP_201_CREATED)
+def student_create_resource_folder(
+    payload: StudentResourceFolderCreateRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    require_active_class(db, user)
+    folder = create_student_resource_folder(db, student_id=user.id, name=payload.name)
+    db.commit()
+    return ok(folder)
 
 
 @router.post("/resources/{resource_id}/save")

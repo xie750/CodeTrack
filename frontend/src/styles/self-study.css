@@ -627,6 +627,7 @@
 
 .student-window-streak {
   margin-top: auto;
+  width: 100%;
   min-width: 0;
   min-height: 64px;
   display: flex;
@@ -637,6 +638,22 @@
   border-radius: 8px;
   background:
     linear-gradient(135deg, #f0fffb 0%, #f3fbff 100%);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+  appearance: none;
+}
+
+.student-window-streak:hover,
+.student-window-streak.is-active {
+  border-color: #9de6d5;
+  box-shadow: 0 14px 28px rgba(13, 115, 101, 0.12);
+  transform: translateY(-1px);
+}
+
+.student-window-streak:focus-visible {
+  outline: 3px solid rgba(47, 125, 246, 0.22);
+  outline-offset: 3px;
 }
 
 .student-window-streak span {
@@ -675,6 +692,325 @@
   color: #4f8d83;
   font-size: 11px;
   line-height: 1.35;
+  font-weight: 800;
+}
+
+.student-behavior-popover {
+  position: fixed;
+  z-index: 1200;
+  width: min(360px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid #dbe7f4;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 22px 60px rgba(31, 61, 102, 0.2);
+  --behavior-popover-enter-x: -24px;
+  --behavior-popover-enter-y: 10px;
+  transform-origin: left calc(100% - 58px);
+  animation: student-behavior-popover-in 220ms cubic-bezier(0.18, 0.92, 0.22, 1.12) both;
+  will-change: transform, opacity, filter;
+}
+
+.student-behavior-popover.is-closing {
+  pointer-events: none;
+  animation: student-behavior-popover-out 170ms cubic-bezier(0.48, 0, 0.75, 0.28) both;
+}
+
+.student-behavior-popover[data-placement="left"] {
+  --behavior-popover-enter-x: 24px;
+  transform-origin: right calc(100% - 58px);
+}
+
+.student-behavior-popover[data-placement="bottom"] {
+  --behavior-popover-enter-x: -8px;
+  --behavior-popover-enter-y: -20px;
+  transform-origin: 36px top;
+}
+
+@keyframes student-behavior-popover-in {
+  0% {
+    opacity: 0;
+    filter: blur(2px);
+    transform: translate3d(var(--behavior-popover-enter-x), var(--behavior-popover-enter-y), 0) scale(0.82);
+  }
+  72% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translate3d(0, 0, 0) scale(1.018);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes student-behavior-popover-out {
+  0% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    filter: blur(2px);
+    transform: translate3d(var(--behavior-popover-enter-x), var(--behavior-popover-enter-y), 0) scale(0.78);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .student-behavior-popover,
+  .student-behavior-popover.is-closing {
+    animation-duration: 1ms;
+  }
+}
+
+.student-behavior-popover::before {
+  content: "";
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 1px solid #dbe7f4;
+  border-top: 0;
+  border-right: 0;
+  background: #ffffff;
+  transform: rotate(45deg);
+}
+
+.student-behavior-popover[data-placement="right"]::before {
+  left: -7px;
+  bottom: 52px;
+}
+
+.student-behavior-popover[data-placement="left"]::before {
+  right: -7px;
+  bottom: 52px;
+  border: 1px solid #dbe7f4;
+  border-bottom: 0;
+  border-left: 0;
+}
+
+.student-behavior-popover[data-placement="bottom"]::before {
+  left: 24px;
+  top: -7px;
+  border: 1px solid #dbe7f4;
+  border-right: 0;
+  border-bottom: 0;
+}
+
+.student-behavior-popover header,
+.student-behavior-popover header > div,
+.student-behavior-popover header span,
+.student-behavior-popover header button,
+.student-behavior-summary,
+.student-behavior-summary span,
+.student-behavior-events article {
+  display: flex;
+  align-items: center;
+}
+
+.student-behavior-popover header {
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.student-behavior-popover header > div {
+  min-width: 0;
+  gap: 8px;
+}
+
+.student-behavior-popover header span {
+  width: 28px;
+  height: 28px;
+  justify-content: center;
+  border-radius: 8px;
+  color: #176cf5;
+  background: #eef5ff;
+}
+
+.student-behavior-popover header strong {
+  color: #17243b;
+  font-size: 14px;
+  line-height: 1.35;
+  font-weight: 950;
+}
+
+.student-behavior-popover header button {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  justify-content: center;
+  border: 1px solid #dbe7f4;
+  border-radius: 8px;
+  color: #61728c;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.student-behavior-popover header button:hover {
+  color: #176cf5;
+  border-color: #bdd6ff;
+  background: #f4f8ff;
+}
+
+.student-behavior-summary {
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.student-behavior-summary span {
+  min-width: 0;
+  flex: 1;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 10px;
+  border: 1px solid #e4edf7;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.student-behavior-summary small,
+.student-behavior-events small {
+  color: #6b7c94;
+  font-size: 10px;
+  line-height: 1.35;
+  font-weight: 800;
+}
+
+.student-behavior-summary strong {
+  color: #17243b;
+  font-size: 15px;
+  line-height: 1.25;
+  font-weight: 950;
+}
+
+.student-behavior-chart {
+  position: relative;
+  margin-top: 12px;
+  padding: 8px 4px 0;
+  border: 1px solid #e6edf6;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #fbfdff 0%, #ffffff 100%);
+}
+
+.student-behavior-chart svg {
+  display: block;
+  width: 100%;
+  height: 150px;
+}
+
+.student-behavior-chart line {
+  stroke: #e6edf6;
+  stroke-width: 1;
+}
+
+.student-behavior-chart text {
+  fill: #7b8da6;
+  font-size: 10px;
+  font-weight: 760;
+}
+
+.student-behavior-area {
+  fill: url("#studentBehaviorArea");
+}
+
+.student-behavior-line {
+  fill: none;
+  stroke: #2f7df6;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.student-behavior-chart circle {
+  fill: #ffffff;
+  stroke: #a8c9ff;
+  stroke-width: 2;
+}
+
+.student-behavior-chart circle.has-data {
+  stroke: #2f7df6;
+}
+
+.student-behavior-chart-tip {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid #dbe9ff;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 8px 18px rgba(47, 125, 246, 0.1);
+}
+
+.student-behavior-chart-tip strong,
+.student-behavior-chart-tip span {
+  color: #1a3561;
+  font-size: 10px;
+  line-height: 1.2;
+  font-weight: 900;
+}
+
+.student-behavior-chart-tip span {
+  color: #176cf5;
+}
+
+.student-behavior-events {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.student-behavior-events article {
+  gap: 9px;
+  padding: 9px 10px;
+  border: 1px solid #edf2f8;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.student-behavior-events time {
+  flex: 0 0 42px;
+  color: #176cf5;
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 950;
+}
+
+.student-behavior-events div {
+  min-width: 0;
+}
+
+.student-behavior-events strong,
+.student-behavior-events small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.student-behavior-events strong {
+  color: #17243b;
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 900;
+}
+
+.student-behavior-events p {
+  margin: 0;
+  padding: 10px;
+  border: 1px dashed #d8e4f1;
+  border-radius: 8px;
+  color: #718198;
+  background: #f8fbff;
+  font-size: 12px;
+  line-height: 1.45;
   font-weight: 800;
 }
 
