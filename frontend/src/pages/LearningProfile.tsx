@@ -1090,7 +1090,7 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
           <img src={heroArt} alt="学生使用电脑学习" />
         </section>
 
-        <section className="global-profile-metrics">
+        <section className="global-profile-metrics" data-onboarding-id="tour-profile-overview">
           <article className="profile-card">
             <span><ChartNoAxesColumnIncreasing size={18} /></span>
             <small>整体画像分</small>

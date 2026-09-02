@@ -13,6 +13,7 @@ import ProjectPractice from "./pages/ProjectPractice";
 import LoginPage from "./pages/LoginPage";
 import AICompanion from "./components/AICompanion";
 import AccountMenu from "./components/AccountMenu";
+import StudentOnboardingTour from "./components/StudentOnboardingTour";
 import AdminApp from "./admin/App";
 import TeacherDevelopApp from "./teacherDevelop/exact/ExactApp";
 import { setCurrentUser as setTeacherDevelopUser } from "./teacherDevelop/api";
@@ -63,11 +64,13 @@ function StudentAppTopbar({
   authUser,
   onLogout,
   onNavigate,
+  onOpenGuide,
   centerSlot
 }: {
   authUser: AuthUser;
   onLogout: () => void;
   onNavigate: (path: string) => void;
+  onOpenGuide?: () => void;
   centerSlot?: ReactNode;
 }) {
   return (
@@ -80,7 +83,14 @@ function StudentAppTopbar({
         </span>
       </button>
       {centerSlot}
-      <AccountMenu authUser={authUser} onLogout={onLogout} onNavigate={onNavigate} />
+      <div className="student-app-topbar-actions">
+        {onOpenGuide ? (
+          <button className="student-guide-topbar-button" type="button" data-onboarding-id="entry-guide-button" onClick={onOpenGuide}>
+            新手引导
+          </button>
+        ) : null}
+        <AccountMenu authUser={authUser} onLogout={onLogout} onNavigate={onNavigate} />
+      </div>
     </header>
   );
 }
@@ -127,10 +137,16 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
     transitionTo(aliases[page] ?? page);
   }
 
+  function openOnboardingGuide() {
+    window.dispatchEvent(new Event("codetrack:student-onboarding-replay"));
+  }
+
+  let content: ReactNode;
+
   if (isWorkspace) {
-    return (
+    content = (
       <>
-        <div className="workspace-route-stage" key={location.pathname}>
+        <div className="workspace-route-stage" data-onboarding-id="tour-workspace-route" key={location.pathname}>
           <Routes location={location}>
             <Route path="/workspace/:taskId" element={<TaskWorkspaceWrapper onBack={() => transitionTo(workspaceBackPath)} />} />
             <Route path="/question-workspace/:assignmentId" element={<QuestionWorkspaceWrapper onBack={() => transitionTo(workspaceBackPath)} />} />
@@ -139,19 +155,23 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
         <AICompanion routePath={location.pathname} routeGroup={activeRouteGroup} />
       </>
     );
-  }
-
-  if (location.pathname === "/" || location.pathname === "") {
-    return <StudentEntryPortal authUser={authUser} accountSlot={<AccountMenu authUser={authUser} onLogout={onLogout} onNavigate={transitionTo} />} />;
-  }
-
-  return (
-    <>
+  } else if (location.pathname === "/" || location.pathname === "") {
+    content = (
+        <StudentEntryPortal
+          authUser={authUser}
+          accountSlot={<AccountMenu authUser={authUser} onLogout={onLogout} onNavigate={transitionTo} />}
+          onOpenGuide={openOnboardingGuide}
+        />
+    );
+  } else {
+    content = (
+      <>
       <div className="student-direct-window" data-route={activeRouteGroup}>
         <StudentAppTopbar
           authUser={authUser}
           onLogout={onLogout}
           onNavigate={transitionTo}
+          onOpenGuide={openOnboardingGuide}
           centerSlot={activeRouteGroup === "/project-practice" ? (
             <nav className="project-practice-top-tabs" aria-label="科研项目实践页面导航">
               <button type="button" className={location.pathname === "/project-practice" ? "active" : ""} onClick={() => transitionTo("/project-practice")}>
@@ -167,7 +187,7 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
             </nav>
           ) : undefined}
         />
-        <div className="route-stage" key={activeRouteGroup}>
+        <div className="route-stage" data-onboarding-id={activeRouteGroup === "/self-study" ? "tour-self-study-route" : undefined} key={activeRouteGroup}>
           <Routes location={location}>
             <Route path="/learning-home" element={<LearningHome onNavigate={handleNavigate} onOpenWorkspace={openTask} />} />
             <Route path="/courses" element={<Navigate to="/" replace />} />
@@ -186,6 +206,14 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
         </div>
       </div>
       <AICompanion routePath={location.pathname} routeGroup={activeRouteGroup} />
+      </>
+    );
+  }
+
+  return (
+    <>
+      {content}
+      <StudentOnboardingTour authUser={authUser} />
     </>
   );
 }

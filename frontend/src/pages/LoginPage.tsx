@@ -3,6 +3,7 @@ import { Button, Input } from "antd";
 import { AlertTriangle, ArrowRight, LockKeyhole, LogIn, RefreshCw, ShieldCheck, Sparkles, UserPlus, UserRound, X } from "lucide-react";
 import { ApiRequestError, api, apiCache } from "../api";
 import { setAccessToken, type AuthUser } from "../authSession";
+import { markStudentOnboardingPending } from "../components/StudentOnboardingTour";
 import { readStoredEntryTheme, StudentEntryMotionBackdrop, STUDENT_ENTRY_THEME_KEY, type StudentEntryTheme } from "./StudentEntryPortal";
 
 type LoginPageProps = {
@@ -122,6 +123,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       const result = await api.login(username, password);
       apiCache.clear();
       setAccessToken(result.access_token);
+      markStudentOnboardingPending(result.user);
       onLogin(result.user);
     } catch (err) {
       setLoginIssue(loginIssueFromError(err));

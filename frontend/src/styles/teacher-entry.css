@@ -687,6 +687,32 @@
   box-shadow: 0 8px 18px color-mix(in srgb, var(--student-entry-accent) 24%, transparent);
 }
 
+.student-entry-guide-button {
+  min-height: 42px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--student-entry-border);
+  border-radius: 999px;
+  color: var(--student-entry-text);
+  background: var(--student-entry-panel);
+  font-size: 13px;
+  font-weight: 900;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(18px);
+  transition: border-color 160ms var(--motion-soft), background 160ms var(--motion-soft), transform 160ms var(--motion-soft);
+}
+
+.student-entry-guide-button:hover,
+.student-entry-guide-button:focus-visible {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--student-entry-accent) 56%, var(--student-entry-border));
+  background: var(--student-entry-panel-strong);
+  outline: none;
+}
+
 .student-entry-page[data-entry-theme="starmap"] .teacher-entry-orbit {
   color: var(--student-entry-accent);
   filter: drop-shadow(0 20px 28px rgba(78, 202, 255, 0.28));
@@ -815,6 +841,12 @@
     min-height: 30px;
     padding-inline: 10px;
   }
+
+  .student-entry-guide-button {
+    min-height: 38px;
+    padding-inline: 12px;
+  }
+
 }
 
 .student-course-drawer-layer {
