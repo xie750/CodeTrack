@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import datetime
-from io import BytesIO
 import json
 import math
 import os
@@ -17,6 +16,10 @@ from sqlalchemy.orm import Session
 
 from .database import get_db
 from .models import TeacherKnowledgeGraph, User
+from backend.app.services.rag.chunking import BuiltChunk, build_parent_child_chunks
+from backend.app.services.rag.cleaning import clean_elements
+from backend.app.services.rag.parsers import SUPPORTED_EXTENSIONS, parse_document
+from backend.app.services.rag.profiles import detect_content_profile, detect_file_profile
 
 
 router = APIRouter(prefix="/teacher/knowledge-graphs", tags=["teacher-knowledge-graphs"])
@@ -31,7 +34,7 @@ NODE_COLORS = {
     "案例": "#d97706",
     "能力": "#dc2626",
 }
-ALLOWED_SUFFIXES = {".pdf", ".docx", ".md", ".txt"}
+ALLOWED_SUFFIXES = SUPPORTED_EXTENSIONS
 
 
 class GraphNode(BaseModel):
@@ -239,6 +242,57 @@ def heuristic_graph(text: str, title: str) -> dict:
     return {"description": f"根据上传资料生成的 {len(nodes)} 个知识节点。", "nodes": nodes, "edges": edges}
 
 
+def _chunk_heading_candidate(chunk: BuiltChunk) -> str:
+    for raw in reversed(chunk.heading_path or []):
+        text = re.sub(r"^\s*(第[一二三四五六七八九十\d]+[章节讲]\s*)", "", raw)
+        text = re.sub(r"^\s*\d+(?:\.\d+)*[.、)]?\s*", "", text).strip()
+        text = re.sub(r"[:：]\s*$", "", text)
+        if 2 <= len(text) <= 32 and text not in {"概述", "总结", "练习", "题目", "示例", "知识点"}:
+            return text
+    return ""
+
+
+def heuristic_graph_from_chunks(chunks: list[BuiltChunk], text: str, title: str) -> dict:
+    heading_candidates = [_chunk_heading_candidate(chunk) for chunk in chunks]
+    heading_candidates = [item for item in heading_candidates if item]
+    generated = heuristic_graph(text, title)
+    nodes = generated.get("nodes", [])
+    preferred = list(dict.fromkeys(([title.strip()] if title.strip() else []) + heading_candidates))
+    if preferred:
+        original_by_label = {str(node.get("label", "")): node for node in nodes if isinstance(node, dict)}
+        merged: list[dict] = []
+        for label in preferred:
+            existing = original_by_label.get(label)
+            merged.append(
+                existing
+                or {
+                    "label": label[:32],
+                    "type": infer_type(label),
+                    "description": f"由资料章节边界识别出的“{label[:24]}”。",
+                    "difficulty": min(5, 1 + len(merged) // 3),
+                }
+            )
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
+            label = str(node.get("label", "")).strip()
+            if label and label not in {item["label"] for item in merged}:
+                merged.append(node)
+            if len(merged) >= 14:
+                break
+        generated["nodes"] = merged[:14]
+        generated["edges"] = [
+            {
+                "source": generated["nodes"][index]["label"],
+                "target": generated["nodes"][index + 1]["label"],
+                "type": "前驱" if index < max(1, (len(generated["nodes"]) - 1) // 2) else "相关",
+            }
+            for index in range(len(generated["nodes"]) - 1)
+        ]
+    generated["description"] = f"复用资料解析与切分能力，根据 {len(chunks)} 个证据切片生成 {len(generated.get('nodes', []))} 个知识节点。"
+    return generated
+
+
 def extract_json_block(value: str) -> dict:
     value = value.strip()
     if value.startswith("```"):
@@ -282,21 +336,40 @@ JSON 结构：{{"description":"一句话概括","nodes":[{{"label":"知识点","
         return None
 
 
-def extract_text(filename: str, content: bytes) -> str:
+def parse_uploaded_material(filename: str, content: bytes, mime_type: str | None) -> tuple[str, list[BuiltChunk], dict]:
     suffix = os.path.splitext(filename.lower())[1]
     if suffix not in ALLOWED_SUFFIXES:
-        raise HTTPException(status_code=415, detail=f"不支持的文件格式：{filename}")
+        supported = "、".join(sorted(ALLOWED_SUFFIXES))
+        raise HTTPException(status_code=415, detail=f"不支持的文件格式：{filename}；支持 {supported}")
     try:
-        if suffix in {".txt", ".md"}:
-            return content.decode("utf-8-sig", errors="ignore")
-        if suffix == ".docx":
-            from docx import Document
-            document = Document(BytesIO(content))
-            return "\n".join(paragraph.text for paragraph in document.paragraphs)
-        from pypdf import PdfReader
-        return "\n".join(page.extract_text() or "" for page in PdfReader(BytesIO(content)).pages)
+        file_profile = detect_file_profile(filename, mime_type, content)
+        parsed = parse_document(filename, content)
+        content_profile = detect_content_profile(filename, parsed.elements)
+        cleaned = clean_elements(parsed.elements, content_profile)
+        groups = build_parent_child_chunks(cleaned, content_profile)
+        child_chunks = [child for _, children in groups for child in children]
+        evidence_chunks = child_chunks or [parent for parent, _ in groups]
+        text = "\n\n".join(chunk.content for chunk in evidence_chunks if chunk.content.strip())
+        source = {
+            "filename": filename,
+            "mime_type": mime_type or file_profile.mime_type or "application/octet-stream",
+            "size_bytes": len(content),
+            "parser": parsed.parser_name,
+            "parser_version": parsed.parser_version,
+            "file_type": file_profile.file_type,
+            "content_profile": content_profile.content_profile,
+            "cleaning_strategy": content_profile.cleaning_strategy,
+            "chunking_strategy": content_profile.chunking_strategy,
+            "element_count": len(parsed.elements),
+            "cleaned_element_count": len(cleaned),
+            "parent_chunk_count": len(groups),
+            "child_chunk_count": len(child_chunks),
+        }
+        return text, evidence_chunks, source
     except HTTPException:
         raise
+    except ValueError as exc:
+        raise HTTPException(status_code=415, detail=f"不支持的文件格式：{filename}") from exc
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"无法解析文件：{filename}") from exc
 
@@ -329,19 +402,26 @@ async def create_graph_from_files(files: list[UploadFile] = File(...), title: st
     if not files:
         raise HTTPException(status_code=422, detail="请至少上传一份资料")
     text_parts: list[str] = []
+    evidence_chunks: list[BuiltChunk] = []
     sources: list[dict] = []
     for upload in files:
         content = await upload.read()
         if len(content) > 20 * 1024 * 1024:
             raise HTTPException(status_code=413, detail=f"文件超过 20 MB：{upload.filename}")
         filename = upload.filename or "资料.txt"
-        text_parts.append(extract_text(filename, content))
-        sources.append({"filename": filename, "mime_type": upload.content_type or "application/octet-stream", "size_bytes": len(content)})
+        extracted_text, chunks, source = parse_uploaded_material(filename, content, upload.content_type)
+        text_parts.append(extracted_text)
+        evidence_chunks.extend(chunks)
+        sources.append(source)
     combined = "\n\n".join(text_parts)[:6000]
     if not combined.strip():
         raise HTTPException(status_code=422, detail="未能从上传资料中提取有效文本")
-    generated = llm_graph(combined, title) or heuristic_graph(combined, title)
+    generated = llm_graph(combined, title) or heuristic_graph_from_chunks(evidence_chunks, combined, title)
     summary, nodes, edges = normalize_generated(generated)
+    if sources:
+        parent_count = sum(int(source.get("parent_chunk_count", 0)) for source in sources)
+        child_count = sum(int(source.get("child_chunk_count", 0)) for source in sources)
+        summary = f"{summary} 已复用资料解析、清洗与父子切分能力：{parent_count} 个父切片、{child_count} 个证据切片。"
     classes = [value.strip() for value in re.split(r"[,，\n]+", target_classes) if value.strip()]
     item = TeacherKnowledgeGraph(user_id=teacher.id, title=title.strip() or "资料知识图谱", description=description.strip(), target_classes=json.dumps(classes, ensure_ascii=False), source_files=json.dumps(sources, ensure_ascii=False), source_summary=summary, nodes_json=json.dumps(nodes, ensure_ascii=False), edges_json=json.dumps(edges, ensure_ascii=False))
     db.add(item); db.commit(); db.refresh(item)
