@@ -155,10 +155,14 @@ export function ExactShell(props: ShellProps) {
   </div>
 }
 
-export function PageLoader() {
+export function PageLoader({ label = '正在加载页面内容' }: { label?: string } = {}) {
   return <div className="exact-loader" role="status" aria-live="polite">
-    <span className="exact-loader-dots" aria-hidden="true"><i /><i /><i /></span>
-    <Text type="secondary">正在读取教学数据</Text>
+    <span className="exact-loader-mark" aria-hidden="true">
+      <i />
+      <i />
+      <i />
+    </span>
+    <Text type="secondary">{label}</Text>
   </div>
 }
 

@@ -13,7 +13,7 @@ export default function MainLayout() {
   const [collapsed, setCollapsed] = useState(false)
 
   return (
-    <Layout className="app-shell" style={{ minHeight: '100vh' }}>
+    <Layout className="app-shell" style={{ minHeight: 'var(--app-viewport-height, 100vh)' }}>
       <Sider
         collapsible
         collapsed={collapsed}
@@ -25,7 +25,7 @@ export default function MainLayout() {
       >
         <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
       </Sider>
-      <Layout>
+      <Layout className="app-main-layout">
         <Topbar />
         <Content className="app-content">
           <Outlet />

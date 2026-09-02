@@ -23,7 +23,9 @@ export interface Student {
   gender: '男' | '女'
   grade: string
   dept: string
+  className?: string
   courseName: string
+  enrolledCourses?: string[]
   status: AccountStatus
   loginStatus: LoginStatus
   lastActiveAt: string
@@ -50,12 +52,19 @@ export interface CourseItem {
   id: string
   name: string
   teacher: string
+  majorName?: string
   semester: string
   hours: number
   model: string
   status: CourseStatus
   studentCount: number
   classCount: number
+  classNames?: string[]
+  knowledgePoints?: string[]
+  taskCount?: number
+  knowledgeBaseStatus?: '未配置' | '待发布' | '已开放'
+  studentPortalStatus?: '未开放' | '已开放'
+  teacherWorkspaceStatus?: '未绑定' | '已绑定'
   students: EnrolledStudent[]
   enrollmentChanges: EnrollmentChange[]
 }
@@ -313,7 +322,7 @@ export interface ParamGroup {
 }
 
 export type NoticeStatus = '草稿' | '已发布' | '已撤回' | '已到期'
-export type NoticeAudience = '全体学生' | '全体教师' | '全体师生' | '科研团队'
+export type NoticeAudience = '全体学生' | '全体教师' | '全体师生' | '人工智能专业师生'
 
 export interface Notice {
   id: string
@@ -386,7 +395,7 @@ export type TimeRange = '本月' | '本学期' | '本年度' | '全部'
 
 export interface TodoItem {
   id: string
-  type: '知识库更新' | '科研项目审核' | '合规审查'
+  type: '教学安排待补齐' | '知识库待开放' | 'AI 服务告警'
   title: string
   count: number
   severity: Severity | 'info'

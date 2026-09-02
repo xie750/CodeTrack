@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Card, Table, Input, Select, Button, Space, Modal, Form, Descriptions, Tabs, message, Drawer, Radio, Row, Col } from 'antd'
+import { Card, Table, Input, Select, Button, Space, Modal, Form, Descriptions, Tabs, message, Drawer, Radio, Row, Col, Tag } from 'antd'
 import { Plus, UploadCloud, RefreshCw, UserX, UserCheck, Eye, Sparkles, Users, Wifi, UserPlus, TrendingUp, TrendingDown } from 'lucide-react'
 import PageHeader from '@admin/components/PageHeader'
 import StatusTag from '@admin/components/StatusTag'
@@ -157,10 +157,7 @@ export default function Teachers() {
 
   const detailTabs = detail ? (() => {
     const teacherName = detail.name
-    // 该教师授课的课程
     const teacherClasses = courses.filter((c) => c.teacher === teacherName)
-    // 该教师教授的所有课程
-    const teacherCourses = teacherClasses
     return [
       {
         key: '1', label: '基本信息',
@@ -179,7 +176,7 @@ export default function Teachers() {
         ),
       },
       {
-        key: '2', label: `授课课程（${teacherClasses.length}）`,
+        key: '2', label: `教学安排（${teacherClasses.length}）`,
         children: teacherClasses.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {teacherClasses.map((c) => (
@@ -190,29 +187,30 @@ export default function Teachers() {
                   <span style={{ fontSize: 11, color: 'var(--n-5)' }}>{c.studentCount} 人</span>
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--n-6)', lineHeight: 1.6 }}>
-                  课时：{c.hours} 课时
+                  行政班：{(c.classNames ?? []).join('、') || '未配置'} · 课时：{c.hours} 课时 · 知识库：{c.knowledgeBaseStatus ?? '未配置'}
                 </div>
               </div>
             ))}
           </div>
-        ) : <span style={{ color: 'var(--n-5)' }}>暂无授课课程</span>,
+        ) : <span style={{ color: 'var(--n-5)' }}>暂无教学安排</span>,
       },
       {
-        key: '3', label: `教授课程（${teacherCourses.length}）`,
-        children: teacherCourses.length > 0 ? (
+        key: '3', label: `端侧对接（${teacherClasses.length}）`,
+        children: teacherClasses.length > 0 ? (
           <Table
             rowKey="id"
             size="small"
             pagination={false}
-            dataSource={teacherCourses}
+            dataSource={teacherClasses}
             columns={[
               { title: '课程名称', dataIndex: 'name', width: 180 },
-              { title: '学期', dataIndex: 'semester', width: 120 },
-              { title: '课时', dataIndex: 'hours', width: 80, render: (v: number) => `${v} 课时` },
-              { title: '学生数', dataIndex: 'studentCount', width: 80, render: (v: number) => `${v} 人` },
+              { title: '学生端', dataIndex: 'studentPortalStatus', width: 90, render: (v: string) => <Tag color={v === '已开放' ? 'success' : 'default'}>{v || '未开放'}</Tag> },
+              { title: '教师端', dataIndex: 'teacherWorkspaceStatus', width: 90, render: (v: string) => <Tag color={v === '已绑定' ? 'processing' : 'default'}>{v || '未绑定'}</Tag> },
+              { title: '任务模板', dataIndex: 'taskCount', width: 80, render: (v: number) => `${v ?? 0} 个` },
+              { title: '知识库', dataIndex: 'knowledgeBaseStatus', width: 90, render: (v: string) => <Tag color={v === '已开放' ? 'success' : v === '待发布' ? 'warning' : 'default'}>{v || '未配置'}</Tag> },
             ]}
           />
-        ) : <span style={{ color: 'var(--n-5)' }}>暂无教授课程</span>,
+        ) : <span style={{ color: 'var(--n-5)' }}>暂无端侧对接记录</span>,
       },
       {
         key: '5', label: '课表',
@@ -437,7 +435,7 @@ export default function Teachers() {
           <li>站内消息推送（含明文新密码）</li>
           {resetTarget?.email && <li>邮箱发送至 {resetTarget.email}</li>}
         </ul>
-        <p style={{ color: colors.warning, fontSize: 12 }}>⚠️ 管理员后台不展示明文密码，您无法获取该密码，请告知用户查看站内消息。</p>
+        <p style={{ color: colors.warning, fontSize: 12 }}>管理员后台不展示明文密码，您无法获取该密码，请告知用户查看站内消息。</p>
       </Modal>
 
       <VerifyModal open={verify.open} actionLabel={verify.action} onCancel={() => setVerify({ open: false, action: '', onOk: () => {} })} onConfirm={verify.onOk} />

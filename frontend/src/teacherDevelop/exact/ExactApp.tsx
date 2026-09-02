@@ -5,7 +5,7 @@ import { useRef } from 'react'
 import { CheckCircle2, CircleAlert } from 'lucide-react'
 
 import { api, TEACHER_API_BASE, type ApiCourse, type BootstrapData } from '../api'
-import { ExactShell, PageLoader, type ExactView } from './components'
+import { ExactShell, type ExactView } from './components'
 import { ExactCreateCourse, ExactCourses, ExactDashboard, ExactPortal } from './pages-global'
 import { ExactCourseSettings, ExactInvite, ExactWorkspace } from './pages-course'
 import { ExactAnalytics, ExactGrading, ExactMonitor, ExactReviews, ExactSettings } from './pages-flow'
@@ -26,6 +26,33 @@ const courseOnlyViews: ExactView[] = [
   'monitor', 'grading', 'analytics', 'ai-assistant', 'reviews', 'discussion', 'course-settings',
 ]
 
+function TeacherWorkbenchBoot() {
+  return <div className="exact-boot-shell" role="status" aria-live="polite">
+    <header className="exact-boot-topbar">
+      <div className="exact-boot-brand" />
+      <div className="exact-boot-actions"><span /><span /><span /></div>
+    </header>
+    <aside className="exact-boot-sidebar">
+      {Array.from({ length: 6 }, (_, index) => <span key={index} />)}
+    </aside>
+    <main className="exact-boot-main">
+      <div className="exact-boot-title">
+        <span />
+        <strong>正在准备教师工作台</strong>
+        <Text type="secondary">同步课程、班级和教学任务数据</Text>
+      </div>
+      <div className="exact-boot-metrics">
+        {Array.from({ length: 4 }, (_, index) => <span key={index} />)}
+      </div>
+      <div className="exact-boot-grid">
+        <section />
+        <section />
+        <aside />
+      </div>
+    </main>
+  </div>
+}
+
 export default function ExactApp({ authUser, loggedIn, onLogin, onLogout }: { authUser: AuthUser; loggedIn: boolean; onLogin: (userId: string, name: string) => void; onLogout: () => void }) {
   const location = useLocation()
   const routerNavigate = useNavigate()
@@ -36,6 +63,7 @@ export default function ExactApp({ authUser, loggedIn, onLogin, onLogout }: { au
   const courseIdRef = useRef(courseId)
   const [classId, setClassId] = useState('class-se1')
   const [loading, setLoading] = useState(false)
+  const [enteringWorkbench, setEnteringWorkbench] = useState(false)
   const [error, setError] = useState('')
   const [noticeOpen, setNoticeOpen] = useState(false)
   const [messageApi, contextHolder] = message.useMessage()
@@ -52,21 +80,23 @@ export default function ExactApp({ authUser, loggedIn, onLogin, onLogout }: { au
         setCourseId(data.selected_course_id)
       }
       if (data.selected_class_id !== classId) setClassId(data.selected_class_id)
+      return data
     } catch (reason: any) {
       if (reason?.status === 403) {
         setError('当前教师账号无权访问该课程，请重新登录')
         onLogout()
-        return
+        return null
       }
       setError(reason.message || '无法连接 CodeTrack 后端')
+      return null
     } finally {
       setLoading(false)
     }
   }, [courseId, classId, onLogout])
 
   useEffect(() => {
-    if (loggedIn && entered) load()
-  }, [loggedIn, entered, load])
+    if (loggedIn && entered && !bootstrap && !loading) void load()
+  }, [loggedIn, entered, bootstrap, loading, load])
 
   useEffect(() => {
     if (!loggedIn) setEntered(false)
@@ -122,20 +152,42 @@ export default function ExactApp({ authUser, loggedIn, onLogin, onLogout }: { au
     }
   }
 
+  const refresh = useCallback(async (requestedCourseId?: string) => {
+    await load(requestedCourseId ?? courseIdRef.current, classId)
+  }, [classId, load])
+
+  const enterWorkbench = async () => {
+    if (bootstrap) {
+      setEntered(true)
+      routerNavigate('/teacher/dashboard')
+      return
+    }
+
+    setEnteringWorkbench(true)
+    const data = await load(courseIdRef.current, classId)
+    if (data) {
+      setEntered(true)
+      routerNavigate('/teacher/dashboard')
+    }
+    setEnteringWorkbench(false)
+  }
+
   if (!loggedIn || !entered) return <ExactPortal
     authUser={authUser}
     loggedIn={loggedIn}
     onLogin={(userId, name) => { onLogin(userId, name); routerNavigate('/', { replace: true }) }}
     onLogout={onLogout}
-    onEnter={() => { setEntered(true); routerNavigate('/teacher/dashboard') }}
+    onEnter={() => { void enterWorkbench() }}
     onNavigate={(path) => {
       setEntered(true)
       routerNavigate(path === '/teacher/materials' ? teacherPath('materials', courseIdRef.current, true) : path)
     }}
+    enteringWorkbench={enteringWorkbench}
+    entryError={error}
   />
 
   if (loading && !bootstrap) {
-    return <div className="exact-boot"><PageLoader /></div>
+    return <TeacherWorkbenchBoot />
   }
 
   if (error && !bootstrap) {
@@ -157,17 +209,17 @@ export default function ExactApp({ authUser, loggedIn, onLogin, onLogout }: { au
     classes,
     teacher: bootstrap.teacher,
     onNavigate: navigate,
-    onRefresh: load,
+    onRefresh: refresh,
     notify,
   }
-  const dashboard = <ExactDashboard courseId={courseId} classId={classId} courses={bootstrap.courses} onCourse={chooseCourse} onNavigate={navigate} onReload={load} />
+  const dashboard = <ExactDashboard courseId={courseId} classId={classId} courses={bootstrap.courses} onCourse={chooseCourse} onNavigate={navigate} onReload={refresh} />
   const classesPage = <ExactClassesV2 {...common} />
   const tasksPage = <ExactTasksV2 {...common} />
   const materialsPage = <ExactMaterialsV2 {...common} />
   const analyticsPage = <ExactAnalytics courseId={courseId} classId={classId} classes={classes} onNavigate={navigate} notify={notify} />
   const content = <Routes>
     <Route path="dashboard" element={dashboard} />
-    <Route path="courses" element={<ExactCourses courses={bootstrap.courses} onReload={load} onCourse={chooseCourse} onNavigate={navigate} />} />
+    <Route path="courses" element={<ExactCourses courses={bootstrap.courses} onReload={refresh} onCourse={chooseCourse} onNavigate={navigate} />} />
     <Route path="courses/new" element={<ExactCreateCourse teacher={bootstrap.teacher} onDone={courseCreated} onCancel={() => navigate('courses')} />} />
     <Route path="classes" element={<Navigate to="/teacher/courses" replace />} />
     <Route path="tasks" element={<Navigate to="/teacher/courses" replace />} />

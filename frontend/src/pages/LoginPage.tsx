@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Button, Input } from "antd";
-import { AlertTriangle, ArrowRight, LockKeyhole, LogIn, RefreshCw, ShieldCheck, Sparkles, UserPlus, UserRound } from "lucide-react";
+import { AlertTriangle, ArrowRight, LockKeyhole, LogIn, RefreshCw, ShieldCheck, Sparkles, UserPlus, UserRound, X } from "lucide-react";
 import { ApiRequestError, api, apiCache } from "../api";
 import { setAccessToken, type AuthUser } from "../authSession";
 import { readStoredEntryTheme, StudentEntryMotionBackdrop, STUDENT_ENTRY_THEME_KEY, type StudentEntryTheme } from "./StudentEntryPortal";
@@ -58,37 +58,38 @@ function loginIssueFromError(error: unknown): LoginIssue {
   };
 }
 
-function LoginErrorNotice({ issue, loading }: { issue: LoginIssue; loading: boolean }) {
+function LoginIssueToast({ issue, loading, onDismiss }: { issue: LoginIssue; loading: boolean; onDismiss: () => void }) {
+  const primaryTip = issue.checklist[0];
+
   return (
-    <section className="login-error-notice" role="alert" aria-live="polite">
-      <div className="login-error-icon" aria-hidden="true">
-        <AlertTriangle size={20} />
+    <aside className="login-issue-toast" role="alert" aria-live="polite" aria-atomic="true">
+      <div className="login-issue-toast-icon" aria-hidden="true">
+        <AlertTriangle size={19} />
       </div>
-      <div className="login-error-content">
-        <div className="login-error-heading">
+      <div className="login-issue-toast-body">
+        <div className="login-issue-toast-heading">
           <strong>{issue.title}</strong>
-          <span>需要处理</span>
+          <span>登录未完成</span>
         </div>
         <p>{issue.description}</p>
-        <ul>
-          {issue.checklist.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
-        <div className="login-error-actions">
-          <button className="login-retry-button" type="submit" disabled={loading}>
+        {primaryTip ? <span className="login-issue-toast-tip">{primaryTip}</span> : null}
+        <div className="login-issue-toast-actions">
+          <button className="login-toast-retry" type="submit" form="login-form" disabled={loading}>
             <RefreshCw size={14} />
             {loading ? "正在重试" : "重试登录"}
           </button>
           {issue.detail ? (
-            <details>
+            <details className="login-toast-detail">
               <summary>技术信息</summary>
               <code>{issue.detail}</code>
             </details>
           ) : null}
         </div>
       </div>
-    </section>
+      <button className="login-toast-close" type="button" aria-label="关闭登录提示" onClick={onDismiss}>
+        <X size={16} />
+      </button>
+    </aside>
   );
 }
 
@@ -144,6 +145,19 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     window.localStorage.setItem(STUDENT_ENTRY_THEME_KEY, nextTheme);
   }
 
+  useEffect(() => {
+    if (!loginIssue) return undefined;
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setLoginIssue(null);
+      }
+    }
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [loginIssue]);
+
   return (
     <main className="login-page student-entry-page" data-entry-theme={entryTheme}>
       <div className="student-entry-backdrop" aria-hidden="true">
@@ -153,6 +167,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         <span className="student-entry-stream stream-b" />
       </div>
       <LoginThemeToggle theme={entryTheme} onThemeChange={changeEntryTheme} />
+      {loginIssue ? <LoginIssueToast issue={loginIssue} loading={loading} onDismiss={() => setLoginIssue(null)} /> : null}
 
       <section className={`login-stage login-shell-stack ${authMode === "register" ? "show-register" : ""}`} aria-label="CodeTrack 账号入口">
         <article className="login-shell-card login-shell-login" aria-label="登录账号">
@@ -202,7 +217,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               </div>
             </div>
 
-            <form className="login-form" onSubmit={handleSubmit}>
+            <form id="login-form" className="login-form" onSubmit={handleSubmit}>
               <label>
                 <span>账号</span>
                 <Input
@@ -227,7 +242,6 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                   disabled={authMode === "register"}
                 />
               </label>
-              {loginIssue ? <LoginErrorNotice issue={loginIssue} loading={loading} /> : null}
               <Button type="primary" htmlType="submit" size="large" loading={loading} disabled={authMode === "register"} icon={<LogIn size={18} />}>
                 立即登录
               </Button>

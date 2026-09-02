@@ -235,9 +235,24 @@ export type PracticeProjectReadiness = {
   secondary_action_label: string;
 };
 
+export type PracticeResearchSignal = {
+  label: string;
+  value: string;
+  note: string;
+};
+
+export type PracticeResearchRecommendation = {
+  project_id: string;
+  profile_fit: string;
+  recommendation_reason: string;
+  signals: PracticeResearchSignal[];
+  confidence: number;
+};
+
 export type PracticeProjectHome = {
   projects: PracticeProjectSummary[];
   recommended_project_id: string | null;
+  research_recommendation?: PracticeResearchRecommendation | null;
   stats: {
     project_count: number;
     in_progress_count: number;
@@ -263,6 +278,22 @@ export type PracticeProjectTaskSection = {
 export type PracticeProjectResource = {
   title: string;
   meta: string;
+};
+
+export type PracticeResearchBrief = {
+  profile_fit: string;
+  recommendation_reason: string;
+  research_stage: string;
+  frontier_topics: Array<{ title: string; source: string; heat: number; summary: string }>;
+  writing_blocks: Array<{ title: string; content: string; status: string }>;
+  writing_checks: Array<{ label: string; result: string }>;
+  data_metrics: Array<{ label: string; value: string; note: string }>;
+  chart_series: Array<{ label: string; value: number }>;
+  data_insights: string[];
+  citations: PracticeProjectResource[];
+  generated_at: string | null;
+  confidence: number;
+  next_actions: string[];
 };
 
 export type PracticeProjectSubmission = {
@@ -291,6 +322,7 @@ export type PracticeProjectDetail = {
   acceptance_criteria: string[];
   mentor_tips: string[];
   resources: PracticeProjectResource[];
+  research_brief?: PracticeResearchBrief;
   submissions: PracticeProjectSubmission[];
   activities: PracticeProjectActivity[];
 };

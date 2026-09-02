@@ -1892,135 +1892,223 @@
   border-radius: 8px;
 }
 
-.login-error-notice {
+.login-issue-toast {
+  position: fixed;
+  top: 28px;
+  left: 50%;
+  z-index: 6;
+  --login-toast-x: -50%;
+  width: min(460px, calc(100vw - 40px));
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr);
+  grid-template-columns: 40px minmax(0, 1fr) 40px;
   gap: 12px;
   padding: 14px;
-  border: 1px solid #f2c9c3;
+  border: 1px solid rgba(239, 68, 68, 0.22);
   border-radius: 8px;
-  background: #fff7f5;
-  box-shadow: inset 4px 0 0 #e15a4f;
+  color: #24324b;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 22px 56px rgba(42, 77, 128, 0.18), 0 6px 18px rgba(185, 28, 28, 0.08);
+  backdrop-filter: blur(18px);
+  transform: translateX(var(--login-toast-x));
+  animation: loginToastEnter 220ms ease-out both;
 }
 
-.login-error-icon {
-  width: 36px;
-  height: 36px;
+.login-issue-toast::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  border-radius: 8px 0 0 8px;
+  background: #ef4444;
+}
+
+.login-issue-toast-icon {
+  width: 40px;
+  height: 40px;
   display: grid;
   place-items: center;
   border-radius: 8px;
-  color: #bd2f26;
-  background: #ffe8e4;
+  color: #b91c1c;
+  background: #fee2e2;
 }
 
-.login-error-content {
+.login-issue-toast-body {
   min-width: 0;
 }
 
-.login-error-heading {
+.login-issue-toast-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
 }
 
-.login-error-heading strong {
-  color: #621b16;
+.login-issue-toast-heading strong {
+  color: #111a30;
   font-size: 15px;
   font-weight: 900;
 }
 
-.login-error-heading span {
+.login-issue-toast-heading span {
   flex: none;
   padding: 3px 8px;
-  border: 1px solid #f0bbb4;
+  border: 1px solid #fed7d7;
   border-radius: 999px;
-  color: #a33b31;
-  background: #fffdfc;
+  color: #b91c1c;
+  background: #fff5f5;
   font-size: 12px;
   font-weight: 800;
 }
 
-.login-error-content p {
+.login-issue-toast-body p {
   margin: 7px 0 0;
-  color: #6b2c25;
+  color: #5e6a80;
   font-size: 13px;
   line-height: 1.55;
 }
 
-.login-error-content ul {
-  margin: 10px 0 0;
-  padding-left: 18px;
-  color: #74403a;
+.login-issue-toast-tip {
+  margin-top: 8px;
+  min-width: 0;
+  padding-left: 12px;
+  position: relative;
+  display: block;
+  color: #43516a;
   font-size: 12px;
-  line-height: 1.7;
+  line-height: 1.5;
 }
 
-.login-error-actions {
-  margin-top: 11px;
+.login-issue-toast-tip::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.72em;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: #ef4444;
+}
+
+.login-issue-toast-actions {
+  margin-top: 10px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
 }
 
-.login-retry-button {
-  min-height: 32px;
-  padding: 0 11px;
+.login-toast-retry {
+  min-height: 40px;
+  padding: 0 14px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  border: 1px solid #e15a4f;
+  gap: 7px;
+  border: 1px solid #ef4444;
   border-radius: 8px;
   color: #ffffff;
-  background: #d9483e;
-  font-size: 12px;
+  background: #dc2626;
+  font-size: 13px;
   font-weight: 900;
   cursor: pointer;
+  transition: background 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
 }
 
-.login-retry-button:hover {
-  background: #c4382f;
+.login-toast-retry:hover {
+  border-color: #b91c1c;
+  background: #b91c1c;
+  box-shadow: 0 10px 20px rgba(185, 28, 28, 0.16);
 }
 
-.login-retry-button:disabled {
+.login-toast-retry:disabled {
   cursor: not-allowed;
-  opacity: 0.72;
+  opacity: 0.7;
+  box-shadow: none;
 }
 
-.login-error-actions details {
+.login-toast-detail {
   min-width: 0;
-  color: #7b4a44;
+  color: #5e6a80;
   font-size: 12px;
 }
 
-.login-error-actions summary {
+.login-toast-detail summary {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
   font-weight: 800;
   cursor: pointer;
 }
 
-.login-error-actions code {
+.login-toast-detail code {
   max-width: 100%;
   margin-top: 7px;
   padding: 8px;
   display: block;
   overflow-wrap: anywhere;
-  border: 1px solid #f2d6d1;
+  border: 1px solid #e8eef7;
   border-radius: 8px;
-  color: #61231d;
-  background: #fffdfc;
+  color: #24324b;
+  background: #f8fbff;
   font-family: var(--font-code);
   line-height: 1.5;
 }
 
-@media (max-width: 520px) {
-  .login-error-notice {
-    grid-template-columns: 1fr;
+.login-toast-close {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  color: #79869a;
+  background: transparent;
+  cursor: pointer;
+  transition: color 180ms ease, background 180ms ease;
+}
+
+.login-toast-close:hover {
+  color: #24324b;
+  background: #f1f5fb;
+}
+
+@keyframes loginToastEnter {
+  from {
+    opacity: 0;
+    transform: translate3d(var(--login-toast-x), -10px, 0) scale(0.98);
   }
 
-  .login-error-heading {
+  to {
+    opacity: 1;
+    transform: translate3d(var(--login-toast-x), 0, 0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-issue-toast {
+    animation: none;
+  }
+}
+
+@media (max-width: 620px) {
+  .login-issue-toast {
+    top: 16px;
+    left: 18px;
+    --login-toast-x: 0;
+    width: auto;
+    grid-template-columns: 36px minmax(0, 1fr) 36px;
+    padding: 12px;
+  }
+
+  .login-issue-toast-icon,
+  .login-toast-close {
+    width: 36px;
+    height: 36px;
+  }
+
+  .login-issue-toast-heading {
     align-items: flex-start;
     flex-direction: column;
+    gap: 6px;
   }
 }
 

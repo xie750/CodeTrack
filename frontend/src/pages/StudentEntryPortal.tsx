@@ -469,10 +469,10 @@ export default function StudentEntryPortal({ authUser, accountSlot }: StudentEnt
 
           <article className="teacher-entry-card" onPointerMove={handleCardPointerMove} onPointerLeave={resetCardTilt}>
             <ProjectPracticeIllustration />
-            <h2>项目实训</h2>
-            <p>根据学习画像匹配企业型微项目，补齐岗位能力证据</p>
+            <h2>科研项目实践</h2>
+            <p>根据学习画像自动推荐助研课题，完成前沿追踪、论文写作与数据分析</p>
             <button type="button" onClick={() => navigate("/project-practice")}>
-              进入实训
+              进入助研
               <ArrowRight size={24} strokeWidth={2.2} />
             </button>
           </article>

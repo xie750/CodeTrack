@@ -88,6 +88,8 @@ async def _stream_json_lines(
     """OpenAI-compatible SSE stream出口。测试可 patch 这个函数。"""
     async with httpx.AsyncClient(trust_env=False) as client:
         async with client.stream("POST", url, json=json, headers=headers, timeout=timeout) as response:
+            if response.status_code >= 400:
+                await response.aread()
             response.raise_for_status()
             async for line in response.aiter_lines():
                 if not line.startswith("data:"):
@@ -290,6 +292,7 @@ async def chat_text_stream(
     base_url: str = "https://api.openai.com/v1",
     timeout: float = DEFAULT_TIMEOUT,
     temperature: float = 0.2,
+    max_tokens: int | None = None,
 ):
     """OpenAI 兼容的原生文本流式输出。逐段 yield `delta.content`。"""
     if not api_key:
@@ -300,6 +303,8 @@ async def chat_text_stream(
         "stream": True,
         "messages": messages,
     }
+    if max_tokens is not None:
+        body["max_tokens"] = max_tokens
     headers = {"Authorization": f"Bearer {api_key}"}
     try:
         async for chunk in _stream_json_lines(

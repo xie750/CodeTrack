@@ -298,6 +298,29 @@ button { cursor: pointer; }
   box-shadow: 0 22px 36px color-mix(in srgb, var(--student-entry-accent) 32%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.34);
 }
 
+.teacher-exact-entry-page .teacher-entry-card > button:disabled {
+  cursor: wait;
+  opacity: .78;
+  transform: none;
+  box-shadow: 0 12px 22px color-mix(in srgb, var(--student-entry-accent) 18%, transparent);
+}
+
+.teacher-entry-spin {
+  animation: teacherEntrySpin 900ms linear infinite;
+}
+
+.teacher-entry-alert {
+  width: min(560px, 100%);
+  margin: 22px auto 0;
+  text-align: left;
+}
+
+@keyframes teacherEntrySpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (max-width: 991px) {
   .teacher-exact-entry-page.exact-portal > header.teacher-entry-topbar {
     padding: 18px;
@@ -1997,35 +2020,36 @@ button { cursor: pointer; }
 .exact-loader {
   box-sizing: border-box;
   width: 100%;
-  min-height: 320px;
+  min-height: 220px;
   display: grid;
   place-content: center;
   justify-items: center;
   gap: 12px;
   text-align: center;
 }
-.exact-loader-dots {
-  width: auto !important;
-  min-width: 44px;
-  height: 14px;
-  display: inline-flex !important;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
+.exact-loader-mark {
+  width: 52px;
+  height: 36px;
+  display: grid !important;
+  grid-template-columns: repeat(3, 1fr);
+  align-items: end;
+  gap: 5px;
   margin: 0 !important;
-  background: transparent !important;
+  padding: 8px;
+  border: 1px solid #dce5f1;
+  border-radius: 8px;
+  background: #f8fbff !important;
 }
-.exact-loader-dots i {
+.exact-loader-mark i {
   display: block;
-  width: 7px;
-  height: 7px;
-  flex: 0 0 7px;
-  border-radius: 50%;
-  background: #43b81a;
-  animation: exactBounce 1s infinite ease-in-out;
+  width: 100%;
+  height: 9px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #4a9eff, #20b89a);
+  animation: exactPulse 920ms infinite ease-in-out;
 }
-.exact-loader-dots i:nth-child(2) { animation-delay: .16s; }
-.exact-loader-dots i:nth-child(3) { animation-delay: .32s; }
+.exact-loader-mark i:nth-child(2) { height: 16px; animation-delay: .12s; }
+.exact-loader-mark i:nth-child(3) { height: 12px; animation-delay: .24s; }
 .exact-loader > .ant-typography {
   display: block;
   width: max-content;
@@ -2037,14 +2061,238 @@ button { cursor: pointer; }
   text-orientation: mixed;
   line-height: 1.5;
 }
-@keyframes exactBounce { to { transform: translateY(-7px); opacity: .4; } }
+@keyframes exactPulse {
+  50% {
+    opacity: .45;
+    transform: translateY(-3px);
+  }
+}
 .exact-empty { min-height: 310px; display: grid; place-content: center; justify-items: center; gap: 8px; color: #7f8b81; }
 .exact-empty svg { color: #7bca63; }
 .exact-empty small { color: #9aa39b; }
-.exact-boot, .exact-boot-error { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 11px; text-align: center; }
+.exact-boot-error { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 11px; text-align: center; }
 .exact-boot-error { color: #5f6b61; }
 .exact-boot-error svg { color: #d46a5d; }
 .exact-boot-error code { background: #eef2ed; padding: 8px 12px; border-radius: 4px; }
+
+.exact-boot-shell {
+  --exact-sidebar-width: 224px;
+  min-height: 100vh;
+  background: #f7f9f6;
+}
+
+.exact-boot-topbar {
+  position: fixed;
+  inset: 0 0 auto;
+  height: 62px;
+  padding: 0 27px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #ebeeea;
+  background: rgba(255, 255, 255, .97);
+  z-index: 2;
+}
+
+.exact-boot-brand,
+.exact-boot-actions span,
+.exact-boot-sidebar span,
+.exact-boot-title > span,
+.exact-boot-metrics span,
+.exact-boot-grid > *,
+.teacher-skeleton-line,
+.teacher-skeleton-art,
+.teacher-skeleton-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #eef3f8;
+}
+
+.exact-boot-brand::after,
+.exact-boot-actions span::after,
+.exact-boot-sidebar span::after,
+.exact-boot-title > span::after,
+.exact-boot-metrics span::after,
+.exact-boot-grid > *::after,
+.teacher-skeleton-line::after,
+.teacher-skeleton-art::after,
+.teacher-skeleton-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .72), transparent);
+  animation: teacherSkeletonShimmer 1.35s infinite;
+}
+
+.exact-boot-brand {
+  width: 172px;
+  height: 28px;
+}
+
+.exact-boot-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.exact-boot-actions span {
+  width: 42px;
+  height: 32px;
+}
+
+.exact-boot-sidebar {
+  position: fixed;
+  top: 62px;
+  left: 0;
+  bottom: 0;
+  width: var(--exact-sidebar-width);
+  padding: 18px 12px;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  border-right: 1px solid #e9ede7;
+  background: #fff;
+}
+
+.exact-boot-sidebar span {
+  height: 38px;
+}
+
+.exact-boot-main {
+  min-height: 100vh;
+  margin-left: var(--exact-sidebar-width);
+  padding: 88px 28px 38px;
+}
+
+.exact-boot-title {
+  min-height: 104px;
+  margin-bottom: 18px;
+  padding: 18px;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 8px;
+  border: 1px solid #dce5f1;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .92);
+  box-shadow: 0 16px 38px rgba(30, 44, 66, .08);
+}
+
+.exact-boot-title > span {
+  width: 220px;
+  height: 22px;
+}
+
+.exact-boot-title strong {
+  color: #17243b;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.exact-boot-title .ant-typography {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.exact-boot-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.exact-boot-metrics span {
+  height: 92px;
+}
+
+.exact-boot-grid {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: 1fr 1fr 360px;
+  gap: 14px;
+}
+
+.exact-boot-grid > * {
+  min-height: 360px;
+}
+
+@keyframes teacherSkeletonShimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.teacher-skeleton-line {
+  display: block;
+  height: 14px;
+}
+
+.teacher-skeleton-line.title {
+  width: 260px;
+  height: 26px;
+  margin-bottom: 12px;
+}
+
+.teacher-skeleton-line.subtitle {
+  width: 360px;
+  max-width: 42vw;
+}
+
+.teacher-skeleton-line.block-title {
+  width: 120px;
+}
+
+.teacher-skeleton-line.link {
+  width: 82px;
+}
+
+.teacher-skeleton-art {
+  width: 250px;
+  max-width: 28vw;
+  height: 96px;
+}
+
+.teacher-skeleton-card {
+  display: block;
+}
+
+.teacher-skeleton-card.metric {
+  min-height: 94px;
+}
+
+.teacher-skeleton-card.course {
+  min-height: 258px;
+}
+
+.teacher-skeleton-card.side {
+  min-height: 265px;
+}
+
+.teacher-skeleton-card.side.tall {
+  min-height: 330px;
+}
+
+.exact-dashboard-loading {
+  position: relative;
+}
+
+.exact-dashboard-loading .exact-block {
+  min-height: 360px;
+}
+
+.teacher-skeleton-caption {
+  position: fixed;
+  right: 24px;
+  bottom: 20px;
+  padding: 8px 12px;
+  border: 1px solid #dce5f1;
+  border-radius: 999px;
+  color: #64748b;
+  background: rgba(255, 255, 255, .9);
+  box-shadow: 0 10px 24px rgba(30, 44, 66, .10);
+  font-size: 12px;
+  font-weight: 850;
+}
 
 /* Dashboard */
 .exact-dashboard-grid { display: grid; grid-template-columns: minmax(650px, 1fr) 375px; gap: 16px; }
@@ -4568,6 +4816,59 @@ button { cursor: pointer; }
   height: 38px;
 }
 
+.exact-context .account-trigger {
+  min-width: 154px;
+  min-height: 46px;
+  padding: 4px 10px 4px 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+  border: 1px solid #dce5f1;
+  border-radius: 10px;
+  color: var(--teacher-text);
+  background: #ffffff;
+  box-shadow: 0 8px 18px rgba(30, 44, 66, .045);
+}
+
+.exact-context .account-trigger:hover,
+.exact-context .account-trigger:focus-visible,
+.exact-context .account-trigger.ant-dropdown-open {
+  border-color: #b9d3f3;
+  background: #f8fbff;
+  box-shadow: 0 10px 22px rgba(30, 44, 66, .07);
+}
+
+.exact-context .account-avatar {
+  width: 36px;
+  height: 36px;
+  font-size: 15px;
+}
+
+.exact-context .account-trigger-copy {
+  min-width: 68px;
+  max-width: 92px;
+}
+
+.exact-context .account-trigger-copy strong {
+  color: var(--teacher-text);
+  font-size: 13px;
+  line-height: 1.15;
+  font-weight: 950;
+}
+
+.exact-context .account-trigger-copy small {
+  color: var(--teacher-muted);
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 800;
+}
+
+.exact-context .account-chevron {
+  margin-left: auto;
+  color: #657187;
+}
+
 .exact-user-menu {
   min-height: 38px;
   display: inline-flex;
@@ -5650,7 +5951,7 @@ button { cursor: pointer; }
   box-shadow: 0 0 0 2px var(--teacher-primary) !important;
 }
 
-.exact-shell .exact-loader-dots i,
+.exact-shell .exact-loader-mark i,
 .exact-shell .exact-activity .dot,
 .exact-shell .workspace-list-row .dot,
 .exact-shell .status-dot,
