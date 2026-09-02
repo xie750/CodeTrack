@@ -81,6 +81,42 @@ function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character] || character)
 }
 
+function patchZoomedPointerEvent(event: Event) {
+  if (!(event instanceof MouseEvent)) return
+  const target = event.target instanceof HTMLElement ? event.target : null
+  const canvas = target?.tagName === 'CANVAS' ? target : target?.querySelector?.('canvas')
+  if (!(canvas instanceof HTMLCanvasElement)) return
+
+  const rect = canvas.getBoundingClientRect()
+  if (!rect.width || !rect.height) return
+
+  const scaleX = canvas.clientWidth / rect.width
+  const scaleY = canvas.clientHeight / rect.height
+  if (!Number.isFinite(scaleX) || !Number.isFinite(scaleY)) return
+
+  const offsetX = (event.clientX - rect.left) * scaleX
+  const offsetY = (event.clientY - rect.top) * scaleY
+  try {
+    Object.defineProperty(event, 'offsetX', { configurable: true, value: offsetX })
+    Object.defineProperty(event, 'offsetY', { configurable: true, value: offsetY })
+  } catch {
+    // Some browsers keep offsetX/Y non-configurable; native ECharts coordinates still work there.
+  }
+}
+
+function canvasPointFromEvent(host: HTMLElement, event: any): [number, number] | null {
+  const nativeEvent = event?.event instanceof MouseEvent ? event.event : event instanceof MouseEvent ? event : null
+  const canvas = host.querySelector('canvas')
+  if (!nativeEvent || !(canvas instanceof HTMLCanvasElement)) return null
+  const rect = canvas.getBoundingClientRect()
+  if (!rect.width || !rect.height) return null
+  const scaleX = canvas.clientWidth / rect.width
+  const scaleY = canvas.clientHeight / rect.height
+  const x = (nativeEvent.clientX - rect.left) * scaleX
+  const y = (nativeEvent.clientY - rect.top) * scaleY
+  return Number.isFinite(x) && Number.isFinite(y) ? [x, y] : null
+}
+
 function GraphCanvas({ graph, selection, mode, linkStart, onSelection, onLinkNode, onNodePosition }: {
   graph: TeacherGraph
   selection: Selection
@@ -92,42 +128,104 @@ function GraphCanvas({ graph, selection, mode, linkStart, onSelection, onLinkNod
 }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<echarts.ECharts | null>(null)
+  const graphRef = useRef(graph)
   const handlersRef = useRef({ onSelection, onLinkNode, onNodePosition, mode })
+  graphRef.current = graph
   handlersRef.current = { onSelection, onLinkNode, onNodePosition, mode }
 
   useEffect(() => {
-    if (!hostRef.current) return
-    const chart = echarts.init(hostRef.current, undefined, { renderer: 'canvas' })
+    const host = hostRef.current
+    if (!host) return
+    const chart = echarts.init(host, undefined, { renderer: 'canvas' })
     chartRef.current = chart
     let draggingNodeId = ''
+    let handledChartClickAt = 0
+    const chooseNode = (nodeId: string) => {
+      if (handlersRef.current.mode === 'connect') handlersRef.current.onLinkNode(nodeId)
+      else handlersRef.current.onSelection({ kind: 'node', id: nodeId })
+    }
+    const nearestNodeAt = (point: [number, number]) => {
+      const seriesModel = (chart as any).getModel?.()?.getSeriesByIndex?.(0)
+      const data = seriesModel?.getData?.()
+      if (!data) return ''
+      let bestNodeId = ''
+      let bestDistance = Number.POSITIVE_INFINITY
+      graphRef.current.nodes.forEach((node, index) => {
+        const layout = data.getItemLayout(index)
+        if (!Array.isArray(layout) || layout.length < 2) return
+        const x = Number(layout[0])
+        const y = Number(layout[1])
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return
+        const radius = (30 + Math.max(1, Math.min(5, node.difficulty)) * 8) / 2 + 10
+        const distance = Math.hypot(point[0] - x, point[1] - y)
+        if (distance <= radius && distance < bestDistance) {
+          bestDistance = distance
+          bestNodeId = node.id
+        }
+      })
+      return bestNodeId
+    }
     const click = (params: any) => {
       if (params.dataType === 'node') {
-        if (handlersRef.current.mode === 'connect') handlersRef.current.onLinkNode(params.data.id)
-        else handlersRef.current.onSelection({ kind: 'node', id: params.data.id })
+        handledChartClickAt = Date.now()
+        chooseNode(params.data.id)
       } else if (params.dataType === 'edge') {
+        handledChartClickAt = Date.now()
         handlersRef.current.onSelection({ kind: 'edge', id: params.data.id })
       }
     }
     const dragEnd = (params: any) => {
-      const point = chart.convertFromPixel({ seriesIndex: 0 }, [params.event.offsetX, params.event.offsetY]) as number[]
-      if (params.dataType === 'node' && Array.isArray(point)) handlersRef.current.onNodePosition(params.data.id, point[0], point[1])
+      const canvasPoint = canvasPointFromEvent(host, params.event)
+      const point = canvasPoint ? chart.convertFromPixel({ seriesIndex: 0 }, canvasPoint) as number[] : null
+      if (params.dataType === 'node' && Array.isArray(point) && point.every(Number.isFinite)) handlersRef.current.onNodePosition(params.data.id, point[0], point[1])
     }
     const pointerDown = (params: any) => {
       draggingNodeId = params.dataType === 'node' ? params.data.id : ''
     }
     const pointerUp = (event: any) => {
       if (!draggingNodeId) return
-      const point = chart.convertFromPixel({ seriesIndex: 0 }, [event.offsetX, event.offsetY]) as number[]
+      const canvasPoint = canvasPointFromEvent(host, event)
+      const point = canvasPoint ? chart.convertFromPixel({ seriesIndex: 0 }, canvasPoint) as number[] : null
       if (Array.isArray(point) && point.every(Number.isFinite)) handlersRef.current.onNodePosition(draggingNodeId, point[0], point[1])
       draggingNodeId = ''
+    }
+    const fallbackPointerDown = (event: any) => {
+      if (draggingNodeId) return
+      const point = canvasPointFromEvent(host, event)
+      const nodeId = point ? nearestNodeAt(point) : ''
+      if (nodeId) draggingNodeId = nodeId
+    }
+    const fallbackClick = (event: any) => {
+      window.setTimeout(() => {
+        if (Date.now() - handledChartClickAt < 80) return
+        const point = canvasPointFromEvent(host, event)
+        const nodeId = point ? nearestNodeAt(point) : ''
+        if (nodeId) chooseNode(nodeId)
+      }, 0)
     }
     chart.on('click', click)
     chart.on('mousedown', pointerDown)
     chart.on('dragend', dragEnd)
+    chart.getZr().on('mousedown', fallbackPointerDown)
+    chart.getZr().on('click', fallbackClick)
     chart.getZr().on('mouseup', pointerUp)
+    const eventTypes = ['pointerdown', 'pointermove', 'pointerup', 'mousedown', 'mousemove', 'mouseup', 'click', 'dblclick', 'wheel']
+    eventTypes.forEach((type) => host.addEventListener(type, patchZoomedPointerEvent, { capture: true, passive: true }))
     const observer = new ResizeObserver(() => chart.resize())
-    observer.observe(hostRef.current)
-    return () => { observer.disconnect(); chart.getZr().off('mouseup', pointerUp); chart.dispose(); chartRef.current = null }
+    observer.observe(host)
+    window.requestAnimationFrame(() => chart.resize())
+    return () => {
+      observer.disconnect()
+      chart.off('click', click)
+      chart.off('mousedown', pointerDown)
+      chart.off('dragend', dragEnd)
+      chart.getZr().off('mousedown', fallbackPointerDown)
+      chart.getZr().off('click', fallbackClick)
+      chart.getZr().off('mouseup', pointerUp)
+      eventTypes.forEach((type) => host.removeEventListener(type, patchZoomedPointerEvent, { capture: true }))
+      chart.dispose()
+      chartRef.current = null
+    }
   }, [])
 
   useEffect(() => {
@@ -227,7 +325,7 @@ export function ExactGraphV2(props: Props) {
   }
 
   const generate = async () => {
-    if (!files.length) { setError('请先选择 PDF、Word、Markdown 或 TXT 资料'); return }
+    if (!files.length) { setError('请先选择 PDF、Word、PPT、Markdown 或 TXT 资料'); return }
     setGenerating(true); setError('')
     try {
       const created = await api.createTeacherGraphFromFiles(files, { title: title.trim() || files[0].name.replace(/\.[^.]+$/, ''), description, target_classes: targetClasses })
@@ -328,11 +426,11 @@ export function ExactGraphV2(props: Props) {
       <div className="kg-layout">
         <aside className="kg-left">
           <section className="kg-card kg-generator">
-            <CardTitle icon={<WandSparkles size={16} />} title="资料生成" extra={<Tag color="blue">PDF / Word / MD / TXT</Tag>} />
+            <CardTitle icon={<WandSparkles size={16} />} title="资料生成" extra={<Tag color="blue">PDF / Word / PPT / MD / TXT</Tag>} />
             <label>图谱名称<Input value={title} placeholder="例如：数据结构课程图谱" onChange={(event) => setTitle(event.target.value)} /></label>
             <label>发布班级<Input.TextArea value={targetClasses} rows={2} placeholder="中文逗号、英文逗号或换行分隔" onChange={(event) => setTargetClasses(event.target.value)} /></label>
             <label>说明<Input.TextArea value={description} rows={2} placeholder="填写图谱用途或教学目标" onChange={(event) => setDescription(event.target.value)} /></label>
-            <input ref={inputRef} hidden type="file" multiple accept=".pdf,.docx,.md,.txt" onChange={(event) => setFiles(Array.from(event.target.files || []))} />
+            <input ref={inputRef} hidden type="file" multiple accept=".pdf,.docx,.pptx,.md,.markdown,.txt" onChange={(event) => setFiles(Array.from(event.target.files || []))} />
             <button type="button" className="kg-upload" onClick={() => inputRef.current?.click()}><UploadCloud size={22} /><strong>{files.length ? `已选择 ${files.length} 个文件` : '选择课程资料'}</strong><small>单个文件不超过 20 MB</small></button>
             {!!files.length && <div className="kg-file-list">{files.map((file) => <span key={`${file.name}-${file.size}`}><FileText size={13} /><b>{file.name}</b><small>{fileSize(file.size)}</small></span>)}</div>}
             <Button block type="primary" icon={<Sparkles size={15} />} loading={generating} disabled={saving} onClick={() => void generate()}>分析并生成图谱</Button>

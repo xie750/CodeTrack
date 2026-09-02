@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 import pytest
 from docx import Document
 from pypdf import PdfWriter
+from pptx import Presentation
 
 from teacher_backend.app.main import app
 
@@ -96,9 +97,12 @@ def test_teacher_knowledge_graph_from_text_files_uses_fallback(client):
     assert graph["status"] == "draft"
     assert graph["target_classes"] == ["Python A 班", "Python B 班", "实验班"]
     assert len(graph["source_files"]) == 2
+    assert graph["source_files"][0]["parser"] == "markdown"
+    assert graph["source_files"][0]["chunking_strategy"]
+    assert graph["source_files"][0]["child_chunk_count"] >= 1
     assert 6 <= graph["node_count"] <= 14
     assert graph["edge_count"] == graph["node_count"] - 1
-    assert graph["source_summary"]
+    assert "父切片" in graph["source_summary"]
 
 
 def test_teacher_knowledge_graph_validation_and_permissions(client):
@@ -137,6 +141,32 @@ def test_teacher_knowledge_graph_accepts_docx_and_pdf(client):
     graph = response.json()["data"]
     assert [item["filename"] for item in graph["source_files"]] == ["lesson.docx", "appendix.pdf"]
     assert graph["node_count"] >= 6
+    assert client.delete(f"/api/teacher/knowledge-graphs/{graph['id']}").status_code == 200
+
+
+def test_teacher_knowledge_graph_reuses_rag_parser_for_markdown_and_pptx(client):
+    deck_buffer = BytesIO()
+    deck = Presentation()
+    slide = deck.slides.add_slide(deck.slide_layouts[1])
+    slide.shapes.title.text = "监督学习"
+    slide.placeholders[1].text = "损失函数\n梯度下降\n模型评估"
+    deck.save(deck_buffer)
+
+    response = client.post(
+        "/api/teacher/knowledge-graphs/from-files",
+        data={"title": "机器学习资料图谱"},
+        files=[
+            ("files", ("lesson.markdown", "# 机器学习\n## 过拟合\n正则化方法".encode("utf-8"), "text/markdown")),
+            ("files", ("slides.pptx", deck_buffer.getvalue(), "application/vnd.openxmlformats-officedocument.presentationml.presentation")),
+        ],
+    )
+    assert response.status_code == 201, response.text
+    graph = response.json()["data"]
+    assert [item["filename"] for item in graph["source_files"]] == ["lesson.markdown", "slides.pptx"]
+    assert {item["parser"] for item in graph["source_files"]} == {"markdown", "python-pptx"}
+    assert any(item["content_profile"] == "slide_deck" for item in graph["source_files"])
+    assert graph["node_count"] >= 6
+    assert "父切片" in graph["source_summary"]
     assert client.delete(f"/api/teacher/knowledge-graphs/{graph['id']}").status_code == 200
 
 

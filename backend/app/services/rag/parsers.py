@@ -251,7 +251,7 @@ def parse_pdf_document(content: bytes) -> ParseResult:
     try:
         import fitz  # PyMuPDF
     except ImportError as exc:
-        raise RuntimeError("PyMuPDF is required for PDF parsing") from exc
+        return _parse_pdf_document_with_pypdf(content, exc)
 
     elements: list[ParsedElement] = []
     doc = fitz.open(stream=content, filetype="pdf")
@@ -263,6 +263,21 @@ def parse_pdf_document(content: bytes) -> ParseResult:
     finally:
         doc.close()
     return ParseResult("pymupdf", "1", elements)
+
+
+def _parse_pdf_document_with_pypdf(content: bytes, import_error: ImportError) -> ParseResult:
+    try:
+        from pypdf import PdfReader
+    except ImportError as exc:
+        raise RuntimeError("PyMuPDF or pypdf is required for PDF parsing") from import_error or exc
+
+    elements: list[ParsedElement] = []
+    reader = PdfReader(io.BytesIO(content))
+    for index, page in enumerate(reader.pages, start=1):
+        text = normalize_text(page.extract_text() or "")
+        if text:
+            elements.append(ParsedElement("paragraph", text, page_no=index, metadata={"page": index}))
+    return ParseResult("pypdf", "1", elements)
 
 
 def parse_docx_document(content: bytes) -> ParseResult:
