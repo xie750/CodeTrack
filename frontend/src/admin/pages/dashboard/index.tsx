@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Card, Row, Col, Tag, Badge, Button, Modal, Select, Input, message } from 'antd'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import {
   GraduationCap,
   Users,
   School,
-  FlaskConical,
-  Zap,
+  BookOpenCheck,
+  DatabaseZap,
   Server,
   Megaphone,
   AlertTriangle,
@@ -89,15 +89,11 @@ const GOLDEN_CARD_HEIGHT = 240
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-  const todoParam = searchParams.get('todo')
 
   const profile = useAppStore((s) => s.profile)
   const teachers = useAppStore((s) => s.teachers)
   const students = useAppStore((s) => s.students)
   const courses = useAppStore((s) => s.courses)
-  const projects = useAppStore((s) => s.projects)
-  const compliance = useAppStore((s) => s.compliance)
   const subjectRoutes = useAppStore((s) => s.subjectRoutes)
   const connectedModels = useAppStore((s) => s.connectedModels)
   const callLogs = useAppStore((s) => s.aiCallLogs)
@@ -111,6 +107,10 @@ export default function Dashboard() {
   const studentCount = students.length
   const teacherCount = teachers.length
   const courseCount = courses.length
+  const teachingRelationCount = courses.reduce((sum, c) => sum + (c.classNames?.length ?? c.classCount), 0)
+  const courseTaskCount = courses.reduce((sum, c) => sum + (c.taskCount ?? 0), 0)
+  const teachingPending = courses.filter((c) => !c.teacher || c.teacherWorkspaceStatus !== '已绑定' || !c.classNames?.length).length
+  const knowledgePending = courses.filter((c) => c.knowledgeBaseStatus !== '已开放').length
   const modelOnline = connectedModels.filter((m) => m.enabled && m.modelType === 'primary').length
   const modelTotal = connectedModels.filter((m) => m.modelType === 'primary').length
   const avgSuccess = useMemo(() => {
@@ -118,8 +118,6 @@ export default function Dashboard() {
     const successCount = callLogs.filter((l) => l.status === '成功').length
     return ((successCount / callLogs.length) * 100).toFixed(1)
   }, [callLogs])
-  const projectTodo = projects.filter((p) => p.status === '待审核').length
-  const complianceTodo = compliance.filter((c) => c.status === '待处理').length
 
   // 今日活跃
   const today = new Date().toISOString().slice(0, 10) // 2026-08-10
@@ -147,7 +145,7 @@ export default function Dashboard() {
   const [editContent, setEditContent] = useState('')
 
   // 待办 + 预警空态
-  const hasTodoItems = projectTodo > 0 || complianceTodo > 0
+  const hasTodoItems = teachingPending > 0 || knowledgePending > 0
 
   // ===== 图表色板 =====
   const CHART_BLUE = colors.primary
@@ -276,30 +274,23 @@ export default function Dashboard() {
     }
   }, [courseCalls, failRates])
 
-  useEffect(() => {
-    if (todoParam) {
-      const t: Record<string, string> = { '科研项目审核': '/admin/research/projects', '合规审查': '/admin/research/compliance' }
-      if (t[todoParam]) navigate(`${t[todoParam]}?todo=1`)
-    }
-  }, [todoParam, navigate])
-
   // ===== 渲染 =====
   const todoItems = [
-    { label: '科研项目审核', desc: '新提交的立项申请等待审核', count: projectTodo, path: '/admin/research/projects?status=待审核' },
-    { label: '合规审查处置', desc: 'AI 初检疑似违规需人工复核', count: complianceTodo, path: '/admin/research/compliance?status=待处理' },
+    { label: '教学安排待补齐', desc: '课程需绑定教师与行政班后，教师端才能发布任务', count: teachingPending, path: '/admin/users/classes' },
+    { label: '知识库待开放', desc: '课程知识库开放后，学生端 AI 诊断和问答才能引用', count: knowledgePending, path: '/admin/users/classes?filter=knowledge' },
   ]
   const pendingAlertList = aiAlerts.filter((a) => a.status === '待处理')
   const displayName = profile.realName || profile.nickname
 
   return (
-    <div>
+    <div className="admin-dashboard">
       {/* ====== 问候 ====== */}
       <div style={{ marginBottom: 18 }}>
         <div style={{ fontSize: 20, fontWeight: 600, color: 'var(--n-9)' }}>
           {greet()}，{displayName}
         </div>
         <div style={{ fontSize: 13, color: 'var(--n-6)', marginTop: 4 }}>
-          {fmtDate()} · 平台运行概况
+          {fmtDate()} · 人工智能专业助学平台运行概况
         </div>
       </div>
 
@@ -315,20 +306,20 @@ export default function Dashboard() {
           <MiniStat icon={<School size={22} />} label="课程总数" value={courseCount.toLocaleString()} color={colors.info} trend={2} trendLabel="较上月" onClick={() => navigate('/admin/users/classes')} />
         </Col>
         <Col xs={24} sm={12} md={4}>
-          <MiniStat icon={<FlaskConical size={22} />} label="科研项目" value={projects.length} color={colors.warning} trend={8} trendLabel="较上周" onClick={() => navigate('/admin/research/projects')} />
+          <MiniStat icon={<BookOpenCheck size={22} />} label="班级课程关系" value={teachingRelationCount} color={colors.warning} trend={0} trendLabel="已对接" onClick={() => navigate('/admin/users/classes')} />
         </Col>
         <Col xs={24} sm={12} md={4}>
-          <MiniStat icon={<Zap size={22} />} label="模型成功率" value={`${avgSuccess}%`} color={colors.purple} trend={0.3} trendLabel="较昨日" onClick={() => navigate('/admin/ai/monitor')} />
+          <MiniStat icon={<DatabaseZap size={22} />} label="任务模板" value={courseTaskCount} color={colors.purple} trend={0} trendLabel="教师端可用" onClick={() => navigate('/admin/users/classes')} />
         </Col>
         <Col xs={24} sm={12} md={4}>
-          <MiniStat icon={<Server size={22} />} label="模型在线" value={`${modelOnline}/${modelTotal}`} color={colors.success} trend={3} trendLabel="课程垂类" onClick={() => navigate('/admin/ai/route')} />
+          <MiniStat icon={<Server size={22} />} label="模型在线" value={`${modelOnline}/${modelTotal}`} color={colors.success} trend={0.3} trendLabel={`成功率 ${avgSuccess}%`} onClick={() => navigate('/admin/ai/route')} />
         </Col>
       </Row>
 
       {/* ====== 主内容区：左流式 + 右贯穿 ====== */}
-      <div style={{ display: 'flex', gap: 16, marginTop: 16 }}>
+      <div className="admin-dashboard-main">
         {/* ─── 左栏 ─── */}
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="admin-dashboard-left">
           {/* 待办 + 预警 — 等高、固定高度、内容滚动 */}
           <Row gutter={16}>
             <Col xs={24} md={12}>
@@ -364,7 +355,7 @@ export default function Dashboard() {
                         <ShieldAlert size={20} style={{ color: 'var(--n-4)', opacity: 0.5 }} />
                       </div>
                       <div style={{ fontSize: 13, color: 'var(--n-5)', fontWeight: 500, marginBottom: 4 }}>暂无待办事项</div>
-                      <div style={{ fontSize: 12, color: 'var(--n-4)' }}>所有任务都已处理完毕，可以休息一下 ☕</div>
+                      <div style={{ fontSize: 12, color: 'var(--n-4)' }}>教学安排、知识库和开放状态均已对齐</div>
                     </div>
                   )}
                 </div>
@@ -403,7 +394,7 @@ export default function Dashboard() {
                         <AlertTriangle size={20} style={{ color: 'var(--c-warning)', opacity: 0.4 }} />
                       </div>
                       <div style={{ fontSize: 13, color: 'var(--n-5)', fontWeight: 500, marginBottom: 4 }}>暂无异常告警</div>
-                      <div style={{ fontSize: 12, color: 'var(--n-4)' }}>系统运行平稳，一切正常 ✨</div>
+                      <div style={{ fontSize: 12, color: 'var(--n-4)' }}>模型路由和沙箱服务当前无需处置</div>
                     </div>
                   )}
                 </div>
@@ -413,6 +404,7 @@ export default function Dashboard() {
 
           {/* AI模型运行观测 */}
           <Card
+            className="admin-dashboard-chart-card"
             title={
               <span style={{ fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <Activity size={15} style={{ color: colors.primary }} />AI模型运行观测
@@ -445,12 +437,12 @@ export default function Dashboard() {
               ))}
             </div>
             {/* 图表区 */}
-            <EChart option={activityOption} height={280} />
+            <EChart option={activityOption} height={280} style={{ flex: 1, minHeight: 280 }} />
           </Card>
         </div>
 
         {/* ─── 右栏 贯穿，flex列撑满 ─── */}
-        <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div className="admin-dashboard-right">
           {/* 公告 — 已发布 / 草稿 标签页 */}
           <Card
             title={<span style={{ fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Megaphone size={14} style={{ color: colors.primary }} />平台公告</span>}
@@ -503,7 +495,7 @@ export default function Dashboard() {
                     <Megaphone size={16} style={{ color: 'var(--n-4)', opacity: 0.4 }} />
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--n-5)' }}>暂无已发布公告</div>
-                  <div style={{ fontSize: 11, color: 'var(--n-4)', marginTop: 2 }}>发布第一条公告通知吧 📢</div>
+                  <div style={{ fontSize: 11, color: 'var(--n-4)', marginTop: 2 }}>发布第一条教学或平台公告</div>
                 </div>
               )
             ) : (
@@ -522,7 +514,7 @@ export default function Dashboard() {
                     <Megaphone size={16} style={{ color: 'var(--n-4)', opacity: 0.4 }} />
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--n-5)' }}>暂无草稿公告</div>
-                  <div style={{ fontSize: 11, color: 'var(--n-4)', marginTop: 2 }}>当前没有待发布的公告 ✍️</div>
+                  <div style={{ fontSize: 11, color: 'var(--n-4)', marginTop: 2 }}>当前没有待发布的公告</div>
                 </div>
               )
             )}

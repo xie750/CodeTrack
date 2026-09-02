@@ -925,6 +925,77 @@ def build_ai_tutor_stream_messages(payload: dict[str, Any]) -> list[dict[str, An
     ]
 
 
+def _compact_context_item(value: Any, limit: int = 220) -> str:
+    return _trim(re.sub(r"\s+", " ", str(value or "")).strip(), limit)
+
+
+def build_fine_tuned_ai_tutor_messages(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    profile = payload.get("learner_profile") if isinstance(payload.get("learner_profile"), dict) else {}
+    overview = profile.get("overview") if isinstance(profile.get("overview"), dict) else {}
+    knowledge_states = profile.get("knowledge_states") if isinstance(profile.get("knowledge_states"), list) else []
+    weak_points = [
+        _compact_context_item(
+            f"{item.get('knowledge_point', '')} {item.get('state', '')} {item.get('mastery_score', '')}",
+            80,
+        )
+        for item in knowledge_states[:5]
+        if isinstance(item, dict)
+    ]
+    history_lines = [
+        f"{'学生' if item.get('role') == 'student' else '导师'}：{_compact_context_item(item.get('content'), 140)}"
+        for item in payload.get("history", [])[-4:]
+        if isinstance(item, dict) and item.get("content")
+    ]
+    source_lines = [
+        f"- {_compact_context_item(source.get('title'), 80)}：{_compact_context_item(source.get('summary') or source.get('content'), 160)}"
+        for source in (payload.get("personal_knowledge_sources") or payload.get("knowledge_sources") or [])[:2]
+        if isinstance(source, dict)
+    ]
+    context_lines = [
+        f"课程：{_compact_context_item((payload.get('course') or {}).get('course_name'), 60)}",
+        f"学习画像摘要：{_compact_context_item(overview.get('summary'), 180) or '暂无'}",
+        f"薄弱点：{'；'.join(item for item in weak_points if item) or '暂无'}",
+    ]
+    if history_lines:
+        context_lines.append("最近对话：\n" + "\n".join(history_lines))
+    if source_lines:
+        context_lines.append("可参考资料摘要：\n" + "\n".join(source_lines))
+    context_lines.append(f"学生问题：{_compact_context_item(payload.get('message'), 500)}")
+    return [
+        {
+            "role": "system",
+            "content": (
+                "你是 CodeTrack 的 AI 助学导师。请用中文回答，优先讲清概念、给出学习步骤，"
+                "不要编造引用；如果信息不足，直接说明。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": "\n\n".join(context_lines),
+        },
+    ]
+
+
+def build_direct_ai_tutor_result(
+    answer: str,
+    *,
+    default_provider: str,
+    fallback_model_name: str,
+    source_used: bool = False,
+) -> dict[str, Any]:
+    return {
+        "answer": answer,
+        "confidence": 0.68 if source_used else GENERAL_ANSWER_CONFIDENCE,
+        "citations": [],
+        "suggested_actions": _default_actions(),
+        "profile_used": True,
+        "source_used": source_used,
+        "safety_note": "",
+        "model_provider": default_provider,
+        "model_name": fallback_model_name,
+    }
+
+
 def build_ai_tutor_metadata_messages(payload: dict[str, Any], answer: str) -> list[dict[str, Any]]:
     metadata_payload = {
         **payload,
@@ -1040,8 +1111,31 @@ async def generate_student_ai_reply(
             fallback_model_name=fallback_model_name,
         )
 
+    llm_result = None
+    started_at = utc_now()
     try:
-        if use_gateway:
+        if model_config.key == FINE_TUNED_MODEL_KEY and not use_gateway:
+            answer_parts: list[str] = []
+            async for chunk in chat_text_stream(
+                build_fine_tuned_ai_tutor_messages(payload),
+                model=fallback_model_name,
+                api_key=model_config.api_key,
+                base_url=model_config.base_url or settings.model_api_base_url,
+                timeout=90,
+                temperature=0.2,
+                max_tokens=192,
+            ):
+                answer_parts.append(chunk)
+            answer = "".join(answer_parts).strip()
+            if not answer:
+                raise ValueError("empty fine-tuned answer")
+            result = build_direct_ai_tutor_result(
+                answer,
+                default_provider=default_provider,
+                fallback_model_name=fallback_model_name,
+                source_used=bool(personal_sources or sources),
+            )
+        elif use_gateway:
             llm_result = await request_json(
                 model_config.gateway_url or "",
                 payload=payload,
@@ -1089,8 +1183,25 @@ async def generate_student_ai_reply(
             "AI 模型请求失败，请稍后再试。",
             details=_llm_error_details(exc, run.id),
         ) from exc
+    except ValueError as exc:
+        finish_run(
+            db,
+            run,
+            status="FAILED",
+            error_code="LLM_EMPTY_ANSWER",
+            error_message=str(exc),
+            attempts=1,
+        )
+        db.commit()
+        raise ApiError(
+            502,
+            "AI_MODEL_REQUEST_FAILED",
+            "AI 模型请求失败，请稍后再试。",
+            details={"llm_error_code": "LLM_EMPTY_ANSWER", "agent_run_id": run.id},
+        ) from exc
 
-    result: dict[str, Any] = llm_result.data
+    if llm_result is not None:
+        result = llm_result.data
     result["run_id"] = run.id
     result["model_key"] = model_config.key
     result["model_label"] = model_config.label
@@ -1103,11 +1214,11 @@ async def generate_student_ai_reply(
             "source_used": result["source_used"],
             "citation_count": len(result["citations"]),
         },
-        attempts=llm_result.attempts,
+        attempts=llm_result.attempts if llm_result is not None else 1,
         model_provider=result["model_provider"],
         model_name=result["model_name"],
-        token_prompt=llm_result.token_prompt,
-        token_completion=llm_result.token_completion,
+        token_prompt=llm_result.token_prompt if llm_result is not None else None,
+        token_completion=llm_result.token_completion if llm_result is not None else None,
     )
     record_step(
         db,
@@ -1117,8 +1228,8 @@ async def generate_student_ai_reply(
         status="SUCCEEDED",
         input_summary={"message": _trim(message, 120), "course_id": course.id},
         output_summary={"confidence": result["confidence"], "actions": result["suggested_actions"]},
-        started_at=llm_result.started_at,
-        finished_at=llm_result.finished_at,
+        started_at=llm_result.started_at if llm_result is not None else started_at,
+        finished_at=llm_result.finished_at if llm_result is not None else utc_now(),
     )
     db.commit()
     return result
@@ -1210,6 +1321,95 @@ async def stream_student_ai_reply(
     )
 
     answer_parts: list[str] = []
+    if model_config.key == FINE_TUNED_MODEL_KEY:
+        started_at = utc_now()
+        try:
+            async for chunk in chat_text_stream(
+                build_fine_tuned_ai_tutor_messages(payload),
+                model=fallback_model_name,
+                api_key=model_config.api_key,
+                base_url=model_config.base_url or settings.model_api_base_url,
+                timeout=90,
+                temperature=0.2,
+                max_tokens=192,
+            ):
+                answer_parts.append(chunk)
+                yield {"type": "delta", "content": chunk}
+
+            answer = "".join(answer_parts).strip()
+            if not answer:
+                raise ValueError("empty fine-tuned streamed answer")
+        except LLMError as exc:
+            finish_run(
+                db,
+                run,
+                status="FAILED",
+                error_code=exc.code,
+                error_message=exc.detail or str(exc),
+                attempts=getattr(exc, "attempts", 1),
+            )
+            db.commit()
+            raise ApiError(
+                502,
+                "AI_MODEL_REQUEST_FAILED",
+                "AI 模型请求失败，请稍后再试。",
+                details=_llm_error_details(exc, run.id),
+            ) from exc
+        except ValueError as exc:
+            finish_run(
+                db,
+                run,
+                status="FAILED",
+                error_code="LLM_STREAM_EMPTY",
+                error_message=str(exc),
+                attempts=1,
+            )
+            db.commit()
+            raise ApiError(
+                502,
+                "AI_MODEL_REQUEST_FAILED",
+                "AI 模型请求失败，请稍后再试。",
+                details={"llm_error_code": "LLM_STREAM_EMPTY", "agent_run_id": run.id},
+            ) from exc
+
+        result = build_direct_ai_tutor_result(
+            answer,
+            default_provider=default_provider,
+            fallback_model_name=fallback_model_name,
+            source_used=bool(personal_sources or sources),
+        )
+        result["run_id"] = run.id
+        result["model_key"] = model_config.key
+        result["model_label"] = model_config.label
+        finish_run(
+            db,
+            run,
+            status="SUCCEEDED",
+            output={
+                "confidence": result["confidence"],
+                "source_used": result["source_used"],
+                "citation_count": len(result["citations"]),
+                "stream": True,
+            },
+            attempts=1,
+            model_provider=result["model_provider"],
+            model_name=result["model_name"],
+        )
+        record_step(
+            db,
+            run,
+            step_name="student_ai_stream_reply",
+            step_order=1,
+            status="SUCCEEDED",
+            input_summary={"message": _trim(message, 120), "course_id": course.id},
+            output_summary={"confidence": result["confidence"], "actions": result["suggested_actions"]},
+            started_at=started_at,
+            finished_at=utc_now(),
+        )
+        db.commit()
+        yield {"type": "final", "data": result}
+        return
+
     try:
         async for chunk in chat_text_stream(
             build_ai_tutor_stream_messages(payload),

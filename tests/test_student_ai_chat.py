@@ -142,32 +142,11 @@ def test_student_ai_chat_can_use_fine_tuned_model(monkeypatch):
     monkeypatch.setenv("CODETRACK_FINE_TUNED_MODEL_LABEL", "CodeTrack 微调模型")
     get_settings.cache_clear()
 
-    async def fake_post(url, *, json, headers=None, timeout=llm_client.DEFAULT_TIMEOUT):
+    async def fake_stream(url, *, json, headers=None, timeout=llm_client.DEFAULT_TIMEOUT):
         calls.append({"url": url, "body": json, "headers": headers})
-        return {
-            "choices": [
-                {
-                    "message": {
-                        "content": json_module.dumps(
-                            {
-                                "answer": "微调模型会优先按课程任务场景解释边界测试。",
-                                "confidence": 0.82,
-                                "knowledge_source_ids": ["kb_boundary_test_reasoning"],
-                                "suggested_actions": ["对比通用模型", "生成练习"],
-                                "profile_used": True,
-                                "source_used": True,
-                                "safety_note": "",
-                            },
-                            ensure_ascii=False,
-                        )
-                    }
-                }
-            ],
-            "usage": {"prompt_tokens": 120, "completion_tokens": 28},
-        }
+        yield {"choices": [{"delta": {"content": "微调模型会优先按课程任务场景解释边界测试。"}}]}
 
-    json_module = json
-    monkeypatch.setattr(llm_client, "_post_json", fake_post)
+    monkeypatch.setattr(llm_client, "_stream_json_lines", fake_stream)
 
     with TestClient(app) as client:
         response = client.post(
@@ -188,6 +167,8 @@ def test_student_ai_chat_can_use_fine_tuned_model(monkeypatch):
     assert calls[0]["url"] == "http://codetrack-model:8080/v1/chat/completions"
     assert calls[0]["headers"] == {"Authorization": "Bearer sk-fine"}
     assert calls[0]["body"]["model"] == "/models/codetrack-q4_k_m.gguf"
+    assert calls[0]["body"]["stream"] is True
+    assert calls[0]["body"]["max_tokens"] == 192
 
 
 def test_student_ai_chat_can_cite_personal_knowledge_base(monkeypatch):

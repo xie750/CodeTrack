@@ -153,12 +153,16 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
           onLogout={onLogout}
           onNavigate={transitionTo}
           centerSlot={activeRouteGroup === "/project-practice" ? (
-            <nav className="project-practice-top-tabs" aria-label="项目实训页面导航">
+            <nav className="project-practice-top-tabs" aria-label="科研项目实践页面导航">
               <button type="button" className={location.pathname === "/project-practice" ? "active" : ""} onClick={() => transitionTo("/project-practice")}>
-                实训首页
+                助研首页
               </button>
-              <button type="button" className={location.pathname.startsWith("/project-practice/projects") ? "active" : ""} onClick={() => transitionTo("/project-practice/projects/sales-cleaning")}>
-                我的项目
+              <button
+                type="button"
+                className={location.pathname.startsWith("/project-practice/projects") ? "active" : ""}
+                onClick={() => transitionTo(location.pathname.startsWith("/project-practice/projects") ? location.pathname : "/project-practice")}
+              >
+                课题工作台
               </button>
             </nav>
           ) : undefined}

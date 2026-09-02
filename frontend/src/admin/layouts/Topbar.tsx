@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react'
 import { Badge, Avatar, Dropdown, Popover, Button, Divider, Modal } from 'antd'
-import { Bell, LogOut, ChevronDown, User, FolderKanban, ShieldCheck, X } from 'lucide-react'
+import { Bell, LogOut, ChevronDown, User, BookOpen, DatabaseZap, ShieldCheck, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '@admin/stores/useAppStore'
 import PersonalCenter from '@admin/components/PersonalCenter'
 
 const todoMeta = [
-  { type: '科研项目审核', icon: <FolderKanban size={14} /> },
-  { type: '合规审查', icon: <ShieldCheck size={14} /> },
+  { type: '教学安排待补齐', icon: <BookOpen size={14} /> },
+  { type: '知识库待开放', icon: <DatabaseZap size={14} /> },
+  { type: 'AI 服务告警', icon: <ShieldCheck size={14} /> },
 ]
 
 // A1 全局顶栏：纯白 + 1px 浅灰底边，只放全局入口（搜索 / 状态徽标 / 通知 / 头像）
@@ -15,19 +16,22 @@ export default function Topbar() {
   const navigate = useNavigate()
   const currentUser = useAppStore((s) => s.currentUser)
   const logout = useAppStore((s) => s.logout)
+  const courses = useAppStore((s) => s.courses)
+  const aiAlerts = useAppStore((s) => s.aiAlerts)
   const [open, setOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [allRead, setAllRead] = useState(false)
 
   const todos = useMemo(() => {
-    const s = useAppStore.getState()
-    const pendingProjects = s.projects.filter((p) => p.status === '待审核').length
-    const pendingCompliance = s.compliance.filter((c) => c.status === '待处理').length
+    const pendingTeaching = courses.filter((c) => !c.teacher || c.teacherWorkspaceStatus !== '已绑定' || !c.classNames?.length).length
+    const pendingKnowledge = courses.filter((c) => c.knowledgeBaseStatus !== '已开放').length
+    const pendingAlerts = aiAlerts.filter((a) => a.status === '待处理').length
     return [
-      { type: '科研项目审核', count: pendingProjects },
-      { type: '合规审查', count: pendingCompliance },
+      { type: '教学安排待补齐', count: pendingTeaching, target: '/admin/users/classes' },
+      { type: '知识库待开放', count: pendingKnowledge, target: '/admin/users/classes?filter=knowledge' },
+      { type: 'AI 服务告警', count: pendingAlerts, target: '/admin/ai/monitor' },
     ]
-  }, [open])
+  }, [courses, aiAlerts, open])
 
   const totalTodo = todos.reduce((s, t) => s + t.count, 0)
   const showBadge = !allRead && totalTodo > 0
@@ -72,11 +76,12 @@ export default function Topbar() {
       {/* 消息列表 */}
       {todos.map((t) => {
         const meta = todoMeta.find((m) => m.type === t.type)
-        const desc =
-          t.type === '科研项目审核'
-            ? `有 ${t.count} 个新提交的科研立项申请等待审核处理`
-            : `有 ${t.count} 项 AI 初检疑似违规内容需要人工复核处置`
-        const time = t.type === '科研项目审核' ? '10 分钟前' : '32 分钟前'
+        const descMap: Record<string, string> = {
+          教学安排待补齐: `有 ${t.count} 个班级课程缺少教师或授课班级配置`,
+          知识库待开放: `有 ${t.count} 门课程知识库尚未开放给学生端 AI 使用`,
+          'AI 服务告警': `有 ${t.count} 项模型或沙箱运行告警需要处理`,
+        }
+        const time = t.type === 'AI 服务告警' ? '32 分钟前' : '今天'
         const isRead = allRead || t.count === 0
 
         return (
@@ -84,7 +89,7 @@ export default function Topbar() {
             key={t.type}
             onClick={() => {
               setOpen(false)
-              navigate(`/admin/dashboard?todo=${t.type}`)
+              navigate(t.target)
             }}
             style={{
               padding: '10px 8px',
@@ -129,7 +134,7 @@ export default function Topbar() {
               {/* 文字内容 */}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--n-8)', marginBottom: 2 }}>{t.type}</div>
-                <div style={{ fontSize: 12, color: 'var(--n-7)', lineHeight: 1.5 }}>{desc}</div>
+                <div style={{ fontSize: 12, color: 'var(--n-7)', lineHeight: 1.5 }}>{descMap[t.type]}</div>
                 <div style={{ marginTop: 6 }}>
                   <span style={{ fontSize: 11, color: 'var(--n-5)' }}>{time}</span>
                 </div>
@@ -142,7 +147,7 @@ export default function Topbar() {
                 onClick={(e) => {
                   e.stopPropagation()
                   setOpen(false)
-                  navigate(`/admin/dashboard?todo=${t.type}`)
+                  navigate(t.target)
                 }}
                 style={{ flexShrink: 0, padding: 0, fontSize: 12, alignSelf: 'center' }}
               >

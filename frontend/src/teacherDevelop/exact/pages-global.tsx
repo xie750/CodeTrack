@@ -37,7 +37,25 @@ function resetEntryCardTilt(event: PointerEvent<HTMLElement>) {
   event.currentTarget.style.setProperty('--tilt-y', '0deg')
 }
 
-export function ExactPortal({ authUser, loggedIn, onLogin, onLogout, onEnter, onNavigate }: { authUser: AuthUser; loggedIn: boolean; onLogin: (userId: string, name: string) => void; onLogout: () => void; onEnter: () => void; onNavigate: (path: string) => void }) {
+export function ExactPortal({
+  authUser,
+  loggedIn,
+  onLogin,
+  onLogout,
+  onEnter,
+  onNavigate,
+  enteringWorkbench = false,
+  entryError = '',
+}: {
+  authUser: AuthUser
+  loggedIn: boolean
+  onLogin: (userId: string, name: string) => void
+  onLogout: () => void
+  onEnter: () => void
+  onNavigate: (path: string) => void
+  enteringWorkbench?: boolean
+  entryError?: string
+}) {
   const teacherName = getCurrentUserName()
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
@@ -135,12 +153,16 @@ export function ExactPortal({ authUser, loggedIn, onLogin, onLogout, onEnter, on
       <>
         <Title>你好，{teacherName}</Title>
         <Text type="secondary">欢迎进入 CodeTrack 教师端，智能助力教学管理与科研协作。</Text>
+        {entryError ? <Alert className="teacher-entry-alert" type="warning" showIcon message={entryError} /> : null}
         <div className="teacher-entry-cards">
           <article className="teacher-entry-card" onPointerMove={handleEntryCardPointerMove} onPointerLeave={resetEntryCardTilt}>
             <div className="teacher-card-visual workbench-visual" aria-hidden="true"><span className="visual-window"><i /><i /><i /><b /><em /></span><span className="visual-profile"><BookOpen size={34} strokeWidth={2.1} /></span><span className="visual-dot dot-a" /><span className="visual-dot dot-b" /></div>
             <h2>教学工作台</h2>
             <p>进入课程管理、班级组织、任务发布与学情分析</p>
-            <button type="button" onClick={onEnter}>进入工作台 <ArrowRight size={24} strokeWidth={2.2} /></button>
+            <button type="button" disabled={enteringWorkbench} aria-busy={enteringWorkbench} onClick={onEnter}>
+              {enteringWorkbench ? '正在进入' : '进入工作台'}
+              {enteringWorkbench ? <RefreshCw className="teacher-entry-spin" size={22} strokeWidth={2.2} /> : <ArrowRight size={24} strokeWidth={2.2} />}
+            </button>
           </article>
           <article className="teacher-entry-card" onPointerMove={handleEntryCardPointerMove} onPointerLeave={resetEntryCardTilt}>
             <div className="teacher-card-visual research-visual" aria-hidden="true"><span className="visual-microscope"><Microscope size={98} strokeWidth={1.45} /></span><span className="visual-flask"><FlaskConical size={42} strokeWidth={1.6} /></span><span className="visual-dot dot-a" /><span className="visual-dot dot-b" /></div>
@@ -163,6 +185,41 @@ interface DashboardProps {
   onReload: (courseId?: string) => void | Promise<void>
 }
 
+function ExactDashboardSkeleton({ courses }: { courses: ApiCourse[] }) {
+  const courseSlots = Math.max(3, Math.min(courses.length || 3, 6))
+
+  return <div className="exact-page exact-dashboard exact-dashboard-loading" role="status" aria-live="polite">
+    <div className="exact-page-title">
+      <div>
+        <span className="teacher-skeleton-line title" />
+        <span className="teacher-skeleton-line subtitle" />
+      </div>
+      <span className="teacher-skeleton-art" />
+    </div>
+    <div className="exact-dashboard-grid">
+      <section className="exact-dashboard-primary">
+        <div className="exact-metric-row">
+          {Array.from({ length: 4 }, (_, index) => <span className="teacher-skeleton-card metric" key={index} />)}
+        </div>
+        <div className="exact-block">
+          <div className="exact-block-title">
+            <span className="teacher-skeleton-line block-title" />
+            <span className="teacher-skeleton-line link" />
+          </div>
+          <div className="exact-dashboard-courses">
+            {Array.from({ length: courseSlots }, (_, index) => <span className="teacher-skeleton-card course" key={index} />)}
+          </div>
+        </div>
+      </section>
+      <aside className="exact-dashboard-side">
+        <span className="teacher-skeleton-card side" />
+        <span className="teacher-skeleton-card side tall" />
+      </aside>
+    </div>
+    <span className="teacher-skeleton-caption">正在整理教师工作台内容</span>
+  </div>
+}
+
 export function ExactDashboard({ courseId, classId, courses, onCourse, onNavigate, onReload }: DashboardProps) {
   const [data, setData] = useState<any>(null)
   const [handled, setHandled] = useState<string[]>([])
@@ -173,7 +230,7 @@ export function ExactDashboard({ courseId, classId, courses, onCourse, onNavigat
     api.dashboard(courseId, classId).then(setData).catch((reason) => setError(reason.message))
   }
   useEffect(load, [courseId, classId])
-  if (!data && !error) return <PageLoader />
+  if (!data && !error) return <ExactDashboardSkeleton courses={courses} />
   if (error) return <Alert type="error" showIcon message={error} action={<Button onClick={load}>重试</Button>} />
   const summary = data.summary
   const metrics = [

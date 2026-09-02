@@ -7,7 +7,7 @@ import { useAppStore } from '@admin/stores/useAppStore'
 import { colors } from '@admin/theme/themeConfig'
 import type { Notice, NoticeAudience } from '@admin/types'
 
-const audiences: NoticeAudience[] = ['全体学生', '全体教师', '全体师生', '科研团队']
+const audiences: NoticeAudience[] = ['全体学生', '全体教师', '全体师生', '人工智能专业师生']
 
 export default function Notices() {
   const notices = useAppStore((s) => s.notices)
@@ -38,7 +38,7 @@ export default function Notices() {
 
   const togglePin = (n: Notice) => {
     updateNotice(n.id, { pinned: !n.pinned })
-    message.success(!n.pinned ? '已置顶（📌 排序优先）' : '已取消置顶')
+    message.success(!n.pinned ? '已置顶，排序优先' : '已取消置顶')
   }
 
   const publish = (n: Notice) => {
@@ -62,7 +62,7 @@ export default function Notices() {
   const handleCreate = () => {
     form.validateFields().then((v) => {
       const audience = v.audience
-      const total = audience === '全体学生' ? 1324 : audience === '全体教师' ? 312 : audience === '科研团队' ? 112 : 2386
+      const total = audience === '全体学生' ? 1324 : audience === '全体教师' ? 312 : audience === '人工智能专业师生' ? 164 : 2386
       addNotice({
         id: `N${Date.now().toString().slice(-3)}`,
         title: v.title,
@@ -240,7 +240,7 @@ export default function Notices() {
         <Form form={form} layout="vertical">
           <Form.Item name="title" label="标题" rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="content" label="正文内容" rules={[{ required: true }]}><Input.TextArea rows={5} /></Form.Item>
-          <Form.Item name="audience" label="目标受众" rules={[{ required: true }]}><Radio.Group><Radio.Button value="全体学生">全体学生</Radio.Button><Radio.Button value="全体教师">全体教师</Radio.Button><Radio.Button value="全体师生">全体师生</Radio.Button><Radio.Button value="科研团队">科研团队</Radio.Button></Radio.Group></Form.Item>
+          <Form.Item name="audience" label="目标受众" rules={[{ required: true }]}><Radio.Group>{audiences.map((audience) => <Radio.Button key={audience} value={audience}>{audience}</Radio.Button>)}</Radio.Group></Form.Item>
           <Form.Item name="expireAt" label="有效期（到期自动失效）"><DatePicker style={{ width: '100%' }} /></Form.Item>
           <Form.Item name="publishImmediately" label="发布方式" valuePropName="checked" initialValue={false}><Switch checkedChildren="立即发布" unCheckedChildren="保存草稿" /></Form.Item>
         </Form>

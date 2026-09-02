@@ -10,7 +10,8 @@ import type { Student } from '@admin/types'
 
 const majors = ['人工智能']
 const grades = ['2023级', '2024级', '2025级']
-const classNames = ['机器学习', 'Python 程序设计', '数据结构']
+const classNames = ['人工智能 1 班', '人工智能 2 班']
+const courseNames = ['机器学习', 'Python 程序设计', '数据结构']
 
 export default function Students() {
   const students = useAppStore((s) => s.students)
@@ -22,6 +23,7 @@ export default function Students() {
   const [keyword, setKeyword] = useState('')
   const [grade, setGrade] = useState<string>()
   const [major, setMajor] = useState<string>()
+  const [className, setClassName] = useState<string>()
   const [courseName, setCourseName] = useState<string>()
   const [tab, setTab] = useState('all')
   const [form] = Form.useForm()
@@ -40,14 +42,15 @@ export default function Students() {
         if (tab === 'disabled' && s.status !== '已停用') return false
         if (grade && s.grade !== grade) return false
         if (major && s.dept !== major) return false
+        if (className && s.className !== className) return false
         if (courseName && s.courseName !== courseName) return false
         if (keyword) {
           const ks = keyword.trim().split(/\s+/).filter(Boolean)
-          return ks.every((k) => `${s.id} ${s.name} ${s.dept} ${s.courseName}`.includes(k))
+          return ks.every((k) => `${s.id} ${s.name} ${s.dept} ${s.className ?? ''} ${s.courseName}`.includes(k))
         }
         return true
       }),
-    [students, keyword, grade, major, courseName, tab],
+    [students, keyword, grade, major, className, courseName, tab],
   )
 
   const count = (st: string) => students.filter((s) => s.status === st).length
@@ -59,7 +62,7 @@ export default function Students() {
         updateStudent(editing.id, v)
         message.success('学生信息已更新')
       } else {
-        addStudent({ id: v.id, name: v.name, gender: v.gender, grade: v.grade, dept: v.dept, courseName: v.className, status: '待激活', loginStatus: '离线', lastActiveAt: '—', createdAt: '2026-08-08' })
+        addStudent({ id: v.id, name: v.name, gender: v.gender, grade: v.grade, dept: v.dept, className: v.className, courseName: v.courseName, enrolledCourses: v.enrolledCourses ?? [v.courseName], status: '待激活', loginStatus: '离线', lastActiveAt: '—', createdAt: '2026-08-08' })
         message.success('学生账号已创建，默认待激活')
       }
       setModalOpen(false)
@@ -101,7 +104,8 @@ export default function Students() {
     { title: '性别', dataIndex: 'gender', width: 50 },
     { title: '年级', dataIndex: 'grade', width: 70 },
     { title: '专业', dataIndex: 'dept', width: 130, ellipsis: true },
-    { title: '课程', dataIndex: 'courseName', width: 110 },
+    { title: '行政班', dataIndex: 'className', width: 120, render: (v: string) => v || '未分班' },
+    { title: '当前课程', dataIndex: 'courseName', width: 120 },
     { title: '账号状态', dataIndex: 'status', width: 85, render: (v: string) => <StatusTag status={v} /> },
     { title: '最近活跃', dataIndex: 'lastActiveAt', width: 100, render: (v: string) => <span style={{ color: colors.textMuted, fontSize: 12 }}>{v}</span> },
     {
@@ -187,7 +191,8 @@ export default function Students() {
             <Input.Search placeholder="学号/姓名" allowClear style={{ width: 220 }} onChange={(e) => setKeyword(e.target.value)} />
             <Select placeholder="年级" allowClear style={{ width: 110 }} options={grades.map((g) => ({ label: g, value: g }))} onChange={setGrade} />
             <Select placeholder="专业" allowClear style={{ width: 190 }} options={majors.map((m) => ({ label: m, value: m }))} onChange={setMajor} />
-            <Select placeholder="课程" allowClear style={{ width: 130 }} options={classNames.map((c) => ({ label: c, value: c }))} onChange={setCourseName} />
+            <Select placeholder="行政班" allowClear style={{ width: 140 }} options={classNames.map((c) => ({ label: c, value: c }))} onChange={setClassName} />
+            <Select placeholder="课程" allowClear style={{ width: 150 }} options={courseNames.map((c) => ({ label: c, value: c }))} onChange={setCourseName} />
           </Space>
           <Table rowKey="id" size="middle" columns={columns} dataSource={filtered} scroll={{ x: 'max-content', y: 420 }} pagination={{ pageSize: 8, showTotal: (t) => `共 ${t} 条` }} />
         </div>
@@ -210,8 +215,14 @@ export default function Students() {
           <Form.Item name="dept" label="专业" rules={[{ required: true }]}>
             <Select options={majors.map((m) => ({ label: m, value: m }))} />
           </Form.Item>
-          <Form.Item name="className" label="课程" rules={[{ required: true }]}>
+          <Form.Item name="className" label="行政班" rules={[{ required: true }]}>
             <Select options={classNames.map((c) => ({ label: c, value: c }))} />
+          </Form.Item>
+          <Form.Item name="courseName" label="当前关注课程" rules={[{ required: true }]}>
+            <Select options={courseNames.map((c) => ({ label: c, value: c }))} />
+          </Form.Item>
+          <Form.Item name="enrolledCourses" label="已加入课程">
+            <Select mode="multiple" options={courseNames.map((c) => ({ label: c, value: c }))} />
           </Form.Item>
           {!editing && (
             <Form.Item name="password" label="初始密码" rules={[
@@ -257,7 +268,8 @@ export default function Students() {
                 <Descriptions.Item label="性别">{detail.gender}</Descriptions.Item>
                 <Descriptions.Item label="年级">{detail.grade}</Descriptions.Item>
                 <Descriptions.Item label="专业" span={2}>{detail.dept}</Descriptions.Item>
-                <Descriptions.Item label="课程" span={2}>{detail.courseName}</Descriptions.Item>
+                <Descriptions.Item label="行政班" span={2}>{detail.className ?? '未分班'}</Descriptions.Item>
+                <Descriptions.Item label="已加入课程" span={2}>{(detail.enrolledCourses ?? [detail.courseName]).join('、')}</Descriptions.Item>
                 <Descriptions.Item label="账号状态"><StatusTag status={detail.status} /></Descriptions.Item>
                 <Descriptions.Item label="最近活跃">{detail.lastActiveAt}</Descriptions.Item>
               </Descriptions>
@@ -334,7 +346,7 @@ export default function Students() {
       >
         <p>确认停用学生 <b>{stopTarget?.name}</b>（{stopTarget?.id}）？</p>
         <p style={{ color: colors.textSecondary, fontSize: 13 }}>停用后该学生将无法登录平台，其账户数据保留可查。</p>
-        <p style={{ color: colors.warning, fontSize: 12 }}>⚠️ 此操作为敏感操作，将写入操作日志。</p>
+              <p style={{ color: colors.warning, fontSize: 12 }}>此操作为敏感操作，将写入操作日志。</p>
       </Modal>
 
       {/* 重置密码确认弹窗 */}
@@ -351,7 +363,7 @@ export default function Students() {
         <ul style={{ color: colors.textSecondary, fontSize: 13, paddingLeft: 20 }}>
           <li>站内消息推送（含明文新密码）</li>
         </ul>
-        <p style={{ color: colors.warning, fontSize: 12 }}>⚠️ 管理员后台不展示明文密码，您无法获取该密码，请告知用户查看站内消息。</p>
+        <p style={{ color: colors.warning, fontSize: 12 }}>管理员后台不展示明文密码，您无法获取该密码，请告知用户查看站内消息。</p>
       </Modal>
 
       <ImportModal open={importOpen} onCancel={() => setImportOpen(false)} kind="学生" onSuccess={() => {}} />

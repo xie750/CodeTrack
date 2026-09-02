@@ -2,7 +2,6 @@ import type { ReactNode } from 'react'
 import {
   LayoutDashboard,
   Users,
-  FlaskConical,
   Sparkles,
   Settings,
 } from 'lucide-react'
@@ -34,17 +33,7 @@ export const navModules: NavModule[] = [
     entries: [
       { key: '/admin/users/teachers', label: '教师账号管理' },
       { key: '/admin/users/students', label: '学生账号管理' },
-      { key: '/admin/users/classes', label: '课程管理' },
-    ],
-  },
-  {
-    key: '/admin/research',
-    label: '科研管理',
-    icon: <FlaskConical size={17} />,
-    entries: [
-      { key: '/admin/research/projects', label: '科研项目管理' },
-      { key: '/admin/research/compliance', label: '科研合规审查' },
-      { key: '/admin/research/statistics', label: '科研统计' },
+      { key: '/admin/users/classes', label: '班级课程与教学安排' },
     ],
   },
   {

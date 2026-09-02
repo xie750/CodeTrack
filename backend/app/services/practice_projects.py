@@ -18,13 +18,189 @@ from backend.app.services.submissions import iso, prefixed_id
 
 
 DEFAULT_PATH_STEPS = [
-    {"title": "课程积累", "description": "先完成课程任务，沉淀知识点、错因和提示使用记录"},
-    {"title": "画像判断", "description": "系统根据学习画像判断是否进入需要项目实战的能力瓶颈"},
-    {"title": "轻量试做", "description": "从小项目开始，聚焦一个真实业务问题和少量能力点"},
-    {"title": "过程留痕", "description": "记录资料、实验、提交和反馈，形成可复盘过程"},
-    {"title": "成果审核", "description": "提交代码、报告或截图，由平台生成反馈和能力证据"},
-    {"title": "能力进阶", "description": "通过首个项目后，再推荐更综合的企业能力场景"},
+    {"title": "画像推理", "description": "读取课程表现、错因、资料保存和学习兴趣，自动判断科研入口方向"},
+    {"title": "课题推荐", "description": "系统生成最适合课题和备选课题，学生无需手动选择研究方向"},
+    {"title": "前沿追踪", "description": "归纳相关论文与研究动态，生成热点主题和发展趋势"},
+    {"title": "写作辅助", "description": "生成综述脉络、论文框架、语言润色和格式检查建议"},
+    {"title": "数据分析", "description": "处理实验数据、调查结果或文本资料，输出图表和研究洞察"},
+    {"title": "成果沉淀", "description": "提交论文框架、分析报告、图表和过程记录，更新科研画像"},
 ]
+
+RESEARCH_BRIEF_LIBRARY = {
+    "sales-cleaning": {
+        "profile_fit": "画像显示你在机器学习模型评估、实验记录和图表解释上已有连续证据，适合进入计算机视觉方向科研训练。",
+        "recommendation_reason": "优先推荐该课题，是因为它同时覆盖赛题要求的前沿追踪、学术写作辅助和科研数据分析三个关键环节。",
+        "research_stage": "当前处于实验分析与论文框架搭建阶段",
+        "frontier_topics": [
+            {
+                "title": "轻量卷积网络与高效图像分类",
+                "source": "课程知识库 + 近三年论文摘要样例",
+                "heat": 92,
+                "summary": "研究热点从单纯提升准确率转向参数量、推理成本与部署约束的综合平衡。",
+            },
+            {
+                "title": "数据增强对小样本分类稳定性的影响",
+                "source": "实验指南 + 综述片段",
+                "heat": 78,
+                "summary": "增强策略常被作为基线改进项，需要在实验表中单独记录。",
+            },
+            {
+                "title": "模型可解释性与错误类别分析",
+                "source": "教师资料库",
+                "heat": 71,
+                "summary": "分类错误不只看总准确率，还要分析混淆类别、召回率和失败样本分布。",
+            },
+        ],
+        "writing_blocks": [
+            {
+                "title": "研究背景",
+                "content": "CIFAR-10 图像分类适合作为人工智能专业本科科研训练入口，可连接模型结构、训练策略和评估指标。",
+                "status": "已生成",
+            },
+            {
+                "title": "相关工作",
+                "content": "围绕 ResNet、EfficientNet 与轻量模型改进路线组织综述，突出准确率、参数量和推理效率的取舍。",
+                "status": "待补引用",
+            },
+            {
+                "title": "实验设计",
+                "content": "固定数据集划分、训练轮次和评价指标，对比不同模型的 Accuracy、Recall、F1 与混淆矩阵表现。",
+                "status": "可提交",
+            },
+            {
+                "title": "结论表达",
+                "content": "先给出总体指标，再解释差异来源，最后说明局限与下一步优化方向。",
+                "status": "待润色",
+            },
+        ],
+        "writing_checks": [
+            {"label": "文献综述结构", "result": "已形成主题归纳，但需补充 2 条代表性引用"},
+            {"label": "论文框架完整性", "result": "摘要、引言、方法、实验、结论均已覆盖"},
+            {"label": "格式规范", "result": "图表编号和指标缩写需要统一"},
+        ],
+        "data_metrics": [
+            {"label": "ResNet-18 Accuracy", "value": "82.4%", "note": "达到验收阈值"},
+            {"label": "EfficientNet-B0 Accuracy", "value": "84.1%", "note": "较基线 +1.7%"},
+            {"label": "Macro F1", "value": "0.831", "note": "部分类别仍需分析召回率"},
+        ],
+        "chart_series": [
+            {"label": "ResNet-18", "value": 82},
+            {"label": "EfficientNet-B0", "value": 84},
+            {"label": "增强策略", "value": 86},
+            {"label": "错误分析后", "value": 88},
+        ],
+        "data_insights": [
+            "EfficientNet-B0 的提升主要体现在动物类别召回率，但交通工具类别混淆仍明显。",
+            "只报告 Accuracy 不足以支撑研究结论，需要补充 Macro F1 与混淆矩阵解释。",
+            "下一步建议把数据增强作为消融实验，避免把性能提升全部归因于模型结构。",
+        ],
+        "next_actions": ["补充两条代表性引用", "生成混淆矩阵解释", "提交实验分析阶段成果包"],
+    },
+    "log-topk": {
+        "profile_fit": "画像显示你在链表和复杂度表达上仍需强化，Top-K 日志课题可以把数据结构知识转成科研分析证据。",
+        "recommendation_reason": "该课题适合作为备选，因为它把文本资料处理、算法比较和异常趋势解释压缩到一个轻量研究任务里。",
+        "research_stage": "当前处于资料归纳与方法选择阶段",
+        "frontier_topics": [
+            {
+                "title": "日志异常检测中的高频模式挖掘",
+                "source": "项目资料库",
+                "heat": 81,
+                "summary": "高频错误路径是异常检测入门任务，适合比较统计结构与排序策略。",
+            },
+            {
+                "title": "Top-K 算法在流式数据中的应用",
+                "source": "课程知识库",
+                "heat": 74,
+                "summary": "研究关注从离线排序转向增量维护与空间开销控制。",
+            },
+            {
+                "title": "文本日志语义归类",
+                "source": "AI 归纳样例",
+                "heat": 66,
+                "summary": "后续可引入文本聚类，但首版先用规则字段保证可解释。",
+            },
+        ],
+        "writing_blocks": [
+            {"title": "问题定义", "content": "从服务日志中定位高频异常接口，比较不同 Top-K 统计方法的准确性和复杂度。", "status": "已生成"},
+            {"title": "方法对比", "content": "对比哈希计数、堆维护和全量排序三种方案，说明各自适用的数据规模。", "status": "可提交"},
+            {"title": "结果讨论", "content": "结合异常接口分布解释系统风险，避免只列统计结果。", "status": "待润色"},
+        ],
+        "writing_checks": [
+            {"label": "综述覆盖", "result": "需要增加流式 Top-K 的研究背景"},
+            {"label": "方法描述", "result": "复杂度表达清晰"},
+            {"label": "格式规范", "result": "表格字段命名需要统一"},
+        ],
+        "data_metrics": [
+            {"label": "日志记录数", "value": "12,480", "note": "脱敏样例数据"},
+            {"label": "异常路径数", "value": "37", "note": "需聚合相似路径"},
+            {"label": "Top-5 覆盖率", "value": "68%", "note": "异常集中度较高"},
+        ],
+        "chart_series": [
+            {"label": "/api/login", "value": 88},
+            {"label": "/api/submit", "value": 74},
+            {"label": "/api/report", "value": 52},
+            {"label": "/api/search", "value": 39},
+        ],
+        "data_insights": [
+            "异常高度集中在登录和提交接口，建议优先检查限流、超时与参数校验。",
+            "堆维护方案适合增量日志，但首版报告需要先给出全量排序基线。",
+            "文本错误摘要可作为后续语义聚类的扩展入口。",
+        ],
+        "next_actions": ["补充流式 Top-K 背景", "生成方法复杂度对比表", "提交资料归纳阶段成果"],
+    },
+    "retention-dashboard": {
+        "profile_fit": "画像显示你在 Python 数据处理和图表表达上已有基础，适合进入调查/行为数据分析型科研任务。",
+        "recommendation_reason": "该课题可强化科研数据分析产出，特别是指标口径、趋势可视化和结论解释。",
+        "research_stage": "当前处于结论提炼与图表规范检查阶段",
+        "frontier_topics": [
+            {
+                "title": "学习分析中的行为序列建模",
+                "source": "资料库摘要",
+                "heat": 84,
+                "summary": "研究从单一完成率转向学习路径、停留时间和任务重试行为的综合解释。",
+            },
+            {
+                "title": "在线学习留存影响因素",
+                "source": "调查数据说明",
+                "heat": 79,
+                "summary": "留存分析需要控制任务难度、反馈及时性和学习基础差异。",
+            },
+            {
+                "title": "教育数据可视化表达",
+                "source": "教师资料库",
+                "heat": 72,
+                "summary": "趋势图与分组柱状图适合展示阶段变化，结论必须绑定指标口径。",
+            },
+        ],
+        "writing_blocks": [
+            {"title": "研究问题", "content": "不同学习行为是否会影响课程任务留存和后续提交质量。", "status": "已生成"},
+            {"title": "数据方法", "content": "用 Python 汇总注册、访问、学习、提交事件，计算次日和 7 日留存。", "status": "可提交"},
+            {"title": "结论草稿", "content": "高频查看诊断和保存资料的学生，后续任务完成稳定性更高。", "status": "待补统计检验"},
+        ],
+        "writing_checks": [
+            {"label": "研究问题清晰度", "result": "变量关系明确"},
+            {"label": "数据分析规范", "result": "建议补充缺失值处理说明"},
+            {"label": "图表格式", "result": "纵轴单位和样本量需要标注"},
+        ],
+        "data_metrics": [
+            {"label": "次日留存", "value": "71.3%", "note": "较低互动组 +12.6%"},
+            {"label": "7 日留存", "value": "48.9%", "note": "受任务难度影响"},
+            {"label": "有效样本", "value": "1,286", "note": "已排除缺失记录"},
+        ],
+        "chart_series": [
+            {"label": "低互动", "value": 43},
+            {"label": "看诊断", "value": 56},
+            {"label": "保存资料", "value": 63},
+            {"label": "完成复盘", "value": 71},
+        ],
+        "data_insights": [
+            "保存学习资料与 7 日留存存在正相关，但不能直接解释为因果关系。",
+            "任务难度是主要混杂因素，报告中需要按课程或难度分组呈现。",
+            "下一步适合补充一张分组趋势图，说明不同学习行为的留存差异。",
+        ],
+        "next_actions": ["补充缺失值处理说明", "生成分组趋势图", "提交结论提炼阶段成果"],
+    },
+}
 
 
 def safe_json_list(raw: str | None) -> list:
@@ -113,6 +289,84 @@ def serialize_submission(submission: PracticeProjectSubmission) -> dict:
     }
 
 
+def research_brief_for_project(project: PracticeProject, resources: list[dict] | None = None) -> dict:
+    resources = resources or safe_json_list(project.resources_json)
+    base = RESEARCH_BRIEF_LIBRARY.get(project.id)
+    if base is None:
+        base = {
+            "profile_fit": f"系统根据课程表现和学习画像，将「{project.title}」判断为当前可进入的科研训练课题。",
+            "recommendation_reason": "该课题能够覆盖领域前沿追踪、学术写作辅助和科研数据分析，适合作为助研入口的阶段产出。",
+            "research_stage": f"当前处于{project.current_stage}阶段",
+            "frontier_topics": [
+                {
+                    "title": project.direction or "专业方向前沿追踪",
+                    "source": "课程知识库 + 项目资料",
+                    "heat": 72,
+                    "summary": project.long_description or project.description,
+                }
+            ],
+            "writing_blocks": [
+                {"title": "研究问题", "content": project.description, "status": "已生成"},
+                {"title": "阶段框架", "content": project.long_description or project.description, "status": "待完善"},
+            ],
+            "writing_checks": [
+                {"label": "论文框架", "result": "已生成初版结构"},
+                {"label": "引用依据", "result": "需要继续补充来源"},
+            ],
+            "data_metrics": [
+                {"label": "助研完成度", "value": "0%", "note": "启动课题后将随提交更新"},
+            ],
+            "chart_series": [
+                {"label": "启动", "value": 20},
+                {"label": "分析", "value": 40},
+                {"label": "提交", "value": 60},
+            ],
+            "data_insights": safe_json_list(project.mentor_tips_json) or ["下一步建议先补齐资料来源，再提交阶段成果。"],
+            "next_actions": ["查看前沿追踪", "完善论文框架", "提交阶段助研成果"],
+        }
+    brief = dict(base)
+    brief["citations"] = resources
+    brief["generated_at"] = iso(utc_now())
+    brief["confidence"] = 0.86 if project.id in RESEARCH_BRIEF_LIBRARY else 0.72
+    return brief
+
+
+def research_recommendation_for_project(projects: list[dict], recommended_project_id: str | None) -> dict | None:
+    if not projects or recommended_project_id is None:
+        return None
+    project = next((item for item in projects if item["id"] == recommended_project_id), projects[0])
+    brief = RESEARCH_BRIEF_LIBRARY.get(project["id"], {})
+    return {
+        "project_id": project["id"],
+        "profile_fit": brief.get(
+            "profile_fit",
+            f"系统根据课程表现和学习画像，将「{project['title']}」判断为当前最适合课题。",
+        ),
+        "recommendation_reason": brief.get(
+            "recommendation_reason",
+            "该课题能够覆盖前沿追踪、写作辅助和数据分析，适合作为阶段助研成果。",
+        ),
+        "signals": [
+            {
+                "label": "研究方向",
+                "value": project.get("direction") or "人工智能专业方向",
+                "note": "由课程表现、资料保存和阶段提交记录推断",
+            },
+            {
+                "label": "能力短板",
+                "value": "文献综述、图表解释",
+                "note": "来自 AI 问答、实验记录和成果提交质量",
+            },
+            {
+                "label": "推荐策略",
+                "value": "先做小课题，再沉淀论文框架",
+                "note": "匹配赛题助研关键环节",
+            },
+        ],
+        "confidence": 0.86,
+    }
+
+
 def project_scope_query(student_id: str, class_id: str):
     return (
         select(PracticeProject, PracticeProjectEnrollment, Course)
@@ -161,16 +415,16 @@ def home_readiness(projects: list[dict]) -> dict:
     if projects:
         return {
             "status": "ACTIVE",
-            "title": "项目实战进行中",
-            "description": "你已经进入项目实战阶段，可以继续推进当前项目并沉淀能力证据。",
-            "primary_action_label": "继续项目",
-            "secondary_action_label": "查看项目路径",
+            "title": "AI 已为你生成科研项目推荐",
+            "description": "平台已根据学习画像、课程表现和能力短板完成底层推理，自动给出最适合的科研训练课题。",
+            "primary_action_label": "进入最适合课题",
+            "secondary_action_label": "查看推理路径",
         }
     return {
         "status": "PREPARING",
-        "title": "项目实战尚未开启",
-        "description": "当课程任务和学习画像显示你进入能力瓶颈时，系统会引导你从第一个轻量项目开始试做。",
-        "primary_action_label": "尝试第一个轻量项目",
+        "title": "科研项目实践尚未开启",
+        "description": "当课程任务、自主学习和资料沉淀产生足够画像信号后，系统会自动生成最适合的科研课题。",
+        "primary_action_label": "生成科研课题",
         "secondary_action_label": "先完成课程任务",
     }
 
@@ -199,6 +453,7 @@ def list_practice_projects(db: Session, student_id: str, class_id: str) -> dict:
     return {
         "projects": projects,
         "recommended_project_id": recommended_project_id,
+        "research_recommendation": research_recommendation_for_project(projects, recommended_project_id),
         "stats": {
             "project_count": len(projects),
             "in_progress_count": len(active_projects),
@@ -216,10 +471,10 @@ def list_practice_projects(db: Session, student_id: str, class_id: str) -> dict:
         ),
         "readiness": home_readiness(projects),
         "proof_items": [
-            {"title": "真实输入", "description": "用数据、日志、业务指标模拟企业任务。", "icon": "database"},
-            {"title": "过程留痕", "description": "记录提交、调试、提示使用和阶段成果。", "icon": "folder"},
-            {"title": "成果可交", "description": "沉淀代码、报告、测试和可复用文档。", "icon": "file-check"},
-            {"title": "AI 辅导", "description": "提供分层提示，不替学生直接完成项目。", "icon": "bot"},
+            {"title": "画像驱动推荐", "description": "不让学生先选方向，平台基于画像自动匹配课题。", "icon": "target"},
+            {"title": "前沿追踪", "description": "归纳论文、研究动态、热点主题和趋势判断。", "icon": "search"},
+            {"title": "写作辅助", "description": "支持综述生成、论文框架、润色和格式规范检查。", "icon": "file-check"},
+            {"title": "数据分析", "description": "处理实验、调查和文本资料，输出图表与研究洞察。", "icon": "database"},
         ],
     }
 
@@ -235,7 +490,7 @@ def start_first_practice_project(db: Session, student: User, class_id: str) -> d
 
     row = db.execute(starter_project_query(student.id)).first()
     if row is None:
-        raise ApiError(404, "PRACTICE_STARTER_NOT_AVAILABLE", "当前还没有适合你的项目模板，请先完成课程任务后再回来尝试。")
+        raise ApiError(404, "PRACTICE_STARTER_NOT_AVAILABLE", "当前还没有足够画像信号生成科研课题，请先完成课程任务后再回来尝试。")
 
     project, _ = row
     now = utc_now()
@@ -249,7 +504,7 @@ def start_first_practice_project(db: Session, student: User, class_id: str) -> d
         experiment_record_count=0,
         submission_count=0,
         weekly_hours=0,
-        last_activity_summary="开启第一个项目尝试",
+        last_activity_summary="开启第一个科研课题",
         joined_at=now,
         updated_at=now,
     )
@@ -259,7 +514,7 @@ def start_first_practice_project(db: Session, student: User, class_id: str) -> d
         project_id=project.id,
         student_id=student.id,
         activity_type="join",
-        text=f"开启第一个项目「{project.title}」尝试",
+        text=f"开启第一个科研课题「{project.title}」",
         time_label="刚刚",
         created_at=now,
     )
@@ -276,7 +531,7 @@ def get_practice_project_detail(db: Session, project_id: str, student_id: str, c
         project_scope_query(student_id, class_id).where(PracticeProject.id == project_id)
     ).first()
     if row is None:
-        raise ApiError(404, "PRACTICE_PROJECT_NOT_FOUND", "项目实训不存在或当前学生无权访问。")
+        raise ApiError(404, "PRACTICE_PROJECT_NOT_FOUND", "科研项目实践不存在或当前学生无权访问。")
     project, enrollment, course = row
     summary = serialize_project_summary(project, enrollment, course)
     submissions = db.scalars(
@@ -310,6 +565,7 @@ def get_practice_project_detail(db: Session, project_id: str, student_id: str, c
         "acceptance_criteria": safe_json_list(project.acceptance_criteria_json),
         "mentor_tips": safe_json_list(project.mentor_tips_json),
         "resources": safe_json_list(project.resources_json),
+        "research_brief": research_brief_for_project(project),
         "submissions": [serialize_submission(submission) for submission in submissions],
         "activities": [serialize_activity(activity) for activity in activities],
     }
@@ -328,17 +584,17 @@ def create_practice_submission(
         project_scope_query(student.id, class_id).where(PracticeProject.id == project_id)
     ).first()
     if row is None:
-        raise ApiError(404, "PRACTICE_PROJECT_NOT_FOUND", "项目实训不存在或当前学生无权访问。")
+        raise ApiError(404, "PRACTICE_PROJECT_NOT_FOUND", "科研项目实践不存在或当前学生无权访问。")
     project, enrollment, _ = row
     now = utc_now()
     submission = PracticeProjectSubmission(
         id=prefixed_id("practice_submit"),
         project_id=project.id,
         student_id=student.id,
-        title=title.strip() or f"{project.current_stage} 阶段成果",
-        description=description.strip() or f"提交内容：{project.current_stage} 阶段材料。",
+        title=title.strip() or f"{project.current_stage} 阶段助研成果",
+        description=description.strip() or f"提交内容：{project.current_stage} 阶段科研材料。",
         status="SUBMITTED",
-        review_comment="已进入阶段成果审核队列，平台将结合实验记录和验收标准生成反馈。",
+        review_comment="已进入阶段助研成果审核队列，平台将结合前沿追踪、写作规范、数据分析和验收标准生成反馈。",
         content_json=json.dumps({"materials": materials}, ensure_ascii=False),
         submitted_at=now,
         created_at=now,

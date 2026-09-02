@@ -9,9 +9,6 @@ const Dashboard = lazy(() => import('@admin/pages/dashboard'))
 const Teachers = lazy(() => import('@admin/pages/users/Teachers'))
 const Students = lazy(() => import('@admin/pages/users/Students'))
 const Classes = lazy(() => import('@admin/pages/users/Classes'))
-const Projects = lazy(() => import('@admin/pages/research/Projects'))
-const Compliance = lazy(() => import('@admin/pages/research/Compliance'))
-const ResearchStats = lazy(() => import('@admin/pages/research/ResearchStats'))
 const AiRoute = lazy(() => import('@admin/pages/ai/AiRoute'))
 const AiMonitor = lazy(() => import('@admin/pages/ai/AiMonitor'))
 const SystemConfig = lazy(() => import('@admin/pages/system/SystemConfig'))
@@ -40,12 +37,7 @@ export default function App() {
             <Route path="students" element={<Students />} />
             <Route path="classes" element={<Classes />} />
           </Route>
-          <Route path="research">
-            <Route index element={<Navigate to="projects" replace />} />
-            <Route path="projects" element={<Projects />} />
-            <Route path="compliance" element={<Compliance />} />
-            <Route path="statistics" element={<ResearchStats />} />
-          </Route>
+          <Route path="research/*" element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="ai">
             <Route index element={<Navigate to="route" replace />} />
             <Route path="route" element={<AiRoute />} />

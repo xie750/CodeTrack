@@ -46,7 +46,7 @@ export default function Logs() {
     { title: '操作描述', dataIndex: 'desc', ellipsis: true },
     {
       title: '敏感', width: 70,
-      render: (_: unknown, r: OperationLog) => r.sensitive ? <Tag color="error"><ShieldAlert size={11} /> ⚠ 敏感</Tag> : <Tag>—</Tag>,
+      render: (_: unknown, r: OperationLog) => r.sensitive ? <Tag color="error"><ShieldAlert size={11} /> 敏感</Tag> : <Tag>—</Tag>,
     },
     { title: '来源IP', dataIndex: 'ip', width: 110, render: (v: string) => <span style={{ fontSize: 12, color: colors.textMuted }}>{v}</span> },
     {
@@ -111,7 +111,7 @@ export default function Logs() {
         <Space wrap className="filter-bar">
           <Input.Search placeholder="操作人" allowClear style={{ width: 180 }} onChange={(e) => setOperator(e.target.value)} />
           <Select placeholder="操作类型" allowClear style={{ width: 130 }} options={actionTypes.map((t) => ({ label: t, value: t }))} onChange={setActionType} />
-          <Select placeholder="资源类型" allowClear style={{ width: 130 }} options={['教师账号', '学生账号', '科研项目', '合规审查', '资源', '公告', '基础参数', '学期', '操作日志'].map((t) => ({ label: t, value: t }))} onChange={setResourceType} />
+          <Select placeholder="资源类型" allowClear style={{ width: 160 }} options={['教师账号', '学生账号', '班级课程', '课程知识库', 'AI模型路由', '公告', '基础参数', '学期', '操作日志'].map((t) => ({ label: t, value: t }))} onChange={setResourceType} />
           <DatePicker.RangePicker style={{ width: 260 }} placeholder={['开始时间', '结束时间']} />
           <Switch checked={sensitiveOnly} onChange={setSensitiveOnly} checkedChildren="仅看敏感操作" unCheckedChildren="全部操作" />
           {sensitiveOnly && <Tag color="error"><ShieldAlert size={11} /> 当前显示 {sensitiveCount} 条敏感操作</Tag>}
@@ -131,7 +131,7 @@ export default function Logs() {
               <Descriptions.Item label="来源 IP">{detail.ip}</Descriptions.Item>
               <Descriptions.Item label="User-Agent">{detail.ua}</Descriptions.Item>
             </Descriptions>
-            <Alert type={detail.sensitive ? 'error' : 'info'} showIcon message={detail.sensitive ? '敏感操作' : '普通操作'} description={detail.sensitive ? '权限变更、删除类及敏感资源读写已自动标记 ⚠ 并红色高亮。' : '该操作已正常记录留痕。'} style={{ marginBottom: 16 }} />
+            <Alert type={detail.sensitive ? 'error' : 'info'} showIcon message={detail.sensitive ? '敏感操作' : '普通操作'} description={detail.sensitive ? '权限变更、删除类及敏感资源读写已自动标记并高亮。' : '该操作已正常记录留痕。'} style={{ marginBottom: 16 }} />
             <Space direction="vertical" style={{ width: '100%' }}>
               <div>
                 <b style={{ fontSize: 13 }}>变更前数据</b>
