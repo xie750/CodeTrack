@@ -805,6 +805,32 @@
   font-size: 15px;
 }
 
+.student-app-topbar-actions {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.student-guide-topbar-button {
+  min-height: 38px;
+  padding: 0 13px;
+  border: 1px solid #d8e5f5;
+  border-radius: 8px;
+  color: #29405f;
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.student-guide-topbar-button:hover,
+.student-guide-topbar-button:focus-visible {
+  border-color: #b9d4fb;
+  color: #176cf5;
+  background: #f4f8ff;
+  outline: none;
+}
+
 /* ==========================================================================
    Student course/self-study navigation windows
    ========================================================================== */

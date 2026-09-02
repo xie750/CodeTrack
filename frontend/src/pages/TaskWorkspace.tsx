@@ -2529,7 +2529,7 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
                 </article>
               </div>
 
-              <aside className={`program-card program-ai${aiCollapsed ? " collapsed" : ""}`} aria-label="AI学习助手" aria-expanded={!aiCollapsed}>
+              <aside className={`program-card program-ai${aiCollapsed ? " collapsed" : ""}`} data-onboarding-id="tour-task-diagnosis" aria-label="AI学习助手" aria-expanded={!aiCollapsed}>
                 <header>
                   <span><Bot size={22} /></span>
                   <h2>AI学习助手</h2>

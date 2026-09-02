@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
-import { ArrowRight, BookOpenCheck, BriefcaseBusiness, CalendarClock, CheckCircle2, Code2, FlaskConical, Loader2, LockKeyhole, Microscope, Sparkles, Target, X } from "lucide-react";
+import { ArrowRight, BookOpenCheck, BriefcaseBusiness, CalendarClock, CheckCircle2, Code2, Compass, FlaskConical, Loader2, LockKeyhole, Microscope, Sparkles, Target, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api, apiCache, type LearningContext, type StudentTaskCard } from "../api";
 import type { AuthUser } from "../authSession";
@@ -12,6 +12,7 @@ export const STUDENT_ENTRY_THEME_KEY = "codetrack.student.entry.theme";
 type StudentEntryPortalProps = {
   authUser: AuthUser;
   accountSlot: ReactNode;
+  onOpenGuide: () => void;
 };
 
 type MotionParticle = {
@@ -202,10 +203,12 @@ export function StudentEntryMotionBackdrop({ theme }: { theme: StudentEntryTheme
 function StudentPortalTopbar({
   accountSlot,
   theme,
+  onOpenGuide,
   onThemeChange
 }: {
   accountSlot: ReactNode;
   theme: StudentEntryTheme;
+  onOpenGuide: () => void;
   onThemeChange: (theme: StudentEntryTheme) => void;
 }) {
   return (
@@ -219,6 +222,10 @@ function StudentPortalTopbar({
           <i aria-hidden="true" />
           学生助学空间已连接
         </span>
+        <button className="student-entry-guide-button" type="button" data-onboarding-id="entry-guide-button" onClick={onOpenGuide}>
+          <Compass size={16} />
+          新手引导
+        </button>
         <div className="student-entry-theme-toggle" aria-label="入口背景风格切换">
           <button type="button" className={theme === "starmap" ? "active" : ""} aria-pressed={theme === "starmap"} onClick={() => onThemeChange("starmap")}>
             星图
@@ -419,7 +426,7 @@ function CourseDrawer({ open, onClose }: { open: boolean; onClose: () => void })
   );
 }
 
-export default function StudentEntryPortal({ authUser, accountSlot }: StudentEntryPortalProps) {
+export default function StudentEntryPortal({ authUser, accountSlot, onOpenGuide }: StudentEntryPortalProps) {
   const navigate = useNavigate();
   const [courseDrawerOpen, setCourseDrawerOpen] = useState(false);
   const [entryTheme, setEntryTheme] = useState<StudentEntryTheme>(readStoredEntryTheme);
@@ -437,7 +444,7 @@ export default function StudentEntryPortal({ authUser, accountSlot }: StudentEnt
         <span className="student-entry-stream stream-a" />
         <span className="student-entry-stream stream-b" />
       </div>
-      <StudentPortalTopbar accountSlot={accountSlot} theme={entryTheme} onThemeChange={changeEntryTheme} />
+      <StudentPortalTopbar accountSlot={accountSlot} theme={entryTheme} onOpenGuide={onOpenGuide} onThemeChange={changeEntryTheme} />
 
       <section className="teacher-entry-hero" aria-labelledby="student-entry-title">
         <div className="teacher-entry-orbit" aria-hidden="true">
@@ -447,7 +454,7 @@ export default function StudentEntryPortal({ authUser, accountSlot }: StudentEnt
         <p>欢迎进入 CodeTrack 学生端，选择课程任务学习或自主学习空间。</p>
 
         <div className="teacher-entry-cards">
-          <article className="teacher-entry-card" onPointerMove={handleCardPointerMove} onPointerLeave={resetCardTilt}>
+          <article className="teacher-entry-card" data-onboarding-id="entry-courses" onPointerMove={handleCardPointerMove} onPointerLeave={resetCardTilt}>
             <CourseIllustration />
             <h2>我的课程</h2>
             <p>进入已加入课程、课程工作台、课程任务、学习画像与知识图谱</p>
@@ -457,7 +464,7 @@ export default function StudentEntryPortal({ authUser, accountSlot }: StudentEnt
             </button>
           </article>
 
-          <article className="teacher-entry-card" onPointerMove={handleCardPointerMove} onPointerLeave={resetCardTilt}>
+          <article className="teacher-entry-card" data-onboarding-id="entry-self-study" onPointerMove={handleCardPointerMove} onPointerLeave={resetCardTilt}>
             <SelfStudyIllustration />
             <h2>自主学习</h2>
             <p>进入知识点学习、个人画像、资源中心、知识图谱与 AI 助手</p>

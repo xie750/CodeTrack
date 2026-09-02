@@ -1050,7 +1050,7 @@ export default function AiTutor() {
         </div>
 
         <footer className="ai-sticky-composer" aria-label="AI 输入区">
-          <div className="ai-prompt-row">
+          <div className="ai-prompt-row" data-onboarding-id="tour-ai-resource-actions">
             {resourceOutputActions.map((action) => (
               <button
                 type="button"
