@@ -670,6 +670,12 @@ button:disabled {
   background: #eef6ff;
 }
 
+.student-onboarding-map span.complete {
+  color: #127b69;
+  border-color: #bce9df;
+  background: #effcf8;
+}
+
 .student-onboarding-progress {
   height: 7px;
   overflow: hidden;
