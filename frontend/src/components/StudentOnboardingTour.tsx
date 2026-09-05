@@ -31,6 +31,8 @@ type TourStep = {
   placement?: "top" | "right" | "bottom" | "left" | "center";
   insight: string;
   icon: JSX.Element;
+  mapLabel?: string;
+  mapIcon?: JSX.Element;
 };
 
 type SpotlightRect = {
@@ -65,30 +67,9 @@ const steps: TourStep[] = [
     routeLabel: "我的课程入口",
     placement: "right",
     insight: "首行动建议：先进入数据结构任务，体验“提交代码 -> AI 诊断 -> 分层提示”的主链路。",
-    icon: <BookOpenCheck size={20} />
-  },
-  {
-    id: "self-study",
-    title: "自学不是资料堆",
-    description: "自主学习会根据薄弱点推荐主题、练习和资料，适合在任务卡住后回到知识点补一段。",
-    targetId: "entry-self-study",
-    route: "/",
-    routeLabel: "自主学习入口",
-    placement: "left",
-    insight: "创新点：自学入口会把画像、知识库和资料中心串起来，生成内容可以继续变成练习或笔记。",
-    icon: <Compass size={20} />
-  },
-  {
-    id: "profile",
-    title: "画像罗盘会解释为什么推荐",
-    description: "学习画像只描述学习状态，不给学生贴标签。它会展示薄弱知识点、高频错因、提示依赖和下一步建议。",
-    targetId: "tour-profile-overview",
-    fallbackTargetId: "tour-self-study-route",
-    route: "/self-study/profile",
-    routeLabel: "自主学习 / 学习画像",
-    placement: "bottom",
-    insight: "看推荐时重点看“依据”：最近任务、错因统计、资料保存和自学行为都会变成画像信号。",
-    icon: <Sparkles size={20} />
+    icon: <BookOpenCheck size={20} />,
+    mapLabel: "课程任务",
+    mapIcon: <ClipboardList size={14} />
   },
   {
     id: "diagnosis",
@@ -100,7 +81,23 @@ const steps: TourStep[] = [
     routeLabel: "任务工作区 / AI 学习助手",
     placement: "left",
     insight: "创新点：提示分三层，一级只给方向，二级给边界和分支，三级才给局部修复思路，避免直接泄露答案。",
-    icon: <Lightbulb size={20} />
+    icon: <Lightbulb size={20} />,
+    mapLabel: "AI诊断",
+    mapIcon: <Bot size={14} />
+  },
+  {
+    id: "profile",
+    title: "画像罗盘会解释为什么推荐",
+    description: "学习画像只描述学习状态，不给学生贴标签。它会展示薄弱知识点、高频错因、提示依赖和下一步建议。",
+    targetId: "tour-profile-overview",
+    fallbackTargetId: "tour-self-study-route",
+    route: "/self-study/profile",
+    routeLabel: "自主学习 / 学习画像",
+    placement: "bottom",
+    insight: "看推荐时重点看“依据”：最近任务、错因统计、资料保存和自学行为都会变成画像信号。",
+    icon: <Sparkles size={20} />,
+    mapLabel: "学习画像",
+    mapIcon: <Compass size={14} />
   },
   {
     id: "sources",
@@ -111,9 +108,30 @@ const steps: TourStep[] = [
     routeLabel: "自主学习 / AI 导师",
     placement: "top",
     insight: "复习技巧：看到低置信度或未命中来源时，优先让 AI 换一种解释或进入课程知识库核对。",
-    icon: <ShieldCheck size={20} />
+    icon: <ShieldCheck size={20} />,
+    mapLabel: "知识来源",
+    mapIcon: <Network size={14} />
+  },
+  {
+    id: "self-study",
+    title: "自学不是资料堆",
+    description: "自主学习会根据薄弱点推荐主题、练习和资料，适合在任务卡住后回到知识点补一段。",
+    targetId: "entry-self-study",
+    route: "/",
+    routeLabel: "自主学习入口",
+    placement: "left",
+    insight: "创新点：自学入口会把画像、知识库和资料中心串起来，生成内容可以继续变成练习或笔记。",
+    icon: <Compass size={20} />,
+    mapLabel: "资料沉淀",
+    mapIcon: <FolderOpen size={14} />
   }
 ];
+
+const tourMilestones = steps.flatMap((step, stepIndex) =>
+  step.mapLabel && step.mapIcon
+    ? [{ stepId: step.id, stepIndex, label: step.mapLabel, icon: step.mapIcon }]
+    : []
+);
 
 function completedKey(userId: string) {
   return `codetrack.student.onboarding.${ONBOARDING_VERSION}.${userId}.completed`;
@@ -280,7 +298,8 @@ export default function StudentOnboardingTour({ authUser, autoStart = true }: St
   const [stepIndex, setStepIndex] = useState(0);
   const step = steps[stepIndex] ?? steps[0];
   const rect = useSpotlight(step, open);
-  const progress = Math.round(((stepIndex + 1) / steps.length) * 100);
+  const activeMilestoneIndex = tourMilestones.findIndex((item) => item.stepId === step.id);
+  const progress = activeMilestoneIndex >= 0 ? Math.round(((activeMilestoneIndex + 1) / tourMilestones.length) * 100) : 0;
   const isLast = stepIndex === steps.length - 1;
 
   const shouldAutoStart = useMemo(() => {
@@ -400,11 +419,20 @@ export default function StudentOnboardingTour({ authUser, autoStart = true }: St
         </div>
 
         <div className="student-onboarding-map" aria-label="引导覆盖模块">
-          <span className={step.id === "courses" ? "active" : ""}><ClipboardList size={14} />课程任务</span>
-          <span className={step.id === "diagnosis" ? "active" : ""}><Bot size={14} />AI诊断</span>
-          <span className={step.id === "profile" ? "active" : ""}><Compass size={14} />学习画像</span>
-          <span className={step.id === "sources" ? "active" : ""}><Network size={14} />知识来源</span>
-          <span className={step.id === "self-study" ? "active" : ""}><FolderOpen size={14} />资料沉淀</span>
+          {tourMilestones.map((item) => {
+            const isActive = item.stepId === step.id;
+            const isComplete = item.stepIndex < stepIndex;
+            return (
+              <span
+                key={item.stepId}
+                className={isActive ? "active" : isComplete ? "complete" : ""}
+                aria-current={isActive ? "step" : undefined}
+              >
+                {item.icon}
+                {item.label}
+              </span>
+            );
+          })}
         </div>
 
         <div className="student-onboarding-progress" aria-label={`引导进度 ${progress}%`}>

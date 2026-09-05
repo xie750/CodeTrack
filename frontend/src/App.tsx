@@ -64,13 +64,11 @@ function StudentAppTopbar({
   authUser,
   onLogout,
   onNavigate,
-  onOpenGuide,
   centerSlot
 }: {
   authUser: AuthUser;
   onLogout: () => void;
   onNavigate: (path: string) => void;
-  onOpenGuide?: () => void;
   centerSlot?: ReactNode;
 }) {
   return (
@@ -84,11 +82,6 @@ function StudentAppTopbar({
       </button>
       {centerSlot}
       <div className="student-app-topbar-actions">
-        {onOpenGuide ? (
-          <button className="student-guide-topbar-button" type="button" data-onboarding-id="entry-guide-button" onClick={onOpenGuide}>
-            新手引导
-          </button>
-        ) : null}
         <AccountMenu authUser={authUser} onLogout={onLogout} onNavigate={onNavigate} />
       </div>
     </header>
@@ -100,6 +93,7 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
   const location = useLocation();
   const isWorkspace = location.pathname.startsWith("/workspace") || location.pathname.startsWith("/question-workspace");
   const activeRouteGroup = routeGroup(location.pathname);
+  const isEntryRoute = location.pathname === "/" || location.pathname === "";
 
   function transitionTo(to: string, state?: unknown) {
     if (to === location.pathname) return;
@@ -155,7 +149,7 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
         <AICompanion routePath={location.pathname} routeGroup={activeRouteGroup} />
       </>
     );
-  } else if (location.pathname === "/" || location.pathname === "") {
+  } else if (isEntryRoute) {
     content = (
         <StudentEntryPortal
           authUser={authUser}
@@ -171,7 +165,6 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
           authUser={authUser}
           onLogout={onLogout}
           onNavigate={transitionTo}
-          onOpenGuide={openOnboardingGuide}
           centerSlot={activeRouteGroup === "/project-practice" ? (
             <nav className="project-practice-top-tabs" aria-label="科研项目实践页面导航">
               <button type="button" className={location.pathname === "/project-practice" ? "active" : ""} onClick={() => transitionTo("/project-practice")}>
@@ -213,7 +206,7 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
   return (
     <>
       {content}
-      <StudentOnboardingTour authUser={authUser} />
+      <StudentOnboardingTour authUser={authUser} autoStart={isEntryRoute} />
     </>
   );
 }
