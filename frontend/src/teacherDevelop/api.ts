@@ -619,6 +619,44 @@ async function createTeacherGraphFromFiles(files: File[], fields: { title: strin
   if (!response.ok) throw new ApiError(payload.detail || '图谱生成失败', response.status)
   return payload.data
 }
+
+async function createTeacherGraphNodeAttachment(
+  graphId: number,
+  nodeId: string,
+  body: { title: string; resource_type: 'text' | 'link'; content: string; link_url: string; visible?: boolean },
+) {
+  return request<any>(
+    '/teacher/knowledge-graphs/' + graphId + '/attachments',
+    { method: 'POST', body: JSON.stringify({ ...body, node_id: nodeId }) },
+  )
+}
+
+async function uploadTeacherGraphNodeAttachmentFile(
+  graphId: number,
+  nodeId: string,
+  file: File,
+  fields: { title?: string; visible?: boolean } = {},
+) {
+  const body = new FormData()
+  body.append('file', file)
+  body.append('node_id', nodeId)
+  body.append('title', fields.title || file.name)
+  body.append('visible', String(fields.visible ?? true))
+  const response = await fetch(
+    TEACHER_API_BASE + '/teacher/knowledge-graphs/' + graphId + '/attachments/file',
+    { method: 'POST', headers: { 'X-User-Id': _currentUserId }, body },
+  )
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) throw new ApiError(payload.detail || '文件挂载失败', response.status)
+  return payload.data
+}
+
+async function deleteTeacherGraphNodeAttachment(graphId: number, _nodeId: string, attachmentId: string) {
+  return request<{ id: string; deleted: boolean }>(
+    '/teacher/knowledge-graphs/' + graphId + '/attachments/' + encodeURIComponent(attachmentId),
+    { method: 'DELETE' },
+  )
+}
 export const api = {
   health: () => request<{ status: string }>('/health'),
   teacherAccounts: () => request<ApiTeacher[]>('/teacher/auth/accounts'),
@@ -717,8 +755,12 @@ export const api = {
   teacherGraph: (graphId: number) => request<any>('/teacher/knowledge-graphs/' + graphId),
   createTeacherGraph: (body: unknown) => request<any>('/teacher/knowledge-graphs', { method: 'POST', body: JSON.stringify(body) }),
   createTeacherGraphFromFiles,
+  createTeacherGraphNodeAttachment,
+  uploadTeacherGraphNodeAttachmentFile,
   saveTeacherGraph: (graphId: number, body: unknown) => request<any>('/teacher/knowledge-graphs/' + graphId, { method: 'PUT', body: JSON.stringify(body) }),
-  publishTeacherGraph: (graphId: number) => request<any>('/teacher/knowledge-graphs/' + graphId + '/publish', { method: 'POST' }),
+  deleteTeacherGraphNodeAttachment,
+  publishTeacherGraph: (graphId: number, body: { class_ids: string[] }) =>
+    request<any>('/teacher/knowledge-graphs/' + graphId + '/publish', { method: 'POST', body: JSON.stringify(body) }),
   deleteTeacherGraph: (graphId: number) => request<any>('/teacher/knowledge-graphs/' + graphId, { method: 'DELETE' }),
   discussions: (courseId: string, classId?: string) => request<ApiDiscussion[]>('/teacher/discussions?course_id=' + courseId + (classId ? '&class_id=' + classId : '')),
   createDiscussion: (body: { course_id: string; class_id: string; title: string; content: string; publish: boolean }) => request<ApiDiscussion>('/teacher/discussions', { method: 'POST', body: JSON.stringify(body) }),

@@ -116,12 +116,30 @@ def ensure_chapter_content_columns() -> None:
             connection.execute(text("ALTER TABLE chapters ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'draft'"))
 
 
+def ensure_teacher_graph_attachment_file_columns() -> None:
+    if engine.dialect.name != "sqlite" or "teacher_graph_node_attachments" not in inspect(engine).get_table_names():
+        return
+    columns = {item["name"] for item in inspect(engine).get_columns("teacher_graph_node_attachments")}
+    definitions = {
+        "file_name": "VARCHAR(220) NOT NULL DEFAULT ''",
+        "file_mime_type": "VARCHAR(120) NOT NULL DEFAULT ''",
+        "file_size_bytes": "INTEGER NOT NULL DEFAULT 0",
+        "file_url": "VARCHAR(500) NOT NULL DEFAULT ''",
+        "stored_name": "VARCHAR(260) NOT NULL DEFAULT ''",
+    }
+    with engine.begin() as connection:
+        for column, definition in definitions.items():
+            if column not in columns:
+                connection.execute(text(f"ALTER TABLE teacher_graph_node_attachments ADD COLUMN {column} {definition}"))
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     Base.metadata.create_all(engine)
     ensure_class_filter_columns()
     ensure_grade_dimension_column()
     ensure_chapter_content_columns()
+    ensure_teacher_graph_attachment_file_columns()
     with SessionLocal() as db:
         seed_database(db)
         ensure_class_prototype_data(db)

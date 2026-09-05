@@ -13,6 +13,7 @@ import {
   FileText,
   GitBranchPlus,
   Layers3,
+  Link2,
   Loader2,
   MessageSquareText,
   Network,
@@ -70,6 +71,7 @@ type PendingRelation = {
 };
 
 type KnowledgeGraphAiAction = "practice" | "document" | "question";
+type NodeAttachment = NonNullable<StudentKnowledgeGraphNode["attachments"]>[number];
 
 const selfStudyGraphStorageKey = "codetrack.selfStudyKnowledgeGraph.v1";
 
@@ -761,6 +763,7 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("knowledge");
   const [relationMenuOpen, setRelationMenuOpen] = useState(false);
   const [pendingRelation, setPendingRelation] = useState<PendingRelation | null>(null);
+  const [viewingAttachment, setViewingAttachment] = useState<NodeAttachment | null>(null);
   const [studentProfile, setStudentProfile] = useState<StudentProfile | null>(null);
   const [diagnosesByNode, setDiagnosesByNode] = useState<Record<string, NodeDiagnosis>>({});
 
@@ -932,6 +935,7 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
   const activeNode = selectedNode ?? graph?.nodes[0] ?? null;
   const selectedTone = stateTone(activeNode?.difficulty);
   const activeDiagnosis = activeNode ? diagnosesByNode[activeNode.id] ?? null : null;
+  const activeNodeAttachments = !isSelfStudy ? activeNode?.attachments ?? [] : [];
   const matchedKnowledgeState = activeNode
     ? studentProfile?.knowledge_states.find((item) => item.knowledge_point === activeNode.label)
     : null;
@@ -1639,6 +1643,38 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
 
                       {inspectorTab === "resources" ? (
                         <>
+                          {!isSelfStudy ? (
+                            <>
+                              <div className="student-graph-section-label">教师挂载知识</div>
+                              <div className="student-graph-attachment-list">
+                                {activeNodeAttachments.map((attachment) => (
+                                  <article key={attachment.id}>
+                                    <span className={attachment.resource_type === "link" ? "blue" : "green"}>
+                                      {attachment.resource_type === "link" ? <Link2 size={16} /> : <FileText size={16} />}
+                                    </span>
+                                    <div>
+                                      <strong>{attachment.title}</strong>
+                                      {attachment.resource_type === "file" && attachment.file_url ? (
+                                        <a href={attachment.file_url} target="_blank" rel="noreferrer" title={`${attachment.file_name || "文件资料"} · ${fileSize(attachment.file_size_bytes || 0)}`}>{attachment.file_name || "文件资料"} · {fileSize(attachment.file_size_bytes || 0)}</a>
+                                      ) : attachment.resource_type === "link" && attachment.link_url ? (
+                                        <a href={attachment.link_url} target="_blank" rel="noreferrer" title={attachment.link_url}>{attachment.link_url}</a>
+                                      ) : (
+                                        <>
+                                          <p>{attachment.content}</p>
+                                          <button type="button" className="student-graph-attachment-view" onClick={() => setViewingAttachment(attachment)}>
+                                            查看全文
+                                          </button>
+                                        </>
+                                      )}
+                                    </div>
+                                  </article>
+                                ))}
+                                {!activeNodeAttachments.length ? (
+                                  <div className="empty-panel compact">老师暂未为当前节点挂载补充知识。</div>
+                                ) : null}
+                              </div>
+                            </>
+                          ) : null}
                           {graph?.source_summary ? (
                             <div className="map-advice">
                               <span className="teacher-soft-icon green"><CircleDot size={20} /></span>
@@ -1756,6 +1792,21 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
           </section>
         </aside>
       </section>
+      {viewingAttachment ? (
+        <div className="student-graph-attachment-modal" role="dialog" aria-modal="true" aria-labelledby="student-graph-attachment-modal-title">
+          <div className="student-graph-attachment-modal-backdrop" onClick={() => setViewingAttachment(null)} />
+          <section>
+            <header>
+              <div>
+                <span>挂载文本</span>
+                <strong id="student-graph-attachment-modal-title">{viewingAttachment.title}</strong>
+              </div>
+              <button type="button" aria-label="关闭" onClick={() => setViewingAttachment(null)}><X size={16} /></button>
+            </header>
+            <p>{viewingAttachment.content || "暂无文本内容"}</p>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

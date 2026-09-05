@@ -149,6 +149,20 @@ export type StudentKnowledgeGraphNode = {
   y: number;
   color: string;
   source: "ai" | "custom" | string;
+  attachments?: Array<{
+    id: string;
+    title: string;
+    resource_type: "text" | "link" | "file" | string;
+    content: string;
+    link_url: string;
+    file_name?: string;
+    file_mime_type?: string;
+    file_size_bytes?: number;
+    file_url?: string;
+    visible?: boolean;
+    created_at?: string;
+    updated_at?: string;
+  }>;
 };
 
 export type StudentKnowledgeGraphEdge = {
@@ -1267,7 +1281,7 @@ export const api = {
   getStudentProfile: (courseId?: string) =>
     cachedGet<StudentProfile>(studentProfileUrl(courseId)),
   getStudentKnowledgeGraph: (courseId: string) =>
-    cachedGet<StudentKnowledgeGraph>(studentKnowledgeGraphUrl(courseId)),
+    request<StudentKnowledgeGraph>(studentKnowledgeGraphUrl(courseId)),
   getPracticeProjectHome: () =>
     cachedGet<PracticeProjectHome>("/api/v1/student/practice-projects"),
   getPracticeProjectDetail: (projectId: string) =>

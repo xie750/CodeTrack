@@ -214,6 +214,60 @@ class TeacherKnowledgeGraph(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
     published_at: Mapped[datetime | None] = mapped_column(DateTime)
 
+    node_attachments: Mapped[list[TeacherGraphNodeAttachment]] = relationship(
+        back_populates="graph",
+        cascade="all, delete-orphan",
+    )
+    publications: Mapped[list[TeacherGraphPublication]] = relationship(
+        back_populates="graph",
+        cascade="all, delete-orphan",
+    )
+
+
+class TeacherGraphNodeAttachment(Base):
+    __tablename__ = "teacher_graph_node_attachments"
+    __table_args__ = (
+        Index("ix_teacher_graph_node_attachment_scope", "graph_id", "node_id", "visible"),
+        Index("ix_teacher_graph_node_attachment_order", "graph_id", "node_id", "order_index"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    graph_id: Mapped[int] = mapped_column(ForeignKey("teacher_knowledge_graphs.id", ondelete="CASCADE"), index=True)
+    node_id: Mapped[str] = mapped_column(String(80), index=True)
+    title: Mapped[str] = mapped_column(String(120))
+    resource_type: Mapped[str] = mapped_column(String(20), default="text")
+    content: Mapped[str] = mapped_column(Text, default="")
+    link_url: Mapped[str] = mapped_column(String(500), default="")
+    file_name: Mapped[str] = mapped_column(String(220), default="")
+    file_mime_type: Mapped[str] = mapped_column(String(120), default="")
+    file_size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    file_url: Mapped[str] = mapped_column(String(500), default="")
+    stored_name: Mapped[str] = mapped_column(String(260), default="")
+    visible: Mapped[bool] = mapped_column(Boolean, default=True)
+    order_index: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+    graph: Mapped[TeacherKnowledgeGraph] = relationship(back_populates="node_attachments")
+
+
+class TeacherGraphPublication(Base):
+    __tablename__ = "teacher_graph_publications"
+    __table_args__ = (
+        UniqueConstraint("graph_id", "class_id", name="uq_teacher_graph_publication_graph_class"),
+        Index("ix_teacher_graph_publication_scope", "class_id", "course_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    graph_id: Mapped[int] = mapped_column(ForeignKey("teacher_knowledge_graphs.id", ondelete="CASCADE"), index=True)
+    class_id: Mapped[str] = mapped_column(String(40), index=True)
+    course_id: Mapped[str] = mapped_column(String(40), index=True)
+    class_name: Mapped[str] = mapped_column(String(120), default="")
+    status: Mapped[str] = mapped_column(String(20), default="published")
+    published_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+    graph: Mapped[TeacherKnowledgeGraph] = relationship(back_populates="publications")
+
 
 class Material(Base):
     __tablename__ = "materials"

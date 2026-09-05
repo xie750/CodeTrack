@@ -7,6 +7,10 @@ from pypdf import PdfWriter
 from pptx import Presentation
 
 from teacher_backend.app.main import app
+from teacher_backend.app.database import SessionLocal
+from teacher_backend.app.models import TeacherGraphNodeAttachment
+from teacher_backend.app.teacher_graphs import open_unified_session
+from backend.app.models import StudentKnowledgeGraph
 
 
 @pytest.fixture
@@ -59,9 +63,29 @@ def test_teacher_knowledge_graph_crud_and_persistence(client):
     assert saved.status_code == 200
     assert saved.json()["data"]["edges"] == [edge]
 
-    published = client.post(f"/api/teacher/knowledge-graphs/{graph_id}/publish")
+    rejected_publish = client.post(f"/api/teacher/knowledge-graphs/{graph_id}/publish", json={"class_ids": []})
+    assert rejected_publish.status_code == 422
+    closed_class_publish = client.post(f"/api/teacher/knowledge-graphs/{graph_id}/publish", json={"class_ids": ["class-ds1"]})
+    assert closed_class_publish.status_code == 422
+
+    published = client.post(f"/api/teacher/knowledge-graphs/{graph_id}/publish", json={"class_ids": ["class-se1"]})
     assert published.status_code == 200
-    assert published.json()["data"]["status"] == "published"
+    published_data = published.json()["data"]
+    assert published_data["status"] == "published"
+    assert published_data["target_class_ids"] == ["class-se1"]
+    assert published_data["synced_student_graphs"][0]["student_graph_id"] == "kg_ta_se1_ds_001"
+
+    unified_db, _ = open_unified_session()
+    try:
+        student_graph = unified_db.get(StudentKnowledgeGraph, "kg_ta_se1_ds_001")
+        assert student_graph is not None
+        assert student_graph.title == "算法课程图谱"
+        assert student_graph.class_id == "class_se_001"
+        other_class_graph = unified_db.get(StudentKnowledgeGraph, "kg_ta_cs1_ds_001")
+        assert other_class_graph is not None
+        assert other_class_graph.title != "算法课程图谱"
+    finally:
+        unified_db.close()
 
     listing = client.get("/api/teacher/knowledge-graphs")
     assert listing.status_code == 200
@@ -167,6 +191,98 @@ def test_teacher_knowledge_graph_reuses_rag_parser_for_markdown_and_pptx(client)
     assert any(item["content_profile"] == "slide_deck" for item in graph["source_files"])
     assert graph["node_count"] >= 6
     assert "父切片" in graph["source_summary"]
+    assert client.delete(f"/api/teacher/knowledge-graphs/{graph['id']}").status_code == 200
+
+
+def test_teacher_knowledge_graph_node_attachments_are_stored_in_table(client):
+    created = client.post(
+        "/api/teacher/knowledge-graphs",
+        json={"title": "节点挂载知识图谱", "nodes": [{"id": "node-attachment-test", "label": "梯度下降", "type": "方法"}]},
+    )
+    assert created.status_code == 201, created.text
+    graph = created.json()["data"]
+
+    attachment = client.post(
+        f"/api/teacher/knowledge-graphs/{graph['id']}/nodes/node-attachment-test/attachments",
+        json={
+            "title": "课前补充阅读",
+            "resource_type": "text",
+            "content": "先理解损失函数，再看参数沿负梯度方向更新。",
+            "link_url": "",
+        },
+    )
+    assert attachment.status_code == 201, attachment.text
+    attachment_id = attachment.json()["data"]["id"]
+
+    file_attachment = client.post(
+        f"/api/teacher/knowledge-graphs/{graph['id']}/nodes/node-attachment-test/attachments/file",
+        data={"title": "节点讲义文件"},
+        files={"file": ("gradient.md", b"# Gradient\nextra material", "text/markdown")},
+    )
+    assert file_attachment.status_code == 201, file_attachment.text
+    file_data = file_attachment.json()["data"]
+    assert file_data["resource_type"] == "file"
+    assert file_data["file_name"] == "gradient.md"
+    assert file_data["file_size_bytes"] == len(b"# Gradient\nextra material")
+
+    with SessionLocal() as db:
+        stored = db.get(TeacherGraphNodeAttachment, attachment_id)
+        assert stored is not None
+        assert stored.node_id == "node-attachment-test"
+        stored_file = db.get(TeacherGraphNodeAttachment, file_data["id"])
+        assert stored_file is not None
+        assert stored_file.resource_type == "file"
+        assert stored_file.stored_name
+
+    detail = client.get(f"/api/teacher/knowledge-graphs/{graph['id']}").json()["data"]
+    node = next(item for item in detail["nodes"] if item["id"] == "node-attachment-test")
+    assert node["attachments"][0]["title"] == "课前补充阅读"
+    assert {item["resource_type"] for item in node["attachments"]} == {"text", "file"}
+
+    file_response = client.get(file_data["file_url"], headers={"X-User-Id": "teacher-01"})
+    assert file_response.status_code == 200
+    assert file_response.content == b"# Gradient\nextra material"
+    assert client.get(file_data["file_url"]).status_code == 404
+
+    published = client.post(f"/api/teacher/knowledge-graphs/{graph['id']}/publish", json={"class_ids": ["class-se1"]})
+    assert published.status_code == 200
+    public_file_response = client.get(file_data["file_url"])
+    assert public_file_response.status_code == 200
+    assert public_file_response.content == b"# Gradient\nextra material"
+
+    deleted = client.delete(
+        f"/api/teacher/knowledge-graphs/{graph['id']}/nodes/node-attachment-test/attachments/{attachment_id}"
+    )
+    assert deleted.status_code == 200
+    detail_after_delete = client.get(f"/api/teacher/knowledge-graphs/{graph['id']}").json()["data"]
+    node_after_delete = next(item for item in detail_after_delete["nodes"] if item["id"] == "node-attachment-test")
+    assert [item["resource_type"] for item in node_after_delete["attachments"]] == ["file"]
+
+    second = client.post(
+        f"/api/teacher/knowledge-graphs/{graph['id']}/nodes/node-attachment-test/attachments",
+        json={
+            "title": "外部资料",
+            "resource_type": "link",
+            "content": "",
+            "link_url": "https://example.com/gradient-descent",
+        },
+    ).json()["data"]
+    saved = client.put(
+        f"/api/teacher/knowledge-graphs/{graph['id']}",
+        json={
+            "title": "节点挂载知识图谱",
+            "description": "",
+            "target_classes": [],
+            "status": "draft",
+            "nodes": [],
+            "edges": [],
+        },
+    )
+    assert saved.status_code == 200
+    with SessionLocal() as db:
+        assert db.get(TeacherGraphNodeAttachment, second["id"]) is None
+        assert db.get(TeacherGraphNodeAttachment, file_data["id"]) is None
+
     assert client.delete(f"/api/teacher/knowledge-graphs/{graph['id']}").status_code == 200
 
 
