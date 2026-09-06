@@ -462,15 +462,48 @@ export interface ApiQuestionInsights {
     top_coverage_rate: number
   }
   clusters: ApiQuestionInsightCluster[]
-  ai_diagnosis: {
-    title: string
-    mode: 'MODEL' | 'RULE_PREVIEW' | string
-    source_label: string
-    summary: string
-    recommendations: string[]
-    evidence: string[]
-    confidence: number
+  diagnosis_capability: {
+    mode: 'REALTIME_MODEL' | string
+    label: string
+    description: string
   }
+}
+
+export interface ApiQuestionInsightDiagnosis {
+  title: string
+  summary: string
+  teaching_suggestions: string[]
+  practice_suggestions: string[]
+  evidence: string[]
+  data_gaps: string[]
+  confidence: number
+  target: {
+    type: 'class' | 'cluster' | string
+    cluster_id: string | null
+    cluster_topic: string | null
+  }
+  model: {
+    provider: string
+    name: string
+    duration_ms: number | null
+    token_prompt: number | null
+    token_completion: number | null
+  }
+  generated_at: string
+}
+
+export interface ApiLearningInterventionResult {
+  action: string
+  course_id: string
+  class_id: string
+  student_id: string | null
+  recipients: number
+  notification_ids: string[]
+  task_id: string | null
+  discussion_id: string | null
+  feedback_id: string | null
+  student_visible: boolean
+  created_at: string
 }
 
 export interface ApiNotification {
@@ -856,6 +889,10 @@ export const api = {
   reviewAction: (reviewId: string, body: unknown) => request<any>('/teacher/ai-reviews/' + reviewId + '/action', { method: 'POST', body: JSON.stringify(body) }),
   analytics: (courseId: string, classId: string) => request<any>('/teacher/analytics/overview?course_id=' + courseId + '&class_id=' + classId),
   questionInsights: (courseId: string, classId: string) => request<ApiQuestionInsights>('/teacher/analytics/question-insights?course_id=' + courseId + '&class_id=' + classId),
+  diagnoseQuestionInsights: (body: { course_id: string; class_id?: string | null; cluster_id?: string | null }) =>
+    request<ApiQuestionInsightDiagnosis>('/teacher/analytics/question-insights/diagnose', { method: 'POST', body: JSON.stringify(body) }),
+  createLearningIntervention: (body: { course_id: string; class_id: string; action: string; title: string; content: string; knowledge_point?: string | null; student_id?: string | null }) =>
+    request<ApiLearningInterventionResult>('/teacher/analytics/interventions', { method: 'POST', body: JSON.stringify(body) }),
   teacherAiChat: (body: { course_id: string; class_id: string | null; session_id?: string | null; message: string; history: ApiTeacherAiHistoryMessage[] }) =>
     request<ApiTeacherAiChatResponse>('/teacher/ai-assistant/chat', { method: 'POST', body: JSON.stringify(body) }),
   streamTeacherAiChat,

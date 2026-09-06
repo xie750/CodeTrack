@@ -155,3 +155,19 @@ class NotificationRead(BaseModel):
     read: bool = True
 
 
+class QuestionInsightDiagnosisRequest(BaseModel):
+    course_id: str
+    class_id: str | None = None
+    cluster_id: str | None = None
+
+
+class LearningInterventionRequest(BaseModel):
+    course_id: str
+    class_id: str
+    action: str = Field(pattern="^(class_practice|class_reminder|student_feedback|risk_reminder|discussion)$")
+    title: str = Field(min_length=2, max_length=160)
+    content: str = Field(min_length=2, max_length=1200)
+    knowledge_point: str | None = Field(default=None, max_length=120)
+    student_id: str | None = None
+
+

@@ -286,6 +286,43 @@ export interface AISafetyConfig {
   logRetentionDays: number
 }
 
+// 管理员端平台权威学科知识库
+export type AuthoritativeKnowledgeBaseStatus = '草稿' | '待审核' | '已发布' | '需复核'
+export type AuthoritativeSourceStatus = '待审核' | '已审定' | '需复核'
+export type AuthoritativeSourceKind = '课程标准' | '教材' | '教师审定讲义' | '公开规范' | '题库解析'
+
+export interface AuthoritativeKnowledgeSource {
+  id: string
+  title: string
+  kind: AuthoritativeSourceKind
+  publisher: string
+  chapter: string
+  status: AuthoritativeSourceStatus
+  reviewer: string
+  chunkCount: number
+  qualityScore: number
+  updatedAt: string
+}
+
+export interface AuthoritativeKnowledgeBase {
+  id: string
+  subject: string
+  courseName: string
+  version: string
+  status: AuthoritativeKnowledgeBaseStatus
+  owner: string
+  coverageRate: number
+  sourceCount: number
+  chunkCount: number
+  citationPassRate: number
+  retrievalPriority: number
+  publishScope: string
+  lastUpdatedAt: string
+  qualityGates: string[]
+  retrievalPolicy: string
+  sources: AuthoritativeKnowledgeSource[]
+}
+
 // ===== 系统设置 =====
 export interface Semester {
   id: string

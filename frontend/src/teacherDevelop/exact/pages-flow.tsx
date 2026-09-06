@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 
 import {
-  api, type ApiClass, type ApiQuestionInsightCluster, type ApiQuestionInsights,
+  api, type ApiClass, type ApiQuestionInsightCluster, type ApiQuestionInsightDiagnosis, type ApiQuestionInsights,
   type ApiReview, type ApiStudent, type ApiSubmission, type ApiTask,
   type ApiTeacher, type ApiTeacherPreference,
 } from '../api'
@@ -208,12 +208,19 @@ export function ExactAnalytics({ courseId, classId, classes, notify }: FlowProps
   const [selectedStudentId, setSelectedStudentId] = useState('')
   const [selectedQuestionId, setSelectedQuestionId] = useState('')
   const [showQuestionDiagnosis, setShowQuestionDiagnosis] = useState(false)
+  const [questionDiagnosis, setQuestionDiagnosis] = useState<ApiQuestionInsightDiagnosis | null>(null)
+  const [diagnosisLoading, setDiagnosisLoading] = useState(false)
+  const [diagnosingClusterId, setDiagnosingClusterId] = useState<string | null>(null)
+  const [interventionLoading, setInterventionLoading] = useState<string | null>(null)
   const courseClasses = useMemo(() => classes.filter((item) => item.course_id === courseId), [classes, courseId])
   useEffect(() => {
     setDiagnosisClassId(classId || courseClasses[0]?.id || '')
     setStudentSearch('')
     setSelectedQuestionId('')
     setShowQuestionDiagnosis(false)
+    setQuestionDiagnosis(null)
+    setDiagnosingClusterId(null)
+    setInterventionLoading(null)
   }, [classId, courseId])
   useEffect(() => { api.analytics(courseId, diagnosisClassId || classId).then(setData) }, [courseId, classId, diagnosisClassId])
   useEffect(() => {
@@ -238,12 +245,55 @@ export function ExactAnalytics({ courseId, classId, classes, notify }: FlowProps
   }, [studentSearch, students])
   const selectedStudent = students.find((item) => item.id === selectedStudentId) || students[0]
   const selectedQuestion = questionInsights?.clusters.find((item) => item.id === selectedQuestionId) || questionInsights?.clusters[0]
+  const generateQuestionDiagnosis = async (clusterId?: string | null) => {
+    const targetClassId = diagnosisClassId || classId || null
+    setDiagnosisLoading(true)
+    setDiagnosingClusterId(clusterId || null)
+    setShowQuestionDiagnosis(true)
+    try {
+      const result = await api.diagnoseQuestionInsights({ course_id: courseId, class_id: targetClassId, cluster_id: clusterId || null })
+      setQuestionDiagnosis(result)
+      notify('AI 诊断已由真实模型生成')
+    } catch (reason: any) {
+      setQuestionDiagnosis(null)
+      notify(reason.message || '真实模型诊断失败')
+    } finally {
+      setDiagnosisLoading(false)
+      setDiagnosingClusterId(null)
+    }
+  }
   const studentStatus = selectedStudent?.status === 'risk'
     ? { text: '高风险', color: 'red', note: '近期任务完成度偏低，建议重点关注学习进度与提示依赖。' }
     : selectedStudent?.status === 'attention'
       ? { text: '需关注', color: 'gold', note: '部分知识点掌握不稳定，建议安排针对性练习与反馈。' }
       : { text: '学习稳定', color: 'green', note: '当前学习节奏稳定，任务完成与知识点掌握情况正常。' }
   if (!data) return <PageLoader />
+  const weakestPoint = [...data.knowledge].sort((left: any, right: any) => left.mastery - right.mastery)[0]?.name || '当前薄弱知识点'
+  const runIntervention = async (key: string, body: { action: string; title: string; content: string; knowledge_point?: string | null; student_id?: string | null }) => {
+    const targetClassId = diagnosisClassId || classId
+    if (!targetClassId) {
+      notify('请先选择教学班')
+      return
+    }
+    setInterventionLoading(key)
+    try {
+      const result = await api.createLearningIntervention({ course_id: courseId, class_id: targetClassId, ...body })
+      const suffix = result.task_id ? '，专项练习已进入学生端任务' : result.feedback_id ? '，反馈已写入学生提交记录' : ''
+      notify(`已触达 ${result.recipients} 名学生${suffix}`)
+    } catch (reason: any) {
+      notify(reason.message || '干预动作执行失败')
+    } finally {
+      setInterventionLoading(null)
+    }
+  }
+  const riskRows = students.filter((item) => item.status === 'risk' || item.status === 'attention')
+  const riskColumns: ColumnsType<ApiStudent> = [
+    { title: '学生', render: (_, row) => <Space><Avatar size={28} className="exact-avatar">{row.name.slice(-1)}</Avatar><span><Text strong>{row.name}</Text><small>{row.number}</small></span></Space> },
+    { title: '风险等级', render: (_, row) => <Tag color={row.status === 'risk' ? 'red' : 'gold'}>{row.status === 'risk' ? '高风险' : '需关注'}</Tag> },
+    { title: '证据', render: (_, row) => `进度 ${row.progress}% · 提交 ${row.submissions} 次 · L${row.hint_level || 0}` },
+    { title: '建议动作', render: (_, row) => row.status === 'risk' ? '发送学习提醒并补充教师反馈' : '推送薄弱点复习提醒' },
+    { title: '操作', render: (_, row) => <Space><Button size="small" loading={interventionLoading === `risk-${row.id}`} onClick={() => void runIntervention(`risk-${row.id}`, { action: 'risk_reminder', title: '学习进度提醒', content: `${row.name}，你近期在${weakestPoint}相关任务中的进度偏慢，请先完成复习资料并在本周内提交一次修正版本。`, knowledge_point: weakestPoint, student_id: row.id })}>提醒</Button><Button size="small" type="link" loading={interventionLoading === `feedback-${row.id}`} onClick={() => void runIntervention(`feedback-${row.id}`, { action: 'student_feedback', title: '教师个性化反馈', content: `${row.name}，老师建议你优先复盘${weakestPoint}，重点说明每一步边界条件，再完成一次小练习验证。`, knowledge_point: weakestPoint, student_id: row.id })}>反馈</Button></Space> },
+  ]
   const questionColumns: ColumnsType<ApiQuestionInsightCluster> = [
     { title: '疑问主题', dataIndex: 'topic', width: 280, render: (_, row) => <button className="question-topic-button" onClick={() => setSelectedQuestionId(row.id)}><strong>{row.topic}</strong><small>{row.representative_question}</small></button> },
     { title: '次数', dataIndex: 'ask_count', width: 82, sorter: (left, right) => left.ask_count - right.ask_count },
@@ -251,7 +301,7 @@ export function ExactAnalytics({ courseId, classId, classes, notify }: FlowProps
     { title: '覆盖', width: 82, render: (_, row) => `${row.coverage_rate}%` },
     { title: '追问', width: 82, render: (_, row) => `${row.repeat_followup_rate}%` },
     { title: '未解决', width: 90, render: (_, row) => <Tag color={row.unresolved_rate >= 30 ? 'red' : row.unresolved_rate >= 20 ? 'gold' : 'blue'}>{row.unresolved_rate}%</Tag> },
-    { title: '操作', width: 96, render: (_, row) => <Button size="small" type="link" onClick={() => { setSelectedQuestionId(row.id); setShowQuestionDiagnosis(true) }}>AI 诊断</Button> },
+    { title: '操作', width: 96, render: (_, row) => <Button size="small" type="link" loading={diagnosisLoading && diagnosingClusterId === row.id} onClick={(event) => { event.stopPropagation(); setSelectedQuestionId(row.id); void generateQuestionDiagnosis(row.id) }}>AI 诊断</Button> },
   ]
   return <div className="exact-course-page exact-analytics">
     <div className="exact-page-title"><div><Text type="secondary">课程工作空间 / 学情分析</Text><Title level={2}>学情分析</Title><Text type="secondary">基于提交、评测、提示和成绩证据分析班级学习状态。</Text></div><Button icon={<Download size={14} />} onClick={() => notify('学情分析已导出')}>导出报告</Button></div>
@@ -262,13 +312,58 @@ export function ExactAnalytics({ courseId, classId, classes, notify }: FlowProps
         <Input allowClear prefix={<Search size={14} />} value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} placeholder="搜索姓名或学号" />
         <Select showSearch optionFilterProp="label" value={selectedStudentId || undefined} onChange={setSelectedStudentId} placeholder="选择学生" options={visibleStudents.map((item) => ({ value: item.id, label: `${item.name} · ${item.number}` }))} />
       </div> : view === '高频疑问' ? <div className="analytics-student-picker question-filter">
-        <Select value={diagnosisClassId} onChange={(value) => { setDiagnosisClassId(value); setSelectedQuestionId(''); setShowQuestionDiagnosis(false) }} options={courseClasses.map((item) => ({ value: item.id, label: item.name }))} placeholder="选择班级" />
-        <Button icon={<Bot size={14} />} type={showQuestionDiagnosis ? 'primary' : 'default'} onClick={() => { setShowQuestionDiagnosis((current) => !current); notify(showQuestionDiagnosis ? '已收起诊断建议' : '已展开诊断建议（当前为规则预览）') }}>AI 诊断</Button>
+        <Select value={diagnosisClassId} onChange={(value) => { setDiagnosisClassId(value); setSelectedQuestionId(''); setShowQuestionDiagnosis(false); setQuestionDiagnosis(null); setDiagnosingClusterId(null) }} options={courseClasses.map((item) => ({ value: item.id, label: item.name }))} placeholder="选择班级" />
+        <Button icon={<Bot size={14} />} type="primary" loading={diagnosisLoading} onClick={() => { void generateQuestionDiagnosis(null) }}>AI 诊断</Button>
       </div> : <Select defaultValue="all" options={[{ value: 'all', label: '全部任务' }]} />}
     </div>
     <div className="analytics-metrics">{[['平均完成率',data.summary.completion_rate + '%'],['平均得分',data.summary.average_score],['逾期率',data.summary.overdue_rate + '%'],['平均提示等级','L' + data.summary.average_hint_level],['风险学生',data.summary.risk_students + ' 人'],['薄弱知识点',data.summary.weak_points + ' 个']].map((item,index) => <span className={'m' + index} key={item[0]}><small>{item[0]}</small><strong>{item[1]}</strong><em>{index % 2 ? '较上周 +2' : '较上周 +6%'}</em></span>)}</div>
-    {view === '班级总览' && <><div className="analytics-charts"><section><strong>成绩分布</strong><SimpleBarPanel data={data.score_distribution} labelKey="range" color="#1677ff" /></section><section><strong>高频错误</strong><SimpleBarPanel data={data.errors} labelKey="name" color="#e4a42d" /></section></div><div className="knowledge-analysis"><strong>知识点掌握度</strong>{data.knowledge.map((item: any) => <div key={item.id}><span>{item.name}</span><Progress percent={item.mastery} strokeColor={item.mastery < 60 ? '#d95f59' : item.mastery < 75 ? '#e4a42d' : '#1677ff'} /><b>{item.mastery}%</b><Tag color={item.mastery < 60 ? 'red' : item.mastery < 75 ? 'gold' : 'green'}>{item.mastery < 60 ? '薄弱' : item.mastery < 75 ? '需关注' : '稳定'}</Tag></div>)}</div></>}
-    {view === '个体诊断' && (selectedStudent ? <div className="student-diagnosis-real"><aside><Avatar size={54} className="exact-avatar">{selectedStudent.name.slice(-1)}</Avatar><Title level={3}>{selectedStudent.name}</Title><Text type="secondary">{selectedStudent.number}</Text><Tag color={studentStatus.color}>{studentStatus.text}</Tag><p>{studentStatus.note}</p><small>最近活跃：{selectedStudent.last_active}</small></aside><main><Row gutter={16}><Col span={6}><Statistic title="课程进度" value={selectedStudent.progress} suffix="%" /></Col><Col span={6}><Statistic title="平均得分" value={selectedStudent.score || 0} /></Col><Col span={6}><Statistic title="提交次数" value={selectedStudent.submissions} /></Col><Col span={6}><Statistic title="最高提示" value={`L${selectedStudent.hint_level || 0}`} /></Col></Row><Divider />{data.knowledge.map((item: any, index: number) => { const mastery = Math.max(20, Math.min(100, Math.round(item.mastery * .55 + selectedStudent.progress * .45 - index * 2))); return <div className="student-kp" key={item.id}><span>{item.name}</span><Progress percent={mastery} strokeColor={mastery < 60 ? '#d95f59' : mastery < 75 ? '#e4a42d' : '#1677ff'} /><b>{mastery}%</b></div> })}</main></div> : <EmptyPanel text="当前班级没有可诊断的学生" />)}
+    {view === '班级总览' && <>
+      <div className="analytics-charts"><section><strong>成绩分布</strong><SimpleBarPanel data={data.score_distribution} labelKey="range" color="#1677ff" /></section><section><strong>高频错误</strong><SimpleBarPanel data={data.errors} labelKey="name" color="#e4a42d" /></section></div>
+      <div className="knowledge-analysis"><strong>知识点掌握度</strong>{data.knowledge.map((item: any) => <div key={item.id}><span>{item.name}</span><Progress percent={item.mastery} strokeColor={item.mastery < 60 ? '#d95f59' : item.mastery < 75 ? '#e4a42d' : '#1677ff'} /><b>{item.mastery}%</b><Tag color={item.mastery < 60 ? 'red' : item.mastery < 75 ? 'gold' : 'green'}>{item.mastery < 60 ? '薄弱' : item.mastery < 75 ? '需关注' : '稳定'}</Tag></div>)}</div>
+      <section className="analytics-action-board">
+        <div className="analytics-action-head"><div><strong>本周教学干预</strong><Text type="secondary">把班级共性问题直接转成学生端动作。</Text></div><Tag color="blue">闭环执行</Tag></div>
+        <div className="analytics-action-grid">
+          <article>
+            <Sparkles size={18} />
+            <div><b>下发专项练习</b><p>围绕{weakestPoint}生成一组短练习，并同步到当前班级学生端任务。</p></div>
+            <Button type="primary" loading={interventionLoading === 'class-practice'} onClick={() => void runIntervention('class-practice', { action: 'class_practice', title: `${weakestPoint}专项练习`, content: `根据本周学情分析，当前班级在${weakestPoint}上掌握不稳定。请完成这组 15 分钟专项练习，重点检查边界条件和解题步骤。`, knowledge_point: weakestPoint })}>生成并下发</Button>
+          </article>
+          <article>
+            <FileText size={18} />
+            <div><b>推送复习提醒</b><p>把薄弱知识点和复习路径发送给学生，形成课后跟进。</p></div>
+            <Button loading={interventionLoading === 'class-reminder'} onClick={() => void runIntervention('class-reminder', { action: 'class_reminder', title: `${weakestPoint}复习提醒`, content: `请本周优先复习${weakestPoint}，完成课程资料中的示例阅读，并整理 1 条仍不理解的问题带到下次课。`, knowledge_point: weakestPoint })}>发送提醒</Button>
+          </article>
+          <article>
+            <MessageSquareText size={18} />
+            <div><b>发起课堂讨论</b><p>把共性错因变成讨论题，让学生先解释再练习。</p></div>
+            <Button loading={interventionLoading === 'class-discussion'} onClick={() => void runIntervention('class-discussion', { action: 'discussion', title: `${weakestPoint}错因讨论`, content: `请结合最近一次任务，说明你在${weakestPoint}上最容易出错的一步，并写出一条避免该错误的方法。`, knowledge_point: weakestPoint })}>发起讨论</Button>
+          </article>
+        </div>
+      </section>
+    </>}
+    {view === '个体诊断' && (selectedStudent ? <div className="student-diagnosis-real">
+      <aside>
+        <Avatar size={54} className="exact-avatar">{selectedStudent.name.slice(-1)}</Avatar>
+        <Title level={3}>{selectedStudent.name}</Title>
+        <Text type="secondary">{selectedStudent.number}</Text>
+        <Tag color={studentStatus.color}>{studentStatus.text}</Tag>
+        <p>{studentStatus.note}</p>
+        <small>最近活跃：{selectedStudent.last_active}</small>
+        <div className="student-intervention-actions">
+          <Button type="primary" block icon={<Send size={14} />} loading={interventionLoading === `student-feedback-${selectedStudent.id}`} onClick={() => void runIntervention(`student-feedback-${selectedStudent.id}`, { action: 'student_feedback', title: '教师个性化学习建议', content: `${selectedStudent.name}，结合你最近的提交和提示使用情况，老师建议你先复盘${weakestPoint}，再用一题短练习检查自己是否能独立说明关键步骤。`, knowledge_point: weakestPoint, student_id: selectedStudent.id })}>发送学习建议</Button>
+          <Button block loading={interventionLoading === `student-reminder-${selectedStudent.id}`} onClick={() => void runIntervention(`student-reminder-${selectedStudent.id}`, { action: 'risk_reminder', title: '学习跟进提醒', content: `${selectedStudent.name}，请在本周完成${weakestPoint}相关复习，并把仍不清楚的问题提交到课程讨论区。`, knowledge_point: weakestPoint, student_id: selectedStudent.id })}>推送跟进提醒</Button>
+        </div>
+      </aside>
+      <main>
+        <Row gutter={16}><Col span={6}><Statistic title="课程进度" value={selectedStudent.progress} suffix="%" /></Col><Col span={6}><Statistic title="平均得分" value={selectedStudent.score || 0} /></Col><Col span={6}><Statistic title="提交次数" value={selectedStudent.submissions} /></Col><Col span={6}><Statistic title="最高提示" value={`L${selectedStudent.hint_level || 0}`} /></Col></Row>
+        <Divider />
+        {data.knowledge.map((item: any, index: number) => { const mastery = Math.max(20, Math.min(100, Math.round(item.mastery * .55 + selectedStudent.progress * .45 - index * 2))); return <div className="student-kp" key={item.id}><span>{item.name}</span><Progress percent={mastery} strokeColor={mastery < 60 ? '#d95f59' : mastery < 75 ? '#e4a42d' : '#1677ff'} /><b>{mastery}%</b></div> })}
+        <section className="individual-action-board">
+          <div><strong>个体干预记录</strong><Text type="secondary">发送后学生端会收到通知；若学生有提交记录，反馈也会写入最近一次提交。</Text></div>
+          <div><span><b>{weakestPoint}</b><small>建议优先复盘的知识点</small></span><span><b>{selectedStudent.hint_level ? `L${selectedStudent.hint_level}` : '未使用'}</b><small>最高提示依赖</small></span><span><b>{selectedStudent.status === 'risk' ? '需要跟进' : '常规观察'}</b><small>干预状态</small></span></div>
+        </section>
+      </main>
+    </div> : <EmptyPanel text="当前班级没有可诊断的学生" />)}
     {view === '高频疑问' && (questionInsights ? <div className="question-insight-layout">
       <main>
         <Alert className="question-source-note" type={questionInsights.data_status.source === 'real' ? 'success' : 'info'} showIcon message={questionInsights.data_status.label} description={questionInsights.data_status.description} />
@@ -283,12 +378,14 @@ export function ExactAnalytics({ courseId, classId, classes, notify }: FlowProps
           ].map((item) => <span key={item[0]}><small>{item[0]}</small><strong>{item[1]}</strong></span>)}
         </div>
         {showQuestionDiagnosis && <section className="question-ai-diagnosis">
-          <div><Bot size={18} /><strong>{questionInsights.ai_diagnosis.title}</strong><Tag color="geekblue">{questionInsights.ai_diagnosis.source_label}</Tag><Tag color="blue">{questionInsights.ai_diagnosis.confidence}%</Tag></div>
-          <p>{questionInsights.ai_diagnosis.summary}</p>
+          <div><Bot size={18} /><strong>{questionDiagnosis?.title || questionInsights.diagnosis_capability.label}</strong>{questionDiagnosis ? <><Tag color="geekblue">{questionDiagnosis.model.name}</Tag><Tag color="blue">{questionDiagnosis.confidence}%</Tag></> : <Tag color="blue">等待模型生成</Tag>}</div>
+          <p>{questionDiagnosis?.summary || questionInsights.diagnosis_capability.description}</p>
           <div className="question-diagnosis-grid">
-            <article><b>教学建议</b>{questionInsights.ai_diagnosis.recommendations.map((item) => <span key={item}><Sparkles size={13} />{item}</span>)}</article>
-            <article><b>依据</b>{questionInsights.ai_diagnosis.evidence.map((item) => <span key={item}><FileText size={13} />{item}</span>)}</article>
+            <article><b>教学建议</b>{questionDiagnosis ? questionDiagnosis.teaching_suggestions.map((item) => <span key={item}><Sparkles size={13} />{item}</span>) : <span><Sparkles size={13} />点击 AI 诊断后由真实模型实时生成。</span>}</article>
+            <article><b>依据</b>{questionDiagnosis ? questionDiagnosis.evidence.map((item) => <span key={item}><FileText size={13} />{item}</span>) : <span><FileText size={13} />将读取当前表格统计、问题样本和知识点数据。</span>}</article>
           </div>
+          {questionDiagnosis && <div className="question-model-meta"><span>{questionDiagnosis.model.provider}</span><span>{questionDiagnosis.generated_at.replace('T', ' ')}</span>{questionDiagnosis.model.duration_ms ? <span>{questionDiagnosis.model.duration_ms} ms</span> : null}</div>}
+          {questionDiagnosis?.data_gaps.length ? <Alert type="warning" showIcon message="数据限制" description={questionDiagnosis.data_gaps.join('；')} /> : null}
         </section>}
         <Table rowKey="id" columns={questionColumns} dataSource={questionInsights.clusters} pagination={false} tableLayout="fixed" onRow={(record) => ({ onClick: () => setSelectedQuestionId(record.id) })} />
       </main>
@@ -322,14 +419,25 @@ export function ExactAnalytics({ courseId, classId, classes, notify }: FlowProps
             </article>)}</div>
           </section>
           <section className="cluster-diagnosis">
-            <div><Bot size={15} /><strong>当前问题诊断</strong><Tag color="geekblue">{questionInsights.ai_diagnosis.source_label}</Tag><Tag color="blue">{selectedQuestion.diagnosis.confidence}%</Tag></div>
-            <p>{selectedQuestion.diagnosis.summary}</p>
-            <Button type="primary" block icon={<MessageSquareText size={14} />} onClick={() => setShowQuestionDiagnosis(true)}>查看综合建议</Button>
+            <div><Bot size={15} /><strong>当前问题诊断</strong>{questionDiagnosis?.target.cluster_id === selectedQuestion.id ? <><Tag color="geekblue">{questionDiagnosis.model.name}</Tag><Tag color="blue">{questionDiagnosis.confidence}%</Tag></> : <Tag color="blue">实时生成</Tag>}</div>
+            <p>{questionDiagnosis?.target.cluster_id === selectedQuestion.id ? questionDiagnosis.summary : '点击下方按钮后，系统会把该问题的统计、学生追问样本和关联知识点发送给真实模型生成诊断。'}</p>
+            {questionDiagnosis?.target.cluster_id === selectedQuestion.id && <div className="cluster-practice-list">{questionDiagnosis.practice_suggestions.map((item) => <span key={item}>{item}</span>)}</div>}
+            <Button type="primary" block loading={diagnosisLoading} icon={<MessageSquareText size={14} />} onClick={() => { void generateQuestionDiagnosis(selectedQuestion.id) }}>生成当前问题诊断</Button>
           </section>
         </div> : <EmptyPanel text="选择一个问题查看详情" />}
       </aside>
     </div> : <PageLoader />)}
-    {view === '预警中心' && <div className="risk-table"><Alert type="warning" showIcon message="风险等级由后端规则计算，AI 只负责解释证据。" /><Table rowKey="name" pagination={false} dataSource={[{ name: '王子轩', level: '高风险', rules: '连续未完成 / 三级提示依赖', active: '3 天前' },{ name: '周昊然', level: '需关注', rules: '任务逾期', active: '1 天前' }]} columns={[{ title: '学生', dataIndex: 'name' },{ title: '风险等级', dataIndex: 'level', render: (value) => <Tag color={value === '高风险' ? 'red' : 'gold'}>{value}</Tag> },{ title: '命中规则', dataIndex: 'rules' },{ title: '最近活跃', dataIndex: 'active' }]} /></div>}
+    {view === '预警中心' && <div className="risk-table intervention-risk-center">
+      <Alert type="warning" showIcon message="预警干预队列" description="风险不只用于展示。教师可直接给学生发送提醒或写入个性化反馈，学生端会收到站内通知。" />
+      <div className="risk-action-strip">
+        <span><strong>{riskRows.length}</strong><small>待跟进学生</small></span>
+        <span><strong>{riskRows.filter((item) => item.status === 'risk').length}</strong><small>高风险</small></span>
+        <span><strong>{weakestPoint}</strong><small>优先干预知识点</small></span>
+        <Button type="primary" loading={interventionLoading === 'risk-batch'} onClick={() => void runIntervention('risk-batch', { action: 'class_reminder', title: '班级学习跟进提醒', content: `本周请重点复习${weakestPoint}，未完成任务的同学请优先补交，并在课程讨论区提交一个仍不理解的问题。`, knowledge_point: weakestPoint })}>批量提醒</Button>
+      </div>
+      <Table rowKey="id" pagination={false} dataSource={riskRows} columns={riskColumns} />
+      {!riskRows.length && <EmptyPanel text="当前没有需要进入干预队列的学生" />}
+    </div>}
   </div>
 }
 

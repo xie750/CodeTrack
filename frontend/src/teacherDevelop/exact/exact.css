@@ -5663,6 +5663,126 @@ button { cursor: pointer; }
   padding: 16px;
 }
 
+.analytics-action-board,
+.individual-action-board {
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid var(--teacher-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: var(--teacher-shadow);
+}
+
+.analytics-action-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.analytics-action-head strong,
+.individual-action-board strong {
+  color: var(--teacher-heading);
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.analytics-action-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.analytics-action-grid article {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid #e6eef8;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.analytics-action-grid article > svg {
+  color: var(--teacher-primary);
+}
+
+.analytics-action-grid article b {
+  color: var(--teacher-heading);
+  font-size: 13px;
+}
+
+.analytics-action-grid article p {
+  min-height: 40px;
+  margin: 4px 0 10px;
+  color: var(--teacher-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.analytics-action-grid article .ant-btn {
+  grid-column: 1 / -1;
+}
+
+.student-intervention-actions {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  margin-top: 12px;
+}
+
+.individual-action-board {
+  display: grid;
+  gap: 12px;
+}
+
+.individual-action-board > div:last-child {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.individual-action-board span,
+.risk-action-strip span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #e6eef8;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.individual-action-board b,
+.risk-action-strip strong {
+  overflow: hidden;
+  color: var(--teacher-heading);
+  font-size: 15px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.individual-action-board small,
+.risk-action-strip small {
+  color: var(--teacher-muted);
+  font-size: 12px;
+}
+
+.intervention-risk-center {
+  display: grid;
+  gap: 12px;
+}
+
+.risk-action-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  gap: 10px;
+  align-items: stretch;
+}
+
 .review-layout-real > aside > button {
   min-height: 64px;
   border-radius: 8px;
@@ -6261,6 +6381,23 @@ button { cursor: pointer; }
   color: var(--teacher-accent);
 }
 
+.question-model-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.question-model-meta span,
+.cluster-practice-list span {
+  padding: 3px 8px;
+  border: 1px solid #dce5f1;
+  border-radius: 999px;
+  color: var(--teacher-muted);
+  background: #fff;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .question-detail-head {
   display: grid;
   gap: 6px;
@@ -6357,6 +6494,12 @@ button { cursor: pointer; }
   gap: 10px;
   padding-top: 12px;
   border-top: 1px solid #edf2f8;
+}
+
+.cluster-practice-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 @media (max-width: 1180px) {

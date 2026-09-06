@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, CalendarClock, Check, ClipboardList, Code2, MonitorPlay } from "lucide-react";
+import { ArrowRight, CalendarClock, Check, ClipboardList, Code2, MonitorPlay, ShieldCheck } from "lucide-react";
 import { api, apiCache, LearningContext, StudentProfile, StudentTaskCard } from "../api";
 import type { TaskOpenTarget } from "../App";
 import heroArt from "../assets/ui-home/hero-art.png";
 import robotImg from "../assets/ui-home/robot-img.png";
 import { StudentInlineNotice, StudentState, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
+import { resolveCourseIdeologyInsight } from "../courseIdeology";
 
 type PageProps = {
   onNavigate: (page: string) => void;
@@ -140,6 +141,14 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
   const primaryTask = tasks.find((task) => task.status !== "COMPLETED") ?? tasks[0];
   const courseName = context?.courses[0]?.course_name;
   const studentName = context?.student.name;
+  const ideologyInsight = useMemo(() => resolveCourseIdeologyInsight({
+    courseName,
+    taskTitle: primaryTask?.title,
+    knowledgePoints: [
+      ...(profile?.knowledge_states ?? []).slice(0, 3).map((item) => item.knowledge_point),
+      ...(primaryTask ? [primaryTask.title] : [])
+    ]
+  }), [courseName, primaryTask, profile]);
   const isLoading = pageStatus === "loading";
 
   return (
@@ -294,6 +303,16 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
             <span><i />保存 1 份学习产物</span>
           </div>
           </> : <div className="empty-panel">暂无今日目标数据。</div>}
+        </section>
+
+        <section className="home-card right-card home-ideology-card">
+          <div className="home-card-header">
+            <h2>今日课程思政提示</h2>
+            <span><ShieldCheck size={15} /> {ideologyInsight.dimension}</span>
+          </div>
+          <strong>{ideologyInsight.title}</strong>
+          <p>{ideologyInsight.summary}</p>
+          <em>{ideologyInsight.reflection}</em>
         </section>
 
         <section className="home-card right-card">

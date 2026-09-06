@@ -596,6 +596,10 @@ a {
   margin-top: 2px;
 }
 
+.admin-kb-selected-row > td {
+  background: var(--primary-bg) !important;
+}
+
 @media (max-width: 1180px) {
   .ai-usage-quality-grid {
     grid-template-columns: 1fr;

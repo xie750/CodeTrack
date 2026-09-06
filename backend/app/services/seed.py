@@ -1608,7 +1608,11 @@ def seed_demo_data(db: Session) -> None:
         },
     }
     for graph_id, values in student_graphs.items():
-        upsert(db, StudentKnowledgeGraph, graph_id, values)
+        existing_graph = db.query(StudentKnowledgeGraph).filter_by(
+            teaching_assignment_id=values["teaching_assignment_id"]
+        ).one_or_none()
+        if existing_graph is None:
+            db.add(StudentKnowledgeGraph(id=graph_id, **values))
 
     profile_snapshots = {
         "profile_user_student_001_ds": {

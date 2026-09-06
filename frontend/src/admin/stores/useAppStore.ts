@@ -14,6 +14,8 @@ import type {
   AiAlert,
   AlertRule,
   AISafetyConfig,
+  AuthoritativeKnowledgeBase,
+  AuthoritativeKnowledgeSource,
   Semester,
   ParamGroup,
   Notice,
@@ -36,6 +38,7 @@ import {
   seedAiCallLogs,
   seedAiAlerts,
   seedAISafetyConfig,
+  seedAuthoritativeKnowledgeBases,
   seedSemesters,
   seedParamGroups,
   seedNotices,
@@ -109,6 +112,13 @@ export const useAppStore = create<{
   updateAvailability: (id: string, patch: Partial<SubjectAvailability>) => void
   aiSafetyConfig: AISafetyConfig
   updateSafetyConfig: (patch: Partial<AISafetyConfig>) => void
+
+  authoritativeKnowledgeBases: AuthoritativeKnowledgeBase[]
+  publishAuthoritativeKnowledgeBase: (id: string) => void
+  updateAuthoritativeKnowledgeBase: (id: string, patch: Partial<AuthoritativeKnowledgeBase>) => void
+  addAuthoritativeKnowledgeSource: (baseId: string, source: Omit<AuthoritativeKnowledgeSource, 'id'>) => void
+  reviewAuthoritativeKnowledgeSource: (baseId: string, sourceId: string) => void
+
   aiCallLogs: AiCallLog[]
   aiAlerts: AiAlert[]
   handleAlert: (id: string, status: import('@admin/types').AlertStatus, meta?: { operator?: string; content?: string }) => void
@@ -302,6 +312,76 @@ export const useAppStore = create<{
   aiSafetyConfig: seedAISafetyConfig,
   updateSafetyConfig: (patch) =>
     set((s) => ({ aiSafetyConfig: { ...s.aiSafetyConfig, ...patch } })),
+
+  authoritativeKnowledgeBases: seedAuthoritativeKnowledgeBases,
+  publishAuthoritativeKnowledgeBase: (id) =>
+    set((s) => {
+      const target = s.authoritativeKnowledgeBases.find((kb) => kb.id === id)
+      if (!target) return s
+      const now = new Date().toLocaleString('zh-CN', { hour12: false })
+      return {
+        authoritativeKnowledgeBases: s.authoritativeKnowledgeBases.map((kb) =>
+          kb.id === id ? { ...kb, status: '已发布' as const, lastUpdatedAt: now } : kb,
+        ),
+        logs: [
+          {
+            id: `L${Date.now()}`,
+            operator: s.currentUser || '超级管理员',
+            actionType: '审核',
+            resourceType: '平台权威知识库',
+            resourceId: id,
+            desc: `发布 ${target.courseName} 权威知识库 ${target.version}`,
+            before: target.status,
+            after: '已发布',
+            ip: '10.20.1.8',
+            ua: 'Chrome/126',
+            time: now,
+            sensitive: true,
+          },
+          ...s.logs,
+        ],
+      }
+    }),
+  updateAuthoritativeKnowledgeBase: (id, patch) =>
+    set((s) => ({
+      authoritativeKnowledgeBases: s.authoritativeKnowledgeBases.map((kb) =>
+        kb.id === id ? { ...kb, ...patch } : kb,
+      ),
+    })),
+  addAuthoritativeKnowledgeSource: (baseId, source) =>
+    set((s) => ({
+      authoritativeKnowledgeBases: s.authoritativeKnowledgeBases.map((kb) => {
+        if (kb.id !== baseId) return kb
+        const nextSource = { ...source, id: `AKS-${Date.now()}` }
+        return {
+          ...kb,
+          status: kb.status === '已发布' ? '需复核' : kb.status,
+          sourceCount: kb.sourceCount + 1,
+          chunkCount: kb.chunkCount + source.chunkCount,
+          lastUpdatedAt: new Date().toLocaleString('zh-CN', { hour12: false }),
+          sources: [nextSource, ...kb.sources],
+        }
+      }),
+    })),
+  reviewAuthoritativeKnowledgeSource: (baseId, sourceId) =>
+    set((s) => ({
+      authoritativeKnowledgeBases: s.authoritativeKnowledgeBases.map((kb) => {
+        if (kb.id !== baseId) return kb
+        const sources = kb.sources.map((source) =>
+          source.id === sourceId
+            ? { ...source, status: '已审定' as const, reviewer: s.currentUser || '超级管理员', qualityScore: Math.max(source.qualityScore, 92) }
+            : source,
+        )
+        const hasReviewRisk = sources.some((source) => source.status !== '已审定')
+        return {
+          ...kb,
+          status: hasReviewRisk ? '待审核' : kb.status,
+          sources,
+          lastUpdatedAt: new Date().toLocaleString('zh-CN', { hour12: false }),
+        }
+      }),
+    })),
+
   aiCallLogs: seedAiCallLogs,
   aiAlerts: seedAiAlerts,
   handleAlert: (id, status, meta) =>

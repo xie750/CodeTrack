@@ -277,7 +277,7 @@ export default function Dashboard() {
   // ===== 渲染 =====
   const todoItems = [
     { label: '教学安排待补齐', desc: '课程需绑定教师与行政班后，教师端才能发布任务', count: teachingPending, path: '/admin/users/classes' },
-    { label: '知识库待开放', desc: '课程知识库开放后，学生端 AI 诊断和问答才能引用', count: knowledgePending, path: '/admin/users/classes?filter=knowledge' },
+    { label: '知识库待开放', desc: '课程知识库开放后，学生端 AI 诊断和问答才能引用', count: knowledgePending, path: '/admin/ai/knowledge' },
   ]
   const pendingAlertList = aiAlerts.filter((a) => a.status === '待处理')
   const displayName = profile.realName || profile.nickname

@@ -2959,6 +2959,57 @@
   border-radius: 50%;
 }
 
+.home-ideology-card {
+  border-color: #f2d6d4;
+  background: linear-gradient(180deg, #fffafa 0%, #ffffff 58%);
+}
+
+.home-ideology-card .home-card-header {
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.home-ideology-card .home-card-header span {
+  min-height: 26px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid #f0c8c5;
+  border-radius: 6px;
+  color: #b93632;
+  background: #fff2f1;
+  font-size: 11px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.home-ideology-card > strong {
+  display: block;
+  color: #17243b;
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1.45;
+}
+
+.home-ideology-card > p {
+  margin-top: 9px;
+  color: #536076;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.home-ideology-card > em {
+  margin-top: 12px;
+  padding-top: 12px;
+  display: block;
+  border-top: 1px solid #f2e3e2;
+  color: #8b4b47;
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.65;
+}
+
 .reminder-list {
   display: flex;
   flex-direction: column;

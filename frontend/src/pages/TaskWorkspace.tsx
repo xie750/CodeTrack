@@ -40,6 +40,7 @@ import { api, LearningContext, TaskDetail, VersionResult, Diagnosis, Hint, Agent
 import StudentRouteBreadcrumb from "../components/StudentRouteBreadcrumb";
 import avatarImg from "../assets/ui-home/avatar.png";
 import { StudentState, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
+import { resolveCourseIdeologyInsight } from "../courseIdeology";
 
 type PageProps = {
   taskId: string;
@@ -2131,6 +2132,12 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
 
   const knowledgeTags = task?.learning_objectives.length ? task.learning_objectives : ["等待任务知识点"];
   const studentName = context?.student.name ?? "学生";
+  const currentCourseName = context?.courses.find((course) => course.course_id === task?.course_id)?.course_name;
+  const ideologyInsight = useMemo(() => resolveCourseIdeologyInsight({
+    courseName: currentCourseName,
+    taskTitle: task?.title,
+    knowledgePoints: knowledgeTags
+  }), [currentCourseName, knowledgeTags, task?.title]);
   const problemWidth = resolveProblemWidth(metrics, layout.problemRatio);
   const editorHeight = resolveEditorHeight(metrics, layout.editorRatio);
   const workspaceStyle = {
@@ -2559,6 +2566,12 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
                             <li><b>语言：</b>{task.interface_spec.language_labels[selectedLanguage] ?? selectedLanguage}</li>
                           </ul>
                         </section>
+                        <section className="program-ideology-note">
+                          <h3><ShieldCheck size={15} /> 专业素养提醒</h3>
+                          <strong>{ideologyInsight.title}</strong>
+                          <p>{ideologyInsight.summary}</p>
+                          <em>{ideologyInsight.dimension} · {ideologyInsight.source}</em>
+                        </section>
                         <section className="program-hints">
                           <h3>分层提示</h3>
                           {hints.length ? [...hints].sort((a, b) => a.level - b.level).map((hint) => (
@@ -2667,6 +2680,16 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
                     <div><strong>复习{item}</strong><p>先对照公开样例自测，再根据系统证据逐步修正。</p></div>
                   </div>
                 ))}
+              </article>
+
+              <article className="program-card program-ideology-summary">
+                <header><h2>课程思政收获</h2><span className="program-panel-meta">{ideologyInsight.dimension}</span></header>
+                <div>
+                  <span><ShieldCheck size={17} /></span>
+                  <strong>{ideologyInsight.title}</strong>
+                  <p>{isPassed(latestResult) ? ideologyInsight.reflection : "完成提交后，结合本题结果复盘这一条专业素养提醒。"}</p>
+                  <em>{ideologyInsight.source}</em>
+                </div>
               </article>
             </section>
             {(task.teacher_review?.grade || task.teacher_review?.feedback.length) ? (

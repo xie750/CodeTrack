@@ -2,22 +2,28 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import secrets
 import string
 import uuid
+from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, inspect, select, text
 from sqlalchemy.orm import Session, selectinload
 
+from backend.app.ai.errors import LLMError, LLMHTTPError, LLMNotConfigured, LLMTimeout
+from backend.app.ai.llm_client import chat_json
+from backend.app.core.config import get_settings
+
 from .database import Base, SessionLocal, engine, get_db
 from .models import (
     AuditLog,
     Chapter,
     ClassGroup,
+    CourseDiscussion,
     Course,
     DiagnosisResult,
     DiagnosisReview,
@@ -43,8 +49,10 @@ from .schemas import (
     FeedbackCreate,
     GradeUpsert,
     KnowledgePointCreate,
+    LearningInterventionRequest,
     MaterialCreate,
     NotificationRead,
+    QuestionInsightDiagnosisRequest,
     ReviewAction,
     StudentSubmissionCreate,
     TaskCreate,
@@ -1143,6 +1151,139 @@ def analytics_overview(
     })
 
 
+@app.post("/api/v1/teacher/analytics/interventions", status_code=201)
+def create_learning_intervention(
+    payload: LearningInterventionRequest,
+    teacher: User = Depends(current_teacher),
+    db: Session = Depends(get_db),
+):
+    course = owned_course(db, teacher, payload.course_id)
+    class_group = db.get(ClassGroup, payload.class_id)
+    if not class_group or class_group.course_id != course.id:
+        raise HTTPException(status_code=404, detail="教学班不存在或不属于当前课程")
+
+    enrollments = db.scalars(
+        select(Enrollment)
+        .options(selectinload(Enrollment.student))
+        .where(Enrollment.class_id == payload.class_id)
+        .order_by(Enrollment.joined_at)
+    ).all()
+    if payload.student_id:
+        enrollments = [item for item in enrollments if item.student_id == payload.student_id]
+        if not enrollments:
+            raise HTTPException(status_code=404, detail="学生不在当前教学班")
+    if payload.action == "student_feedback" and not payload.student_id:
+        raise HTTPException(status_code=422, detail="个体反馈必须指定学生")
+
+    now = datetime.now().replace(microsecond=0)
+    recipients = [item.student for item in enrollments]
+    notification_ids: list[str] = []
+    task_id: str | None = None
+    discussion_id: str | None = None
+    feedback_id: str | None = None
+
+    if payload.action == "class_practice":
+        task = Task(
+            id=uid("task-intervention"),
+            course_id=course.id,
+            class_id=class_group.id,
+            title=payload.title,
+            type="programming",
+            chapter_label=payload.knowledge_point or "学情干预",
+            description=payload.content,
+            starter_code="// 根据教师下发的专项练习要求完成代码。\n",
+            status="published",
+            difficulty="基础",
+            due_at=now + timedelta(days=7),
+            publish_at=now,
+            allow_hints=True,
+        )
+        db.add(task)
+        db.flush()
+        for index, name in enumerate(["基础检查", "边界场景", "综合用例"], 1):
+            db.add(TestCase(
+                id=uid("case-intervention"),
+                task_id=task.id,
+                name=name,
+                hidden=index == 3,
+                weight=30 if index < 3 else 40,
+            ))
+        task_id = task.id
+        notice_title = f"新的专项练习：{task.title}"
+    elif payload.action == "discussion":
+        discussion = CourseDiscussion(
+            id=uid("discussion"),
+            course_id=course.id,
+            class_id=class_group.id,
+            teacher_id=teacher.id,
+            title=payload.title,
+            content=payload.content,
+            status="published",
+            published_at=now,
+        )
+        db.add(discussion)
+        discussion_id = discussion.id
+        notice_title = f"新的课堂讨论：{discussion.title}"
+    elif payload.action == "student_feedback":
+        submission = db.scalars(
+            select(Submission)
+            .join(Task)
+            .where(
+                Task.course_id == course.id,
+                Submission.student_id == payload.student_id,
+            )
+            .order_by(Submission.submitted_at.desc())
+        ).first()
+        if submission:
+            feedback = TeacherFeedback(
+                id=uid("feedback"),
+                submission_id=submission.id,
+                teacher_id=teacher.id,
+                content=payload.content,
+                status="published",
+                student_visible=True,
+            )
+            db.add(feedback)
+            feedback_id = feedback.id
+        notice_title = payload.title
+    else:
+        notice_title = payload.title
+
+    for student in recipients:
+        notice = Notification(
+            id=uid("notice"),
+            user_id=student.id,
+            type="intervention" if payload.action != "risk_reminder" else "risk",
+            title=notice_title,
+            content=payload.content,
+        )
+        db.add(notice)
+        notification_ids.append(notice.id)
+
+    audit(
+        db,
+        teacher.id,
+        f"analytics.intervention.{payload.action}",
+        "class_group",
+        class_group.id,
+        f"{payload.title}|recipients={len(recipients)}",
+    )
+    db.commit()
+    return envelope({
+        "action": payload.action,
+        "course_id": course.id,
+        "class_id": class_group.id,
+        "student_id": payload.student_id,
+        "recipients": len(recipients),
+        "notification_ids": notification_ids,
+        "task_id": task_id,
+        "discussion_id": discussion_id,
+        "feedback_id": feedback_id,
+        "student_visible": bool(notification_ids or feedback_id or task_id or discussion_id),
+        "created_at": now.isoformat(),
+    })
+
+
 def question_insight_seed(course: Course, class_group: ClassGroup | None, student_count: int):
     """Build a deterministic teacher-facing view of high-frequency AI questions.
 
@@ -1289,6 +1430,56 @@ def question_insight_seed(course: Course, class_group: ClassGroup | None, studen
     return clusters
 
 
+def validate_question_insight_diagnosis(raw: dict[str, Any]) -> dict[str, Any]:
+    def clean_text(value: Any, fallback: str = "") -> str:
+        text = str(value or "").strip()
+        return text or fallback
+
+    def clean_list(value: Any, limit: int) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        return [str(item).strip() for item in value[:limit] if str(item).strip()]
+
+    try:
+        confidence = float(raw.get("confidence", 0.75))
+    except (TypeError, ValueError):
+        confidence = 0.75
+    confidence = max(0.0, min(1.0, confidence))
+
+    summary = clean_text(raw.get("summary"))
+    if not summary:
+        raise ValueError("summary 不能为空")
+
+    return {
+        "title": clean_text(raw.get("title"), "高频疑问实时诊断"),
+        "summary": summary,
+        "teaching_suggestions": clean_list(raw.get("teaching_suggestions"), 6),
+        "practice_suggestions": clean_list(raw.get("practice_suggestions"), 6),
+        "evidence": clean_list(raw.get("evidence"), 8),
+        "data_gaps": clean_list(raw.get("data_gaps"), 6),
+        "confidence": confidence,
+    }
+
+
+def question_insight_model_messages(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {
+            "role": "system",
+            "content": (
+                "你是 CodeTrack 教师端的高频疑问诊断模型，服务人工智能专业课程教师。"
+                "你必须只基于用户消息提供的数据生成诊断，不要编造不存在的学生、问题、次数、任务或知识点。"
+                "如果数据源标记为 prototype，要在 data_gaps 中指出缺少真实学生 AI 提问日志。"
+                "输出必须是 JSON 对象，字段为 title, summary, teaching_suggestions, practice_suggestions, evidence, data_gaps, confidence。"
+                "confidence 是 0 到 1 的小数。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": json.dumps(payload, ensure_ascii=False),
+        },
+    ]
+
+
 @app.get("/api/v1/teacher/analytics/question-insights")
 def question_insights(
     course_id: str = "course-ds",
@@ -1345,26 +1536,122 @@ def question_insights(
             "top_coverage_rate": max((item["coverage_rate"] for item in clusters), default=0),
         },
         "clusters": clusters,
-        "ai_diagnosis": {
-            "title": "高频疑问诊断建议",
-            "mode": "RULE_PREVIEW",
-            "source_label": "规则诊断预览",
-            "summary": (
-                "学生提问集中在少数关键知识点，且高频问题与提交错误、提示依赖存在重叠。"
-                "建议教师先处理覆盖学生最多且未解决率最高的问题，再生成专项练习。"
-            ),
-            "recommendations": [
-                "先讲最高频问题簇，再安排 5-8 分钟课堂即时练习验证理解。",
-                "对反复追问学生推送同一知识点的基础题与迁移题，避免只靠继续问 AI。",
-                "把低置信度问题补充到课程知识库，提升后续 AI 回答的引用质量。",
-            ],
-            "evidence": [
-                f"共识别 {len(clusters)} 个问题簇。",
-                f"累计 {total_questions} 次 AI 提问，覆盖 {unique_students} 名学生。",
-                f"仍未解决问题约 {unresolved_questions} 次，低置信度回答约 {low_confidence_questions} 次。",
-            ],
-            "confidence": 84,
+        "diagnosis_capability": {
+            "mode": "REALTIME_MODEL",
+            "label": "实时模型诊断",
+            "description": "点击 AI 诊断后，后端会调用配置的真实模型实时生成建议。",
         },
+    })
+
+
+@app.post("/api/v1/teacher/analytics/question-insights/diagnose")
+async def diagnose_question_insights(
+    payload: QuestionInsightDiagnosisRequest,
+    teacher: User = Depends(current_teacher),
+    db: Session = Depends(get_db),
+):
+    course = owned_course(db, teacher, payload.course_id)
+    class_group = db.get(ClassGroup, payload.class_id) if payload.class_id else None
+    if payload.class_id and (not class_group or class_group.course_id != course.id):
+        raise HTTPException(status_code=404, detail="教学班不存在或不属于当前课程")
+
+    settings = get_settings()
+    if not settings.model_api_key or not settings.model_name:
+        raise HTTPException(status_code=503, detail="未配置真实模型：请设置 CODETRACK_MODEL_API_KEY 和 CODETRACK_MODEL_NAME 后重试")
+
+    student_count = (
+        db.scalar(select(func.count()).select_from(Enrollment).where(Enrollment.class_id == payload.class_id))
+        if payload.class_id
+        else db.scalar(
+            select(func.count(func.distinct(Enrollment.student_id)))
+            .select_from(Enrollment)
+            .join(ClassGroup)
+            .where(ClassGroup.course_id == course.id)
+        )
+    ) or 0
+    clusters = question_insight_seed(course, class_group, student_count)
+    selected_cluster = next((item for item in clusters if item["id"] == payload.cluster_id), None) if payload.cluster_id else None
+    if payload.cluster_id and selected_cluster is None:
+        raise HTTPException(status_code=404, detail="问题簇不存在")
+
+    total_questions = sum(item["ask_count"] for item in clusters)
+    unique_students = min(student_count, sum(item["student_count"] for item in clusters))
+    unresolved_questions = round(sum(item["ask_count"] * item["unresolved_rate"] / 100 for item in clusters))
+    low_confidence_questions = round(sum(item["ask_count"] * item["low_confidence_rate"] / 100 for item in clusters))
+    model_payload = {
+        "task": "请基于高频疑问统计和具体提问样本，实时生成给教师的诊断建议。",
+        "scope": {
+            "course_id": course.id,
+            "course_name": course.name,
+            "class_id": class_group.id if class_group else None,
+            "class_name": class_group.name if class_group else "全部授课班级",
+            "student_count": student_count,
+        },
+        "data_status": {
+            "source": "prototype",
+            "label": "原型聚合数据",
+            "description": "当前项目尚未持久化学生 AI 提问日志，后续接入真实事件后可直接替换聚合来源。",
+        },
+        "summary": {
+            "question_cluster_count": len(clusters),
+            "total_questions": total_questions,
+            "unique_students": unique_students,
+            "avg_questions_per_student": round(total_questions / max(student_count, 1), 1),
+            "unresolved_questions": unresolved_questions,
+            "low_confidence_questions": low_confidence_questions,
+            "top_coverage_rate": max((item["coverage_rate"] for item in clusters), default=0),
+        },
+        "selected_cluster": selected_cluster,
+        "clusters": clusters,
+        "output_requirements": [
+            "summary 用 2-4 句话概括主要学情问题。",
+            "teaching_suggestions 给教师下一节课可执行动作。",
+            "practice_suggestions 给可生成的练习题方向。",
+            "evidence 必须引用输入中的量化数据或具体问题。",
+            "data_gaps 必须说明真实学生 AI 提问日志尚未接入时的限制。",
+        ],
+    }
+
+    try:
+        result = await chat_json(
+            question_insight_model_messages(model_payload),
+            model=settings.model_name,
+            api_key=settings.model_api_key,
+            base_url=settings.model_api_base_url,
+            validator=validate_question_insight_diagnosis,
+            timeout=45,
+            retries=1,
+            temperature=0.2,
+            prompt_version="question-insight-diagnosis-v1",
+            model_provider="OPENAI_COMPATIBLE",
+        )
+    except LLMNotConfigured as exc:
+        raise HTTPException(status_code=503, detail="未配置真实模型：请设置 CODETRACK_MODEL_API_KEY 和 CODETRACK_MODEL_NAME 后重试") from exc
+    except LLMTimeout as exc:
+        raise HTTPException(status_code=504, detail="真实模型请求超时，请稍后重试") from exc
+    except LLMHTTPError as exc:
+        detail = exc.detail or str(exc)
+        raise HTTPException(status_code=502, detail=f"真实模型调用失败：{detail}") from exc
+    except LLMError as exc:
+        raise HTTPException(status_code=502, detail=f"真实模型响应不可用：{exc.code}") from exc
+
+    diagnosis = result.data
+    return envelope({
+        **diagnosis,
+        "confidence": round(diagnosis["confidence"] * 100),
+        "target": {
+            "type": "cluster" if selected_cluster else "class",
+            "cluster_id": selected_cluster["id"] if selected_cluster else None,
+            "cluster_topic": selected_cluster["topic"] if selected_cluster else None,
+        },
+        "model": {
+            "provider": result.model_provider,
+            "name": result.model_name,
+            "duration_ms": result.duration_ms,
+            "token_prompt": result.token_prompt,
+            "token_completion": result.token_completion,
+        },
+        "generated_at": datetime.now().replace(microsecond=0).isoformat(),
     })
 
 

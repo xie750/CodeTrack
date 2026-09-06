@@ -1,6 +1,9 @@
 from fastapi.testclient import TestClient
 
 from backend.app.main import app
+from backend.app.core.database import SessionLocal
+from backend.app.models import StudentKnowledgeGraph
+from backend.app.services.seed import seed_demo_data
 
 
 def test_student_course_knowledge_graph_is_scoped_by_class_and_course():
@@ -41,3 +44,28 @@ def test_student_course_knowledge_graph_rejects_unjoined_course():
 
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "COURSE_NOT_IN_STUDENT_CLASS"
+
+
+def test_seed_preserves_teacher_published_course_knowledge_graph():
+    with TestClient(app):
+        pass
+
+    with SessionLocal() as db:
+        graph = db.get(StudentKnowledgeGraph, "kg_ta_se1_ds_001")
+        assert graph is not None
+        graph.title = "教师发布后的课程图谱"
+        graph.description = "教师端发布后同步到学生端的动态图谱。"
+        graph.nodes_json = '[{"id":"node-teacher-published","label":"教师发布节点"}]'
+        graph.edges_json = "[]"
+        db.commit()
+
+    with SessionLocal() as db:
+        seed_demo_data(db)
+        db.commit()
+
+    with SessionLocal() as db:
+        graph = db.get(StudentKnowledgeGraph, "kg_ta_se1_ds_001")
+        assert graph is not None
+        assert graph.title == "教师发布后的课程图谱"
+        assert graph.description == "教师端发布后同步到学生端的动态图谱。"
+        assert graph.nodes_json == '[{"id":"node-teacher-published","label":"教师发布节点"}]'
