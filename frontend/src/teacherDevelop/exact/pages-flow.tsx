@@ -12,7 +12,8 @@ import {
 } from 'lucide-react'
 
 import {
-  api, type ApiClass, type ApiReview, type ApiStudent, type ApiSubmission, type ApiTask,
+  api, type ApiClass, type ApiQuestionInsightCluster, type ApiQuestionInsights,
+  type ApiReview, type ApiStudent, type ApiSubmission, type ApiTask,
   type ApiTeacher, type ApiTeacherPreference,
 } from '../api'
 import type { ExactView } from './components'
@@ -199,17 +200,31 @@ export function ExactGrading({ courseId, onNavigate, notify }: FlowProps) {
 
 export function ExactAnalytics({ courseId, classId, classes, notify }: FlowProps & { classes: ApiClass[] }) {
   const [data, setData] = useState<any>(null)
+  const [questionInsights, setQuestionInsights] = useState<ApiQuestionInsights | null>(null)
   const [view, setView] = useState('班级总览')
   const [diagnosisClassId, setDiagnosisClassId] = useState(classId)
   const [students, setStudents] = useState<ApiStudent[]>([])
   const [studentSearch, setStudentSearch] = useState('')
   const [selectedStudentId, setSelectedStudentId] = useState('')
+  const [selectedQuestionId, setSelectedQuestionId] = useState('')
+  const [showQuestionDiagnosis, setShowQuestionDiagnosis] = useState(false)
   const courseClasses = useMemo(() => classes.filter((item) => item.course_id === courseId), [classes, courseId])
   useEffect(() => {
     setDiagnosisClassId(classId || courseClasses[0]?.id || '')
     setStudentSearch('')
+    setSelectedQuestionId('')
+    setShowQuestionDiagnosis(false)
   }, [classId, courseId])
   useEffect(() => { api.analytics(courseId, diagnosisClassId || classId).then(setData) }, [courseId, classId, diagnosisClassId])
+  useEffect(() => {
+    if (!diagnosisClassId && !classId) { setQuestionInsights(null); return }
+    api.questionInsights(courseId, diagnosisClassId || classId)
+      .then((payload) => {
+        setQuestionInsights(payload)
+        setSelectedQuestionId((current) => payload.clusters.some((item) => item.id === current) ? current : payload.clusters[0]?.id || '')
+      })
+      .catch((reason: any) => notify(reason.message || '高频疑问数据加载失败'))
+  }, [courseId, classId, diagnosisClassId])
   useEffect(() => {
     if (!diagnosisClassId) { setStudents([]); setSelectedStudentId(''); return }
     api.students(diagnosisClassId).then((items) => {
@@ -222,25 +237,98 @@ export function ExactAnalytics({ courseId, classId, classes, notify }: FlowProps
     return students.filter((item) => !keyword || `${item.name} ${item.number}`.toLowerCase().includes(keyword))
   }, [studentSearch, students])
   const selectedStudent = students.find((item) => item.id === selectedStudentId) || students[0]
+  const selectedQuestion = questionInsights?.clusters.find((item) => item.id === selectedQuestionId) || questionInsights?.clusters[0]
   const studentStatus = selectedStudent?.status === 'risk'
     ? { text: '高风险', color: 'red', note: '近期任务完成度偏低，建议重点关注学习进度与提示依赖。' }
     : selectedStudent?.status === 'attention'
       ? { text: '需关注', color: 'gold', note: '部分知识点掌握不稳定，建议安排针对性练习与反馈。' }
       : { text: '学习稳定', color: 'green', note: '当前学习节奏稳定，任务完成与知识点掌握情况正常。' }
   if (!data) return <PageLoader />
+  const questionColumns: ColumnsType<ApiQuestionInsightCluster> = [
+    { title: '疑问主题', dataIndex: 'topic', width: 280, render: (_, row) => <button className="question-topic-button" onClick={() => setSelectedQuestionId(row.id)}><strong>{row.topic}</strong><small>{row.representative_question}</small></button> },
+    { title: '次数', dataIndex: 'ask_count', width: 82, sorter: (left, right) => left.ask_count - right.ask_count },
+    { title: '学生', width: 82, render: (_, row) => `${row.student_count} 人` },
+    { title: '覆盖', width: 82, render: (_, row) => `${row.coverage_rate}%` },
+    { title: '追问', width: 82, render: (_, row) => `${row.repeat_followup_rate}%` },
+    { title: '未解决', width: 90, render: (_, row) => <Tag color={row.unresolved_rate >= 30 ? 'red' : row.unresolved_rate >= 20 ? 'gold' : 'blue'}>{row.unresolved_rate}%</Tag> },
+    { title: '操作', width: 96, render: (_, row) => <Button size="small" type="link" onClick={() => { setSelectedQuestionId(row.id); setShowQuestionDiagnosis(true) }}>AI 诊断</Button> },
+  ]
   return <div className="exact-course-page exact-analytics">
     <div className="exact-page-title"><div><Text type="secondary">课程工作空间 / 学情分析</Text><Title level={2}>学情分析</Title><Text type="secondary">基于提交、评测、提示和成绩证据分析班级学习状态。</Text></div><Button icon={<Download size={14} />} onClick={() => notify('学情分析已导出')}>导出报告</Button></div>
     <div className="analytics-toolbar">
-      <Segmented value={view} onChange={setView} options={['班级总览','个体诊断','预警中心']} />
+      <Segmented value={view} onChange={setView} options={['班级总览','个体诊断','高频疑问','预警中心']} />
       {view === '个体诊断' ? <div className="analytics-student-picker">
         <Select value={diagnosisClassId} onChange={(value) => { setDiagnosisClassId(value); setStudentSearch(''); setSelectedStudentId('') }} options={courseClasses.map((item) => ({ value: item.id, label: item.name }))} placeholder="选择班级" />
         <Input allowClear prefix={<Search size={14} />} value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} placeholder="搜索姓名或学号" />
         <Select showSearch optionFilterProp="label" value={selectedStudentId || undefined} onChange={setSelectedStudentId} placeholder="选择学生" options={visibleStudents.map((item) => ({ value: item.id, label: `${item.name} · ${item.number}` }))} />
+      </div> : view === '高频疑问' ? <div className="analytics-student-picker question-filter">
+        <Select value={diagnosisClassId} onChange={(value) => { setDiagnosisClassId(value); setSelectedQuestionId(''); setShowQuestionDiagnosis(false) }} options={courseClasses.map((item) => ({ value: item.id, label: item.name }))} placeholder="选择班级" />
+        <Button icon={<Bot size={14} />} type={showQuestionDiagnosis ? 'primary' : 'default'} onClick={() => { setShowQuestionDiagnosis((current) => !current); notify(showQuestionDiagnosis ? '已收起诊断建议' : '已展开诊断建议（当前为规则预览）') }}>AI 诊断</Button>
       </div> : <Select defaultValue="all" options={[{ value: 'all', label: '全部任务' }]} />}
     </div>
     <div className="analytics-metrics">{[['平均完成率',data.summary.completion_rate + '%'],['平均得分',data.summary.average_score],['逾期率',data.summary.overdue_rate + '%'],['平均提示等级','L' + data.summary.average_hint_level],['风险学生',data.summary.risk_students + ' 人'],['薄弱知识点',data.summary.weak_points + ' 个']].map((item,index) => <span className={'m' + index} key={item[0]}><small>{item[0]}</small><strong>{item[1]}</strong><em>{index % 2 ? '较上周 +2' : '较上周 +6%'}</em></span>)}</div>
     {view === '班级总览' && <><div className="analytics-charts"><section><strong>成绩分布</strong><SimpleBarPanel data={data.score_distribution} labelKey="range" color="#1677ff" /></section><section><strong>高频错误</strong><SimpleBarPanel data={data.errors} labelKey="name" color="#e4a42d" /></section></div><div className="knowledge-analysis"><strong>知识点掌握度</strong>{data.knowledge.map((item: any) => <div key={item.id}><span>{item.name}</span><Progress percent={item.mastery} strokeColor={item.mastery < 60 ? '#d95f59' : item.mastery < 75 ? '#e4a42d' : '#1677ff'} /><b>{item.mastery}%</b><Tag color={item.mastery < 60 ? 'red' : item.mastery < 75 ? 'gold' : 'green'}>{item.mastery < 60 ? '薄弱' : item.mastery < 75 ? '需关注' : '稳定'}</Tag></div>)}</div></>}
     {view === '个体诊断' && (selectedStudent ? <div className="student-diagnosis-real"><aside><Avatar size={54} className="exact-avatar">{selectedStudent.name.slice(-1)}</Avatar><Title level={3}>{selectedStudent.name}</Title><Text type="secondary">{selectedStudent.number}</Text><Tag color={studentStatus.color}>{studentStatus.text}</Tag><p>{studentStatus.note}</p><small>最近活跃：{selectedStudent.last_active}</small></aside><main><Row gutter={16}><Col span={6}><Statistic title="课程进度" value={selectedStudent.progress} suffix="%" /></Col><Col span={6}><Statistic title="平均得分" value={selectedStudent.score || 0} /></Col><Col span={6}><Statistic title="提交次数" value={selectedStudent.submissions} /></Col><Col span={6}><Statistic title="最高提示" value={`L${selectedStudent.hint_level || 0}`} /></Col></Row><Divider />{data.knowledge.map((item: any, index: number) => { const mastery = Math.max(20, Math.min(100, Math.round(item.mastery * .55 + selectedStudent.progress * .45 - index * 2))); return <div className="student-kp" key={item.id}><span>{item.name}</span><Progress percent={mastery} strokeColor={mastery < 60 ? '#d95f59' : mastery < 75 ? '#e4a42d' : '#1677ff'} /><b>{mastery}%</b></div> })}</main></div> : <EmptyPanel text="当前班级没有可诊断的学生" />)}
+    {view === '高频疑问' && (questionInsights ? <div className="question-insight-layout">
+      <main>
+        <Alert className="question-source-note" type={questionInsights.data_status.source === 'real' ? 'success' : 'info'} showIcon message={questionInsights.data_status.label} description={questionInsights.data_status.description} />
+        <div className="question-insight-summary">
+          {[
+            ['主题数', questionInsights.summary.question_cluster_count],
+            ['总提问', questionInsights.summary.total_questions],
+            ['学生覆盖', `${questionInsights.summary.unique_students}/${questionInsights.scope.student_count}`],
+            ['人均', questionInsights.summary.avg_questions_per_student],
+            ['未解决', questionInsights.summary.unresolved_questions],
+            ['低置信', questionInsights.summary.low_confidence_questions],
+          ].map((item) => <span key={item[0]}><small>{item[0]}</small><strong>{item[1]}</strong></span>)}
+        </div>
+        {showQuestionDiagnosis && <section className="question-ai-diagnosis">
+          <div><Bot size={18} /><strong>{questionInsights.ai_diagnosis.title}</strong><Tag color="geekblue">{questionInsights.ai_diagnosis.source_label}</Tag><Tag color="blue">{questionInsights.ai_diagnosis.confidence}%</Tag></div>
+          <p>{questionInsights.ai_diagnosis.summary}</p>
+          <div className="question-diagnosis-grid">
+            <article><b>教学建议</b>{questionInsights.ai_diagnosis.recommendations.map((item) => <span key={item}><Sparkles size={13} />{item}</span>)}</article>
+            <article><b>依据</b>{questionInsights.ai_diagnosis.evidence.map((item) => <span key={item}><FileText size={13} />{item}</span>)}</article>
+          </div>
+        </section>}
+        <Table rowKey="id" columns={questionColumns} dataSource={questionInsights.clusters} pagination={false} tableLayout="fixed" onRow={(record) => ({ onClick: () => setSelectedQuestionId(record.id) })} />
+      </main>
+      <aside className="question-detail-panel">
+        {selectedQuestion ? <div className="question-detail-scroll">
+          <div className="question-detail-head">
+            <Tag color={selectedQuestion.severity === 'HIGH' ? 'red' : selectedQuestion.severity === 'MEDIUM' ? 'gold' : 'blue'}>{selectedQuestion.severity === 'HIGH' ? '高频高风险' : selectedQuestion.severity === 'MEDIUM' ? '重点关注' : '观察中'}</Tag>
+            <Title level={3}>{selectedQuestion.topic}</Title>
+            <Text type="secondary">{selectedQuestion.representative_question}</Text>
+          </div>
+          <div className="question-detail-metrics">
+            <span><small>提问次数</small><strong>{selectedQuestion.ask_count}</strong></span>
+            <span><small>覆盖学生</small><strong>{selectedQuestion.student_count}</strong></span>
+            <span><small>覆盖率</small><strong>{selectedQuestion.coverage_rate}%</strong></span>
+            <span><small>未解决率</small><strong>{selectedQuestion.unresolved_rate}%</strong></span>
+          </div>
+          <section>
+            <strong>关联知识点</strong>
+            <Space size={[4, 4]} wrap>{selectedQuestion.knowledge_points.map((item) => <Tag key={item}>{item}</Tag>)}</Space>
+          </section>
+          <section>
+            <strong>关联错因</strong>
+            {selectedQuestion.related_errors.map((item) => <p key={item}><AlertTriangle size={13} />{item}</p>)}
+          </section>
+          <section>
+            <strong>具体提问详情</strong>
+            <div className="question-sample-list">{selectedQuestion.sample_questions.map((item) => <article key={item.id}>
+              <div><Avatar size={26} className="exact-avatar">{item.student_name.slice(-1)}</Avatar><b>{item.student_name}</b><Tag color={item.resolved ? 'green' : 'orange'}>{item.resolved ? '已解决' : '仍在追问'}</Tag></div>
+              <p>{item.question}</p>
+              <div className="question-sample-meta"><span>{item.intent}</span><span>追问 {item.followups} 次</span><span>置信 {item.ai_confidence}%</span><span>{item.asked_at}</span></div>
+            </article>)}</div>
+          </section>
+          <section className="cluster-diagnosis">
+            <div><Bot size={15} /><strong>当前问题诊断</strong><Tag color="geekblue">{questionInsights.ai_diagnosis.source_label}</Tag><Tag color="blue">{selectedQuestion.diagnosis.confidence}%</Tag></div>
+            <p>{selectedQuestion.diagnosis.summary}</p>
+            <Button type="primary" block icon={<MessageSquareText size={14} />} onClick={() => setShowQuestionDiagnosis(true)}>查看综合建议</Button>
+          </section>
+        </div> : <EmptyPanel text="选择一个问题查看详情" />}
+      </aside>
+    </div> : <PageLoader />)}
     {view === '预警中心' && <div className="risk-table"><Alert type="warning" showIcon message="风险等级由后端规则计算，AI 只负责解释证据。" /><Table rowKey="name" pagination={false} dataSource={[{ name: '王子轩', level: '高风险', rules: '连续未完成 / 三级提示依赖', active: '3 天前' },{ name: '周昊然', level: '需关注', rules: '任务逾期', active: '1 天前' }]} columns={[{ title: '学生', dataIndex: 'name' },{ title: '风险等级', dataIndex: 'level', render: (value) => <Tag color={value === '高风险' ? 'red' : 'gold'}>{value}</Tag> },{ title: '命中规则', dataIndex: 'rules' },{ title: '最近活跃', dataIndex: 'active' }]} /></div>}
   </div>
 }

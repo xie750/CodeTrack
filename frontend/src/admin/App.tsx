@@ -10,6 +10,7 @@ const Teachers = lazy(() => import('@admin/pages/users/Teachers'))
 const Students = lazy(() => import('@admin/pages/users/Students'))
 const Classes = lazy(() => import('@admin/pages/users/Classes'))
 const AiRoute = lazy(() => import('@admin/pages/ai/AiRoute'))
+const AiUsage = lazy(() => import('@admin/pages/ai/AiUsage'))
 const AiMonitor = lazy(() => import('@admin/pages/ai/AiMonitor'))
 const SystemConfig = lazy(() => import('@admin/pages/system/SystemConfig'))
 const Notices = lazy(() => import('@admin/pages/system/Notices'))
@@ -41,6 +42,7 @@ export default function App() {
           <Route path="ai">
             <Route index element={<Navigate to="route" replace />} />
             <Route path="route" element={<AiRoute />} />
+            <Route path="usage" element={<AiUsage />} />
             <Route path="monitor" element={<AiMonitor />} />
           </Route>
           <Route path="system">

@@ -1143,6 +1143,231 @@ def analytics_overview(
     })
 
 
+def question_insight_seed(course: Course, class_group: ClassGroup | None, student_count: int):
+    """Build a deterministic teacher-facing view of high-frequency AI questions.
+
+    The teacher prototype does not yet persist student AI chat records in this
+    backend. This payload keeps the contract close to the later real
+    aggregation: question clusters, detailed question samples, quantitative
+    rates, and an AI diagnosis summary that teachers can act on.
+    """
+    total_students = max(student_count, 1)
+    scope_note = (
+        f"{course.name} / {class_group.name if class_group else '全部授课班级'}。"
+        "当前为原型聚合数据，后续接入学生端 AI_QUESTION_ASKED 事件后按真实提问计算。"
+    )
+    if course.id in {"course-ml", "course_arch_001"} or "机器学习" in course.name:
+        clusters = [
+            {
+                "id": "q-ml-split",
+                "topic": "数据集划分混淆",
+                "representative_question": "训练集、验证集、测试集为什么不能混用？",
+                "knowledge_points": ["模型评估", "数据集划分", "泛化能力"],
+                "related_tasks": ["训练集、验证集、测试集划分练习"],
+                "ask_count": 36,
+                "student_count": min(total_students, 18),
+                "repeat_followup_rate": 41,
+                "unresolved_rate": 27,
+                "low_confidence_rate": 12,
+                "recent_growth_rate": 18,
+                "severity": "HIGH",
+                "related_errors": ["把验证集用于训练调参", "用测试集选择模型"],
+                "sample_questions": [
+                    {"id": "q-ml-001", "student_name": "王子轩", "question": "为什么验证集不能参与训练？", "intent": "概念解释", "asked_at": "2026-08-03 19:42", "followups": 3, "ai_confidence": 78, "resolved": False},
+                    {"id": "q-ml-002", "student_name": "李思雨", "question": "测试集是不是也能用来调正则化参数？", "intent": "作业提示", "asked_at": "2026-08-04 21:10", "followups": 2, "ai_confidence": 81, "resolved": True},
+                    {"id": "q-ml-003", "student_name": "周昊然", "question": "训练准确率高但验证准确率低说明什么？", "intent": "错因追问", "asked_at": "2026-08-05 09:18", "followups": 4, "ai_confidence": 69, "resolved": False},
+                ],
+            },
+            {
+                "id": "q-ml-regularization",
+                "topic": "正则化作用理解不完整",
+                "representative_question": "正则化为什么能缓解过拟合？",
+                "knowledge_points": ["过拟合", "正则化", "损失函数"],
+                "related_tasks": ["过拟合与正则化概念测验"],
+                "ask_count": 29,
+                "student_count": min(total_students, 15),
+                "repeat_followup_rate": 34,
+                "unresolved_rate": 22,
+                "low_confidence_rate": 9,
+                "recent_growth_rate": 11,
+                "severity": "MEDIUM",
+                "related_errors": ["只背结论，不能解释惩罚项", "混淆 L1 与 L2 的直观效果"],
+                "sample_questions": [
+                    {"id": "q-ml-004", "student_name": "赵明宇", "question": "正则化是不是就是减少特征数量？", "intent": "概念纠偏", "asked_at": "2026-08-04 15:24", "followups": 1, "ai_confidence": 84, "resolved": True},
+                    {"id": "q-ml-005", "student_name": "陈佳怡", "question": "为什么损失函数后面加一项就能防止过拟合？", "intent": "概念解释", "asked_at": "2026-08-05 20:03", "followups": 2, "ai_confidence": 76, "resolved": False},
+                ],
+            },
+        ]
+    else:
+        clusters = [
+            {
+                "id": "q-ds-head-node",
+                "topic": "链表头节点删除处理",
+                "representative_question": "删除头节点时为什么一定要返回新的 head？",
+                "knowledge_points": ["链表", "边界处理", "指针更新"],
+                "related_tasks": ["单链表指定位置节点删除"],
+                "ask_count": 42,
+                "student_count": min(total_students, 21),
+                "repeat_followup_rate": 48,
+                "unresolved_rate": 31,
+                "low_confidence_rate": 14,
+                "recent_growth_rate": 23,
+                "severity": "HIGH",
+                "related_errors": ["头节点返回值遗漏", "删除后仍返回旧 head", "空链表分支缺失"],
+                "sample_questions": [
+                    {"id": "q-ds-001", "student_name": "王子轩", "question": "删除第 0 个节点的时候，为什么原来的 head 不能继续返回？", "intent": "代码错误分析", "asked_at": "2026-08-03 20:16", "followups": 4, "ai_confidence": 74, "resolved": False},
+                    {"id": "q-ds-002", "student_name": "周昊然", "question": "head = head->next 之后还需要 delete 原节点吗？", "intent": "作业提示", "asked_at": "2026-08-04 18:35", "followups": 2, "ai_confidence": 82, "resolved": True},
+                    {"id": "q-ds-003", "student_name": "李思雨", "question": "空链表和删除头节点是不是可以写成同一个 if？", "intent": "边界条件", "asked_at": "2026-08-05 09:02", "followups": 3, "ai_confidence": 68, "resolved": False},
+                ],
+            },
+            {
+                "id": "q-ds-stack-empty",
+                "topic": "栈空状态与 pop 条件",
+                "representative_question": "栈为空时为什么不能直接 pop？",
+                "knowledge_points": ["栈与队列", "边界条件", "括号匹配"],
+                "related_tasks": ["栈实现括号匹配"],
+                "ask_count": 27,
+                "student_count": min(total_students, 14),
+                "repeat_followup_rate": 32,
+                "unresolved_rate": 18,
+                "low_confidence_rate": 8,
+                "recent_growth_rate": 9,
+                "severity": "MEDIUM",
+                "related_errors": ["右括号多出时未判断栈空", "循环结束后未检查剩余左括号"],
+                "sample_questions": [
+                    {"id": "q-ds-004", "student_name": "陈佳怡", "question": "遇到右括号时栈是空的，为什么直接错？", "intent": "概念解释", "asked_at": "2026-08-03 16:21", "followups": 1, "ai_confidence": 86, "resolved": True},
+                    {"id": "q-ds-005", "student_name": "林若曦", "question": "最后栈不为空是不是也说明括号不匹配？", "intent": "练习追问", "asked_at": "2026-08-05 12:47", "followups": 2, "ai_confidence": 80, "resolved": True},
+                ],
+            },
+            {
+                "id": "q-ds-recursion",
+                "topic": "递归出口不清晰",
+                "representative_question": "二叉树递归遍历什么时候应该停止？",
+                "knowledge_points": ["二叉树", "递归", "遍历"],
+                "related_tasks": ["二叉树前序遍历"],
+                "ask_count": 19,
+                "student_count": min(total_students, 10),
+                "repeat_followup_rate": 29,
+                "unresolved_rate": 21,
+                "low_confidence_rate": 6,
+                "recent_growth_rate": 7,
+                "severity": "WATCH",
+                "related_errors": ["递归出口缺失", "左右子树顺序混淆"],
+                "sample_questions": [
+                    {"id": "q-ds-006", "student_name": "赵明宇", "question": "root == nullptr 的时候为什么要直接 return？", "intent": "概念解释", "asked_at": "2026-08-04 10:28", "followups": 1, "ai_confidence": 88, "resolved": True},
+                    {"id": "q-ds-007", "student_name": "王子轩", "question": "前序遍历是不是每次都先访问根节点？", "intent": "概念确认", "asked_at": "2026-08-05 14:11", "followups": 2, "ai_confidence": 83, "resolved": True},
+                ],
+            },
+        ]
+
+    for cluster in clusters:
+        cluster["coverage_rate"] = round(cluster["student_count"] * 100 / total_students)
+        cluster["data_scope_note"] = scope_note
+        cluster["diagnosis"] = {
+            "summary": (
+                f"“{cluster['topic']}”已经形成班级共性疑问，"
+                f"{cluster['student_count']} 名学生累计提问 {cluster['ask_count']} 次，"
+                f"重复追问率 {cluster['repeat_followup_rate']}%。"
+            ),
+            "teaching_suggestions": [
+                f"下节课用 8-10 分钟集中讲解“{cluster['representative_question']}”。",
+                f"把讲解绑定到 {cluster['knowledge_points'][0]} 的任务反馈，先讲错误现象再讲概念。",
+                "补充一份短讲义或示例到课程知识库，降低后续 AI 低置信度回答比例。",
+            ],
+            "practice_suggestions": [
+                f"生成 3 道围绕 {cluster['knowledge_points'][0]} 的诊断题。",
+                "给提问学生推送一组分层练习，先做概念判断，再做代码或案例分析。",
+            ],
+            "evidence": [
+                f"提问次数：{cluster['ask_count']}",
+                f"覆盖学生：{cluster['student_count']} / {total_students}",
+                f"未解决率：{cluster['unresolved_rate']}%",
+                f"关联错因：{'、'.join(cluster['related_errors'][:2])}",
+            ],
+            "confidence": 86 if cluster["severity"] == "HIGH" else 78,
+        }
+    return clusters
+
+
+@app.get("/api/v1/teacher/analytics/question-insights")
+def question_insights(
+    course_id: str = "course-ds",
+    class_id: str = "class-se1",
+    teacher: User = Depends(current_teacher),
+    db: Session = Depends(get_db),
+):
+    course = owned_course(db, teacher, course_id)
+    class_group = db.get(ClassGroup, class_id) if class_id else None
+    if class_id and (not class_group or class_group.course_id != course.id):
+        raise HTTPException(status_code=404, detail="教学班不存在或不属于当前课程")
+    student_count = (
+        db.scalar(select(func.count()).select_from(Enrollment).where(Enrollment.class_id == class_id))
+        if class_id
+        else db.scalar(
+            select(func.count(func.distinct(Enrollment.student_id)))
+            .select_from(Enrollment)
+            .join(ClassGroup)
+            .where(ClassGroup.course_id == course.id)
+        )
+    ) or 0
+    clusters = question_insight_seed(course, class_group, student_count)
+    total_questions = sum(item["ask_count"] for item in clusters)
+    unique_students = min(student_count, sum(item["student_count"] for item in clusters))
+    unresolved_questions = round(
+        sum(item["ask_count"] * item["unresolved_rate"] / 100 for item in clusters)
+    )
+    low_confidence_questions = round(
+        sum(item["ask_count"] * item["low_confidence_rate"] / 100 for item in clusters)
+    )
+    return envelope({
+        "scope": {
+            "course_id": course.id,
+            "course_name": course.name,
+            "class_id": class_group.id if class_group else None,
+            "class_name": class_group.name if class_group else "全部授课班级",
+            "student_count": student_count,
+        },
+        "data_status": {
+            "source": "prototype",
+            "label": "原型聚合数据",
+            "description": (
+                "当前已接入教师端后端接口；本项目尚未持久化学生 AI 提问日志，"
+                "高频疑问由后端规则化样例生成。后续接入学生端 AI_QUESTION_ASKED 事件后按真实提问统计。"
+            ),
+        },
+        "summary": {
+            "question_cluster_count": len(clusters),
+            "total_questions": total_questions,
+            "unique_students": unique_students,
+            "avg_questions_per_student": round(total_questions / max(student_count, 1), 1),
+            "unresolved_questions": unresolved_questions,
+            "low_confidence_questions": low_confidence_questions,
+            "top_coverage_rate": max((item["coverage_rate"] for item in clusters), default=0),
+        },
+        "clusters": clusters,
+        "ai_diagnosis": {
+            "title": "高频疑问诊断建议",
+            "mode": "RULE_PREVIEW",
+            "source_label": "规则诊断预览",
+            "summary": (
+                "学生提问集中在少数关键知识点，且高频问题与提交错误、提示依赖存在重叠。"
+                "建议教师先处理覆盖学生最多且未解决率最高的问题，再生成专项练习。"
+            ),
+            "recommendations": [
+                "先讲最高频问题簇，再安排 5-8 分钟课堂即时练习验证理解。",
+                "对反复追问学生推送同一知识点的基础题与迁移题，避免只靠继续问 AI。",
+                "把低置信度问题补充到课程知识库，提升后续 AI 回答的引用质量。",
+            ],
+            "evidence": [
+                f"共识别 {len(clusters)} 个问题簇。",
+                f"累计 {total_questions} 次 AI 提问，覆盖 {unique_students} 名学生。",
+                f"仍未解决问题约 {unresolved_questions} 次，低置信度回答约 {low_confidence_questions} 次。",
+            ],
+            "confidence": 84,
+        },
+    })
+
+
 @app.get("/api/v1/teacher/knowledge-graph")
 def knowledge_graph(course_id: str = "course-ds", teacher: User = Depends(current_teacher), db: Session = Depends(get_db)):
     owned_course(db, teacher, course_id)

@@ -5,6 +5,94 @@ export type ApiResponse<T> = { data: T; meta: ApiMeta };
 export type ApiErrorBody = { error: { code: string; message: string; details: Record<string, unknown> }; meta: ApiMeta };
 export type ApiErrorKind = "network" | "server" | "auth" | "forbidden" | "bad_response" | "request";
 
+export type AdminAiUsagePayload = {
+  filters: {
+    range: string;
+    date_from: string | null;
+    date_to: string | null;
+    course_id: string | null;
+    class_id: string | null;
+    role: string | null;
+    workflow_type: string | null;
+    model_name: string | null;
+  };
+  summary: {
+    ai_usage_rate: number;
+    total_calls: number;
+    unique_users: number;
+    active_users: number;
+    total_tokens: number;
+    success_rate: number;
+    failure_rate: number;
+    avg_latency_ms: number | null;
+    p95_latency_ms: number | null;
+    effective_rate: number;
+    citation_rate: number;
+    low_confidence_rate: number;
+  };
+  trends: Array<{
+    bucket: string;
+    calls: number;
+    users: number;
+    tokens: number;
+    success_rate: number;
+  }>;
+  course_breakdown: Array<{
+    course_id: string;
+    course_name: string;
+    calls: number;
+    users: number;
+    tokens: number;
+    success: number;
+    success_rate: number;
+    usage_rate: number;
+  }>;
+  feature_breakdown: Array<{
+    workflow_type: string;
+    label: string;
+    calls: number;
+    tokens: number;
+    success: number;
+    effective: number;
+    success_rate: number;
+    effective_rate: number;
+  }>;
+  model_breakdown: Array<{
+    model_name: string;
+    provider: string;
+    calls: number;
+    tokens: number;
+    success_rate: number;
+    avg_latency_ms: number | null;
+  }>;
+  role_breakdown: Array<{
+    role: string;
+    label: string;
+    calls: number;
+    users: number;
+  }>;
+  recent_logs: Array<{
+    id: string;
+    time: string | null;
+    user_id: string | null;
+    user_name: string;
+    role: string;
+    course_id: string | null;
+    course_name: string;
+    class_id: string | null;
+    class_name: string;
+    workflow_type: string;
+    feature: string;
+    model_provider: string | null;
+    model_name: string | null;
+    status: string;
+    latency_ms: number | null;
+    tokens: number;
+    error_code: string | null;
+  }>;
+  insights: string[];
+};
+
 type ApiRequestErrorOptions = {
   kind: ApiErrorKind;
   status?: number;
@@ -13,6 +101,10 @@ type ApiRequestErrorOptions = {
   rawMessage?: string;
   recovery?: string;
   details?: Record<string, unknown>;
+};
+
+type ApiRequestOptions = RequestInit & {
+  skipAuth?: boolean;
 };
 
 export class ApiRequestError extends Error {
@@ -1108,13 +1200,14 @@ function userFacingApiMessage(status: number, code?: string, message?: string) {
   return message || "请求没有完成，请稍后重试。";
 }
 
-export async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const headers = new Headers(authHeaders());
-  new Headers(options.headers).forEach((value, key) => headers.set(key, value));
+export async function request<T>(url: string, options: ApiRequestOptions = {}): Promise<T> {
+  const { skipAuth, ...fetchOptions } = options;
+  const headers = new Headers(skipAuth ? undefined : authHeaders());
+  new Headers(fetchOptions.headers).forEach((value, key) => headers.set(key, value));
   let response: Response;
   try {
     response = await fetch(url, {
-      ...options,
+      ...fetchOptions,
       headers
     });
   } catch (error) {
@@ -1272,6 +1365,18 @@ export const api = {
   }),
   me: () => request<AuthUser>("/api/v1/auth/me"),
   logout: () => request<{ logged_out: boolean }>("/api/v1/auth/logout", { method: "POST" }),
+  getAdminAiUsage: (params: Record<string, string | undefined>) => {
+    const search = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value) search.set(key, value);
+    });
+    const suffix = search.toString() ? `?${search.toString()}` : "";
+    return request<AdminAiUsagePayload>(`/api/v1/admin/ai/usage${suffix}`, {
+      headers: { "X-Demo-User-Id": "user_admin_001" },
+      skipAuth: true,
+      cache: "no-store"
+    });
+  },
   getTask: (taskId: string, assignmentId?: string) => request<TaskDetail>(`/api/v1/tasks/${taskId}${assignmentId ? `?assignment_id=${encodeURIComponent(assignmentId)}` : ''}`),
   getQuestionWorkspace: (assignmentId: string) =>
     request<QuestionWorkspace>(`/api/v1/student/assignments/${assignmentId}/workspace`),

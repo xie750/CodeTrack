@@ -473,6 +473,135 @@ a {
   flex-direction: column;
 }
 
+.ai-usage-page {
+  gap: 0;
+}
+
+.ai-usage-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.ai-usage-stat {
+  min-height: 112px;
+  height: 100%;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--n-0);
+  border: 1px solid var(--n-3);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.ai-usage-stat-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ai-usage-stat-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-caption);
+  color: var(--n-6);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.ai-usage-help {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--n-6);
+  background: var(--n-3);
+}
+
+.ai-usage-stat-value {
+  margin-top: 4px;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--n-8);
+  font-variant-numeric: tabular-nums;
+}
+
+.ai-usage-stat-note {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--n-6);
+  line-height: 1.4;
+}
+
+.ai-usage-quality-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.ai-usage-quality-grid > div {
+  min-height: 72px;
+  border-radius: 8px;
+  background: var(--n-2);
+  border: 1px solid var(--n-3);
+  padding: 10px 12px;
+}
+
+.ai-usage-quality-grid span {
+  display: block;
+  font-size: 12px;
+  color: var(--n-6);
+  margin-bottom: 6px;
+}
+
+.ai-usage-quality-grid b {
+  font-size: 22px;
+  line-height: 1.2;
+  color: var(--n-8);
+  font-variant-numeric: tabular-nums;
+}
+
+.ai-usage-insights {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-usage-insights > div {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--primary-bg);
+  color: var(--primary-deep);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.ai-usage-insights svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+@media (max-width: 1180px) {
+  .ai-usage-quality-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 1180px) {
   .admin-dashboard-main {
     flex-direction: column;

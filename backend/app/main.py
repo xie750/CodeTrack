@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from backend.app.api import (
+    admin_ai_usage,
     auth,
     executions,
     health,
@@ -41,6 +42,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="CodeTrack Demo V0.1", version="0.1.0", lifespan=lifespan)
     app.add_exception_handler(ApiError, api_error_handler)
     app.include_router(health.router)
+    app.include_router(admin_ai_usage.router)
     app.include_router(rag.router)
     app.include_router(auth.router)
     app.include_router(tasks.router)

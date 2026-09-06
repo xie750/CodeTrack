@@ -42,6 +42,7 @@ export const navModules: NavModule[] = [
     icon: <Sparkles size={17} />,
     entries: [
       { key: '/admin/ai/route', label: '模型管理' },
+      { key: '/admin/ai/usage', label: 'AI 使用分析' },
       { key: '/admin/ai/monitor', label: '运行观测与告警处置' },
     ],
   },
