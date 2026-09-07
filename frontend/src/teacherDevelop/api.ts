@@ -100,6 +100,19 @@ function legacyTaskStatus(contentStatus: string, rawStatus: string) {
   return 'scheduled'
 }
 
+export function defaultTaskStartAt() {
+  return new Date().toISOString().slice(0, 16)
+}
+
+export function formatTaskDateTime(value?: string | null, fallback = '未设置') {
+  if (!value) return fallback
+  return value.slice(0, 16).replace('T', ' ')
+}
+
+export function taskDateTimeInputValue(value?: string | null, fallback = defaultTaskStartAt()) {
+  return value ? value.slice(0, 16) : fallback
+}
+
 function unifiedTaskToLegacy(row: any): ApiTask {
   const publication = row.publications?.find((item: any) => item.class_id === 'class_se_001') || row.publications?.[0]
   const testCaseCount = Math.max(row.required_test_case_count || row.test_case_count || 0, 1)
@@ -117,6 +130,7 @@ function unifiedTaskToLegacy(row: any): ApiTask {
     total_score: 100,
     created_at: publication?.published_at || undefined,
     publish_at: publication?.published_at || null,
+    start_at: publication?.start_at || publication?.published_at || null,
     due_at: publication?.deadline || '2026-12-30T23:59:00',
     submitted: row.submitted_count || 0,
     total: row.roster_total || 0,
@@ -130,8 +144,91 @@ function unifiedTaskToLegacy(row: any): ApiTask {
   }
 }
 
+const questionTypeMap: Record<string, ApiTaskQuestion['question_type']> = {
+  quiz: 'SINGLE_CHOICE',
+  single_choice: 'SINGLE_CHOICE',
+  multiple_choice: 'MULTIPLE_CHOICE',
+  true_false: 'TRUE_FALSE',
+  fill_blank: 'FILL_BLANK',
+  fill_in_blank: 'FILL_IN_BLANK',
+}
+
+function defaultPaperQuestions(chapter: string[]): ApiTaskQuestion[] {
+  const points = chapter.length ? chapter : ['链表边界处理']
+  return [
+    {
+      question_type: 'SINGLE_CHOICE',
+      stem: '链表删除头结点时，最关键的返回值是什么？',
+      analysis: '删除头结点后，新的头指针应指向原 head.next。',
+      knowledge_points: points,
+      difficulty: 'BASIC',
+      score: 10,
+      options: [
+        { label: 'A', content: '返回原 head', is_correct: false },
+        { label: 'B', content: '返回 head.next', is_correct: true },
+        { label: 'C', content: '返回空指针', is_correct: false },
+        { label: 'D', content: '返回被删除节点', is_correct: false },
+      ],
+    },
+    {
+      question_type: 'MULTIPLE_CHOICE',
+      stem: '设计链表删除逻辑时，通常需要覆盖哪些边界场景？',
+      analysis: '空链表、头结点删除和越界位置都属于高频边界场景。',
+      knowledge_points: points,
+      difficulty: 'BASIC',
+      score: 15,
+      options: [
+        { label: 'A', content: '空链表', is_correct: true },
+        { label: 'B', content: '删除头结点', is_correct: true },
+        { label: 'C', content: '位置越界', is_correct: true },
+        { label: 'D', content: '只测试中间节点即可', is_correct: false },
+      ],
+    },
+    {
+      question_type: 'TRUE_FALSE',
+      stem: '判断：删除单链表节点时，只要修改当前节点的值即可，不需要处理前驱指针。',
+      analysis: '删除节点通常需要维护前驱指针或特殊处理头结点。',
+      knowledge_points: points,
+      difficulty: 'BASIC',
+      score: 10,
+      options: [
+        { label: 'A', content: '正确', is_correct: false },
+        { label: 'B', content: '错误', is_correct: true },
+      ],
+    },
+  ]
+}
+
+function normalizeTaskQuestions(rawQuestions: any, taskType: string, chapter: string[]): ApiTaskQuestion[] {
+  const source = Array.isArray(rawQuestions) && rawQuestions.length ? rawQuestions : defaultPaperQuestions(chapter)
+  return source.map((question: any, index: number) => {
+    const questionType = questionTypeMap[question.question_type] || questionTypeMap[question.type] || questionTypeMap[taskType] || 'SINGLE_CHOICE'
+    const isFill = questionType === 'FILL_BLANK' || questionType === 'FILL_IN_BLANK'
+    const options = Array.isArray(question.options) ? question.options : []
+    return {
+      question_type: questionType,
+      stem: question.stem || question.title || `第 ${index + 1} 题`,
+      analysis: question.analysis || '',
+      knowledge_points: Array.isArray(question.knowledge_points) && question.knowledge_points.length ? question.knowledge_points : chapter,
+      difficulty: question.difficulty || 'BASIC',
+      score: Number(question.score || 10),
+      options: isFill
+        ? [{
+            label: '答案',
+            content: question.answer || question.standard_answer || options.find((item: any) => item.is_correct)?.content || '',
+            is_correct: true,
+          }]
+        : options.map((option: any, optionIndex: number) => ({
+            label: option.label || String.fromCharCode(65 + optionIndex),
+            content: option.content || '',
+            is_correct: Boolean(option.is_correct),
+          })),
+    }
+  })
+}
+
 function createUnifiedTaskPayload(body: any) {
-  const taskType = body.type || 'programming'
+  const taskType = body.task_kind === 'question_set' ? 'quiz' : body.type || 'programming'
   const isCoding = taskType === 'programming' || taskType === 'project'
   const chapter = Array.isArray(body.chapter_label) ? body.chapter_label : [body.chapter_label || '链表']
   const testCases = Array.isArray(body.test_cases) ? body.test_cases : []
@@ -163,18 +260,7 @@ function createUnifiedTaskPayload(body: any) {
           error_tag: 'UNKNOWN_OR_LOW_CONFIDENCE',
         }))
       : [],
-    questions: isCoding ? [] : [{
-      question_type: taskType === 'true_false' ? 'TRUE_FALSE' : taskType === 'multiple_choice' ? 'MULTIPLE_CHOICE' : 'SINGLE_CHOICE',
-      stem: body.description || body.title || '请完成本题。',
-      analysis: '',
-      knowledge_points: chapter,
-      difficulty: 'BASIC',
-      score: body.total_score || 100,
-      options: [
-        { label: 'A', content: '正确', is_correct: true },
-        { label: 'B', content: '错误', is_correct: false },
-      ],
-    }],
+    questions: isCoding ? [] : normalizeTaskQuestions(body.questions, taskType, chapter),
   }
 }
 
@@ -325,11 +411,28 @@ export interface ApiTask {
   total_score: number
   created_at?: string
   publish_at: string | null
+  start_at: string | null
   due_at: string
   submitted: number
   total: number
   completion: number
   test_cases: Array<{ id: string; name: string; hidden: boolean; weight: number }>
+}
+
+export interface ApiTaskQuestionOption {
+  label: string
+  content: string
+  is_correct: boolean
+}
+
+export interface ApiTaskQuestion {
+  question_type: 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'FILL_BLANK' | 'FILL_IN_BLANK'
+  stem: string
+  analysis?: string
+  knowledge_points?: string[]
+  difficulty?: string
+  score?: number
+  options: ApiTaskQuestionOption[]
 }
 
 export interface ApiMaterial {
@@ -367,7 +470,7 @@ export interface ApiChapter {
 
 export interface ApiStudentChapter extends ApiChapter {
   materials: Array<{ id: string; title: string; type: string; size: string; content_url: string | null }>
-  tasks: Array<{ id: string; title: string; type: string; due_at: string; difficulty: string }>
+  tasks: Array<{ id: string; title: string; type: string; start_at?: string | null; due_at: string; difficulty: string }>
 }
 
 export interface ApiSubmission {
@@ -843,6 +946,7 @@ export const api = {
         class_ids: [unifiedClassId(body.class_id || 'class-se1')],
         assignment_mode: 'PRACTICE',
         allow_hint_level_3: true,
+        start_at: body.start_at || body.publish_at || defaultTaskStartAt(),
         deadline: body.due_at || null,
       }),
     })

@@ -1,16 +1,23 @@
 import json
+import re
+from pathlib import Path
+from urllib.parse import quote_plus
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.core.api_response import ApiError
+from backend.app.core.config import get_settings
 from backend.app.models import (
     Course,
     Enrollment,
+    LearnerEvent,
     PracticeProject,
     PracticeProjectActivity,
     PracticeProjectEnrollment,
+    PracticeProjectMaterial,
     PracticeProjectSubmission,
+    StudentGeneratedResource,
     User,
 )
 from backend.app.models.entities import utc_now
@@ -26,6 +33,13 @@ DEFAULT_PATH_STEPS = [
     {"title": "成果沉淀", "description": "提交论文框架、分析报告、图表和过程记录，更新科研画像"},
 ]
 
+PAPER_SEARCH_BASES = {
+    "arxiv": "https://arxiv.org/search/?query={query}&searchtype=all&source=header",
+    "semantic_scholar": "https://www.semanticscholar.org/search?q={query}&sort=relevance",
+    "papers_with_code": "https://paperswithcode.com/search?q={query}",
+    "huggingface_papers": "https://huggingface.co/papers?q={query}",
+}
+
 RESEARCH_BRIEF_LIBRARY = {
     "sales-cleaning": {
         "profile_fit": "画像显示你在机器学习模型评估、实验记录和图表解释上已有连续证据，适合进入计算机视觉方向科研训练。",
@@ -35,18 +49,24 @@ RESEARCH_BRIEF_LIBRARY = {
             {
                 "title": "轻量卷积网络与高效图像分类",
                 "source": "课程知识库 + 近三年论文摘要样例",
+                "source_url": "https://arxiv.org/search/?query=efficient+image+classification+lightweight+cnn&searchtype=all&source=header",
+                "code_url": "https://paperswithcode.com/search?q=lightweight%20image%20classification",
                 "heat": 92,
                 "summary": "研究热点从单纯提升准确率转向参数量、推理成本与部署约束的综合平衡。",
             },
             {
                 "title": "数据增强对小样本分类稳定性的影响",
                 "source": "实验指南 + 综述片段",
+                "source_url": "https://arxiv.org/search/?query=data+augmentation+small+sample+image+classification&searchtype=all&source=header",
+                "code_url": "https://paperswithcode.com/search?q=data%20augmentation%20cifar-10",
                 "heat": 78,
                 "summary": "增强策略常被作为基线改进项，需要在实验表中单独记录。",
             },
             {
                 "title": "模型可解释性与错误类别分析",
                 "source": "教师资料库",
+                "source_url": "https://www.semanticscholar.org/search?q=model%20interpretability%20image%20classification%20error%20analysis&sort=relevance",
+                "code_url": "https://huggingface.co/papers?q=image%20classification%20interpretability",
                 "heat": 71,
                 "summary": "分类错误不只看总准确率，还要分析混淆类别、召回率和失败样本分布。",
             },
@@ -104,18 +124,24 @@ RESEARCH_BRIEF_LIBRARY = {
             {
                 "title": "日志异常检测中的高频模式挖掘",
                 "source": "项目资料库",
+                "source_url": "https://arxiv.org/search/?query=log+anomaly+detection+frequent+pattern+mining&searchtype=all&source=header",
+                "code_url": "https://paperswithcode.com/search?q=log%20anomaly%20detection",
                 "heat": 81,
                 "summary": "高频错误路径是异常检测入门任务，适合比较统计结构与排序策略。",
             },
             {
                 "title": "Top-K 算法在流式数据中的应用",
                 "source": "课程知识库",
+                "source_url": "https://www.semanticscholar.org/search?q=top-k%20algorithm%20streaming%20data&sort=relevance",
+                "code_url": "https://paperswithcode.com/search?q=top-k%20streaming",
                 "heat": 74,
                 "summary": "研究关注从离线排序转向增量维护与空间开销控制。",
             },
             {
                 "title": "文本日志语义归类",
                 "source": "AI 归纳样例",
+                "source_url": "https://arxiv.org/search/?query=semantic+log+clustering+anomaly+detection&searchtype=all&source=header",
+                "code_url": "https://huggingface.co/papers?q=log%20anomaly%20detection",
                 "heat": 66,
                 "summary": "后续可引入文本聚类，但首版先用规则字段保证可解释。",
             },
@@ -156,18 +182,24 @@ RESEARCH_BRIEF_LIBRARY = {
             {
                 "title": "学习分析中的行为序列建模",
                 "source": "资料库摘要",
+                "source_url": "https://www.semanticscholar.org/search?q=learning%20analytics%20behavior%20sequence%20modeling&sort=relevance",
+                "code_url": "https://paperswithcode.com/search?q=learning%20analytics",
                 "heat": 84,
                 "summary": "研究从单一完成率转向学习路径、停留时间和任务重试行为的综合解释。",
             },
             {
                 "title": "在线学习留存影响因素",
                 "source": "调查数据说明",
+                "source_url": "https://arxiv.org/search/?query=online+learning+retention+factor+analysis&searchtype=all&source=header",
+                "code_url": "https://huggingface.co/papers?q=online%20learning%20retention",
                 "heat": 79,
                 "summary": "留存分析需要控制任务难度、反馈及时性和学习基础差异。",
             },
             {
                 "title": "教育数据可视化表达",
                 "source": "教师资料库",
+                "source_url": "https://www.semanticscholar.org/search?q=educational%20data%20visualization%20learning%20analytics&sort=relevance",
+                "code_url": "https://paperswithcode.com/search?q=education%20data%20visualization",
                 "heat": 72,
                 "summary": "趋势图与分组柱状图适合展示阶段变化，结论必须绑定指标口径。",
             },
@@ -221,6 +253,43 @@ def safe_json_object(raw: str | None) -> dict:
     except json.JSONDecodeError:
         return {}
     return value if isinstance(value, dict) else {}
+
+
+def safe_file_name(name: str | None) -> str:
+    base = Path(name or "upload").name
+    cleaned = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", base)
+    return cleaned[:255] or "upload"
+
+
+def external_source_links(project: PracticeProject, focus: str = "") -> list[dict]:
+    query = focus.strip() or project.direction or project.title
+    encoded = quote_plus(query)
+    return [
+        {
+            "platform": "arxiv",
+            "label": "arXiv 论文检索",
+            "description": "查看相关预印本、最新论文标题和摘要。",
+            "url": PAPER_SEARCH_BASES["arxiv"].format(query=encoded),
+        },
+        {
+            "platform": "semantic_scholar",
+            "label": "Semantic Scholar",
+            "description": "查看论文、作者、引用和相关研究脉络。",
+            "url": PAPER_SEARCH_BASES["semantic_scholar"].format(query=encoded),
+        },
+        {
+            "platform": "papers_with_code",
+            "label": "Papers with Code",
+            "description": "查看论文对应代码、任务、数据集和 benchmark。",
+            "url": PAPER_SEARCH_BASES["papers_with_code"].format(query=encoded),
+        },
+        {
+            "platform": "huggingface_papers",
+            "label": "Hugging Face Papers",
+            "description": "查看模型社区近期论文和实现讨论。",
+            "url": PAPER_SEARCH_BASES["huggingface_papers"].format(query=encoded),
+        },
+    ]
 
 
 def status_label(status: str) -> str:
@@ -289,6 +358,30 @@ def serialize_submission(submission: PracticeProjectSubmission) -> dict:
     }
 
 
+def serialize_material(material: PracticeProjectMaterial) -> dict:
+    return {
+        "id": material.id,
+        "project_id": material.project_id,
+        "material_type": material.material_type,
+        "title": material.title,
+        "description": material.description,
+        "content": material.content,
+        "file_name": material.file_name,
+        "file_size": material.file_size,
+        "mime_type": material.mime_type,
+        "download_url": (
+            f"/api/v1/student/practice-projects/{material.project_id}/materials/{material.id}/download"
+            if material.storage_path
+            else None
+        ),
+        "external_url": material.external_url,
+        "source": material.source,
+        "status": material.status,
+        "created_at": iso(material.created_at),
+        "updated_at": iso(material.updated_at),
+    }
+
+
 def research_brief_for_project(project: PracticeProject, resources: list[dict] | None = None) -> dict:
     resources = resources or safe_json_list(project.resources_json)
     base = RESEARCH_BRIEF_LIBRARY.get(project.id)
@@ -301,6 +394,8 @@ def research_brief_for_project(project: PracticeProject, resources: list[dict] |
                 {
                     "title": project.direction or "专业方向前沿追踪",
                     "source": "课程知识库 + 项目资料",
+                    "source_url": PAPER_SEARCH_BASES["arxiv"].format(query=quote_plus(project.direction or project.title)),
+                    "code_url": PAPER_SEARCH_BASES["papers_with_code"].format(query=quote_plus(project.direction or project.title)),
                     "heat": 72,
                     "summary": project.long_description or project.description,
                 }
@@ -326,9 +421,152 @@ def research_brief_for_project(project: PracticeProject, resources: list[dict] |
         }
     brief = dict(base)
     brief["citations"] = resources
+    for index, citation in enumerate(brief["citations"]):
+        if isinstance(citation, dict) and not citation.get("source_url"):
+            citation["source_url"] = external_source_links(project)[index % 4]["url"]
+    brief["external_sources"] = external_source_links(project)
     brief["generated_at"] = iso(utc_now())
     brief["confidence"] = 0.86 if project.id in RESEARCH_BRIEF_LIBRARY else 0.72
     return brief
+
+
+def _project_knowledge_points(project: PracticeProject) -> list[str]:
+    points = safe_json_list(project.capability_points_json)
+    if project.direction:
+        points.insert(0, project.direction)
+    return [str(point) for point in points[:6]]
+
+
+def _add_learner_event(
+    db: Session,
+    *,
+    project: PracticeProject,
+    student_id: str,
+    class_id: str,
+    event_type: str,
+    payload: dict,
+) -> None:
+    db.add(
+        LearnerEvent(
+            id=prefixed_id("event"),
+            student_id=student_id,
+            course_id=project.course_id,
+            class_id=class_id,
+            event_type=event_type,
+            knowledge_points=json.dumps(_project_knowledge_points(project), ensure_ascii=False),
+            payload=json.dumps(payload, ensure_ascii=False),
+        )
+    )
+
+
+def _update_enrollment_for_activity(
+    enrollment: PracticeProjectEnrollment | None,
+    *,
+    progress_delta: int,
+    experiment_delta: int,
+    summary: str,
+) -> None:
+    if enrollment is None:
+        return
+    enrollment.status = "IN_PROGRESS" if enrollment.status == "NOT_STARTED" else enrollment.status
+    enrollment.progress = min(100, max(enrollment.progress, enrollment.progress + progress_delta))
+    enrollment.experiment_record_count += experiment_delta
+    enrollment.weekly_hours = round(float(enrollment.weekly_hours or 0) + 0.3, 1)
+    enrollment.last_activity_summary = summary
+    enrollment.updated_at = utc_now()
+
+
+def _create_submission_resource(
+    db: Session,
+    *,
+    project: PracticeProject,
+    student: User,
+    class_id: str,
+    submission: PracticeProjectSubmission,
+    materials: list[str],
+    material_records: list[PracticeProjectMaterial],
+) -> StudentGeneratedResource:
+    resources = safe_json_list(project.resources_json)
+    citations = [
+        {
+            "source_id": f"practice_project:{project.id}:{index}",
+            "title": item.get("title", "科研项目资料") if isinstance(item, dict) else str(item),
+            "summary": item.get("meta", "") if isinstance(item, dict) else "",
+            "source_type": "practice_project",
+            "version": "v0.1",
+            "authority_level": "COURSE",
+            "source_url": (
+                item.get("source_url")
+                if isinstance(item, dict) and item.get("source_url")
+                else external_source_links(project)[index % 4]["url"]
+            ),
+        }
+        for index, item in enumerate(resources)
+    ]
+    material_sections = [
+        {
+            "heading": record.title,
+            "paragraphs": [
+                record.description or "学生上传的科研过程材料。",
+                record.content or record.file_name or record.external_url or "已记录材料元数据。",
+            ],
+            "citation_ids": [],
+        }
+        for record in material_records
+    ]
+    payload = {
+        "sections": [
+            {
+                "heading": "阶段提交概览",
+                "paragraphs": [
+                    submission.description,
+                    f"本次成果包包含：{'、'.join(materials) if materials else '阶段研究结论'}。",
+                ],
+                "citation_ids": [item["source_id"] for item in citations[:2]],
+            },
+            {
+                "heading": "前沿追踪与分析依据",
+                "paragraphs": [
+                    "系统已将前沿追踪、写作检查、数据分析和阶段提交合并为可回看的科研学习产物。",
+                    "后续可从资料中心继续追问、生成练习或补充论文框架。",
+                ],
+                "citation_ids": [item["source_id"] for item in citations],
+            },
+            *material_sections,
+        ],
+        "metadata": {
+            "source": "practice_project_submission",
+            "project_id": project.id,
+            "submission_id": submission.id,
+            "material_ids": [record.id for record in material_records],
+        },
+    }
+    now = utc_now()
+    resource = StudentGeneratedResource(
+        id=prefixed_id("resource"),
+        student_id=student.id,
+        course_id=project.course_id,
+        class_id=class_id,
+        run_id=None,
+        session_id=None,
+        resource_type="DOCUMENT",
+        title=f"{submission.title} · 科研阶段总结",
+        prompt=f"沉淀科研项目「{project.title}」的阶段成果。",
+        knowledge_point=project.direction or project.title,
+        summary=f"已沉淀 {submission.title}，包含前沿追踪、材料清单、阶段结论和后续动作。",
+        status="READY",
+        render_payload_json=json.dumps(payload, ensure_ascii=False),
+        citations_json=json.dumps(citations, ensure_ascii=False),
+        file_path=None,
+        file_format="HTML",
+        confidence=0.84,
+        saved_to_resource_center=True,
+        saved_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(resource)
+    return resource
 
 
 def research_recommendation_for_project(projects: list[dict], recommended_project_id: str | None) -> dict | None:
@@ -552,6 +790,15 @@ def get_practice_project_detail(db: Session, project_id: str, student_id: str, c
         .order_by(PracticeProjectActivity.created_at.desc())
         .limit(8)
     ).all()
+    materials = db.scalars(
+        select(PracticeProjectMaterial)
+        .where(
+            PracticeProjectMaterial.project_id == project.id,
+            PracticeProjectMaterial.student_id == student_id,
+        )
+        .order_by(PracticeProjectMaterial.created_at.desc())
+        .limit(12)
+    ).all()
     return {
         "project": summary,
         "metrics": {
@@ -566,9 +813,260 @@ def get_practice_project_detail(db: Session, project_id: str, student_id: str, c
         "mentor_tips": safe_json_list(project.mentor_tips_json),
         "resources": safe_json_list(project.resources_json),
         "research_brief": research_brief_for_project(project),
+        "materials": [serialize_material(material) for material in materials],
         "submissions": [serialize_submission(submission) for submission in submissions],
         "activities": [serialize_activity(activity) for activity in activities],
     }
+
+
+def refresh_frontier_tracking(
+    db: Session,
+    project_id: str,
+    student: User,
+    class_id: str,
+    focus: str,
+) -> dict:
+    row = db.execute(
+        project_scope_query(student.id, class_id).where(PracticeProject.id == project_id)
+    ).first()
+    if row is None:
+        raise ApiError(404, "PRACTICE_PROJECT_NOT_FOUND", "科研项目实践不存在或当前学生无权访问。")
+    project, enrollment, _ = row
+    brief = research_brief_for_project(project)
+    focus_text = focus.strip()[:120]
+    if focus_text:
+        brief["next_actions"] = [f"围绕「{focus_text}」补充来源", *brief.get("next_actions", [])[:2]]
+    now = utc_now()
+    activity = PracticeProjectActivity(
+        id=prefixed_id("practice_activity"),
+        project_id=project.id,
+        student_id=student.id,
+        activity_type="frontier",
+        text=f"刷新了「{project.title}」前沿追踪",
+        time_label="刚刚",
+        created_at=now,
+    )
+    db.add(activity)
+    _update_enrollment_for_activity(
+        enrollment,
+        progress_delta=3,
+        experiment_delta=1,
+        summary="刷新了前沿追踪并生成最新研究动态",
+    )
+    _add_learner_event(
+        db,
+        project=project,
+        student_id=student.id,
+        class_id=class_id,
+        event_type="RESEARCH_FRONTIER_TRACKED",
+        payload={
+            "project_id": project.id,
+            "focus": focus_text,
+            "topic_count": len(brief.get("frontier_topics", [])),
+            "citation_count": len(brief.get("citations", [])),
+        },
+    )
+    db.flush()
+    return {
+        "brief": brief,
+        "activity": serialize_activity(activity),
+        "detail": get_practice_project_detail(db, project.id, student.id, class_id),
+    }
+
+
+def create_practice_material(
+    db: Session,
+    project_id: str,
+    student: User,
+    class_id: str,
+    material_type: str,
+    title: str,
+    description: str,
+    content: str,
+    file_name: str | None,
+    file_size: int | None,
+    mime_type: str | None,
+    external_url: str,
+) -> dict:
+    row = db.execute(
+        project_scope_query(student.id, class_id).where(PracticeProject.id == project_id)
+    ).first()
+    if row is None:
+        raise ApiError(404, "PRACTICE_PROJECT_NOT_FOUND", "科研项目实践不存在或当前学生无权访问。")
+    project, enrollment, _ = row
+    normalized_title = title.strip()
+    if not normalized_title:
+        raise ApiError(422, "PRACTICE_MATERIAL_TITLE_EMPTY", "材料标题不能为空。")
+    if not (content.strip() or description.strip() or file_name or external_url.strip()):
+        raise ApiError(422, "PRACTICE_MATERIAL_CONTENT_EMPTY", "请至少填写材料说明、正文、文件名或外链。")
+    now = utc_now()
+    material = PracticeProjectMaterial(
+        id=prefixed_id("practice_material"),
+        project_id=project.id,
+        student_id=student.id,
+        material_type=(material_type.strip().upper() or "NOTE")[:40],
+        title=normalized_title,
+        description=description.strip(),
+        content=content.strip(),
+        file_name=file_name.strip() if file_name else None,
+        file_size=file_size,
+        mime_type=mime_type.strip()[:120] if mime_type else None,
+        storage_path=None,
+        external_url=external_url.strip(),
+        source="student_upload",
+        status="READY",
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(material)
+    activity = PracticeProjectActivity(
+        id=prefixed_id("practice_activity"),
+        project_id=project.id,
+        student_id=student.id,
+        activity_type="material",
+        text=f"上传了科研过程材料「{material.title}」",
+        time_label="刚刚",
+        created_at=now,
+    )
+    db.add(activity)
+    _update_enrollment_for_activity(
+        enrollment,
+        progress_delta=2,
+        experiment_delta=1,
+        summary=f"上传了科研过程材料「{material.title}」",
+    )
+    _add_learner_event(
+        db,
+        project=project,
+        student_id=student.id,
+        class_id=class_id,
+        event_type="RESEARCH_MATERIAL_UPLOADED",
+        payload={
+            "project_id": project.id,
+            "material_id": material.id,
+            "material_title": material.title,
+            "material_type": material.material_type,
+            "file_name": material.file_name,
+        },
+    )
+    db.flush()
+    return {
+        "material": serialize_material(material),
+        "activity": serialize_activity(activity),
+        "detail": get_practice_project_detail(db, project.id, student.id, class_id),
+    }
+
+
+def create_practice_material_file(
+    db: Session,
+    project_id: str,
+    student: User,
+    class_id: str,
+    *,
+    material_type: str,
+    title: str,
+    description: str,
+    content: bytes,
+    file_name: str | None,
+    mime_type: str | None,
+) -> dict:
+    row = db.execute(
+        project_scope_query(student.id, class_id).where(PracticeProject.id == project_id)
+    ).first()
+    if row is None:
+        raise ApiError(404, "PRACTICE_PROJECT_NOT_FOUND", "科研项目实践不存在或当前学生无权访问。")
+    project, enrollment, _ = row
+    if not content:
+        raise ApiError(422, "PRACTICE_MATERIAL_FILE_EMPTY", "上传文件为空。")
+    settings = get_settings()
+    limit = settings.resource_max_upload_mb * 1024 * 1024
+    if len(content) > limit:
+        raise ApiError(
+            413,
+            "PRACTICE_MATERIAL_FILE_TOO_LARGE",
+            f"上传文件超过 {settings.resource_max_upload_mb} MB 上限。",
+            details={"size": len(content)},
+        )
+    safe_name = safe_file_name(file_name)
+    material_id = prefixed_id("practice_material")
+    suffix = Path(safe_name).suffix[:16]
+    target_dir = Path(settings.resource_storage_dir) / "practice-projects" / student.id / project.id
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / f"{material_id}{suffix}"
+    target.write_bytes(content)
+
+    now = utc_now()
+    material = PracticeProjectMaterial(
+        id=material_id,
+        project_id=project.id,
+        student_id=student.id,
+        material_type=(material_type.strip().upper() or "CODE_FILE")[:40],
+        title=title.strip() or safe_name,
+        description=description.strip(),
+        content="",
+        file_name=safe_name,
+        file_size=len(content),
+        mime_type=mime_type,
+        storage_path=str(target),
+        external_url="",
+        source="student_file_upload",
+        status="READY",
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(material)
+    activity = PracticeProjectActivity(
+        id=prefixed_id("practice_activity"),
+        project_id=project.id,
+        student_id=student.id,
+        activity_type="file",
+        text=f"上传了代码/实验文件「{material.file_name}」",
+        time_label="刚刚",
+        created_at=now,
+    )
+    db.add(activity)
+    _update_enrollment_for_activity(
+        enrollment,
+        progress_delta=3,
+        experiment_delta=1,
+        summary=f"上传了代码/实验文件「{material.file_name}」",
+    )
+    _add_learner_event(
+        db,
+        project=project,
+        student_id=student.id,
+        class_id=class_id,
+        event_type="RESEARCH_MATERIAL_UPLOADED",
+        payload={
+            "project_id": project.id,
+            "material_id": material.id,
+            "material_title": material.title,
+            "material_type": material.material_type,
+            "file_name": material.file_name,
+            "file_size": material.file_size,
+            "source": "student_file_upload",
+        },
+    )
+    db.flush()
+    return {
+        "material": serialize_material(material),
+        "activity": serialize_activity(activity),
+        "detail": get_practice_project_detail(db, project.id, student.id, class_id),
+    }
+
+
+def get_practice_material_file(db: Session, project_id: str, student_id: str, material_id: str) -> PracticeProjectMaterial:
+    material = db.get(PracticeProjectMaterial, material_id)
+    if (
+        material is None
+        or material.project_id != project_id
+        or material.student_id != student_id
+        or not material.storage_path
+    ):
+        raise ApiError(404, "PRACTICE_MATERIAL_FILE_NOT_FOUND", "科研材料文件不存在或不可访问。")
+    if not Path(material.storage_path).exists():
+        raise ApiError(404, "PRACTICE_MATERIAL_FILE_MISSING", "科研材料文件尚未落盘或已被移除。")
+    return material
 
 
 def create_practice_submission(
@@ -579,6 +1077,8 @@ def create_practice_submission(
     title: str,
     description: str,
     materials: list[str],
+    material_ids: list[str] | None = None,
+    note: str = "",
 ) -> dict:
     row = db.execute(
         project_scope_query(student.id, class_id).where(PracticeProject.id == project_id)
@@ -587,6 +1087,21 @@ def create_practice_submission(
         raise ApiError(404, "PRACTICE_PROJECT_NOT_FOUND", "科研项目实践不存在或当前学生无权访问。")
     project, enrollment, _ = row
     now = utc_now()
+    material_records = []
+    if material_ids:
+        material_records = list(
+            db.scalars(
+                select(PracticeProjectMaterial).where(
+                    PracticeProjectMaterial.project_id == project.id,
+                    PracticeProjectMaterial.student_id == student.id,
+                    PracticeProjectMaterial.id.in_(material_ids),
+                )
+            ).all()
+        )
+        found_ids = {record.id for record in material_records}
+        missing_ids = [item for item in material_ids if item not in found_ids]
+        if missing_ids:
+            raise ApiError(404, "PRACTICE_MATERIAL_NOT_FOUND", "存在不可访问的科研材料。", {"material_ids": missing_ids})
     submission = PracticeProjectSubmission(
         id=prefixed_id("practice_submit"),
         project_id=project.id,
@@ -595,14 +1110,24 @@ def create_practice_submission(
         description=description.strip() or f"提交内容：{project.current_stage} 阶段科研材料。",
         status="SUBMITTED",
         review_comment="已进入阶段助研成果审核队列，平台将结合前沿追踪、写作规范、数据分析和验收标准生成反馈。",
-        content_json=json.dumps({"materials": materials}, ensure_ascii=False),
+        content_json=json.dumps(
+            {
+                "materials": materials,
+                "material_ids": [record.id for record in material_records],
+                "material_titles": [record.title for record in material_records],
+                "note": note.strip(),
+            },
+            ensure_ascii=False,
+        ),
         submitted_at=now,
         created_at=now,
     )
     db.add(submission)
     enrollment.status = "SUBMITTED"
     enrollment.submission_count += 1
-    enrollment.experiment_record_count += 1 if materials else 0
+    enrollment.experiment_record_count += max(1 if materials else 0, len(material_records))
+    enrollment.completed_stage_count = min(project.total_stage_count, enrollment.completed_stage_count + 1)
+    enrollment.progress = min(100, max(enrollment.progress + 6, int(enrollment.completed_stage_count / max(project.total_stage_count, 1) * 100)))
     enrollment.last_activity_summary = f"提交了 {submission.title}"
     enrollment.updated_at = now
     activity = PracticeProjectActivity(
@@ -615,8 +1140,50 @@ def create_practice_submission(
         created_at=now,
     )
     db.add(activity)
+    resource = _create_submission_resource(
+        db,
+        project=project,
+        student=student,
+        class_id=class_id,
+        submission=submission,
+        materials=materials,
+        material_records=material_records,
+    )
+    _add_learner_event(
+        db,
+        project=project,
+        student_id=student.id,
+        class_id=class_id,
+        event_type="artifact_saved",
+        payload={
+            "project_id": project.id,
+            "submission_id": submission.id,
+            "resource_id": resource.id,
+            "resource_title": resource.title,
+            "resource_type": resource.resource_type,
+            "source": "practice_project_submission",
+        },
+    )
+    _add_learner_event(
+        db,
+        project=project,
+        student_id=student.id,
+        class_id=class_id,
+        event_type="RESEARCH_STAGE_SUBMITTED",
+        payload={
+            "project_id": project.id,
+            "submission_id": submission.id,
+            "material_count": len(materials),
+            "uploaded_material_count": len(material_records),
+        },
+    )
+    db.flush()
+    content = safe_json_object(submission.content_json)
+    content["artifact_resource_id"] = resource.id
+    submission.content_json = json.dumps(content, ensure_ascii=False)
     db.flush()
     return {
         "submission": serialize_submission(submission),
+        "artifact_resource_id": resource.id,
         "detail": get_practice_project_detail(db, project.id, student.id, class_id),
     }

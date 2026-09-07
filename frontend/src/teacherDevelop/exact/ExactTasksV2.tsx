@@ -8,7 +8,16 @@ import {
   MessageSquareText, MoreHorizontal, Plus, Search, Settings2, Sparkles, X,
 } from 'lucide-react'
 
-import { api, type ApiClass, type ApiCourse, type ApiTask } from '../api'
+import {
+  api,
+  defaultTaskStartAt,
+  formatTaskDateTime,
+  taskDateTimeInputValue,
+  type ApiClass,
+  type ApiCourse,
+  type ApiTask,
+  type ApiTaskQuestion,
+} from '../api'
 import type { ExactView } from './components'
 import { CourseBreadcrumb, EmptyPanel, PageLoader } from './components'
 import './task-exact.css'
@@ -46,6 +55,94 @@ function taskTypeLabel(type: string) {
   return labels[type] || type
 }
 
+type TaskKind = 'programming' | 'question_set'
+
+const QUESTION_TYPE_OPTIONS: Array<{ value: ApiTaskQuestion['question_type']; label: string }> = [
+  { value: 'SINGLE_CHOICE', label: '单选题' },
+  { value: 'MULTIPLE_CHOICE', label: '多选题' },
+  { value: 'TRUE_FALSE', label: '判断题' },
+  { value: 'FILL_BLANK', label: '填空题' },
+]
+
+function defaultQuestionOptions(type: ApiTaskQuestion['question_type']) {
+  if (type === 'TRUE_FALSE') {
+    return [
+      { label: 'A', content: '正确', is_correct: false },
+      { label: 'B', content: '错误', is_correct: true },
+    ]
+  }
+  if (type === 'FILL_BLANK' || type === 'FILL_IN_BLANK') {
+    return [{ label: '答案', content: 'head.next', is_correct: true }]
+  }
+  return [
+    { label: 'A', content: '空链表', is_correct: type === 'MULTIPLE_CHOICE' },
+    { label: 'B', content: '删除头结点', is_correct: true },
+    { label: 'C', content: '位置越界', is_correct: type === 'MULTIPLE_CHOICE' },
+    { label: 'D', content: '只处理普通中间节点', is_correct: false },
+  ]
+}
+
+function createDefaultPaperQuestions(): ApiTaskQuestion[] {
+  return [
+    {
+      question_type: 'SINGLE_CHOICE',
+      stem: '链表删除头结点时，最关键的返回值是什么？',
+      analysis: '删除头结点后，新的头指针应指向原 head.next。',
+      knowledge_points: ['链表', '链表删除'],
+      difficulty: 'BASIC',
+      score: 10,
+      options: [
+        { label: 'A', content: '返回原 head', is_correct: false },
+        { label: 'B', content: '返回 head.next', is_correct: true },
+        { label: 'C', content: '返回空指针', is_correct: false },
+        { label: 'D', content: '返回被删除节点', is_correct: false },
+      ],
+    },
+    {
+      question_type: 'MULTIPLE_CHOICE',
+      stem: '设计链表删除逻辑时，通常需要覆盖哪些边界场景？',
+      analysis: '空链表、头结点删除和越界位置都属于高频边界场景。',
+      knowledge_points: ['链表', '边界处理'],
+      difficulty: 'BASIC',
+      score: 15,
+      options: [
+        { label: 'A', content: '空链表', is_correct: true },
+        { label: 'B', content: '删除头结点', is_correct: true },
+        { label: 'C', content: '位置越界', is_correct: true },
+        { label: 'D', content: '只测试中间节点即可', is_correct: false },
+      ],
+    },
+    {
+      question_type: 'FILL_BLANK',
+      stem: '删除头结点后，新的头指针通常应指向 ____。',
+      analysis: '头结点被删除后，链表入口应更新为原头结点的 next。',
+      knowledge_points: ['链表删除'],
+      difficulty: 'BASIC',
+      score: 10,
+      options: [{ label: '答案', content: 'head.next', is_correct: true }],
+    },
+  ]
+}
+
+function normalizeQuestionForSubmit(question: ApiTaskQuestion, chapter: string[], index: number): ApiTaskQuestion {
+  const type = question.question_type
+  const isFill = type === 'FILL_BLANK' || type === 'FILL_IN_BLANK'
+  const options = isFill
+    ? [{ label: '答案', content: question.options[0]?.content || '', is_correct: true }]
+    : question.options.map((option, optionIndex) => ({
+        label: option.label || String.fromCharCode(65 + optionIndex),
+        content: option.content,
+        is_correct: option.is_correct,
+      }))
+  return {
+    ...question,
+    stem: question.stem || `第 ${index + 1} 题`,
+    knowledge_points: question.knowledge_points?.length ? question.knowledge_points : chapter,
+    score: Number(question.score || 10),
+    options,
+  }
+}
+
 export function ExactTasksV2(props: Props) {
   const [tasks, setTasks] = useState<ApiTask[]>([])
   const [loading, setLoading] = useState(true)
@@ -64,6 +161,9 @@ export function ExactTasksV2(props: Props) {
   const [search, setSearch] = useState('')
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest')
   const [form] = Form.useForm()
+  const taskKind = Form.useWatch('task_kind', form) as TaskKind | undefined
+  const currentTaskKind: TaskKind = taskKind || 'question_set'
+  const [paperQuestions, setPaperQuestions] = useState<ApiTaskQuestion[]>(createDefaultPaperQuestions)
 
   const load = async () => {
     setLoading(true)
@@ -131,29 +231,46 @@ export function ExactTasksV2(props: Props) {
     setPanelOpen(true)
     setStep(0)
     setDraftId('')
+    setPaperQuestions(createDefaultPaperQuestions())
     form.resetFields()
+    form.setFieldValue('start_at', defaultTaskStartAt())
   }
 
   const createDraft = async () => {
     if (draftId) return tasks.find((item) => item.id === draftId)
     const values = form.getFieldsValue()
+    const kind: TaskKind = values.task_kind || currentTaskKind
+    const chapter = Array.isArray(values.chapter) ? values.chapter : [values.chapter].filter(Boolean)
+    const normalizedQuestions = paperQuestions.map((question, index) => normalizeQuestionForSubmit(question, chapter, index))
+    if (kind === 'question_set') {
+      if (!normalizedQuestions.length) throw new Error('题组试卷至少需要一道题目')
+      const invalidQuestion = normalizedQuestions.find((question) => {
+        const isFill = question.question_type === 'FILL_BLANK' || question.question_type === 'FILL_IN_BLANK'
+        const correctCount = question.options.filter((option) => option.is_correct && option.content.trim()).length
+        return !question.stem.trim() || correctCount === 0 || (!isFill && question.options.filter((option) => option.content.trim()).length < 2)
+      })
+      if (invalidQuestion) throw new Error('请补全题干、选项和正确答案后再保存')
+    }
     const task = await api.createTask({
       course_id: props.courseId,
       class_id: null,
-      title: values.title || '单链表指定位置节点删除',
-      type: values.type || 'programming',
-      chapter_label: Array.isArray(values.chapter) ? values.chapter[0] || '第3章 函数结构' : values.chapter || '第3章 函数结构',
-      description: values.description || '给定单链表和头结点，删除指定位置节点并返回链表头结点。',
-      starter_code: values.starter_code || 'ListNode* removeAt(ListNode* head, int index) {\n  return head;\n}',
+      title: values.title || (kind === 'question_set' ? '链表边界条件诊断小卷' : '单链表指定位置节点删除'),
+      task_kind: kind,
+      type: kind === 'programming' ? 'programming' : 'quiz',
+      chapter_label: chapter.length ? chapter : ['链表'],
+      description: values.description || (kind === 'question_set' ? '完成本组链表边界条件诊断题。' : '给定单链表和头结点，删除指定位置节点并返回链表头结点。'),
+      starter_code: kind === 'programming' ? values.starter_code || 'ListNode* removeAt(ListNode* head, int index) {\n  return head;\n}' : '',
       difficulty: values.difficulty || '进阶',
       total_score: 100,
+      start_at: values.start_at || defaultTaskStartAt(),
       due_at: values.due_at || '2026-12-30T23:59:00',
       allow_hints: true,
-      test_cases: [
+      questions: kind === 'question_set' ? normalizedQuestions : [],
+      test_cases: kind === 'programming' ? [
         { name: '基础用例', input_data: 'values=[1,2,3], position=1', expected_output: '[1,3]', hidden: false, weight: 30 },
         { name: '边界用例', input_data: 'values=[], position=0', expected_output: '[]', hidden: false, weight: 30 },
         { name: '隐藏用例', input_data: 'values=[1,2,3], position=2', expected_output: '[1,2]', hidden: true, weight: 40 },
-      ],
+      ] : [],
     })
     setDraftId(task.id)
     await load()
@@ -180,6 +297,7 @@ export function ExactTasksV2(props: Props) {
       if (!task) throw new Error('创建任务失败')
       await api.publishTask(task.id, {
         class_id: props.classId,
+        start_at: form.getFieldValue('start_at') || defaultTaskStartAt(),
         due_at: form.getFieldValue('due_at') || '2026-12-30T23:59:00',
       })
       props.notify('作业已发布到教学班')
@@ -193,6 +311,63 @@ export function ExactTasksV2(props: Props) {
     }
   }
 
+  const updateQuestion = (index: number, patch: Partial<ApiTaskQuestion>) => {
+    setPaperQuestions((current) => current.map((question, questionIndex) => (
+      questionIndex === index ? { ...question, ...patch } : question
+    )))
+  }
+
+  const changeQuestionType = (index: number, questionType: ApiTaskQuestion['question_type']) => {
+    updateQuestion(index, {
+      question_type: questionType,
+      options: defaultQuestionOptions(questionType),
+    })
+  }
+
+  const updateQuestionOption = (questionIndex: number, optionIndex: number, patch: Partial<ApiTaskQuestion['options'][number]>) => {
+    setPaperQuestions((current) => current.map((question, index) => {
+      if (index !== questionIndex) return question
+      return {
+        ...question,
+        options: question.options.map((option, currentOptionIndex) => (
+          currentOptionIndex === optionIndex ? { ...option, ...patch } : option
+        )),
+      }
+    }))
+  }
+
+  const setSingleCorrectOption = (questionIndex: number, optionIndex: number) => {
+    setPaperQuestions((current) => current.map((question, index) => {
+      if (index !== questionIndex) return question
+      return {
+        ...question,
+        options: question.options.map((option, currentOptionIndex) => ({
+          ...option,
+          is_correct: currentOptionIndex === optionIndex,
+        })),
+      }
+    }))
+  }
+
+  const addQuestion = () => {
+    setPaperQuestions((current) => [
+      ...current,
+      {
+        question_type: 'SINGLE_CHOICE',
+        stem: `第 ${current.length + 1} 题题干`,
+        analysis: '',
+        knowledge_points: [],
+        difficulty: 'BASIC',
+        score: 10,
+        options: defaultQuestionOptions('SINGLE_CHOICE'),
+      },
+    ])
+  }
+
+  const removeQuestion = (index: number) => {
+    setPaperQuestions((current) => current.length <= 1 ? current : current.filter((_, questionIndex) => questionIndex !== index))
+  }
+
   const openTaskView = (view: 'monitor' | 'grading', taskId: string) => {
     sessionStorage.setItem(`codetrack:${view}-task-id`, taskId)
     props.onNavigate(view)
@@ -202,7 +377,14 @@ export function ExactTasksV2(props: Props) {
     setDraftId(task.id)
     setPanelOpen(true)
     setStep(nextStep)
-    form.setFieldsValue({ ...task, chapter: task.chapter ? [task.chapter] : [] })
+    setPaperQuestions(createDefaultPaperQuestions())
+    form.setFieldsValue({
+      ...task,
+      task_kind: task.type === 'programming' || task.type === 'project' ? 'programming' : 'question_set',
+      chapter: task.chapter ? [task.chapter] : [],
+      start_at: taskDateTimeInputValue(task.start_at),
+      due_at: taskDateTimeInputValue(task.due_at, '2026-12-30T23:59'),
+    })
   }
 
   const duplicateTask = async (task: ApiTask) => {
@@ -211,21 +393,24 @@ export function ExactTasksV2(props: Props) {
         course_id: props.courseId,
         class_id: null,
         title: `${task.title}（副本）`,
-        type: task.type,
+        task_kind: task.type === 'programming' || task.type === 'project' ? 'programming' : 'question_set',
+        type: task.type === 'programming' || task.type === 'project' ? 'programming' : 'quiz',
         chapter_label: task.chapter,
         description: task.description,
         starter_code: task.starter_code,
         difficulty: task.difficulty,
         total_score: task.total_score,
+        start_at: task.start_at || defaultTaskStartAt(),
         due_at: task.due_at || '2026-12-30T23:59:00',
         allow_hints: true,
-        test_cases: task.test_cases.map((item) => ({
+        questions: task.type === 'programming' || task.type === 'project' ? [] : createDefaultPaperQuestions(),
+        test_cases: task.type === 'programming' || task.type === 'project' ? task.test_cases.map((item) => ({
           name: item.name,
           input_data: '',
           expected_output: '',
           hidden: item.hidden,
           weight: item.weight,
-        })),
+        })) : [],
       })
       props.notify('任务已复制到草稿箱')
       await load()
@@ -331,7 +516,8 @@ export function ExactTasksV2(props: Props) {
                 <Paragraph ellipsis={{ rows: 1 }}>{task.description}</Paragraph>
                 <div className="task-v2-data">
                   <span><small>知识点</small><b>链表 / 链表删除</b></span>
-                  <span><small>截止时间</small><b>{task.due_at.slice(0,16).replace('T',' ')}</b></span>
+                  <span><small>开始时间</small><b>{formatTaskDateTime(task.start_at)}</b></span>
+                  <span><small>截止时间</small><b>{formatTaskDateTime(task.due_at)}</b></span>
                   <span><small>下发班级</small><b>{Math.max(task.total ? 1 : 0, index + 1)} 个班级</b></span>
                   <span><small>提交概览</small><b>{task.submitted}/{task.total || 68} 提交</b></span>
                   <span><small>发布状态</small><b><i className={'task-state ' + status.color} />{status.text}</b></span>
@@ -356,35 +542,104 @@ export function ExactTasksV2(props: Props) {
 
       {panelOpen && <aside className="task-v2-panel">
         <div className="task-v2-panel-head"><div><Title level={3}>创建并发布任务</Title></div><Button type="text" icon={<X size={16} />} onClick={() => setPanelOpen(false)} /></div>
-        <Steps current={step} size="small" items={[{ title: '基本信息' }, { title: '测试用例' }, { title: '发布设置' }, { title: '预览发布' }]} />
+        <Steps current={step} size="small" items={[{ title: '基本信息' }, { title: currentTaskKind === 'programming' ? '测试用例' : '题目编辑' }, { title: '发布设置' }, { title: '预览发布' }]} />
         <Button className="task-ai-button" block icon={<Sparkles size={15} />} onClick={() => setAiOpen(true)}>与 AI 对话生成练习草稿</Button>
 
         <Form form={form} layout="vertical" initialValues={{
-          title: '单链表指定位置节点删除',
-          type: 'programming',
-          chapter: '第3章 函数结构',
-          description: '给定单链表和头结点，删除指定位置节点并返回链表头结点。',
+          title: '链表边界条件诊断小卷',
+          task_kind: 'question_set',
+          chapter: ['链表', '链表删除'],
+          description: '完成本组链表边界条件诊断题。',
           difficulty: '进阶',
-          due_at: '2026-12-30T23:59:00',
+          start_at: defaultTaskStartAt(),
+          due_at: '2026-12-30T23:59',
         }}>
           {step === 0 && <>
             <Form.Item label="任务标题" name="title" rules={[{ required: true }]}><Input showCount maxLength={50} /></Form.Item>
             <Form.Item label="题目说明" name="description"><Input.TextArea rows={4} showCount maxLength={500} /></Form.Item>
             <Form.Item label="知识点选择" name="chapter"><Select mode="multiple" options={['链表','链表删除','栈与队列'].map((value) => ({ value, label: value }))} /></Form.Item>
-            <Row gutter={12}><Col span={12}><Form.Item label="任务类型" name="type"><Select options={[{ value: 'programming', label: '编程题' }, { value: 'single_choice', label: '单选题' }, { value: 'multiple_choice', label: '多选题' }, { value: 'true_false', label: '判断题' }, { value: 'fill_blank', label: '填空题' }, { value: 'short_answer', label: '简答题' }, { value: 'project', label: '综合项目' }]} /></Form.Item></Col><Col span={12}><Form.Item label="难度" name="difficulty"><Select options={['基础','进阶','挑战'].map((value) => ({ value, label: value }))} /></Form.Item></Col></Row>
+            <Row gutter={12}><Col span={12}><Form.Item label="任务形态" name="task_kind"><Select options={[{ value: 'question_set', label: '题组试卷' }, { value: 'programming', label: '编程任务' }]} /></Form.Item></Col><Col span={12}><Form.Item label="难度" name="difficulty"><Select options={['基础','进阶','挑战'].map((value) => ({ value, label: value }))} /></Form.Item></Col></Row>
           </>}
-          {step === 1 && <>
-            <Alert type="info" showIcon message="公开测试对学生可见，隐藏测试只对教师可见。" />
+          {step === 1 && currentTaskKind === 'programming' && <>
+            <Alert type="info" showIcon message="编程任务使用公开与隐藏测试用例，学生进入代码工作区完成提交。" />
             {['基础用例','边界用例','隐藏用例'].map((name, index) => <div className="task-test-row" key={name}><Input value={name} readOnly /><InputNumber value={index === 2 ? 40 : 30} suffix="%" readOnly /><Tag color={index === 2 ? 'orange' : 'green'}>{index === 2 ? '隐藏' : '公开'}</Tag></div>)}
             <Button type="dashed" block icon={<Plus size={14} />}>添加测试用例</Button>
           </>}
+          {step === 1 && currentTaskKind === 'question_set' && <div className="task-paper-editor">
+            <Alert type="info" showIcon message="题组试卷可以混合单选、多选、判断和填空题；学生端会进入做题页面，不再进入编程工作区。" />
+            {paperQuestions.map((question, questionIndex) => {
+              const isFill = question.question_type === 'FILL_BLANK' || question.question_type === 'FILL_IN_BLANK'
+              const isMulti = question.question_type === 'MULTIPLE_CHOICE'
+              return (
+                <section className="task-question-card" key={questionIndex}>
+                  <div className="task-question-card-head">
+                    <Tag color="blue">第 {questionIndex + 1} 题</Tag>
+                    <Select
+                      size="small"
+                      value={question.question_type}
+                      options={QUESTION_TYPE_OPTIONS}
+                      onChange={(value) => changeQuestionType(questionIndex, value)}
+                    />
+                    <InputNumber
+                      min={1}
+                      max={100}
+                      value={question.score}
+                      addonAfter="分"
+                      onChange={(value) => updateQuestion(questionIndex, { score: Number(value || 10) })}
+                    />
+                    <Button size="small" danger disabled={paperQuestions.length <= 1} onClick={() => removeQuestion(questionIndex)}>删除</Button>
+                  </div>
+                  <Input.TextArea
+                    rows={2}
+                    value={question.stem}
+                    onChange={(event) => updateQuestion(questionIndex, { stem: event.target.value })}
+                    placeholder="输入题干"
+                  />
+                  {isFill ? (
+                    <label className="task-fill-answer">
+                      <span>标准答案</span>
+                      <Input
+                        value={question.options[0]?.content || ''}
+                        onChange={(event) => updateQuestion(questionIndex, { options: [{ label: '答案', content: event.target.value, is_correct: true }] })}
+                        placeholder="学生填写内容与标准答案一致即判为正确"
+                      />
+                    </label>
+                  ) : (
+                    <div className="task-question-options">
+                      {question.options.map((option, optionIndex) => (
+                        <div className="task-question-option" key={`${questionIndex}-${option.label}`}>
+                          {isMulti ? (
+                            <Checkbox checked={option.is_correct} onChange={(event) => updateQuestionOption(questionIndex, optionIndex, { is_correct: event.target.checked })} />
+                          ) : (
+                            <Radio checked={option.is_correct} onChange={() => setSingleCorrectOption(questionIndex, optionIndex)} />
+                          )}
+                          <Tag>{option.label}</Tag>
+                          <Input value={option.content} onChange={(event) => updateQuestionOption(questionIndex, optionIndex, { content: event.target.value })} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <Input.TextArea
+                    rows={2}
+                    value={question.analysis}
+                    onChange={(event) => updateQuestion(questionIndex, { analysis: event.target.value })}
+                    placeholder="题目解析，提交后展示给学生"
+                  />
+                </section>
+              )
+            })}
+            <Button type="dashed" block icon={<Plus size={14} />} onClick={addQuestion}>添加题目</Button>
+          </div>}
           {step === 2 && <>
-            <Form.Item label="截止时间" name="due_at"><Input /></Form.Item>
+            <Row gutter={12}>
+              <Col span={12}><Form.Item label="开始时间" name="start_at" rules={[{ required: true, message: '请选择开始时间' }]}><Input type="datetime-local" /></Form.Item></Col>
+              <Col span={12}><Form.Item label="截止时间" name="due_at" rules={[{ required: true, message: '请选择截止时间' }]}><Input type="datetime-local" /></Form.Item></Col>
+            </Row>
             <Form.Item label="下发班级"><Select mode="multiple" defaultValue={[props.classId]} options={courseClasses.map((item) => ({ value: item.id, label: item.name }))} /></Form.Item>
             <Form.Item label="提示开放级别"><Select defaultValue="3" options={[{ value: '3', label: '3 级提示（逐步引导）' }]} /></Form.Item>
             <Checkbox defaultChecked>允许学生在截止时间后查看题目与代码</Checkbox>
           </>}
-          {step === 3 && <div className="task-preview-final"><CheckCircle2 /><Title level={4}>{form.getFieldValue('title')}</Title><p>{form.getFieldValue('description')}</p><Tag color="green">等待教师确认发布</Tag></div>}
+          {step === 3 && <div className="task-preview-final"><CheckCircle2 /><Title level={4}>{form.getFieldValue('title')}</Title><p>{form.getFieldValue('description')}</p><Tag color="green">{currentTaskKind === 'programming' ? '编程任务' : `${paperQuestions.length} 题混合试卷`} · 等待教师确认发布</Tag></div>}
         </Form>
 
         <div className="task-v2-panel-actions">

@@ -91,13 +91,6 @@ function taskToFavorite(task: StudentTaskCard): FavoriteItem {
   };
 }
 
-function initialFavoriteIds(tasks: StudentTaskCard[]) {
-  const coding = tasks.find((task) => task.task_type === "CODING")?.assignment_id;
-  const quiz = tasks.find((task) => task.task_type === "QUIZ")?.assignment_id;
-  const fallback = tasks.slice(0, 2).map((task) => task.assignment_id);
-  return new Set([coding, quiz, ...fallback].filter(Boolean).slice(0, 2) as string[]);
-}
-
 type LearningLibraryProps = {
   initialCourseId?: string;
   scope?: "global" | "course";
@@ -140,7 +133,7 @@ export default function LearningLibrary({ initialCourseId = "", scope = "global"
 
         const loadedTasks = taskResult.status === "fulfilled" ? taskResult.value : [];
         setTasks(loadedTasks);
-        setFavoriteIds(initialFavoriteIds(loadedTasks));
+        setFavoriteIds(new Set());
         setRecentlyChangedIds(new Set());
         setProfile(profileResult.status === "fulfilled" ? profileResult.value : null);
         if (taskResult.status === "rejected") {
@@ -213,7 +206,7 @@ export default function LearningLibrary({ initialCourseId = "", scope = "global"
     );
   }, [favoriteItems]);
 
-  const weakPoint = profile?.knowledge_states.find((item) => item.state === "WEAK")?.knowledge_point ?? "链表边界处理";
+  const weakPoint = profile?.knowledge_states.find((item) => item.state === "WEAK")?.knowledge_point ?? null;
 
   function toggleFavorite(item: FavoriteItem) {
     setFavoriteIds((current) => {
@@ -275,7 +268,7 @@ export default function LearningLibrary({ initialCourseId = "", scope = "global"
 
         <section className="library-stats" aria-label="收藏统计">
           <StatCard title="收藏题目总数" value={String(favoriteItems.length)} unit="道" detail="来自教师下发任务" tone="blue" icon={<Bookmark size={24} fill="currentColor" />} />
-          <StatCard title="本次可演示" value={String(recentlyChangedIds.size)} unit="次" detail="收藏状态响应" tone="orange" icon={<PlusCircle size={25} fill="currentColor" />} />
+          <StatCard title="本次更新" value={String(recentlyChangedIds.size)} unit="次" detail="收藏状态变化" tone="orange" icon={<PlusCircle size={25} fill="currentColor" />} />
           <StatCard title="编程题" value={String(typeCounts.编程题)} unit="道" detail="关联沙箱任务" tone="green" icon={<Code2 size={25} />} />
           <StatCard title="练习题" value={String(typeCounts.练习题)} unit="道" detail="关联阶段练习" tone="purple" icon={<Pencil size={25} fill="currentColor" />} />
         </section>
@@ -419,7 +412,7 @@ export default function LearningLibrary({ initialCourseId = "", scope = "global"
             <h2>学习建议</h2>
           </header>
           <AdviceItem tone="blue" icon={<BarChart3 size={22} />} title="先复盘收藏任务" text="收藏夹里的题目都来自当前班级任务，可以直接回到任务工作区继续练习。" />
-          <AdviceItem tone="green" icon={<Target size={22} />} title="强化薄弱知识点" text={`${weakPoint} 需要结合任务诊断和收藏题目复盘。`} />
+          <AdviceItem tone="green" icon={<Target size={22} />} title="强化薄弱知识点" text={weakPoint ? `${weakPoint} 需要结合任务诊断和收藏题目复盘。` : "学习画像加载后会给出更具体的薄弱点建议。"} />
           <AdviceItem tone="orange" icon={<Clock3 size={22} />} title="定期清理收藏" text="取消收藏会即时更新统计，便于演示收藏状态联动。" />
           <button type="button" className="plan-button" onClick={() => navigate("/self-study/ai")}>
             生成个性化学习计划

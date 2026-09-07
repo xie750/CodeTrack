@@ -1,6 +1,6 @@
 .program-shell {
-  --program-topbar-height: 58px;
-  --program-head-height: 102px;
+  --program-topbar-height: var(--student-app-topbar-height, 58px);
+  --program-head-height: 142px;
   height: var(--app-viewport-height);
   min-height: var(--app-viewport-height);
   overflow: hidden;
@@ -214,28 +214,47 @@
   max-width: none;
   height: calc(var(--app-viewport-height) - var(--program-topbar-height));
   margin: 0 auto;
-  padding: 0 18px 24px;
+  padding: 16px 22px 24px;
   overflow: auto;
   scrollbar-gutter: stable;
 }
 
-.program-head {
+.program-head,
+.question-head {
   position: sticky;
   top: 0;
   z-index: 20;
-  min-height: var(--program-head-height);
-  padding: 14px 0 12px;
+  min-height: 118px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  background: #f7f9fc;
+  border: 1px solid #dfe7f2;
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 88% 10%, rgba(54, 132, 255, 0.1), transparent 30%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 251, 255, 0.96));
+  box-shadow: 0 14px 32px rgba(31, 62, 108, 0.065);
   cursor: default;
   user-select: none;
 }
 
+.program-head > div,
+.question-head > div {
+  min-width: 0;
+}
+
+.program-route-breadcrumb,
+.question-route-breadcrumb {
+  width: 100%;
+  max-width: none;
+  margin: 0 0 10px;
+}
+
 .program-back {
-  height: 28px;
+  min-height: 32px;
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -251,47 +270,59 @@
   color: #176cf5;
 }
 
-.program-title-line {
-  margin-top: 20px;
+.program-title-line,
+.question-title-line {
+  margin-top: 10px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
+  flex-wrap: wrap;
+  cursor: default;
+  user-select: none;
 }
 
 .program-title-line > div {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
+  flex-wrap: wrap;
   cursor: default;
   user-select: none;
 }
 
-.program-title-line h1 {
-  font-size: 24px;
+.program-title-line h1,
+.question-title-line h1 {
+  margin: 0;
+  color: #111d33;
+  font-size: 22px;
+  line-height: 1.32;
   font-weight: 900;
   cursor: default;
 }
 
-.program-title-line span {
+.program-title-line span,
+.question-title-line span {
   min-height: 28px;
   padding: 5px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   border-radius: 6px;
-  color: #7c8595;
-  background: #fff3df;
+  color: #176cf5;
+  background: #eef6ff;
   font-size: 12px;
   font-weight: 800;
   cursor: default;
 }
 
 .program-title-line b {
-  color: #ff921e;
+  color: #176cf5;
 }
 
 .program-scene-shortcut {
   min-width: 128px;
-  height: 38px;
+  min-height: 40px;
   padding: 0 14px;
   display: inline-flex;
   align-items: center;
@@ -321,9 +352,10 @@
 }
 
 .program-head-actions button,
+.question-head-actions button,
 .program-editor footer button,
 .program-ai footer button {
-  height: 40px;
+  min-height: 42px;
   padding: 0 18px;
   display: inline-flex;
   align-items: center;
@@ -338,6 +370,7 @@
 }
 
 .program-head-actions .outline,
+.question-head-actions button,
 .program-editor footer button,
 .program-ai footer button {
   border-color: #d8e2f0;
@@ -347,6 +380,7 @@
 }
 
 .program-head-actions .primary,
+.question-head-actions button.primary,
 .program-editor footer .primary,
 .program-ai footer .primary {
   border-color: #176cf5;
@@ -3596,28 +3630,33 @@ html.workspace-resizing-y * {
 
   .program-page {
     height: calc(var(--app-viewport-height) - var(--program-topbar-height));
-    padding: 0 12px 18px;
+    padding: 12px 12px 18px;
     overflow-x: hidden;
   }
 
-  .program-head {
+  .program-head,
+  .question-head {
     align-items: flex-start;
     flex-direction: column;
     gap: 10px;
+    padding: 14px;
   }
 
-  .program-title-line {
+  .program-title-line,
+  .question-title-line {
     margin-top: 12px;
     align-items: flex-start;
     flex-direction: column;
     gap: 8px;
   }
 
-  .program-title-line h1 {
+  .program-title-line h1,
+  .question-title-line h1 {
     font-size: 21px;
   }
 
-  .program-head-actions {
+  .program-head-actions,
+  .question-head-actions {
     width: 100%;
     justify-content: flex-start;
     gap: 8px;
@@ -3625,7 +3664,8 @@ html.workspace-resizing-y * {
     padding-bottom: 2px;
   }
 
-  .program-head-actions button {
+  .program-head-actions button,
+  .question-head-actions button {
     flex: 0 0 auto;
   }
 

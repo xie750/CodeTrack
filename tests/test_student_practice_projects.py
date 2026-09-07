@@ -1,6 +1,9 @@
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from backend.app.main import app
+from backend.app.core.database import SessionLocal
+from backend.app.models import LearnerEvent
 
 
 STUDENT_HEADERS = {"X-Demo-User-Id": "user_student_001"}
@@ -55,6 +58,9 @@ def test_student_practice_project_detail_returns_workflow_sections():
     assert data["resources"]
     assert data["research_brief"]["confidence"] >= 0.8
     assert data["research_brief"]["frontier_topics"][0]["title"] == "轻量卷积网络与高效图像分类"
+    assert data["research_brief"]["frontier_topics"][0]["source_url"].startswith("https://")
+    assert data["research_brief"]["frontier_topics"][0]["code_url"].startswith("https://")
+    assert data["research_brief"]["external_sources"][0]["url"].startswith("https://arxiv.org/")
     assert data["research_brief"]["writing_blocks"][0]["title"] == "研究背景"
     assert data["research_brief"]["data_metrics"][0]["label"] == "ResNet-18 Accuracy"
     assert data["research_brief"]["citations"][0]["title"] == "CIFAR-10 数据集说明"
@@ -129,3 +135,114 @@ def test_student_can_start_first_lightweight_practice_project():
     assert home_data["recommended_project_id"] == "log-topk"
     assert home_data["research_recommendation"]["project_id"] == "log-topk"
     assert home_data["readiness"]["status"] == "ACTIVE"
+
+
+def test_student_can_refresh_frontier_tracking_and_record_profile_event():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/student/practice-projects/sales-cleaning/frontier-track",
+            headers=STUDENT_HEADERS,
+            json={"focus": "轻量模型最新对比"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["brief"]["frontier_topics"]
+    assert data["brief"]["next_actions"][0] == "围绕「轻量模型最新对比」补充来源"
+    assert data["activity"]["type"] == "frontier"
+    assert data["detail"]["activities"][0]["type"] == "frontier"
+
+    with SessionLocal() as db:
+        event = db.scalar(
+            select(LearnerEvent)
+            .where(
+                LearnerEvent.student_id == "user_student_001",
+                LearnerEvent.event_type == "RESEARCH_FRONTIER_TRACKED",
+            )
+            .order_by(LearnerEvent.created_at.desc())
+        )
+    assert event is not None
+
+
+def test_student_material_upload_submit_and_resource_deposit_flow():
+    with TestClient(app) as client:
+        material_response = client.post(
+            "/api/v1/student/practice-projects/sales-cleaning/materials",
+            headers=STUDENT_HEADERS,
+            json={
+                "material_type": "FRONTIER_NOTE",
+                "title": "轻量模型前沿综述摘录",
+                "description": "补充 EfficientNet 与轻量卷积网络的代表性摘要。",
+                "content": "记录三条模型压缩、数据增强和错误类别分析方向的前沿摘要。",
+                "file_name": "frontier-notes.md",
+                "file_size": 512,
+                "mime_type": "text/markdown",
+            },
+        )
+
+        assert material_response.status_code == 201
+        material = material_response.json()["data"]["material"]
+
+        submit_response = client.post(
+            "/api/v1/student/practice-projects/sales-cleaning/submissions",
+            headers=STUDENT_HEADERS,
+            json={
+                "title": "P3 前沿补充与实验分析成果",
+                "description": "提交前沿摘录、模型对比表和阶段结论。",
+                "materials": ["前沿综述摘录", "模型对比表", "阶段研究结论"],
+                "material_ids": [material["id"]],
+                "note": "本次提交重点补足前沿追踪来源。",
+            },
+        )
+
+        resources_response = client.get(
+            "/api/v1/student/resources/generated?course_id=course_arch_001",
+            headers=STUDENT_HEADERS,
+        )
+
+    assert submit_response.status_code == 201
+    submit_data = submit_response.json()["data"]
+    assert submit_data["submission"]["content"]["material_ids"] == [material["id"]]
+    assert submit_data["submission"]["content"]["artifact_resource_id"] == submit_data["artifact_resource_id"]
+    assert submit_data["detail"]["materials"][0]["title"] == "轻量模型前沿综述摘录"
+
+    assert resources_response.status_code == 200
+    saved_resources = resources_response.json()["data"]["items"]
+    assert any(item["id"] == submit_data["artifact_resource_id"] for item in saved_resources)
+
+
+def test_student_can_upload_code_file_download_and_submit_it():
+    with TestClient(app) as client:
+        upload_response = client.post(
+            "/api/v1/student/practice-projects/sales-cleaning/materials/upload",
+            headers=STUDENT_HEADERS,
+            data={
+                "title": "训练脚本 v2",
+                "description": "提交 ResNet-18 训练脚本和实验入口。",
+                "material_type": "CODE_FILE",
+            },
+            files={"file": ("train_resnet.py", b"print('train resnet')\n", "text/x-python")},
+        )
+
+        assert upload_response.status_code == 201
+        material = upload_response.json()["data"]["material"]
+        download_response = client.get(material["download_url"], headers=STUDENT_HEADERS)
+
+        submit_response = client.post(
+            "/api/v1/student/practice-projects/sales-cleaning/submissions",
+            headers=STUDENT_HEADERS,
+            json={
+                "title": "P3 代码与实验文件成果",
+                "description": "提交训练脚本和阶段实验说明。",
+                "materials": ["代码文件", "实验说明"],
+                "material_ids": [material["id"]],
+            },
+        )
+
+    assert material["file_name"] == "train_resnet.py"
+    assert material["file_size"] == len(b"print('train resnet')\n")
+    assert material["download_url"]
+    assert download_response.status_code == 200
+    assert download_response.content == b"print('train resnet')\n"
+    assert submit_response.status_code == 201
+    assert submit_response.json()["data"]["submission"]["content"]["material_ids"] == [material["id"]]

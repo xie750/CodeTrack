@@ -37,6 +37,7 @@ from backend.app.core.api_response import ApiError, ok, request_id
 from backend.app.core.config import get_settings
 from backend.app.core.database import get_db
 from backend.app.core.security import current_user, require_role
+from backend.app.services.cache import invalidate_prefix, remember_json, stable_cache_key
 from backend.app.models import (
     Diagnosis,
     KnowledgeSource,
@@ -55,6 +56,7 @@ router = APIRouter(prefix="/api/v1/teacher", tags=["teacher-resources"])
 
 MAX_PAGE_SIZE = 100
 DEFAULT_PAGE_SIZE = 20
+TEACHER_RESOURCE_CACHE_TTL_SECONDS = 45
 
 # §7.2 A 状态筛选器的四态
 STATUSES = {"ACTIVE", "DISABLED", "PARSE_PENDING", "PARSE_FAILED"}
@@ -63,6 +65,14 @@ SOURCE_TYPES = {"COURSEWARE", "CODE", "DATASET", "TECH_DOC", "TEACHER_NOTE"}
 AUTHORITY_LEVELS = {"HIGH", "MEDIUM", "LOW"}
 # §7.2 C 共享范围：仅当前班级 / 当前课程 / 教师复用
 SHARE_SCOPES = {"CLASS", "COURSE", "TEACHER"}
+
+
+def _teacher_resource_cache_prefix(teacher_id: str) -> str:
+    return f"codetrack:teacher-resources:{teacher_id}:"
+
+
+def _invalidate_teacher_resource_cache(teacher_id: str) -> None:
+    invalidate_prefix(_teacher_resource_cache_prefix(teacher_id))
 
 
 # --- 请求体 -----------------------------------------------------------------
@@ -287,68 +297,88 @@ def list_resources(
     require_role(user, "TEACHER")
     _ensure_course_scope(db, user.id, course_id)
 
-    all_sources = list(
-        db.scalars(
-            select(KnowledgeSource)
-            .where(KnowledgeSource.course_id == course_id)
-            .order_by(KnowledgeSource.title.asc())
-        ).all()
+    key = stable_cache_key(
+        f"teacher-resources:{user.id}",
+        "list",
+        course_id,
+        status or "",
+        chapter or "",
+        knowledge_point or "",
+        source_type or "",
+        q or "",
+        page,
+        page_size,
     )
-    counts = _reference_counts(db)
 
-    stats = {
-        "total": len(all_sources),
-        "active": len([item for item in all_sources if (item.status or "ACTIVE") == "ACTIVE"]),
-        "disabled": len([item for item in all_sources if item.status == "DISABLED"]),
-        "ai_retrievable": len([item for item in all_sources if item.ai_retrievable]),
-        "student_visible": len([item for item in all_sources if item.student_visible]),
-        "parse_pending": len([item for item in all_sources if item.status == "PARSE_PENDING"]),
-        "parse_failed": len([item for item in all_sources if item.status == "PARSE_FAILED"]),
-    }
+    def build_payload() -> dict:
+        all_sources = list(
+            db.scalars(
+                select(KnowledgeSource)
+                .where(KnowledgeSource.course_id == course_id)
+                .order_by(KnowledgeSource.title.asc())
+            ).all()
+        )
+        counts = _reference_counts(db)
 
-    chapters: list[str] = []
-    points: list[str] = []
-    types: list[str] = []
-    for item in all_sources:
-        if item.chapter and item.chapter not in chapters:
-            chapters.append(item.chapter)
-        for point in _loads_points(item.knowledge_points):
-            if point not in points:
-                points.append(point)
-        if item.source_type and item.source_type not in types:
-            types.append(item.source_type)
+        stats = {
+            "total": len(all_sources),
+            "active": len([item for item in all_sources if (item.status or "ACTIVE") == "ACTIVE"]),
+            "disabled": len([item for item in all_sources if item.status == "DISABLED"]),
+            "ai_retrievable": len([item for item in all_sources if item.ai_retrievable]),
+            "student_visible": len([item for item in all_sources if item.student_visible]),
+            "parse_pending": len([item for item in all_sources if item.status == "PARSE_PENDING"]),
+            "parse_failed": len([item for item in all_sources if item.status == "PARSE_FAILED"]),
+        }
 
-    keyword = (q or "").strip().lower()
-    filtered = []
-    for item in all_sources:
-        if status and (item.status or "ACTIVE") != status:
-            continue
-        if chapter and (item.chapter or "") != chapter:
-            continue
-        if knowledge_point and knowledge_point not in _loads_points(item.knowledge_points):
-            continue
-        if source_type and item.source_type != source_type:
-            continue
-        if keyword and keyword not in item.title.lower() and keyword not in (item.summary or "").lower():
-            continue
-        filtered.append(item)
+        chapters: list[str] = []
+        points: list[str] = []
+        types: list[str] = []
+        for item in all_sources:
+            if item.chapter and item.chapter not in chapters:
+                chapters.append(item.chapter)
+            for point in _loads_points(item.knowledge_points):
+                if point not in points:
+                    points.append(point)
+            if item.source_type and item.source_type not in types:
+                types.append(item.source_type)
 
-    total = len(filtered)
-    start = (page - 1) * page_size
-    items = [_serialize(item, counts.get(item.id, 0)) for item in filtered[start : start + page_size]]
+        keyword = (q or "").strip().lower()
+        filtered = []
+        for item in all_sources:
+            if status and (item.status or "ACTIVE") != status:
+                continue
+            if chapter and (item.chapter or "") != chapter:
+                continue
+            if knowledge_point and knowledge_point not in _loads_points(item.knowledge_points):
+                continue
+            if source_type and item.source_type != source_type:
+                continue
+            if keyword and keyword not in item.title.lower() and keyword not in (item.summary or "").lower():
+                continue
+            filtered.append(item)
 
-    return ok(
-        {
-            "course_id": course_id,
-            "stats": stats,
-            "items": items,
-            "filters": {
-                "chapters": sorted(chapters),
-                "knowledge_points": sorted(points),
-                "source_types": sorted(types),
+        total = len(filtered)
+        start = (page - 1) * page_size
+        items = [_serialize(item, counts.get(item.id, 0)) for item in filtered[start : start + page_size]]
+
+        return {
+            "data": {
+                "course_id": course_id,
+                "stats": stats,
+                "items": items,
+                "filters": {
+                    "chapters": sorted(chapters),
+                    "knowledge_points": sorted(points),
+                    "source_types": sorted(types),
+                },
             },
-        },
-        meta={"page": page, "page_size": page_size, "total": total},
+            "meta": {"page": page, "page_size": page_size, "total": total},
+        }
+
+    payload = remember_json(key, TEACHER_RESOURCE_CACHE_TTL_SECONDS, build_payload)
+    return ok(
+        payload["data"],
+        meta=payload["meta"],
     )
 
 
@@ -373,7 +403,13 @@ def resource_detail(
     """资料详情，附版本记录与引用次数（§7.2 B / C）。"""
     require_role(user, "TEACHER")
     source = _get_source(db, resource_id, user.id)
-    return ok(_serialize_detail(db, source, user.id))
+    key = stable_cache_key(f"teacher-resources:{user.id}", "detail", resource_id)
+    payload = remember_json(
+        key,
+        TEACHER_RESOURCE_CACHE_TTL_SECONDS,
+        lambda: _serialize_detail(db, source, user.id),
+    )
+    return ok(payload)
 
 
 @router.post("/resources")
@@ -423,6 +459,7 @@ def create_resource(
         },
     )
     db.commit()
+    _invalidate_teacher_resource_cache(user.id)
     db.refresh(source)
     return ok(_serialize(source, 0), rid=rid)
 
@@ -514,6 +551,7 @@ def update_resource(
         },
     )
     db.commit()
+    _invalidate_teacher_resource_cache(user.id)
     db.refresh(source)
 
     return ok(_serialize_detail(db, source, user.id), rid=rid)
@@ -561,6 +599,7 @@ def delete_resource(
         },
     )
     db.commit()
+    _invalidate_teacher_resource_cache(user.id)
 
     # 库里删干净之后再动磁盘：反过来的话事务回滚了文件已经没了
     if storage_path:
@@ -662,6 +701,7 @@ def upload_resource(
         },
     )
     db.commit()
+    _invalidate_teacher_resource_cache(user.id)
     db.refresh(source)
     return ok(_serialize(source, 0), rid=rid)
 
@@ -719,6 +759,7 @@ def copy_resource(
         },
     )
     db.commit()
+    _invalidate_teacher_resource_cache(user.id)
     db.refresh(clone)
     return ok(_serialize(clone, 0), rid=rid)
 

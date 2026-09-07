@@ -15,7 +15,8 @@ import {
 import { useLocation, useNavigate } from 'react-router-dom'
 
 import {
-  api, type ApiAnnouncement, type ApiClass, type ApiClassJoinStatus, type ApiCourse, type ApiDiscussion, type ApiMaterial,
+  api, defaultTaskStartAt,
+  type ApiAnnouncement, type ApiClass, type ApiClassJoinStatus, type ApiCourse, type ApiDiscussion, type ApiMaterial,
   type ApiStudent, type ApiTask, type ApiTeacher,
 } from '../api'
 import type { ExactView } from './components'
@@ -685,6 +686,7 @@ export function ExactTasks(props: CommonProps) {
         description: values.description || '实现单链表指定位置节点删除。',
         starter_code: 'ListNode* removeAt(ListNode* head, int index) {\n  return head;\n}',
         difficulty: '进阶',
+        start_at: values.start_at || defaultTaskStartAt(),
         due_at: '2026-12-30T23:59:00',
         test_cases: [
           { name: '头节点删除', hidden: false, weight: 30 },
@@ -700,7 +702,7 @@ export function ExactTasks(props: CommonProps) {
     if (!selected) return
     setPublishing(true)
     try {
-      await api.publishTask(selected.id, { class_id: props.classId, due_at: '2026-12-30T23:59:00' })
+      await api.publishTask(selected.id, { class_id: props.classId, start_at: form.getFieldValue('start_at') || selected.start_at || defaultTaskStartAt(), due_at: form.getFieldValue('due_at') || '2026-12-30T23:59:00' })
       props.notify('任务已发布，学生端现在可以读取')
       load()
     } catch (reason: any) { props.notify(reason.message) } finally { setPublishing(false) }
@@ -717,11 +719,12 @@ export function ExactTasks(props: CommonProps) {
       <aside>
         <div className="side-panel-head"><div><Title level={3}>创建并发布任务</Title><Text type="secondary">按步骤完成任务配置</Text></div><button>×</button></div>
         <Steps current={0} size="small" items={[{ title: '基本信息' },{ title: '题目配置' },{ title: '发布设置' },{ title: '预览发布' }]} />
-        <Form form={form} layout="vertical" initialValues={{ title: '\u5355\u94fe\u8868\u8fb9\u754c\u6761\u4ef6\u4e13\u9879\u7ec3\u4e60', chapter: '\u7b2c 2 \u7ae0 \u7ebf\u6027\u8868', type: 'programming' }}>
+        <Form form={form} layout="vertical" initialValues={{ title: '\u5355\u94fe\u8868\u8fb9\u754c\u6761\u4ef6\u4e13\u9879\u7ec3\u4e60', chapter: '\u7b2c 2 \u7ae0 \u7ebf\u6027\u8868', type: 'programming', start_at: defaultTaskStartAt(), due_at: '2026-12-30T23:59' }}>
           <Form.Item label="任务名称" name="title"><Input showCount maxLength={50} /></Form.Item>
           <Form.Item label="任务说明" name="description"><Input.TextArea rows={4} /></Form.Item>
           <Form.Item label="关联知识点" name="chapter"><Select options={[{ value: '第 2 章 线性表', label: '第 2 章 线性表' },{ value: '第 3 章 栈与队列', label: '第 3 章 栈与队列' }]} /></Form.Item>
-          <Row gutter={12}><Col span={12}><Form.Item label="任务类型" name="type"><Select options={[{ value: 'programming', label: '编程任务' },{ value: 'quiz', label: '客观题' }]} /></Form.Item></Col><Col span={12}><Form.Item label="截止时间"><Input value="2026-12-30 23:59" readOnly /></Form.Item></Col></Row>
+          <Row gutter={12}><Col span={12}><Form.Item label="任务类型" name="type"><Select options={[{ value: 'programming', label: '编程任务' },{ value: 'quiz', label: '客观题' }]} /></Form.Item></Col><Col span={12}><Form.Item label="开始时间" name="start_at"><Input type="datetime-local" /></Form.Item></Col></Row>
+          <Form.Item label="截止时间" name="due_at"><Input type="datetime-local" /></Form.Item>
           <Form.Item><Checkbox defaultChecked>允许学生使用分层提示</Checkbox></Form.Item>
         </Form>
         <div className="side-panel-actions"><Button onClick={create} loading={saving}>保存为草稿</Button><Button type="primary" onClick={selected?.status === 'draft' ? publish : create} loading={publishing}>{selected?.status === 'draft' ? '确认发布' : '确认创建'}</Button></div>

@@ -8,6 +8,8 @@ import {
   CheckCircle2,
   CirclePlay,
   Database,
+  Download,
+  ExternalLink,
   FileCheck2,
   FileText,
   GitBranch,
@@ -20,16 +22,19 @@ import {
   Sparkles,
   Target,
   Trophy,
+  UploadCloud,
   Workflow
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ApiRequestError,
   api,
   type PracticeProjectActivity,
   type PracticeProjectDetail,
+  type PracticeExternalSource,
   type PracticeProjectHome,
+  type PracticeProjectMaterial,
   type PracticeProjectProofItem,
   type PracticeProjectSummary,
   type PracticeProjectTaskSection,
@@ -41,13 +46,14 @@ type ResearchBrief = {
   profileFit: string;
   recommendationReason: string;
   researchStage: string;
-  frontierTopics: Array<{ title: string; source: string; heat: number; summary: string }>;
+  frontierTopics: Array<{ title: string; source: string; heat: number; summary: string; source_url?: string; code_url?: string }>;
   writingBlocks: Array<{ title: string; content: string; status: string }>;
   writingChecks: Array<{ label: string; result: string }>;
   dataMetrics: Array<{ label: string; value: string; note: string }>;
   chartSeries: Array<{ label: string; value: number }>;
   dataInsights: string[];
-  citations: Array<{ title: string; meta: string }>;
+  citations: Array<{ title: string; meta: string; source_url?: string }>;
+  externalSources?: PracticeExternalSource[];
   generatedAt?: string | null;
   confidence?: number;
   nextActions?: string[];
@@ -326,6 +332,7 @@ function fallbackDetail(project: PracticeProjectSummary): PracticeProjectDetail 
     acceptance_criteria: ["前沿追踪有来源", "论文框架结构完整", "数据分析图表可解释", "结论不脱离实验或资料证据"],
     mentor_tips: brief.dataInsights,
     resources: brief.citations,
+    materials: [],
     submissions: [
       {
         id: "fallback-submit-1",
@@ -401,6 +408,13 @@ function materialHint(item: string) {
   return "沉淀阶段结论、下一步计划和 AI 助研过程证据";
 }
 
+function formatFileSize(size: number | null | undefined) {
+  if (!size) return "";
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
+}
+
 function normalizeResearchBrief(apiBrief: PracticeResearchBrief | undefined, fallback: ResearchBrief): ResearchBrief {
   if (!apiBrief) return fallback;
   return {
@@ -414,6 +428,7 @@ function normalizeResearchBrief(apiBrief: PracticeResearchBrief | undefined, fal
     chartSeries: apiBrief.chart_series?.length ? apiBrief.chart_series : fallback.chartSeries,
     dataInsights: apiBrief.data_insights?.length ? apiBrief.data_insights : fallback.dataInsights,
     citations: apiBrief.citations?.length ? apiBrief.citations : fallback.citations,
+    externalSources: apiBrief.external_sources?.length ? apiBrief.external_sources : fallback.externalSources,
     generatedAt: apiBrief.generated_at,
     confidence: apiBrief.confidence,
     nextActions: apiBrief.next_actions
@@ -669,6 +684,7 @@ function ProjectPracticeDetail({
   projectId: string;
 }) {
   const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [activeTab, setActiveTab] = useState("课题任务");
   const [detail, setDetail] = useState<PracticeProjectDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -676,6 +692,18 @@ function ProjectPracticeDetail({
   const [submitting, setSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
   const [selectedMaterials, setSelectedMaterials] = useState<string[]>([]);
+  const [selectedMaterialIds, setSelectedMaterialIds] = useState<string[]>([]);
+  const [frontierFocus, setFrontierFocus] = useState("");
+  const [frontierRefreshing, setFrontierRefreshing] = useState(false);
+  const [materialSaving, setMaterialSaving] = useState(false);
+  const [fileUploading, setFileUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [materialForm, setMaterialForm] = useState({
+    title: "",
+    description: "",
+    content: "",
+    fileName: ""
+  });
 
   useEffect(() => {
     let alive = true;
@@ -700,6 +728,7 @@ function ProjectPracticeDetail({
   const project = pageData.project;
   const brief = researchBriefFor(project, pageData.research_brief);
   const latestSubmits = pageData.submissions.length > 0 ? pageData.submissions : fallbackDetail(project).submissions;
+  const uploadedMaterials: PracticeProjectMaterial[] = pageData.materials ?? [];
   const activityRows = useMemo(
     () => (pageData.activities.length > 0 ? pageData.activities : fallbackActivities.filter((activity) => activity.project_id === project.id)),
     [pageData.activities, project.id]
@@ -713,6 +742,82 @@ function ProjectPracticeDetail({
     setSubmitMessage(null);
   }
 
+  function toggleUploadedMaterial(materialId: string) {
+    setSelectedMaterialIds((current) => {
+      if (current.includes(materialId)) return current.filter((value) => value !== materialId);
+      return [...current, materialId];
+    });
+    setSubmitMessage(null);
+  }
+
+  async function refreshFrontierTracking() {
+    setFrontierRefreshing(true);
+    setSubmitMessage(null);
+    try {
+      const result = await api.refreshPracticeProjectFrontier(project.id, frontierFocus);
+      setDetail(result.detail);
+      setSubmitMessage("前沿追踪已刷新，并写入科研过程记录。");
+    } catch (err) {
+      setSubmitMessage(apiErrorMessage(err));
+    } finally {
+      setFrontierRefreshing(false);
+    }
+  }
+
+  async function saveProjectMaterial() {
+    if (!materialForm.title.trim()) {
+      setSubmitMessage("请先填写材料标题。");
+      return;
+    }
+    setMaterialSaving(true);
+    setSubmitMessage(null);
+    try {
+      const result = await api.createPracticeProjectMaterial(project.id, {
+        material_type: "FRONTIER_NOTE",
+        title: materialForm.title,
+        description: materialForm.description,
+        content: materialForm.content,
+        file_name: materialForm.fileName || null,
+        mime_type: materialForm.fileName ? "text/plain" : null
+      });
+      setDetail(result.detail);
+      setSelectedMaterialIds((current) => Array.from(new Set([result.material.id, ...current])));
+      setMaterialForm({ title: "", description: "", content: "", fileName: "" });
+      setSubmitMessage("科研过程材料已保存，可以随成果包一起提交。");
+    } catch (err) {
+      setSubmitMessage(apiErrorMessage(err));
+    } finally {
+      setMaterialSaving(false);
+    }
+  }
+
+  async function uploadProjectFile() {
+    if (!selectedFile) {
+      setSubmitMessage("请先选择要上传的代码或实验文件。");
+      return;
+    }
+    setFileUploading(true);
+    setSubmitMessage(null);
+    try {
+      const result = await api.uploadPracticeProjectMaterial(project.id, {
+        file: selectedFile,
+        title: materialForm.title || selectedFile.name,
+        description: materialForm.description || "科研项目阶段开发文件",
+        material_type: "CODE_FILE"
+      });
+      setDetail(result.detail);
+      setSelectedMaterialIds((current) => Array.from(new Set([result.material.id, ...current])));
+      setSelectedFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      setMaterialForm((current) => ({ ...current, title: "", description: "", fileName: "" }));
+      setSubmitMessage("代码/实验文件已上传并加入本次成果包。");
+    } catch (err) {
+      setSubmitMessage(apiErrorMessage(err));
+    } finally {
+      setFileUploading(false);
+    }
+  }
+
   async function submitCurrentStage() {
     setSubmitting(true);
     setSubmitMessage(null);
@@ -721,11 +826,14 @@ function ProjectPracticeDetail({
       const result = await api.submitPracticeProject(project.id, {
         title: `${project.stage} 阶段助研成果`,
         description: `提交内容：${project.stage} 阶段科研材料。`,
-        materials
+        materials,
+        material_ids: selectedMaterialIds,
+        note: selectedMaterialIds.length ? "包含已上传科研过程材料。" : ""
       });
       setDetail(result.detail);
       setSelectedMaterials([]);
-      setSubmitMessage("阶段助研成果已提交，已进入审核队列。");
+      setSelectedMaterialIds([]);
+      setSubmitMessage(result.artifact_resource_id ? "阶段助研成果已提交，并已沉淀到我的资料。" : "阶段助研成果已提交，已进入审核队列。");
     } catch (err) {
       setSubmitMessage(apiErrorMessage(err));
     } finally {
@@ -770,6 +878,31 @@ function ProjectPracticeDetail({
           </div>
           <span>{brief.frontierTopics.length} 个热点</span>
         </div>
+        <div className="research-action-row">
+          <input
+            aria-label="前沿追踪关注点"
+            value={frontierFocus}
+            onChange={(event) => setFrontierFocus(event.target.value)}
+            placeholder="可填写关注点，如轻量模型、数据增强、错误分析"
+          />
+          <button type="button" disabled={frontierRefreshing} onClick={refreshFrontierTracking}>
+            {frontierRefreshing ? <Loader2 className="practice-spin-icon" size={16} /> : <Search size={16} />}
+            {frontierRefreshing ? "刷新中" : "刷新前沿追踪"}
+          </button>
+        </div>
+        {brief.externalSources?.length ? (
+          <div className="research-platform-links" aria-label="权威科研平台入口">
+            {brief.externalSources.map((source) => (
+              <a key={source.platform} href={source.url} target="_blank" rel="noreferrer">
+                <ExternalLink size={15} />
+                <span>
+                  <strong>{source.label}</strong>
+                  <small>{source.description}</small>
+                </span>
+              </a>
+            ))}
+          </div>
+        ) : null}
         <div className="research-frontier-grid">
           {brief.frontierTopics.map((topic) => (
             <article key={topic.title}>
@@ -779,13 +912,31 @@ function ProjectPracticeDetail({
               </div>
               <p>{topic.summary}</p>
               <small>{topic.source}</small>
+              <div className="research-topic-links">
+                {topic.source_url ? (
+                  <a href={topic.source_url} target="_blank" rel="noreferrer">
+                    <ExternalLink size={13} /> 查看论文来源
+                  </a>
+                ) : null}
+                {topic.code_url ? (
+                  <a href={topic.code_url} target="_blank" rel="noreferrer">
+                    <ExternalLink size={13} /> 查看代码/榜单
+                  </a>
+                ) : null}
+              </div>
               <i><b style={{ width: `${topic.heat}%` }} /></i>
             </article>
           ))}
         </div>
         <div className="research-citation-strip">
           {brief.citations.map((citation) => (
-            <span key={citation.title}><BookOpenText size={14} /> {citation.title} · {citation.meta}</span>
+            citation.source_url ? (
+              <a key={citation.title} href={citation.source_url} target="_blank" rel="noreferrer">
+                <BookOpenText size={14} /> {citation.title} · {citation.meta}
+              </a>
+            ) : (
+              <span key={citation.title}><BookOpenText size={14} /> {citation.title} · {citation.meta}</span>
+            )
           ))}
         </div>
       </div>
@@ -905,9 +1056,9 @@ function ProjectPracticeDetail({
         <div className="project-tab-summary">
           <div>
             <strong>阶段助研成果包</strong>
-            <p>选择本次要提交的材料类型，平台会写入阶段成果并刷新最近提交。</p>
+            <p>选择本次要提交的材料类型，平台会写入阶段成果、过程记录和资料沉淀。</p>
           </div>
-          <span>{selectedMaterials.length || pageData.submission_requirements.slice(0, 3).length} 项待提交</span>
+          <span>{(selectedMaterials.length || pageData.submission_requirements.slice(0, 3).length) + selectedMaterialIds.length} 项待提交</span>
         </div>
         <div className="project-result-grid">
           {pageData.submission_requirements.map((item) => (
@@ -924,6 +1075,88 @@ function ProjectPracticeDetail({
               </span>
             </button>
           ))}
+        </div>
+        <div className="project-material-uploader">
+          <div className="project-material-form">
+            <input
+              value={materialForm.title}
+              onChange={(event) => setMaterialForm((current) => ({ ...current, title: event.target.value }))}
+              placeholder="材料标题，如轻量模型前沿综述摘录"
+            />
+            <input
+              value={materialForm.fileName}
+              onChange={(event) => setMaterialForm((current) => ({ ...current, fileName: event.target.value }))}
+              placeholder="文件名或附件标识，如 frontier-notes.md"
+            />
+            <label className="project-file-picker">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".py,.ipynb,.cpp,.c,.h,.hpp,.java,.js,.ts,.tsx,.json,.csv,.xlsx,.md,.txt,.zip"
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null;
+                  setSelectedFile(file);
+                  if (file) {
+                    setMaterialForm((current) => ({
+                      ...current,
+                      title: current.title || file.name,
+                      fileName: file.name
+                    }));
+                  }
+                }}
+              />
+              <UploadCloud size={16} />
+              <span>{selectedFile ? `${selectedFile.name} · ${formatFileSize(selectedFile.size)}` : "选择代码/实验文件"}</span>
+            </label>
+            <textarea
+              value={materialForm.description}
+              onChange={(event) => setMaterialForm((current) => ({ ...current, description: event.target.value }))}
+              placeholder="材料说明"
+            />
+            <textarea
+              value={materialForm.content}
+              onChange={(event) => setMaterialForm((current) => ({ ...current, content: event.target.value }))}
+              placeholder="材料正文、摘要或上传说明"
+            />
+            <button type="button" disabled={materialSaving} onClick={saveProjectMaterial}>
+              {materialSaving ? <Loader2 className="practice-spin-icon" size={16} /> : <FileText size={16} />}
+              {materialSaving ? "保存中" : "保存过程材料"}
+            </button>
+            <button type="button" className="secondary" disabled={fileUploading} onClick={uploadProjectFile}>
+              {fileUploading ? <Loader2 className="practice-spin-icon" size={16} /> : <UploadCloud size={16} />}
+              {fileUploading ? "上传中" : "上传文件并加入成果包"}
+            </button>
+          </div>
+          <div className="project-uploaded-materials">
+            <strong>已保存材料</strong>
+            {uploadedMaterials.length > 0 ? uploadedMaterials.slice(0, 6).map((material) => (
+              <article key={material.id} className="project-uploaded-material-row">
+                <button
+                  type="button"
+                  className={selectedMaterialIds.includes(material.id) ? "selected" : ""}
+                  onClick={() => toggleUploadedMaterial(material.id)}
+                >
+                  <FileCheck2 size={16} />
+                  <span>
+                    <b>{material.title}</b>
+                    <small>{material.file_name ? `${material.file_name} ${formatFileSize(material.file_size)}` : material.description || material.material_type}</small>
+                  </span>
+                </button>
+                {material.download_url ? (
+                  <a
+                    href={material.download_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={`下载 ${material.title}`}
+                  >
+                    <Download size={14} />
+                  </a>
+                ) : null}
+              </article>
+            )) : (
+              <p>暂无过程材料，可先保存前沿摘录、分析说明或附件元数据。</p>
+            )}
+          </div>
         </div>
         <button type="button" className="project-result-submit" disabled={submitting} onClick={submitCurrentStage}>
           {submitting ? <Loader2 className="practice-spin-icon" size={18} /> : <ArrowRight size={18} />}

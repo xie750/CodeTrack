@@ -33,6 +33,7 @@
 | `14_self_study_knowledge_base_design.md` | 自主学习知识库初版设计与开发规格 |
 | `15_admin_authoritative_subject_knowledge_base_design.md` | 管理员端权威学科知识库设计，用于降低垂类 AI 幻觉和治理引用来源 |
 | `16_algorithm_application_design.md` | 算法应用的内部落点、推荐逻辑和验收口径 |
+| `17_voice_control_feature_design.md` | 语音控制功能调研、竞品参考和轻量落地方案 |
 | `12_hifi_prototype_page_framework.md` | 高保真原型的三端页面框架、控件和功能清单 |
 | `../../AGENTS.md` | 项目级 agent harness 入口 |
 

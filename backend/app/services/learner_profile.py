@@ -58,6 +58,9 @@ def _event_activity_minutes(event_type: str, payload: dict) -> int:
         "artifact_saved": 16,
         "EXECUTION_FINISHED": 20,
         "DIAGNOSIS_CREATED": 18,
+        "RESEARCH_FRONTIER_TRACKED": 18,
+        "RESEARCH_MATERIAL_UPLOADED": 20,
+        "RESEARCH_STAGE_SUBMITTED": 34,
     }
     return weights.get(event_type, 14)
 
@@ -77,6 +80,9 @@ def _event_quality_score(event_type: str, payload: dict) -> float:
         "artifact_saved": 76,
         "EXECUTION_FINISHED": 70,
         "DIAGNOSIS_CREATED": 68,
+        "RESEARCH_FRONTIER_TRACKED": 78,
+        "RESEARCH_MATERIAL_UPLOADED": 80,
+        "RESEARCH_STAGE_SUBMITTED": 84,
     }
     return defaults.get(event_type, 66)
 
@@ -99,6 +105,12 @@ def _event_summary(event_type: str, knowledge_points: list, payload: dict) -> st
         return f"听完{resource_title or topic}学习内容，作为自主学习持续性证据。"
     if event_type == "artifact_saved":
         return f"保存{resource_title or topic}学习资料，沉淀为可回看学习产物。"
+    if event_type == "RESEARCH_FRONTIER_TRACKED":
+        return f"刷新 {topic} 科研前沿追踪，已记录为研究资料归纳证据。"
+    if event_type == "RESEARCH_MATERIAL_UPLOADED":
+        return f"上传 {topic} 科研过程材料，已进入项目时间线和画像事件。"
+    if event_type == "RESEARCH_STAGE_SUBMITTED":
+        return f"提交 {topic} 科研阶段成果，系统已沉淀资料并更新项目进度。"
     if event_type == "EXECUTION_FINISHED":
         return f"完成 {topic} 代码运行验证，测试结果进入任务行为记录。"
     return f"产生 {topic} 学习行为，已纳入学习画像。"

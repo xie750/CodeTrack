@@ -487,19 +487,28 @@ export type PracticeProjectTaskSection = {
 export type PracticeProjectResource = {
   title: string;
   meta: string;
+  source_url?: string;
+};
+
+export type PracticeExternalSource = {
+  platform: string;
+  label: string;
+  description: string;
+  url: string;
 };
 
 export type PracticeResearchBrief = {
   profile_fit: string;
   recommendation_reason: string;
   research_stage: string;
-  frontier_topics: Array<{ title: string; source: string; heat: number; summary: string }>;
+  frontier_topics: Array<{ title: string; source: string; heat: number; summary: string; source_url?: string; code_url?: string }>;
   writing_blocks: Array<{ title: string; content: string; status: string }>;
   writing_checks: Array<{ label: string; result: string }>;
   data_metrics: Array<{ label: string; value: string; note: string }>;
   chart_series: Array<{ label: string; value: number }>;
   data_insights: string[];
   citations: PracticeProjectResource[];
+  external_sources?: PracticeExternalSource[];
   generated_at: string | null;
   confidence: number;
   next_actions: string[];
@@ -518,6 +527,24 @@ export type PracticeProjectSubmission = {
   created_at: string | null;
 };
 
+export type PracticeProjectMaterial = {
+  id: string;
+  project_id: string;
+  material_type: string;
+  title: string;
+  description: string;
+  content: string;
+  file_name: string | null;
+  file_size: number | null;
+  mime_type: string | null;
+  download_url?: string | null;
+  external_url: string;
+  source: string;
+  status: string;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
 export type PracticeProjectDetail = {
   project: PracticeProjectSummary;
   metrics: {
@@ -532,6 +559,7 @@ export type PracticeProjectDetail = {
   mentor_tips: string[];
   resources: PracticeProjectResource[];
   research_brief?: PracticeResearchBrief;
+  materials: PracticeProjectMaterial[];
   submissions: PracticeProjectSubmission[];
   activities: PracticeProjectActivity[];
 };
@@ -1652,32 +1680,41 @@ export const api = {
       `/api/v1/student/ai-chat/sessions/${encodeURIComponent(sessionId)}`,
       { method: "DELETE" }
     ),
-  generateResource: (resourceType: GeneratedResourceType | string, message: string, courseId?: string, sessionId?: string | null) =>
-    request<GenerateResourceResponse>("/api/v1/student/resources/generate", {
+  generateResource: async (resourceType: GeneratedResourceType | string, message: string, courseId?: string, sessionId?: string | null) => {
+    const result = await request<GenerateResourceResponse>("/api/v1/student/resources/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ resource_type: resourceType, message, course_id: courseId, session_id: sessionId })
-    }),
-  saveGeneratedResource: (resourceId: string) =>
-    request<GeneratedResource>(`/api/v1/student/resources/${encodeURIComponent(resourceId)}/save`, {
+    });
+    clearApiCache((url) => url.startsWith("/api/v1/student/resources"));
+    return result;
+  },
+  saveGeneratedResource: async (resourceId: string) => {
+    const result = await request<GeneratedResource>(`/api/v1/student/resources/${encodeURIComponent(resourceId)}/save`, {
       method: "POST"
-    }),
+    });
+    clearApiCache((url) => url.startsWith("/api/v1/student/resources"));
+    return result;
+  },
   listGeneratedResources: (courseId?: string) => {
     const params = new URLSearchParams();
     if (courseId) params.set("course_id", courseId);
     const suffix = params.toString() ? `?${params.toString()}` : "";
-    return request<{ items: GeneratedResource[] }>(`/api/v1/student/resources/generated${suffix}`);
+    return cachedGet<{ items: GeneratedResource[] }>(`/api/v1/student/resources/generated${suffix}`, 15_000);
   },
   listStudentResourceFolders: () =>
-    request<{ items: StudentResourceFolder[] }>("/api/v1/student/resources/folders", { cache: "no-store" }),
-  createStudentResourceFolder: (name: string) =>
-    request<StudentResourceFolder>("/api/v1/student/resources/folders", {
+    cachedGet<{ items: StudentResourceFolder[] }>("/api/v1/student/resources/folders", 30_000),
+  createStudentResourceFolder: async (name: string) => {
+    const result = await request<StudentResourceFolder>("/api/v1/student/resources/folders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name })
-    }),
+    });
+    clearApiCache((url) => url.startsWith("/api/v1/student/resources"));
+    return result;
+  },
   getGeneratedPracticeWorkspace: (resourceId: string) =>
-    request<GeneratedPracticeWorkspace>(`/api/v1/student/resources/${encodeURIComponent(resourceId)}/practice`),
+    cachedGet<GeneratedPracticeWorkspace>(`/api/v1/student/resources/${encodeURIComponent(resourceId)}/practice`, 10_000),
   submitGeneratedPractice: async (resourceId: string, answers: Array<{ question_id: string; selected_option_ids: string[] }>) => {
     const result = await request<SubmitQuestionResult>(`/api/v1/student/resources/${encodeURIComponent(resourceId)}/practice/submit`, {
       method: "POST",
@@ -1689,9 +1726,9 @@ export const api = {
   },
   submitPracticeProject: async (
     projectId: string,
-    payload: { title?: string; description?: string; materials?: string[] }
+    payload: { title?: string; description?: string; materials?: string[]; material_ids?: string[]; note?: string }
   ) => {
-    const result = await request<{ submission: PracticeProjectSubmission; detail: PracticeProjectDetail }>(
+    const result = await request<{ submission: PracticeProjectSubmission; artifact_resource_id?: string; detail: PracticeProjectDetail }>(
       `/api/v1/student/practice-projects/${encodeURIComponent(projectId)}/submissions`,
       {
         method: "POST",
@@ -1700,6 +1737,64 @@ export const api = {
       }
     );
     clearApiCache((url) => url.startsWith("/api/v1/student/practice-projects"));
+    return result;
+  },
+  refreshPracticeProjectFrontier: async (projectId: string, focus = "") => {
+    const result = await request<{ brief: PracticeResearchBrief; activity: PracticeProjectActivity; detail: PracticeProjectDetail }>(
+      `/api/v1/student/practice-projects/${encodeURIComponent(projectId)}/frontier-track`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ focus })
+      }
+    );
+    clearApiCache((url) => url.startsWith("/api/v1/student/practice-projects"));
+    clearApiCache((url) => url.startsWith("/api/v1/student/profile"));
+    return result;
+  },
+  createPracticeProjectMaterial: async (
+    projectId: string,
+    payload: {
+      material_type?: string;
+      title: string;
+      description?: string;
+      content?: string;
+      file_name?: string | null;
+      file_size?: number | null;
+      mime_type?: string | null;
+      external_url?: string;
+    }
+  ) => {
+    const result = await request<{ material: PracticeProjectMaterial; activity: PracticeProjectActivity; detail: PracticeProjectDetail }>(
+      `/api/v1/student/practice-projects/${encodeURIComponent(projectId)}/materials`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      }
+    );
+    clearApiCache((url) => url.startsWith("/api/v1/student/practice-projects"));
+    clearApiCache((url) => url.startsWith("/api/v1/student/profile"));
+    return result;
+  },
+  uploadPracticeProjectMaterial: async (
+    projectId: string,
+    payload: { file: File; title?: string; description?: string; material_type?: string }
+  ) => {
+    const data = new FormData();
+    data.append("file", payload.file);
+    data.append("title", payload.title ?? payload.file.name);
+    data.append("description", payload.description ?? "");
+    data.append("material_type", payload.material_type ?? "CODE_FILE");
+    const result = await request<{ material: PracticeProjectMaterial; activity: PracticeProjectActivity; detail: PracticeProjectDetail }>(
+      `/api/v1/student/practice-projects/${encodeURIComponent(projectId)}/materials/upload`,
+      {
+        method: "POST",
+        body: data
+      }
+    );
+    clearApiCache((url) => url.startsWith("/api/v1/student/practice-projects"));
+    clearApiCache((url) => url.startsWith("/api/v1/student/profile"));
     return result;
   },
   markGeneratedPodcastListened: async (resourceId: string, completedSegmentCount?: number) => {

@@ -28,7 +28,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field, model_validator
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from backend.app.core.api_response import ApiError, ok
@@ -37,19 +37,37 @@ from backend.app.core.security import current_user, require_role
 from backend.app.models import (
     AdministrativeClass,
     Capability,
+    CapabilityEvidence,
     Course,
+    Diagnosis,
+    DiagnosisReview,
+    ExecutionRun,
+    Grade,
+    HintRecord,
+    IdempotencyRecord,
+    LearnerEvent,
     Question,
+    QuestionAnswer,
+    QuestionAttempt,
     QuestionOption,
+    Recommendation,
     StudentClassMembership,
     StudentTaskProgress,
     Submission,
+    SubmissionVersion,
     Task,
     TaskAssignment,
+    TeacherFeedback,
     TeachingAssignment,
     TestCase,
+    TestResult,
     User,
 )
 from backend.app.services.submissions import iso
+from backend.app.services.assignment_schedule import (
+    as_utc,
+    assert_publish_time_range,
+)
 from backend.app.services.teacher_scope import (
     SUBMITTED_PROGRESS_STATUSES,
     class_student_ids,
@@ -133,15 +151,24 @@ class QuestionPayload(BaseModel):
     difficulty: str = "BASIC"
     score: float = Field(default=10, gt=0)
     error_type: str | None = None
-    options: list[QuestionOptionPayload] = Field(min_length=2)
+    options: list[QuestionOptionPayload] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_options(self):
+        self.question_type = self.question_type.upper()
+        choice_types = {"SINGLE_CHOICE", "MULTIPLE_CHOICE", "TRUE_FALSE"}
+        fill_types = {"FILL_BLANK", "FILL_IN_BLANK"}
+        if self.question_type not in choice_types | fill_types:
+            raise ValueError("Unsupported question type.")
+        if self.question_type in choice_types and len(self.options) < 2:
+            raise ValueError("Choice questions must have at least two options.")
         correct_count = len([item for item in self.options if item.is_correct])
         if correct_count == 0:
             raise ValueError("At least one option must be marked correct.")
         if self.question_type in {"SINGLE_CHOICE", "TRUE_FALSE"} and correct_count != 1:
             raise ValueError("Single choice and true/false questions must have exactly one correct option.")
+        if self.question_type in fill_types and correct_count < 1:
+            raise ValueError("Fill blank questions must have at least one standard answer.")
         return self
 
 
@@ -174,6 +201,7 @@ class TeacherTaskPublishRequest(BaseModel):
     class_ids: list[str] = Field(min_length=1)
     assignment_mode: str = "QUIZ"
     allow_hint_level_3: bool = True
+    start_at: datetime | None = None
     deadline: datetime | None = None
 
 
@@ -305,6 +333,9 @@ def _publish_task(
 
     total_required_count = _required_count_for_task(db, task)
     published_at = utc_now()
+    start_at = as_utc(payload.start_at) or published_at
+    deadline = as_utc(payload.deadline)
+    assert_publish_time_range(start_at, deadline)
     rows = []
     for class_id in payload.class_ids:
         teaching = allowed_by_class[class_id]
@@ -326,7 +357,8 @@ def _publish_task(
         assignment.assignment_mode = payload.assignment_mode
         assignment.allow_hint_level_3 = payload.allow_hint_level_3
         assignment.published_at = published_at
-        assignment.deadline = payload.deadline
+        assignment.start_at = start_at
+        assignment.deadline = deadline
         db.flush()
 
         initialized = 0
@@ -358,6 +390,8 @@ def _publish_task(
                 "teaching_assignment_id": teaching.id,
                 "publish_status": assignment.publish_status,
                 "assignment_mode": assignment.assignment_mode,
+                "start_at": iso(assignment.start_at),
+                "deadline": iso(assignment.deadline),
                 "initialized_student_count": initialized,
             }
         )
@@ -538,6 +572,7 @@ def teacher_task_list(
                         "assignment_mode": item.assignment_mode,
                         "allow_hint_level_3": item.allow_hint_level_3,
                         "published_at": iso(item.published_at),
+                        "start_at": iso(item.start_at),
                         "deadline": iso(item.deadline),
                     }
                     for item in publications

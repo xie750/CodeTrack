@@ -10,7 +10,8 @@ import {
 } from 'lucide-react'
 
 import {
-  api, type ApiChapter, type ApiClass, type ApiCourse, type ApiMaterial,
+  api, defaultTaskStartAt, formatTaskDateTime,
+  type ApiChapter, type ApiClass, type ApiCourse, type ApiMaterial,
   type ApiStudentChapter, type ApiTask,
 } from '../api'
 import type { ExactView } from './components'
@@ -194,6 +195,7 @@ export function ExactCourseContent(props: Props) {
         starter_code: values.type === 'programming' ? '// 请在这里完成代码\n' : '',
         difficulty: values.difficulty,
         total_score: 100,
+        start_at: values.start_at || defaultTaskStartAt(),
         due_at: values.due_at,
         allow_hints: true,
         test_cases: values.type === 'programming' ? [
@@ -201,7 +203,7 @@ export function ExactCourseContent(props: Props) {
           { name: '边界用例', hidden: true, weight: 60 },
         ] : [],
       })
-      if (publish) await api.publishTask(created.id, { class_id: props.classId, due_at: values.due_at })
+      if (publish) await api.publishTask(created.id, { class_id: props.classId, start_at: values.start_at || defaultTaskStartAt(), due_at: values.due_at })
       practiceForm.resetFields()
       setPracticeModalOpen(false)
       await load()
@@ -225,7 +227,7 @@ export function ExactCourseContent(props: Props) {
           .map((item) => ({ id: item.id, title: item.title, type: item.type, size: item.size, content_url: item.content_url || null })),
         tasks: tasks
           .filter((item) => item.chapter === chapter.title && item.status === 'published')
-          .map((item) => ({ id: item.id, title: item.title, type: item.type, due_at: item.due_at, difficulty: item.difficulty })),
+          .map((item) => ({ id: item.id, title: item.title, type: item.type, start_at: item.start_at, due_at: item.due_at, difficulty: item.difficulty })),
       }))
     setStudentChapters(rows)
     setStudentChapterId(rows.find((item) => item.materials.length || item.tasks.length)?.id || rows[0]?.id || '')
@@ -316,7 +318,7 @@ export function ExactCourseContent(props: Props) {
 
           {detailTab === 'practice' && <section className="chapter-practice-section chapter-tab-panel">
             <header><div><ClipboardCheck size={17} /><span><strong>课后练习</strong><small>复用任务管理中的练习与成绩数据</small></span></div><Button size="small" icon={<Plus size={13} />} onClick={() => setPracticeModalOpen(true)}>创建练习</Button></header>
-            <div className="chapter-practice-list">{chapterTasks.map((task) => <article key={task.id}><span><FileQuestion size={17} /></span><div><strong>{task.title}</strong><small>截止 {task.due_at.slice(0, 16).replace('T', ' ')} · {task.submitted}/{task.total || 0} 提交</small></div><Tag color={task.status === 'published' ? 'blue' : 'gold'}>{task.status === 'published' ? '已发布' : '草稿'}</Tag><Button type="link" size="small" onClick={() => props.onNavigate('tasks')}>任务管理 <ChevronRight size={12} /></Button></article>)}{!chapterTasks.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="本章节还没有课后练习" />}</div>
+            <div className="chapter-practice-list">{chapterTasks.map((task) => <article key={task.id}><span><FileQuestion size={17} /></span><div><strong>{task.title}</strong><small>开始 {formatTaskDateTime(task.start_at)} · 截止 {formatTaskDateTime(task.due_at)} · {task.submitted}/{task.total || 0} 提交</small></div><Tag color={task.status === 'published' ? 'blue' : 'gold'}>{task.status === 'published' ? '已发布' : '草稿'}</Tag><Button type="link" size="small" onClick={() => props.onNavigate('tasks')}>任务管理 <ChevronRight size={12} /></Button></article>)}{!chapterTasks.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="本章节还没有课后练习" />}</div>
           </section>}
         </>}
       </main>
@@ -331,7 +333,7 @@ export function ExactCourseContent(props: Props) {
     </Modal>
 
     <Modal title={`创建课后练习 · ${selectedChapter?.title || ''}`} open={practiceModalOpen} onCancel={() => setPracticeModalOpen(false)} footer={<><Button onClick={() => setPracticeModalOpen(false)}>取消</Button><Button loading={saving} onClick={() => savePractice(false)}>保存草稿</Button><Button type="primary" loading={saving} icon={<Send size={14} />} onClick={() => savePractice(true)}>发布给学生</Button></>}>
-      <Form form={practiceForm} layout="vertical" initialValues={{ type: 'programming', difficulty: '进阶', due_at: '2026-12-30T23:59:00' }}><Form.Item label="练习名称" name="title" rules={[{ required: true, message: '请输入练习名称' }]}><Input /></Form.Item><Form.Item label="练习说明" name="description"><Input.TextArea rows={3} /></Form.Item><div className="practice-form-grid"><Form.Item label="题型" name="type"><Select options={[{ value: 'programming', label: '编程题' }, { value: 'single_choice', label: '单选题' }, { value: 'short_answer', label: '简答题' }]} /></Form.Item><Form.Item label="难度" name="difficulty"><Select options={['基础', '进阶', '挑战'].map((value) => ({ value, label: value }))} /></Form.Item></div><Form.Item label="截止时间" name="due_at"><Input /></Form.Item></Form>
+      <Form form={practiceForm} layout="vertical" initialValues={{ type: 'programming', difficulty: '进阶', start_at: defaultTaskStartAt(), due_at: '2026-12-30T23:59' }}><Form.Item label="练习名称" name="title" rules={[{ required: true, message: '请输入练习名称' }]}><Input /></Form.Item><Form.Item label="练习说明" name="description"><Input.TextArea rows={3} /></Form.Item><div className="practice-form-grid"><Form.Item label="题型" name="type"><Select options={[{ value: 'programming', label: '编程题' }, { value: 'single_choice', label: '单选题' }, { value: 'short_answer', label: '简答题' }]} /></Form.Item><Form.Item label="难度" name="difficulty"><Select options={['基础', '进阶', '挑战'].map((value) => ({ value, label: value }))} /></Form.Item></div><div className="practice-form-grid"><Form.Item label="开始时间" name="start_at" rules={[{ required: true, message: '请选择开始时间' }]}><Input type="datetime-local" /></Form.Item><Form.Item label="截止时间" name="due_at" rules={[{ required: true, message: '请选择截止时间' }]}><Input type="datetime-local" /></Form.Item></div></Form>
     </Modal>
 
     <Drawer rootClassName="student-content-preview-drawer" title={<span><GraduationCap size={18} /> 学生视角</span>} open={previewOpen} onClose={() => setPreviewOpen(false)} width={720}>
@@ -341,7 +343,7 @@ export function ExactCourseContent(props: Props) {
           <div className="student-chapter-heading"><Tag>{selectedStudentChapter.teaching_mode}</Tag><Title level={3}>{selectedStudentChapter.title}</Title><p>{selectedStudentChapter.description || '本章课程内容'}</p></div>
           <section><strong><BookOpen size={15} /> 本章知识点</strong><div className="student-knowledge-grid">{selectedStudentChapter.knowledge_points.map((point) => <span key={point.id}><CheckCircle2 size={13} />{point.name}</span>)}</div></section>
           <section><strong><Presentation size={15} /> 学习资料</strong>{selectedStudentChapter.materials.map((item) => <article key={item.id}><FileText size={17} /><div><strong>{item.title}</strong><small>{item.type.toUpperCase()} · {item.size}</small></div><Button size="small">查看</Button></article>)}{!selectedStudentChapter.materials.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无公开资料" />}</section>
-          <section><strong><ClipboardCheck size={15} /> 课后练习</strong>{selectedStudentChapter.tasks.map((task) => <article key={task.id}><FileQuestion size={17} /><div><strong>{task.title}</strong><small><Clock3 size={11} /> 截止 {task.due_at.slice(0, 16).replace('T', ' ')}</small></div><Button type="primary" size="small">开始练习</Button></article>)}{!selectedStudentChapter.tasks.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无课后练习" />}</section>
+          <section><strong><ClipboardCheck size={15} /> 课后练习</strong>{selectedStudentChapter.tasks.map((task) => <article key={task.id}><FileQuestion size={17} /><div><strong>{task.title}</strong><small><Clock3 size={11} /> 开始 {formatTaskDateTime(task.start_at)} · 截止 {formatTaskDateTime(task.due_at)}</small></div><Button type="primary" size="small">开始练习</Button></article>)}{!selectedStudentChapter.tasks.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无课后练习" />}</section>
         </>}</main></div>
       </div>}
     </Drawer>

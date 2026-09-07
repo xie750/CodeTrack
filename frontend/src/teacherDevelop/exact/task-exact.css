@@ -187,6 +187,56 @@
   margin: 9px 0;
 }
 
+.task-paper-editor {
+  display: grid;
+  gap: 12px;
+}
+
+.task-question-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #dfe8f5;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.task-question-card-head {
+  display: grid;
+  grid-template-columns: auto minmax(104px, 1fr) 92px auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.task-question-card-head .ant-input-number-group-wrapper {
+  width: 92px;
+}
+
+.task-question-options {
+  display: grid;
+  gap: 8px;
+}
+
+.task-question-option {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 22px auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.task-question-option .ant-tag {
+  margin-inline-end: 0;
+}
+
+.task-fill-answer {
+  display: grid;
+  gap: 6px;
+  color: #526071;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .task-v2-panel-actions {
   display: flex;
   justify-content: space-between;

@@ -23,6 +23,7 @@ from backend.app.models import (
     PracticeProject,
     PracticeProjectActivity,
     PracticeProjectEnrollment,
+    PracticeProjectMaterial,
     PracticeProjectSubmission,
     Question,
     QuestionOption,
@@ -132,6 +133,14 @@ def ensure_task_workspace_columns(db: Session) -> None:
     db.commit()
 
 
+def ensure_task_assignment_schedule_columns(db: Session) -> None:
+    columns = {column["name"] for column in inspect(db.bind).get_columns("task_assignments")}
+    if "start_at" not in columns:
+        db.execute(text("ALTER TABLE task_assignments ADD COLUMN start_at DATETIME"))
+    db.execute(text("UPDATE task_assignments SET start_at = published_at WHERE start_at IS NULL"))
+    db.commit()
+
+
 def ensure_knowledge_source_columns(db: Session) -> None:
     """资料中心（§七）给 knowledge_sources 补的列，在没跑 alembic 的库上兜底。
 
@@ -181,7 +190,11 @@ def ensure_practice_project_tables(db: Session) -> None:
     PracticeProject.__table__.create(bind=db.bind, checkfirst=True)
     PracticeProjectEnrollment.__table__.create(bind=db.bind, checkfirst=True)
     PracticeProjectSubmission.__table__.create(bind=db.bind, checkfirst=True)
+    PracticeProjectMaterial.__table__.create(bind=db.bind, checkfirst=True)
     PracticeProjectActivity.__table__.create(bind=db.bind, checkfirst=True)
+    material_columns = {column["name"] for column in inspect(db.bind).get_columns("practice_project_materials")}
+    if "storage_path" not in material_columns:
+        db.execute(text("ALTER TABLE practice_project_materials ADD COLUMN storage_path VARCHAR(500)"))
     columns = {column["name"] for column in inspect(db.bind).get_columns("practice_projects")}
     additions = [
         ("member_names_json", "TEXT NOT NULL DEFAULT '[]'"),
@@ -225,6 +238,7 @@ def ensure_authoritative_knowledge_tables(db: Session) -> None:
 def seed_demo_data(db: Session) -> None:
     ensure_auth_columns(db)
     ensure_task_workspace_columns(db)
+    ensure_task_assignment_schedule_columns(db)
     ensure_knowledge_source_columns(db)
     ensure_student_knowledge_graph_table(db)
     ensure_practice_project_tables(db)
@@ -584,6 +598,7 @@ def seed_demo_data(db: Session) -> None:
             "assignment_mode": "PRACTICE",
             "allow_hint_level_3": True,
             "published_at": datetime(2026, 7, 20, 8, 0, tzinfo=timezone.utc),
+            "start_at": datetime(2026, 7, 20, 8, 0, tzinfo=timezone.utc),
             "deadline": datetime(2026, 8, 5, 23, 59, tzinfo=timezone.utc),
         },
     )
@@ -599,6 +614,7 @@ def seed_demo_data(db: Session) -> None:
             "assignment_mode": "PRACTICE",
             "allow_hint_level_3": True,
             "published_at": datetime(2026, 7, 21, 8, 0, tzinfo=timezone.utc),
+            "start_at": datetime(2026, 7, 21, 8, 0, tzinfo=timezone.utc),
             "deadline": datetime(2026, 8, 6, 23, 59, tzinfo=timezone.utc),
         },
     )
@@ -614,6 +630,7 @@ def seed_demo_data(db: Session) -> None:
             "assignment_mode": "PRACTICE",
             "allow_hint_level_3": True,
             "published_at": datetime(2026, 7, 24, 8, 0, tzinfo=timezone.utc),
+            "start_at": datetime(2026, 7, 24, 8, 0, tzinfo=timezone.utc),
             "deadline": datetime(2026, 8, 7, 23, 59, tzinfo=timezone.utc),
         },
     )
@@ -629,6 +646,7 @@ def seed_demo_data(db: Session) -> None:
             "assignment_mode": "QUIZ",
             "allow_hint_level_3": False,
             "published_at": datetime(2026, 7, 25, 8, 0, tzinfo=timezone.utc),
+            "start_at": datetime(2026, 7, 25, 8, 0, tzinfo=timezone.utc),
             "deadline": datetime(2026, 8, 10, 23, 59, tzinfo=timezone.utc),
         },
     )
@@ -644,6 +662,7 @@ def seed_demo_data(db: Session) -> None:
             "assignment_mode": "EXAM",
             "allow_hint_level_3": False,
             "published_at": datetime(2026, 7, 27, 8, 0, tzinfo=timezone.utc),
+            "start_at": datetime(2026, 7, 27, 8, 0, tzinfo=timezone.utc),
             "deadline": datetime(2026, 8, 12, 23, 59, tzinfo=timezone.utc),
         },
     )
@@ -659,6 +678,7 @@ def seed_demo_data(db: Session) -> None:
             "assignment_mode": "PRACTICE",
             "allow_hint_level_3": True,
             "published_at": datetime(2026, 7, 22, 8, 0, tzinfo=timezone.utc),
+            "start_at": datetime(2026, 7, 22, 8, 0, tzinfo=timezone.utc),
             "deadline": datetime(2026, 8, 8, 23, 59, tzinfo=timezone.utc),
         },
     )
@@ -674,6 +694,7 @@ def seed_demo_data(db: Session) -> None:
             "assignment_mode": "QUIZ",
             "allow_hint_level_3": False,
             "published_at": datetime(2026, 7, 23, 8, 0, tzinfo=timezone.utc),
+            "start_at": datetime(2026, 7, 23, 8, 0, tzinfo=timezone.utc),
             "deadline": datetime(2026, 8, 9, 23, 59, tzinfo=timezone.utc),
         },
     )
@@ -689,6 +710,7 @@ def seed_demo_data(db: Session) -> None:
             "assignment_mode": "PRACTICE",
             "allow_hint_level_3": True,
             "published_at": datetime(2026, 7, 21, 8, 0, tzinfo=timezone.utc),
+            "start_at": datetime(2026, 7, 21, 8, 0, tzinfo=timezone.utc),
             "deadline": datetime(2026, 8, 6, 23, 59, tzinfo=timezone.utc),
         },
     )

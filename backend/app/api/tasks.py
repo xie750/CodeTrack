@@ -26,6 +26,10 @@ from backend.app.models import (
 from backend.app.services.audit import record_audit
 from backend.app.services.programming_specs import get_programming_spec
 from backend.app.services.submissions import create_submission_version, iso, run_execution
+from backend.app.services.assignment_schedule import (
+    assert_assignment_started,
+    assignment_start_at,
+)
 
 router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
 
@@ -227,8 +231,9 @@ def get_task(
         raise ApiError(404, "TASK_NOT_FOUND", "任务不存在")
     if task.workspace_type != "CODING":
         raise ApiError(400, "NOT_CODING_TASK", "当前任务不是编程任务，请使用题目作答工作台")
+    assignment = None
     if assignment_id:
-        _student_assignment(db, assignment_id, task_id, user.id)
+        assignment = _student_assignment(db, assignment_id, task_id, user.id)
     else:
         ensure_course_member(db, task.course_id, user.id)
     test_cases = (
@@ -252,6 +257,15 @@ def get_task(
         "test_cases": [serialize_test_case(case, reveal_io=case.visibility == "PUBLIC") for case in test_cases],
         "current_progress": progress_for(db, task.id, user.id, assignment_id),
     }
+    if assignment is not None:
+        data["assignment"] = {
+            "assignment_id": assignment.id,
+            "assignment_mode": assignment.assignment_mode,
+            "allow_hint_level_3": assignment.allow_hint_level_3,
+            "published_at": iso(assignment.published_at),
+            "start_at": iso(assignment_start_at(assignment)),
+            "deadline": iso(assignment.deadline),
+        }
     submission = db.scalar(
         select(Submission).where(
             Submission.task_id == task.id,
@@ -282,6 +296,7 @@ def submit_code(
     assignment = None
     if assignment_id:
         assignment = _student_assignment(db, assignment_id, task_id, user.id)
+        assert_assignment_started(assignment)
     else:
         ensure_course_member(db, task.course_id, user.id, role="STUDENT")
     submission, version, execution, created = create_submission_version(

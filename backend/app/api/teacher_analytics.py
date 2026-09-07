@@ -829,6 +829,7 @@ def create_learning_intervention(
             assignment_mode="QUIZ",
             allow_hint_level_3=False,
             published_at=now,
+            start_at=now,
             deadline=now + timedelta(days=7),
         )
         db.add(assignment)

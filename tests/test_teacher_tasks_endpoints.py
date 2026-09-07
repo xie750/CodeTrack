@@ -18,7 +18,17 @@ from uuid import uuid4
 
 from backend.app.core.database import SessionLocal
 from backend.app.main import app
-from backend.app.models import Question, QuestionOption, StudentTaskProgress, Task, TaskAssignment
+from backend.app.models import (
+    Question,
+    QuestionAnswer,
+    QuestionAttempt,
+    QuestionOption,
+    LearnerEvent,
+    Recommendation,
+    StudentTaskProgress,
+    Task,
+    TaskAssignment,
+)
 
 TEACHER = {"X-Demo-User-Id": "user_teacher_001"}
 OTHER_TEACHER = {"X-Demo-User-Id": "user_teacher_002"}
@@ -54,6 +64,13 @@ def _cleanup_task(task_id: str | None) -> None:
         )
         question_ids = list(db.scalars(select(Question.id).where(Question.task_id == task_id)).all())
         if assignment_ids:
+            attempt_ids = list(
+                db.scalars(select(QuestionAttempt.id).where(QuestionAttempt.assignment_id.in_(assignment_ids))).all()
+            )
+            if attempt_ids:
+                db.execute(delete(QuestionAnswer).where(QuestionAnswer.attempt_id.in_(attempt_ids)))
+                db.execute(delete(QuestionAttempt).where(QuestionAttempt.id.in_(attempt_ids)))
+            db.execute(delete(LearnerEvent).where(LearnerEvent.assignment_id.in_(assignment_ids)))
             db.execute(
                 delete(StudentTaskProgress).where(StudentTaskProgress.assignment_id.in_(assignment_ids))
             )
@@ -61,6 +78,8 @@ def _cleanup_task(task_id: str | None) -> None:
         if question_ids:
             db.execute(delete(QuestionOption).where(QuestionOption.question_id.in_(question_ids)))
             db.execute(delete(Question).where(Question.id.in_(question_ids)))
+        db.execute(delete(Recommendation).where(Recommendation.related_task_id == task_id))
+        db.execute(delete(LearnerEvent).where(LearnerEvent.task_id == task_id))
         db.execute(delete(Task).where(Task.id == task_id))
         db.commit()
     finally:
@@ -151,15 +170,19 @@ def test_teacher_can_create_publish_and_student_can_open_question_workspace(requ
         assert draft_row["content_status"] == "READY"
         assert draft_row["question_count"] == 1
 
+        start_at = "2026-09-01T08:00:00Z"
+        deadline = "2026-09-30T23:59:00Z"
         published = c.post(
             f"/api/v1/teacher/tasks/{task_id}/publish",
             headers=TEACHER,
-            json={"class_ids": [SE_CLASS], "assignment_mode": "QUIZ"},
+            json={"class_ids": [SE_CLASS], "assignment_mode": "QUIZ", "start_at": start_at, "deadline": deadline},
         )
         assert published.status_code == 200, published.text
         publication = published.json()["data"]["publications"][0]
         assert publication["class_id"] == SE_CLASS
         assert publication["publish_status"] == "PUBLISHED"
+        assert publication["start_at"] == start_at
+        assert publication["deadline"] == deadline
         assert publication["initialized_student_count"] > 0
 
         published_row = _row(_tasks(c, TEACHER, keyword=title), task_id)
@@ -174,6 +197,7 @@ def test_teacher_can_create_publish_and_student_can_open_question_workspace(requ
         assert student_tasks.status_code == 200, student_tasks.text
         student_row = next(item for item in student_tasks.json()["data"] if item["task_id"] == task_id)
         assert student_row["workspace_type"] == "QUESTION_SET"
+        assert student_row["start_at"] == start_at
         assert student_row["status"] == "NOT_STARTED"
         assert student_row["total_required_count"] == 1
 
@@ -184,8 +208,124 @@ def test_teacher_can_create_publish_and_student_can_open_question_workspace(requ
         assert workspace.status_code == 200, workspace.text
         workspace_data = workspace.json()["data"]
         assert workspace_data["task"]["task_id"] == task_id
+        assert workspace_data["assignment"]["start_at"] == start_at
         assert len(workspace_data["questions"]) == 1
         assert workspace_data["questions"][0]["stem"] == "Which option is marked as correct?"
+
+
+def test_teacher_can_publish_mixed_question_paper_and_student_submit(request):
+    task_id = None
+    request.addfinalizer(lambda: _cleanup_task(task_id))
+    with TestClient(app) as c:
+        title = f"mixed-paper-{uuid4().hex[:8]}"
+        created = c.post(
+            "/api/v1/teacher/tasks",
+            headers=TEACHER,
+            json={
+                "course_id": DS_COURSE,
+                "title": title,
+                "description": "Mixed question paper should keep each question type.",
+                "workspace_type": "QUESTION_SET",
+                "language": "CPP",
+                "interface_spec": "",
+                "learning_objectives": ["mixed paper"],
+                "capability_ids": [],
+                "questions": [
+                    {
+                        "question_type": "SINGLE_CHOICE",
+                        "stem": "Pick B.",
+                        "analysis": "B is correct.",
+                        "knowledge_points": ["single"],
+                        "difficulty": "BASIC",
+                        "score": 10,
+                        "options": [
+                            {"label": "A", "content": "Wrong", "is_correct": False},
+                            {"label": "B", "content": "Right", "is_correct": True},
+                        ],
+                    },
+                    {
+                        "question_type": "MULTIPLE_CHOICE",
+                        "stem": "Pick A and C.",
+                        "analysis": "A and C are correct.",
+                        "knowledge_points": ["multiple"],
+                        "difficulty": "BASIC",
+                        "score": 20,
+                        "options": [
+                            {"label": "A", "content": "Right", "is_correct": True},
+                            {"label": "B", "content": "Wrong", "is_correct": False},
+                            {"label": "C", "content": "Right", "is_correct": True},
+                        ],
+                    },
+                    {
+                        "question_type": "FILL_BLANK",
+                        "stem": "Deleting the head returns ____.",
+                        "analysis": "The next node becomes the new head.",
+                        "knowledge_points": ["fill"],
+                        "difficulty": "BASIC",
+                        "score": 15,
+                        "options": [
+                            {"label": "答案", "content": "head.next", "is_correct": True},
+                        ],
+                    },
+                ],
+            },
+        )
+        assert created.status_code == 201, created.text
+        task_id = created.json()["data"]["task_id"]
+
+        published = c.post(
+            f"/api/v1/teacher/tasks/{task_id}/publish",
+            headers=TEACHER,
+            json={"class_ids": [SE_CLASS], "assignment_mode": "QUIZ", "start_at": "2026-09-01T08:00:00Z"},
+        )
+        assert published.status_code == 200, published.text
+        assignment_id = published.json()["data"]["publications"][0]["assignment_id"]
+
+        workspace = c.get(f"/api/v1/student/assignments/{assignment_id}/workspace", headers=STUDENT)
+        assert workspace.status_code == 200, workspace.text
+        questions = workspace.json()["data"]["questions"]
+        assert [question["question_type"] for question in questions] == [
+            "SINGLE_CHOICE",
+            "MULTIPLE_CHOICE",
+            "FILL_BLANK",
+        ]
+        assert questions[2]["options"] == []
+
+        single_b = next(option for option in questions[0]["options"] if option["label"] == "B")["option_id"]
+        multiple_ids = [
+            option["option_id"] for option in questions[1]["options"] if option["label"] in {"A", "C"}
+        ]
+        submitted = c.post(
+            f"/api/v1/student/assignments/{assignment_id}/submit-answers",
+            headers=STUDENT,
+            json={
+                "answers": [
+                    {"question_id": questions[0]["question_id"], "selected_option_ids": [single_b]},
+                    {"question_id": questions[1]["question_id"], "selected_option_ids": multiple_ids},
+                    {"question_id": questions[2]["question_id"], "selected_option_ids": [" head.next "]},
+                ]
+            },
+        )
+        assert submitted.status_code == 201, submitted.text
+        result = submitted.json()["data"]
+        assert result["correct_count"] == 3
+        assert result["score"] == 45
+
+
+def test_publish_rejects_deadline_before_start_time():
+    with TestClient(app) as c:
+        response = c.post(
+            f"/api/v1/teacher/tasks/{QUESTION_TASK}/publish",
+            headers=TEACHER,
+            json={
+                "class_ids": [SE_CLASS],
+                "assignment_mode": "QUIZ",
+                "start_at": "2026-09-30T08:00:00Z",
+                "deadline": "2026-09-01T23:59:00Z",
+            },
+        )
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "TASK_TIME_RANGE_INVALID"
 
 
 # ------------------------------------------------------------------ 行内容

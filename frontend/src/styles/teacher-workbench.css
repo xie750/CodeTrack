@@ -4555,6 +4555,10 @@
   box-shadow: 0 12px 28px rgba(34, 65, 110, 0.045);
 }
 
+.student-resource-skeleton {
+  min-height: 142px;
+}
+
 .student-resource-grid.list .student-resource-card {
   grid-template-columns: 74px minmax(0, 1fr);
 }

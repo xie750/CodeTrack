@@ -39,7 +39,6 @@ import {
 } from "lucide-react";
 import { api, LearningContext, TaskDetail, VersionResult, Diagnosis, Hint, AgentWorkflowRun } from "../api";
 import StudentRouteBreadcrumb from "../components/StudentRouteBreadcrumb";
-import avatarImg from "../assets/ui-home/avatar.png";
 import { StudentState, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
 import { resolveCourseIdeologyInsight } from "../courseIdeology";
 
@@ -2214,7 +2213,6 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
   }, [selectedCaseIndex, teacherCases.length]);
 
   const knowledgeTags = task?.learning_objectives.length ? task.learning_objectives : ["等待任务知识点"];
-  const studentName = context?.student.name ?? "学生";
   const currentCourseName = context?.courses.find((course) => course.course_id === task?.course_id)?.course_name;
   const ideologyInsight = useMemo(() => resolveCourseIdeologyInsight({
     courseName: currentCourseName,
@@ -2426,25 +2424,6 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
 
   return (
     <div className="program-shell" data-task-id={taskId} style={workspaceStyle}>
-      <header className="program-topbar">
-        <div className="program-brand">
-          <span className="program-brand-mark ct-brand-mark" aria-hidden="true" />
-          <span className="program-brand-copy">
-            <strong>Code<span>Track</span></strong>
-            <small>学生助学空间</small>
-          </span>
-        </div>
-        <div className="program-top-actions">
-          <div className="program-account" aria-label={`${studentName}账号`}>
-            <img src={avatarImg} alt={`${studentName}头像`} />
-            <span className="program-account-copy">
-              <strong>{studentName}</strong>
-              <small>学生端</small>
-            </span>
-          </div>
-        </div>
-      </header>
-
       <main className="program-page">
         {loading ? (
           <>

@@ -1,65 +1,42 @@
 import { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import {
   Archive,
-  BookOpen,
   CalendarDays,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Copy,
   Download,
-  ExternalLink,
   Eye,
-  FileCode2,
   FileQuestion,
   FileText,
   Folder,
   FolderArchive,
   FolderPlus,
-  Github,
   GraduationCap,
   Grid2X2,
   LibraryBig,
   List,
   MoreVertical,
   MoveRight,
-  Network,
   Podcast,
   Presentation,
   Search,
   Settings2,
   Tag,
-  Waypoints,
-  Wrench
+  Waypoints
 } from "lucide-react";
 import { api, type GeneratedResource, type StudentResourceFolder } from "../api";
 import { authHeaders } from "../authSession";
 import GeneratedResourcePreviewModal from "../components/GeneratedResourcePreviewModal";
 import { StudentInlineNotice, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
 
-type ResourceType = "官方文档" | "外部文章" | "视频教程" | "工具网站" | "知识卡片" | "AI 生成";
+type ResourceType = "AI 生成";
 type ResourceFolder = string;
-type ResourceSource = "全部" | "官方" | "社区" | "视频平台" | "AI 生成";
+type ResourceSource = "全部" | "AI 生成";
 type SortMode = "收藏时间" | "标题";
 type SortOrder = "降序" | "升序";
 type PageMarker = number | "ellipsis-left" | "ellipsis-right";
-
-type ExternalResourceItem = {
-  kind: "external";
-  id: string;
-  type: Exclude<ResourceType, "AI 生成">;
-  folder: ResourceFolder;
-  title: string;
-  source: Exclude<ResourceSource, "全部" | "AI 生成">;
-  domain: string;
-  url: string;
-  summary: string;
-  collectedAt: string;
-  tags: string[];
-  tone: "python" | "pytorch" | "article" | "video" | "sklearn" | "tool";
-};
 
 type GeneratedResourceItem = {
   kind: "generated";
@@ -75,110 +52,14 @@ type GeneratedResourceItem = {
   resource: GeneratedResource;
 };
 
-type ResourceListItem = ExternalResourceItem | GeneratedResourceItem;
+type ResourceListItem = GeneratedResourceItem;
 
-const defaultFolderOptions: ResourceFolder[] = ["全部收藏", "课程资料", "外部文章", "视频教程", "工具网站", "知识卡片", "已归档"];
-const resourceTypeOptions: Array<"全部" | ResourceType> = ["全部", "官方文档", "外部文章", "视频教程", "工具网站", "知识卡片", "AI 生成"];
-const sourceOptions: ResourceSource[] = ["全部", "官方", "社区", "视频平台", "AI 生成"];
+const defaultFolderOptions: ResourceFolder[] = ["全部收藏", "知识卡片", "已归档"];
+const resourceTypeOptions: Array<"全部" | ResourceType> = ["全部", "AI 生成"];
+const sourceOptions: ResourceSource[] = ["全部", "AI 生成"];
 const sortModeOptions: SortMode[] = ["收藏时间", "标题"];
 const sortOrderOptions: SortOrder[] = ["降序", "升序"];
 const pageSizeOptions = [6, 12, 24];
-
-const externalResources: ExternalResourceItem[] = [
-  {
-    kind: "external",
-    id: "python-docs-312",
-    type: "官方文档",
-    folder: "课程资料",
-    title: "Python 官方文档（3.12）",
-    source: "官方",
-    domain: "docs.python.org",
-    url: "https://docs.python.org/3.12/",
-    summary: "Python 3.12.2 官方文档，包含完整的语言参考与标准库说明。",
-    collectedAt: "2024-05-18",
-    tags: ["Python", "官方文档", "参考手册"],
-    tone: "python"
-  },
-  {
-    kind: "external",
-    id: "pytorch-tutorials",
-    type: "官方文档",
-    folder: "课程资料",
-    title: "PyTorch 官方教程",
-    source: "官方",
-    domain: "pytorch.org",
-    url: "https://pytorch.org/tutorials/",
-    summary: "PyTorch 官方提供的深度学习入门与进阶教程，覆盖张量、训练循环和模型部署。",
-    collectedAt: "2024-05-16",
-    tags: ["深度学习", "PyTorch", "教程"],
-    tone: "pytorch"
-  },
-  {
-    kind: "external",
-    id: "transformer-intro",
-    type: "外部文章",
-    folder: "外部文章",
-    title: "A Gentle Introduction to Transformers",
-    source: "社区",
-    domain: "medium.com",
-    url: "https://medium.com/",
-    summary: "一篇通俗介绍 Transformer 介绍文章，适合初学者理解注意力机制和编码器结构。",
-    collectedAt: "2024-05-15",
-    tags: ["NLP", "Transformer", "深度学习"],
-    tone: "article"
-  },
-  {
-    kind: "external",
-    id: "machine-learning-video",
-    type: "视频教程",
-    folder: "视频教程",
-    title: "机器学习入门（李宏毅）",
-    source: "视频平台",
-    domain: "youtube.com",
-    url: "https://www.youtube.com/",
-    summary: "台湾大学李宏毅教授的机器学习课程视频，适合作为机器学习核心课补充材料。",
-    collectedAt: "2024-05-14",
-    tags: ["机器学习", "视频课程", "李宏毅"],
-    tone: "video"
-  },
-  {
-    kind: "external",
-    id: "sklearn-guide",
-    type: "官方文档",
-    folder: "工具网站",
-    title: "scikit-learn 用户指南",
-    source: "官方",
-    domain: "scikit-learn.org",
-    url: "https://scikit-learn.org/stable/user_guide.html",
-    summary: "scikit-learn 用户指南，覆盖常用算法、模型评估与使用示例。",
-    collectedAt: "2024-05-12",
-    tags: ["机器学习", "Scikit-learn", "官方文档"],
-    tone: "sklearn"
-  },
-  {
-    kind: "external",
-    id: "tableau-learning",
-    type: "工具网站",
-    folder: "工具网站",
-    title: "Tableau 官方学习资源",
-    source: "官方",
-    domain: "tableau.com",
-    url: "https://www.tableau.com/learn/training",
-    summary: "Tableau 官方教程与学习路径，帮助快速掌握数据可视化分析。",
-    collectedAt: "2024-05-10",
-    tags: ["数据可视化", "Tableau", "教程"],
-    tone: "tool"
-  }
-];
-
-function externalResourceIcon(item: ExternalResourceItem) {
-  if (item.tone === "python") return <CodePythonMark />;
-  if (item.tone === "pytorch") return <Network size={30} />;
-  if (item.tone === "article") return <FileText size={30} />;
-  if (item.tone === "video") return <BookOpen size={30} />;
-  if (item.tone === "sklearn") return <Wrench size={30} />;
-  return <Grid2X2 size={30} />;
-}
 
 function generatedResourceIcon(resource: GeneratedResource) {
   if (resource.resource_type === "PPT") return <Presentation size={24} />;
@@ -280,17 +161,19 @@ export default function StudentResourceCenter() {
   const [jumpPage, setJumpPage] = useState("1");
   const [folderOverrides, setFolderOverrides] = useState<Record<string, ResourceFolder>>({});
   const [generatedResources, setGeneratedResources] = useState<GeneratedResource[]>([]);
+  const [resourcesLoading, setResourcesLoading] = useState(true);
   const [generatedError, setGeneratedError] = useState<string | null>(null);
   const [generatedErrorDetail, setGeneratedErrorDetail] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [previewResource, setPreviewResource] = useState<GeneratedResource | null>(null);
-  const [previewExternal, setPreviewExternal] = useState<ExternalResourceItem | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [customFolders, setCustomFolders] = useState<StudentResourceFolder[]>([]);
   const [folderBusy, setFolderBusy] = useState(false);
 
   useEffect(() => {
     let alive = true;
+    setResourcesLoading(true);
+    setGeneratedResources([]);
     setGeneratedError(null);
     setGeneratedErrorDetail(null);
     api.listGeneratedResources()
@@ -299,8 +182,12 @@ export default function StudentResourceCenter() {
       })
       .catch((err) => {
         if (!alive) return;
-        setGeneratedError(studentErrorMessage(err, "AI 生成资源接口暂时不可用，当前先展示外部资源占位数据。"));
+        setGeneratedResources([]);
+        setGeneratedError(studentErrorMessage(err, "资源中心数据加载失败，请稍后重试。"));
         setGeneratedErrorDetail(studentErrorDetail(err));
+      })
+      .finally(() => {
+        if (alive) setResourcesLoading(false);
       });
     return () => {
       alive = false;
@@ -335,11 +222,10 @@ export default function StudentResourceCenter() {
   }, [customFolders]);
 
   const allItems = useMemo<ResourceListItem[]>(() => {
-    const externalItems = externalResources.map((item) => ({
+    return generatedItems.map((item) => ({
       ...item,
       folder: folderOverrides[item.id] ?? item.folder
     }));
-    return [...generatedItems, ...externalItems];
   }, [folderOverrides, generatedItems]);
 
   const allTags = useMemo(() => {
@@ -384,7 +270,8 @@ export default function StudentResourceCenter() {
     return visibleItems.slice(start, start + pageSize);
   }, [pageSize, safeCurrentPage, visibleItems]);
   const paginationMarkers = useMemo(() => pageMarkers(safeCurrentPage, totalPages), [safeCurrentPage, totalPages]);
-  const totalStorageGb = Math.max(1.2, allItems.length * 0.18).toFixed(1);
+  const totalStorageGb = (allItems.length * 0.18).toFixed(1);
+  const hasActiveFilters = activeFolder !== "全部收藏" || resourceType !== "全部" || source !== "全部" || tag !== "全部" || Boolean(query.trim());
 
   useEffect(() => {
     setCurrentPage(1);
@@ -449,26 +336,18 @@ export default function StudentResourceCenter() {
 
   function moveResource(item: ResourceListItem, folder: ResourceFolder) {
     if (folder === "全部收藏") return;
-    if (item.kind === "generated") {
-      setActionNotice("AI 生成资源的移动接口暂未接入，当前保持在知识卡片分类中。");
-      return;
-    }
     setFolderOverrides((current) => ({ ...current, [item.id]: folder }));
-    setActionNotice(`已临时移动到“${folder}”，后端分类保存接口接入后会持久化。`);
+    setActionNotice(`已在本页移动到“${folder}”。`);
   }
 
   async function copyResourceLink(item: ResourceListItem) {
-    const text = item.kind === "external" ? item.url : `${window.location.origin}/self-study/library?resource=${encodeURIComponent(item.id)}`;
+    const text = `${window.location.origin}/self-study/library?resource=${encodeURIComponent(item.id)}`;
     try {
       await navigator.clipboard.writeText(text);
       setActionNotice("资源链接已复制。");
     } catch {
       setActionNotice("复制接口不可用，请在打开资源后从浏览器地址栏复制。");
     }
-  }
-
-  function openExternalResource(item: ExternalResourceItem) {
-    window.open(item.url, "_blank", "noopener,noreferrer");
   }
 
   function openGeneratedPractice(resource: GeneratedResource) {
@@ -505,11 +384,20 @@ export default function StudentResourceCenter() {
       <header className="student-resource-header">
         <div>
           <h1>资源中心</h1>
-          <p>管理你收藏的外部资源与生成内容，便于整理、查找与复习。</p>
+          <p>管理你已加入资源中心的 AI 生成内容，便于整理、查找与复习。</p>
         </div>
         <section className="student-resource-summary" aria-label="资源统计">
-          <span>共收纳 <b>{allItems.length}</b> 个资源</span>
-          <small>占用空间 {totalStorageGb} GB</small>
+          {resourcesLoading ? (
+            <>
+              <span>正在读取资源中心</span>
+              <small>请稍候，当前不会展示样例数据</small>
+            </>
+          ) : (
+            <>
+              <span>共收纳 <b>{allItems.length}</b> 个资源</span>
+              <small>占用空间 {totalStorageGb} GB</small>
+            </>
+          )}
         </section>
       </header>
 
@@ -518,7 +406,7 @@ export default function StudentResourceCenter() {
           <Search size={18} />
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索我的收藏资源（支持标题、描述、标签、来源）" />
         </label>
-        <button type="button" onClick={() => setActionNotice("搜索已按当前关键词刷新。")}>搜索</button>
+        <button type="button" onClick={() => setActionNotice("搜索已按当前关键词刷新。")} disabled={resourcesLoading}>搜索</button>
         <button type="button" className="student-resource-advanced" onClick={() => setAdvancedOpen((current) => !current)}>
           <Settings2 size={16} />
           高级搜索
@@ -527,7 +415,7 @@ export default function StudentResourceCenter() {
 
       {advancedOpen ? (
         <section className="student-resource-advanced-panel" aria-label="高级搜索条件">
-          <span>高级搜索后端接口暂未接入，当前先复用本页筛选条件。</span>
+          <span>按当前已加载资源快速筛选。</span>
           <button type="button" onClick={() => setQuery("机器学习")}>机器学习</button>
           <button type="button" onClick={() => setQuery("Python")}>Python</button>
           <button type="button" onClick={() => setQuery("Transformer")}>Transformer</button>
@@ -543,7 +431,7 @@ export default function StudentResourceCenter() {
                 <button type="button" aria-label="添加文件夹" onClick={createFolder} disabled={folderBusy}>
                   <FolderPlus size={16} />
                 </button>
-                <button type="button" aria-label="分类设置" onClick={() => setActionNotice("分类设置接口暂未接入，入口已预留。")}>
+                <button type="button" aria-label="分类设置" onClick={() => setActionNotice("当前支持新建文件夹，系统分类会根据真实资源自动统计。")}>
                   <Settings2 size={16} />
                 </button>
               </div>
@@ -567,7 +455,7 @@ export default function StudentResourceCenter() {
           <section className="student-resource-tag-panel">
             <header>
               <h2>标签</h2>
-              <button type="button" aria-label="新增标签" onClick={() => setActionNotice("新增标签接口暂未接入，入口已预留。")}>
+              <button type="button" aria-label="新增标签" onClick={() => setActionNotice("标签来自已保存资源的知识点、类型和引用信息，会随真实资源自动更新。")}>
                 <Tag size={15} />
               </button>
             </header>
@@ -608,19 +496,21 @@ export default function StudentResourceCenter() {
           ) : null}
           {actionNotice ? <p className="student-resource-notice">{actionNotice}</p> : null}
 
-          <section className={`student-resource-grid ${viewMode === "list" ? "list" : ""}`} aria-label="资源列表">
-            {visibleItems.length ? pagedItems.map((item) => (
+          <section className={`student-resource-grid ${viewMode === "list" ? "list" : ""}`} aria-label="资源列表" aria-busy={resourcesLoading}>
+            {resourcesLoading ? (
+              Array.from({ length: viewMode === "list" ? 3 : 6 }).map((_, index) => (
+                <article className="student-resource-card student-resource-skeleton skeleton-block" key={index} aria-hidden="true" />
+              ))
+            ) : visibleItems.length ? pagedItems.map((item) => (
               <article className={`student-resource-card ${item.kind}`} key={`${item.kind}-${item.id}`}>
                 <button
                   type="button"
-                  className={`student-resource-thumb ${item.kind === "external" ? item.tone : "generated"}`}
-                  onClick={() => item.kind === "external" ? setPreviewExternal(item) : setPreviewResource(item.resource)}
+                  className="student-resource-thumb generated"
+                  onClick={() => setPreviewResource(item.resource)}
                   aria-label={`预览 ${item.title}`}
                 >
-                  <span>{item.kind === "external" ? externalResourceIcon(item) : generatedResourceIcon(item.resource)}</span>
-                  {item.kind === "generated" ? (
-                    <em>{generatedResourceMetric(item.resource).value}{generatedResourceMetric(item.resource).label}</em>
-                  ) : null}
+                  <span>{generatedResourceIcon(item.resource)}</span>
+                  <em>{generatedResourceMetric(item.resource).value}{generatedResourceMetric(item.resource).label}</em>
                 </button>
 
                 <div className="student-resource-card-body">
@@ -634,16 +524,12 @@ export default function StudentResourceCenter() {
                     {item.tags.map((itemTag) => <span key={itemTag}>{itemTag}</span>)}
                   </div>
                   <div className="student-resource-meta">
-                    <span>{item.kind === "external" && item.domain.includes("github") ? <Github size={14} /> : <GraduationCap size={14} />} {item.domain}</span>
+                    <span><GraduationCap size={14} /> {item.domain}</span>
                     <span><CalendarDays size={14} /> 收藏于 {formatDate(item.collectedAt)}</span>
                     <span><Archive size={14} /> {item.folder}</span>
                   </div>
                   <div className="student-resource-actions">
-                    {item.kind === "external" ? (
-                      <button type="button" className="primary" onClick={() => openExternalResource(item)}>
-                        打开原文 <ExternalLink size={15} />
-                      </button>
-                    ) : item.resource.resource_type === "PRACTICE_SET" ? (
+                    {item.resource.resource_type === "PRACTICE_SET" ? (
                       <button type="button" className="primary" onClick={() => openGeneratedPractice(item.resource)}>
                         <FileQuestion size={15} /> 开始练习
                       </button>
@@ -656,15 +542,9 @@ export default function StudentResourceCenter() {
                         <Eye size={15} /> 预览
                       </button>
                     )}
-                    {item.kind === "external" ? (
-                      <button type="button" onClick={() => setPreviewExternal(item)}>
-                        <Eye size={15} /> 预览
-                      </button>
-                    ) : (
-                      <button type="button" onClick={() => downloadGeneratedResource(item.resource)} disabled={!item.resource.download_available}>
-                        <Download size={15} /> 导出
-                      </button>
-                    )}
+                    <button type="button" onClick={() => downloadGeneratedResource(item.resource)} disabled={!item.resource.download_available}>
+                      <Download size={15} /> 导出
+                    </button>
                     <label className="student-resource-move">
                       <MoveRight size={15} />
                       <select value={item.folder} onChange={(event) => moveResource(item, event.target.value as ResourceFolder)} aria-label={`移动 ${item.title}`}>
@@ -682,14 +562,14 @@ export default function StudentResourceCenter() {
             )) : (
               <article className="student-resource-empty">
                 <LibraryBig size={28} />
-                <h2>没有匹配的资源</h2>
-                <p>可以调整关键词、资源类型或标签筛选。外部资源新增和高级搜索接口接入后会在这里继续补齐。</p>
-                <button type="button" onClick={resetFilters}>清空筛选</button>
+                <h2>{hasActiveFilters ? "没有匹配的资源" : "资源中心暂时没有资料"}</h2>
+                <p>{hasActiveFilters ? "可以调整关键词、资源类型或标签筛选。" : "这里仅展示你主动加入资源中心的 AI 生成资料。生成并保存后，会从后端读取并展示在这里。"}</p>
+                <button type="button" onClick={hasActiveFilters ? resetFilters : () => navigate("/self-study/ai")}>{hasActiveFilters ? "清空筛选" : "去生成资料"}</button>
               </article>
             )}
           </section>
 
-          <footer className="student-resource-pagination">
+          {!resourcesLoading && visibleItems.length ? <footer className="student-resource-pagination">
             <span className="student-resource-total">共 {visibleItems.length} 条</span>
             <button type="button" aria-label="上一页" disabled={safeCurrentPage <= 1} onClick={() => goToPage(safeCurrentPage - 1)}><ChevronLeft size={16} /></button>
             {paginationMarkers.map((marker) => (
@@ -732,37 +612,9 @@ export default function StudentResourceCenter() {
               />
               / {totalPages} 页
             </label>
-          </footer>
+          </footer> : null}
         </main>
       </div>
-
-      {previewExternal ? createPortal(
-        <div className="student-resource-preview" role="dialog" aria-modal="true" aria-label="外部资源预览">
-          <button type="button" className="student-resource-preview-mask" aria-label="关闭预览" onClick={() => setPreviewExternal(null)} />
-          <section>
-            <header>
-              <div>
-                <small>{previewExternal.type} · {previewExternal.domain}</small>
-                <h2>{previewExternal.title}</h2>
-              </div>
-              <button type="button" aria-label="关闭预览" onClick={() => setPreviewExternal(null)}>×</button>
-            </header>
-            <p>{previewExternal.summary}</p>
-            <div className="student-resource-tags">
-              {previewExternal.tags.map((item) => <span key={item}>{item}</span>)}
-            </div>
-            <footer>
-              <button type="button" className="primary" onClick={() => openExternalResource(previewExternal)}>
-                打开原文 <ExternalLink size={15} />
-              </button>
-              <button type="button" onClick={() => copyResourceLink(previewExternal)}>
-                <Copy size={15} /> 复制链接
-              </button>
-            </footer>
-          </section>
-        </div>,
-        document.body
-      ) : null}
 
       <GeneratedResourcePreviewModal
         resource={previewResource}
@@ -791,13 +643,5 @@ function FilterSelect({
         {options.map((option) => <option key={option} value={option}>{option}</option>)}
       </select>
     </label>
-  );
-}
-
-function CodePythonMark() {
-  return (
-    <strong className="student-python-mark" aria-hidden="true">
-      Py
-    </strong>
   );
 }

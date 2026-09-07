@@ -244,30 +244,31 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
   const pending = tasks.filter((task) => task.status !== "COMPLETED").length;
   const progress = tasks.length ? Math.round((completed / tasks.length) * 100) : 0;
   const knowledgePoints = Array.from(new Set(tasks.flatMap((task) => task.knowledge_points)));
-  const learnedPoints = profile?.knowledge_states.filter((item) => item.state === "MASTERED").length ?? completed;
-  const assignmentCount = tasks.filter((task) => task.workspace_type === "PROGRAMMING" || task.task_type === "QUIZ" || task.task_type === "EXAM").length || tasks.length;
+  const learnedPoints = profile?.knowledge_states.filter((item) => item.state === "MASTERED").length ?? 0;
+  const assignmentCount = tasks.filter((task) => task.workspace_type === "PROGRAMMING" || task.task_type === "QUIZ" || task.task_type === "EXAM").length;
   const score = profile
     ? clampPercent((profile.overview.overall_progress + profile.overview.recent_task_completion + (100 - profile.overview.compile_error_rate) + (100 - profile.overview.logic_error_rate)) / 4)
-    : clampPercent(progress || 82);
-  const resourceProgress = profile ? profile.overview.overall_progress : clampPercent((learnedPoints / Math.max(knowledgePoints.length, 1)) * 100);
-  const practiceScore = profile ? clampPercent(100 - profile.overview.logic_error_rate) : clampPercent(progress + 18);
+    : progress;
+  const resourceProgress = profile ? profile.overview.overall_progress : 0;
+  const practiceScore = profile ? clampPercent(100 - profile.overview.logic_error_rate) : 0;
   const activityScore = clampPercent((completed + inProgress) / Math.max(tasks.length, 1) * 100);
   const visibleTasks = tasks.slice(0, 5);
   const visibleInterventions = interventions?.items.slice(0, 4) ?? [];
+  const visibleKnowledgePoints = knowledgePoints.slice(0, 3);
 
   const stats = [
     { label: "课程任务", value: loading ? "..." : String(tasks.length), sub: `待完成 ${pending} 项`, icon: <ClipboardList size={28} />, tone: "blue" },
-    { label: "学习资源", value: String(Math.max(knowledgePoints.length, tasks.length * 2)), sub: `已学习 ${Math.max(learnedPoints, completed)} 个`, icon: <BookMarked size={28} />, tone: "green" },
+    { label: "学习资源", value: String(knowledgePoints.length), sub: `已学习 ${learnedPoints} 个`, icon: <BookMarked size={28} />, tone: "green" },
     { label: "测验/作业", value: String(assignmentCount), sub: `待完成 ${pending} 项`, icon: <PencilLine size={28} />, tone: "purple" },
-    { label: "课堂活动", value: String(Math.max(completed + inProgress, tasks.length)), sub: `参与 ${Math.max(completed, 0)} 次`, icon: <UsersRound size={28} />, tone: "orange" }
+    { label: "课堂活动", value: String(completed + inProgress), sub: `参与 ${completed} 次`, icon: <UsersRound size={28} />, tone: "orange" }
   ];
 
   const announcements = [
-    { title: activeTask ? `${activeTask.title} 已发布` : "课程任务等待发布", date: activeTask?.published_at ? deadlineLabel(activeTask.published_at) : "今天" },
-    { title: activeTask ? `${taskTypeLabel(activeTask)} 截止提醒` : "学习资料同步通知", date: activeTask?.deadline ? deadlineLabel(activeTask.deadline) : "本周" },
-    { title: knowledgePoints[0] ? `${knowledgePoints[0]} 知识点已更新` : "课程知识点已更新", date: "最近" },
-    { title: profile ? "学习画像已生成" : "完成任务后生成画像", date: "持续更新" }
-  ];
+    activeTask ? { title: `${activeTask.title} 已发布`, date: activeTask.published_at ? deadlineLabel(activeTask.published_at) : "待同步" } : null,
+    activeTask?.deadline ? { title: `${taskTypeLabel(activeTask)} 截止提醒`, date: deadlineLabel(activeTask.deadline) } : null,
+    knowledgePoints[0] ? { title: `${knowledgePoints[0]} 知识点已更新`, date: "最近" } : null,
+    profile ? { title: "学习画像已生成", date: "持续更新" } : null
+  ].filter((item): item is { title: string; date: string } => Boolean(item));
 
   function openActiveTask() {
     if (!activeTask || loading) return;
@@ -367,13 +368,13 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
               <h2>课程公告</h2>
             </header>
             <ul>
-              {announcements.map((item) => (
+              {announcements.length ? announcements.map((item) => (
                 <li key={`${item.title}-${item.date}`}>
                   <Megaphone size={13} />
                   <span>{item.title}</span>
                   <time>{item.date}</time>
                 </li>
-              ))}
+              )) : <li className="course-dashboard-notice-empty">暂无课程公告</li>}
             </ul>
           </article>
         </div>
@@ -443,13 +444,13 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
         <article className="course-dashboard-card course-dashboard-knowledge">
           <h2>知识图谱入口</h2>
           <div className="course-map-preview">
-            {(knowledgePoints.length ? knowledgePoints.slice(0, 3) : ["链表", "栈与队列", "二叉树"]).map((point, index, items) => (
+            {visibleKnowledgePoints.length ? visibleKnowledgePoints.map((point, index, items) => (
               <span key={point}>
                 {index === 0 ? <BookOpen size={18} /> : index === 1 ? <Network size={18} /> : <ShieldCheck size={18} />}
                 {point}
                 {index < items.length - 1 ? <i /> : null}
               </span>
-            ))}
+            )) : <div className="course-map-empty">当前课程暂无已同步知识点。</div>}
           </div>
           <p className="student-panel-copy">课程知识点、任务证据和画像状态在这里汇总，后续可接入真实知识库检索。</p>
         </article>

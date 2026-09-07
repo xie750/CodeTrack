@@ -1,7 +1,7 @@
 import json
 from typing import Any
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, File, Form, UploadFile, status
 from fastapi.responses import FileResponse
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from backend.app.core.api_response import ApiError, ok
 from backend.app.core.database import SessionLocal, get_db
 from backend.app.core.security import current_user, require_role
+from backend.app.services.cache import invalidate_prefix, remember_json, stable_cache_key
 from backend.app.models import (
     AdministrativeClass,
     Course,
@@ -26,6 +27,7 @@ from backend.app.models import (
 )
 from backend.app.services.learner_profile import serialize_learner_profile
 from backend.app.services.submissions import iso
+from backend.app.services.assignment_schedule import assignment_start_at
 from backend.app.services.ai_tutor import (
     ai_tutor_history_payload,
     append_ai_tutor_message,
@@ -46,9 +48,13 @@ from backend.app.services.question_workflow import (
     submit_question_answers,
 )
 from backend.app.services.practice_projects import (
+    create_practice_material,
+    create_practice_material_file,
     create_practice_submission,
+    get_practice_material_file,
     get_practice_project_detail,
     list_practice_projects,
+    refresh_frontier_tracking,
     start_first_practice_project,
 )
 from backend.app.services.student_resources import (
@@ -70,6 +76,16 @@ from backend.app.services.student_resources import (
 )
 
 router = APIRouter(prefix="/api/v1/student", tags=["student"])
+
+STUDENT_RESOURCE_CACHE_TTL_SECONDS = 30
+
+
+def _student_resource_cache_prefix(student_id: str) -> str:
+    return f"codetrack:student-resources:{student_id}:"
+
+
+def _invalidate_student_resource_cache(student_id: str) -> None:
+    invalidate_prefix(_student_resource_cache_prefix(student_id))
 
 
 class QuestionAnswerPayload(BaseModel):
@@ -127,6 +143,23 @@ class PracticeProjectSubmissionRequest(BaseModel):
     title: str = Field(default="", max_length=180)
     description: str = Field(default="", max_length=2000)
     materials: list[str] = Field(default_factory=list, max_length=12)
+    material_ids: list[str] = Field(default_factory=list, max_length=12)
+    note: str = Field(default="", max_length=1200)
+
+
+class PracticeProjectFrontierRequest(BaseModel):
+    focus: str = Field(default="", max_length=120)
+
+
+class PracticeProjectMaterialRequest(BaseModel):
+    material_type: str = Field(default="NOTE", max_length=40)
+    title: str = Field(min_length=1, max_length=180)
+    description: str = Field(default="", max_length=1000)
+    content: str = Field(default="", max_length=6000)
+    file_name: str | None = Field(default=None, max_length=255)
+    file_size: int | None = Field(default=None, ge=0, le=50_000_000)
+    mime_type: str | None = Field(default=None, max_length=120)
+    external_url: str = Field(default="", max_length=500)
 
 
 class InterventionReplyRequest(BaseModel):
@@ -500,6 +533,7 @@ def list_student_interventions(
                 "feedback_id": payload.get("feedback_id"),
                 "discussion_id": payload.get("discussion_id"),
                 "task_status": progress.status if progress else None,
+                "start_at": iso(assignment_start_at(assignment)) if assignment else None,
                 "deadline": iso(assignment.deadline) if assignment else None,
                 "action_label": _intervention_action_label(action),
                 "responded": event.id in responded_parent_ids,
@@ -593,6 +627,99 @@ def student_start_first_practice_project(
     return ok(result)
 
 
+@router.post("/practice-projects/{project_id}/frontier-track")
+def student_refresh_practice_frontier(
+    project_id: str,
+    payload: PracticeProjectFrontierRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    administrative_class, _ = require_active_class(db, user)
+    result = refresh_frontier_tracking(
+        db,
+        project_id=project_id,
+        student=user,
+        class_id=administrative_class.id,
+        focus=payload.focus,
+    )
+    db.commit()
+    return ok(result)
+
+
+@router.post("/practice-projects/{project_id}/materials", status_code=status.HTTP_201_CREATED)
+def student_create_practice_project_material(
+    project_id: str,
+    payload: PracticeProjectMaterialRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    administrative_class, _ = require_active_class(db, user)
+    result = create_practice_material(
+        db,
+        project_id=project_id,
+        student=user,
+        class_id=administrative_class.id,
+        material_type=payload.material_type,
+        title=payload.title,
+        description=payload.description,
+        content=payload.content,
+        file_name=payload.file_name,
+        file_size=payload.file_size,
+        mime_type=payload.mime_type,
+        external_url=payload.external_url,
+    )
+    db.commit()
+    return ok(result)
+
+
+@router.post("/practice-projects/{project_id}/materials/upload", status_code=status.HTTP_201_CREATED)
+def student_upload_practice_project_material(
+    project_id: str,
+    title: str = Form(default=""),
+    description: str = Form(default=""),
+    material_type: str = Form(default="CODE_FILE"),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    administrative_class, _ = require_active_class(db, user)
+    payload = file.file.read()
+    result = create_practice_material_file(
+        db,
+        project_id=project_id,
+        student=user,
+        class_id=administrative_class.id,
+        material_type=material_type,
+        title=title,
+        description=description,
+        content=payload,
+        file_name=file.filename,
+        mime_type=file.content_type,
+    )
+    db.commit()
+    return ok(result)
+
+
+@router.get("/practice-projects/{project_id}/materials/{material_id}/download")
+def student_download_practice_project_material(
+    project_id: str,
+    material_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    require_active_class(db, user)
+    material = get_practice_material_file(db, project_id=project_id, student_id=user.id, material_id=material_id)
+    return FileResponse(
+        material.storage_path,
+        media_type=material.mime_type or "application/octet-stream",
+        filename=material.file_name or material.title,
+    )
+
+
 @router.post("/practice-projects/{project_id}/submissions", status_code=status.HTTP_201_CREATED)
 def student_create_practice_project_submission(
     project_id: str,
@@ -610,6 +737,8 @@ def student_create_practice_project_submission(
         title=payload.title,
         description=payload.description,
         materials=payload.materials,
+        material_ids=payload.material_ids,
+        note=payload.note,
     )
     db.commit()
     return ok(result)
@@ -801,6 +930,7 @@ async def student_generate_ppt_resource(
         run_id=resource.get("run_id"),
     )
     db.commit()
+    _invalidate_student_resource_cache(user.id)
     return ok(
         {
             "resource": resource,
@@ -876,6 +1006,8 @@ async def student_generate_resource(
         run_id=resource.get("run_id"),
     )
     db.commit()
+    if resource.get("saved_to_resource_center"):
+        _invalidate_student_resource_cache(user.id)
     return ok(
         {
             "resource": resource,
@@ -899,7 +1031,13 @@ def student_resource_folders(
 ):
     require_role(user, "STUDENT")
     require_active_class(db, user)
-    return ok({"items": list_student_resource_folders(db, student_id=user.id)})
+    key = stable_cache_key(f"student-resources:{user.id}", "folders")
+    items = remember_json(
+        key,
+        STUDENT_RESOURCE_CACHE_TTL_SECONDS,
+        lambda: list_student_resource_folders(db, student_id=user.id),
+    )
+    return ok({"items": items})
 
 
 @router.post("/resources/folders", status_code=status.HTTP_201_CREATED)
@@ -912,6 +1050,7 @@ def student_create_resource_folder(
     require_active_class(db, user)
     folder = create_student_resource_folder(db, student_id=user.id, name=payload.name)
     db.commit()
+    _invalidate_student_resource_cache(user.id)
     return ok(folder)
 
 
@@ -925,6 +1064,7 @@ def student_save_generated_resource(
     administrative_class, _ = require_active_class(db, user)
     resource = save_generated_resource(db, user=user, class_id=administrative_class.id, resource_id=resource_id)
     db.commit()
+    _invalidate_student_resource_cache(user.id)
     return ok(resource)
 
 
@@ -935,7 +1075,12 @@ def student_generated_resources(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    resources = list_saved_generated_resources(db, student_id=user.id, course_id=course_id)
+    key = stable_cache_key(f"student-resources:{user.id}", "generated", course_id or "")
+    resources = remember_json(
+        key,
+        STUDENT_RESOURCE_CACHE_TTL_SECONDS,
+        lambda: list_saved_generated_resources(db, student_id=user.id, course_id=course_id),
+    )
     return ok({"items": resources})
 
 
@@ -949,7 +1094,13 @@ def student_generated_resource_detail(
     resource = get_generated_resource(db, student_id=user.id, resource_id=resource_id)
     if not resource.saved_to_resource_center:
         raise ApiError(409, "RESOURCE_NOT_SAVED", "请先将资源加入资源中心，再打开。")
-    return ok(serialize_generated_resource(resource))
+    key = stable_cache_key(f"student-resources:{user.id}", "detail", resource_id)
+    data = remember_json(
+        key,
+        STUDENT_RESOURCE_CACHE_TTL_SECONDS,
+        lambda: serialize_generated_resource(resource),
+    )
+    return ok(data)
 
 
 @router.get("/resources/{resource_id}/practice")
@@ -959,7 +1110,13 @@ def student_generated_practice_workspace(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    return ok(practice_workspace_payload(db, student_id=user.id, resource_id=resource_id))
+    key = stable_cache_key(f"student-resources:{user.id}", "practice", resource_id)
+    data = remember_json(
+        key,
+        STUDENT_RESOURCE_CACHE_TTL_SECONDS,
+        lambda: practice_workspace_payload(db, student_id=user.id, resource_id=resource_id),
+    )
+    return ok(data)
 
 
 @router.post("/resources/{resource_id}/practice/submit", status_code=status.HTTP_201_CREATED)
@@ -972,7 +1129,9 @@ def student_submit_generated_practice(
     require_role(user, "STUDENT")
     administrative_class, _ = require_active_class(db, user)
     answers = [answer.model_dump() for answer in payload.answers]
-    return ok(submit_generated_practice(db, user=user, class_id=administrative_class.id, resource_id=resource_id, answers=answers))
+    result = submit_generated_practice(db, user=user, class_id=administrative_class.id, resource_id=resource_id, answers=answers)
+    _invalidate_student_resource_cache(user.id)
+    return ok(result)
 
 
 @router.post("/resources/{resource_id}/podcast/listened")
@@ -984,15 +1143,15 @@ def student_mark_generated_podcast_listened(
 ):
     require_role(user, "STUDENT")
     administrative_class, _ = require_active_class(db, user)
-    return ok(
-        record_generated_podcast_listened(
-            db,
-            user=user,
-            class_id=administrative_class.id,
-            resource_id=resource_id,
-            completed_segment_count=payload.completed_segment_count,
-        )
+    result = record_generated_podcast_listened(
+        db,
+        user=user,
+        class_id=administrative_class.id,
+        resource_id=resource_id,
+        completed_segment_count=payload.completed_segment_count,
     )
+    _invalidate_student_resource_cache(user.id)
+    return ok(result)
 
 
 @router.get("/resources/{resource_id}/download")
@@ -1199,6 +1358,7 @@ def list_student_tasks(
                 "assignment_mode": assignment.assignment_mode,
                 "description": task.description,
                 "published_at": iso(assignment.published_at),
+                "start_at": iso(assignment_start_at(assignment)),
                 "deadline": iso(assignment.deadline),
                 "difficulty": task_difficulty(task),
                 "knowledge_points": task_knowledge_points(task),

@@ -140,11 +140,14 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
   if (isWorkspace) {
     content = (
       <>
-        <div className="workspace-route-stage" data-onboarding-id="tour-workspace-route" key={location.pathname}>
-          <Routes location={location}>
-            <Route path="/workspace/:taskId" element={<TaskWorkspaceWrapper onBack={() => transitionTo(workspaceBackPath)} />} />
-            <Route path="/question-workspace/:assignmentId" element={<QuestionWorkspaceWrapper onBack={() => transitionTo(workspaceBackPath)} />} />
-          </Routes>
+        <div className="student-direct-window student-workspace-direct" data-route={activeRouteGroup}>
+          <StudentAppTopbar authUser={authUser} onLogout={onLogout} onNavigate={transitionTo} />
+          <div className="workspace-route-stage" data-onboarding-id="tour-workspace-route" key={location.pathname}>
+            <Routes location={location}>
+              <Route path="/workspace/:taskId" element={<TaskWorkspaceWrapper onBack={() => transitionTo(workspaceBackPath)} />} />
+              <Route path="/question-workspace/:assignmentId" element={<QuestionWorkspaceWrapper onBack={() => transitionTo(workspaceBackPath)} />} />
+            </Routes>
+          </div>
         </div>
         <AICompanion routePath={location.pathname} routeGroup={activeRouteGroup} />
       </>

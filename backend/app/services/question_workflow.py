@@ -23,6 +23,10 @@ from backend.app.models import (
     User,
 )
 from backend.app.models.entities import utc_now
+from backend.app.services.assignment_schedule import (
+    assert_assignment_started,
+    assignment_start_at,
+)
 from backend.app.services.recommendation import sync_learning_recommendations
 from backend.app.services.submissions import iso
 
@@ -34,6 +38,8 @@ ERROR_LABELS = {
     "STACK_QUEUE_RULE_CONFUSION": "栈队列规则混淆",
     "EMPTY_GUARD_MISSING": "判空保护不足",
 }
+
+FILL_QUESTION_TYPES = {"FILL_BLANK", "FILL_IN_BLANK"}
 
 
 def loads_json(value: str, fallback):
@@ -108,7 +114,12 @@ def selected_answer_map(answers: list[dict]) -> dict[str, list[str]]:
     return answer_map
 
 
+def _normalized_text_answer(value: str) -> str:
+    return " ".join(value.strip().lower().split())
+
+
 def serialize_question(question: Question, include_correct: bool = False, answer: list[str] | None = None, result: dict | None = None) -> dict:
+    is_fill_question = question.question_type in FILL_QUESTION_TYPES
     payload = {
         "question_id": question.id,
         "question_type": question.question_type,
@@ -120,7 +131,7 @@ def serialize_question(question: Question, include_correct: bool = False, answer
         "selected_option_ids": answer or [],
         "is_correct": result.get("is_correct") if result else None,
         "earned_score": result.get("score") if result else None,
-        "options": [
+        "options": [] if is_fill_question else [
             {
                 "option_id": option.id,
                 "label": option.label,
@@ -132,6 +143,8 @@ def serialize_question(question: Question, include_correct: bool = False, answer
     }
     if include_correct:
         payload["correct_option_ids"] = [option.id for option in question.options if option.is_correct]
+        if is_fill_question:
+            payload["correct_answers"] = [option.content for option in question.options if option.is_correct]
     return payload
 
 
@@ -162,6 +175,7 @@ def question_workspace_payload(
             "assignment_mode": assignment.assignment_mode,
             "allow_hint_level_3": assignment.allow_hint_level_3,
             "published_at": iso(assignment.published_at),
+            "start_at": iso(assignment_start_at(assignment)),
             "deadline": iso(assignment.deadline),
         },
         "task": {
@@ -205,6 +219,7 @@ def save_question_draft(db: Session, assignment_id: str, class_id: str, user: Us
     assignment, task, _, _ = load_assignment_for_student(db, assignment_id, class_id)
     if task.workspace_type != "QUESTION_SET":
         raise ApiError(400, "NOT_QUESTION_WORKSPACE", "当前任务不是题目作答任务")
+    assert_assignment_started(assignment)
     attempt = draft_attempt(db, assignment, user.id)
     attempt.answers_json = json.dumps(selected_answer_map(answers), ensure_ascii=False, sort_keys=True)
     progress = db.scalar(
@@ -235,9 +250,23 @@ def evaluate_questions(questions: list[Question], answer_map: dict[str, list[str
     earned_score = 0.0
     correct_count = 0
     for question in questions:
-        selected = set(answer_map.get(question.id, []))
+        selected_values = answer_map.get(question.id, [])
+        selected = set(selected_values)
         correct = {option.id for option in question.options if option.is_correct}
-        is_correct = selected == correct
+        if question.question_type in FILL_QUESTION_TYPES:
+            normalized_selected = {
+                _normalized_text_answer(value)
+                for value in selected_values
+                if _normalized_text_answer(value)
+            }
+            normalized_correct = {
+                _normalized_text_answer(option.content)
+                for option in question.options
+                if option.is_correct and _normalized_text_answer(option.content)
+            }
+            is_correct = bool(normalized_selected) and not normalized_selected.isdisjoint(normalized_correct)
+        else:
+            is_correct = selected == correct
         score = question.score if is_correct else 0
         earned_score += score
         correct_count += 1 if is_correct else 0
@@ -245,7 +274,7 @@ def evaluate_questions(questions: list[Question], answer_map: dict[str, list[str
             "is_correct": is_correct,
             "score": score,
             "analysis": question.analysis,
-            "correct_option_ids": sorted(correct),
+            "correct_option_ids": [] if question.question_type in FILL_QUESTION_TYPES else sorted(correct),
             "selected_option_ids": sorted(selected),
         }
     return results, earned_score, correct_count, total_score
@@ -474,6 +503,7 @@ def submit_question_answers(db: Session, assignment_id: str, class_id: str, user
     assignment, task, teaching, _ = load_assignment_for_student(db, assignment_id, class_id)
     if task.workspace_type != "QUESTION_SET":
         raise ApiError(400, "NOT_QUESTION_WORKSPACE", "当前任务不是题目作答任务")
+    assert_assignment_started(assignment)
     questions = db.scalars(
         select(Question).where(Question.task_id == task.id).order_by(Question.sort_order.asc())
     ).all()
@@ -491,6 +521,7 @@ def submit_question_answers(db: Session, assignment_id: str, class_id: str, user
     attempt.total_count = len(questions)
     attempt.result_json = json.dumps(results, ensure_ascii=False, sort_keys=True)
     attempt.submitted_at = now
+    db.flush()
 
     for question in questions:
         answer = db.scalar(
