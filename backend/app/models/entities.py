@@ -916,6 +916,24 @@ class LearnerEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
+class StudentDailyTask(Base):
+    __tablename__ = "student_daily_tasks"
+    __table_args__ = (
+        Index("ix_student_daily_tasks_student_date", "student_id", "task_date", "sort_order"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    student_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    task_date: Mapped[str] = mapped_column(String(10), nullable=False)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    student: Mapped[User] = relationship()
+
+
 class LearnerProfileSnapshot(Base):
     __tablename__ = "learner_profile_snapshots"
     __table_args__ = (

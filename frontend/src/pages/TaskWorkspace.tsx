@@ -40,7 +40,6 @@ import {
 import { api, LearningContext, TaskDetail, VersionResult, Diagnosis, Hint, AgentWorkflowRun } from "../api";
 import StudentRouteBreadcrumb from "../components/StudentRouteBreadcrumb";
 import { StudentState, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
-import { resolveCourseIdeologyInsight } from "../courseIdeology";
 
 type PageProps = {
   taskId: string;
@@ -1955,8 +1954,8 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
             setActiveExecutionId(persistedRun.executionId);
             setActiveResultTab("results");
           } else if (persistedRun && !persistedRun.executionId) {
-            setRunState("QUEUED");
-            setRunMessage(persistedRun.message || "提交请求已发出，正在等待后端返回执行编号");
+            setRunState(persistedRun.status === "ERROR" ? "ERROR" : "QUEUED");
+            setRunMessage(persistedRun.message || (persistedRun.status === "ERROR" ? "提交失败" : "提交请求已发出，正在等待后端返回执行编号"));
             setActiveResultTab("results");
           } else {
             setRunState("IDLE");
@@ -1997,6 +1996,27 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
     }, 1450);
     return () => window.clearInterval(timer);
   }, [algorithmScene, algorithmScenePlaying]);
+
+  useEffect(() => {
+    if (activeExecutionId || runState !== "QUEUED") return undefined;
+    const timer = window.setInterval(() => {
+      const persistedRun = readTaskExecutionRun(taskId, assignmentId);
+      if (!persistedRun) return;
+      if (persistedRun.status === "ERROR") {
+        setRunState("ERROR");
+        setRunMessage(persistedRun.message || "提交失败");
+        return;
+      }
+      if (persistedRun.executionId) {
+        setRunState(persistedRun.status === "QUEUED" ? "QUEUED" : "RUNNING");
+        setRunMessage(persistedRun.message || "正在恢复后端执行状态");
+        setActiveExecutionId(persistedRun.executionId);
+        setActiveResultTab("results");
+      }
+    }, 700);
+
+    return () => window.clearInterval(timer);
+  }, [activeExecutionId, assignmentId, runState, taskId]);
 
   useEffect(() => {
     if (!activeExecutionId) return undefined;
@@ -2213,12 +2233,6 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
   }, [selectedCaseIndex, teacherCases.length]);
 
   const knowledgeTags = task?.learning_objectives.length ? task.learning_objectives : ["等待任务知识点"];
-  const currentCourseName = context?.courses.find((course) => course.course_id === task?.course_id)?.course_name;
-  const ideologyInsight = useMemo(() => resolveCourseIdeologyInsight({
-    courseName: currentCourseName,
-    taskTitle: task?.title,
-    knowledgePoints: knowledgeTags
-  }), [currentCourseName, knowledgeTags, task?.title]);
   const problemWidth = resolveProblemWidth(metrics, layout.problemRatio);
   const editorHeight = resolveEditorHeight(metrics, layout.editorRatio);
   const workspaceStyle = {
@@ -2472,6 +2486,10 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
                     {algorithmScene ? "查看算法演示" : "生成算法演示"}
                   </button>
                 </div>
+                <div className="program-ideology-banner">
+                  <span><ShieldCheck size={16} /> AI 课程思政融入</span>
+                  <p>本任务已纳入“知识学习 + 工程实践 + 价值引导”闭环，系统会在诊断、提示和总结中提示 AI 专业学习的责任意识、严谨精神与技术向善。</p>
+                </div>
               </div>
             </section>
 
@@ -2671,10 +2689,10 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
                           </ul>
                         </section>
                         <section className="program-ideology-note">
-                          <h3><ShieldCheck size={15} /> 专业素养提醒</h3>
-                          <strong>{ideologyInsight.title}</strong>
-                          <p>{ideologyInsight.summary}</p>
-                          <em>{ideologyInsight.dimension} · {ideologyInsight.source}</em>
+                          <h3><ShieldCheck size={15} /> 课程思政融入点</h3>
+                          <strong>知识学习、能力训练、价值引导同步发生</strong>
+                          <p>CodeTrack 不只判断代码是否通过，也把 AI 专业学习中的工程责任、数据安全、算法公平和创新使命放进学习过程。</p>
+                          <em>学生端轻量融入 · 无需教师端单独配置</em>
                         </section>
                         <section className="program-hints">
                           <h3>分层提示</h3>
@@ -2787,12 +2805,12 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
               </article>
 
               <article className="program-card program-ideology-summary">
-                <header><h2>课程思政收获</h2><span className="program-panel-meta">{ideologyInsight.dimension}</span></header>
+                <header><h2>价值引导闭环</h2><span className="program-panel-meta">AI 专业素养</span></header>
                 <div>
                   <span><ShieldCheck size={17} /></span>
-                  <strong>{ideologyInsight.title}</strong>
-                  <p>{isPassed(latestResult) ? ideologyInsight.reflection : "完成提交后，结合本题结果复盘这一条专业素养提醒。"}</p>
-                  <em>{ideologyInsight.source}</em>
+                  <strong>从会做题走向会负责任地使用技术</strong>
+                  <p>{isPassed(latestResult) ? "本次实践已形成技术掌握、调试过程和专业素养三类学习证据，可继续沉淀到学习总结与个人画像。" : "完成提交后，系统会结合代码结果、提示使用和学习总结，帮助你复盘专业能力与责任意识。"}</p>
+                  <em>科技向善 · 工程责任 · 严谨求证 · 创新实践</em>
                 </div>
               </article>
             </section>

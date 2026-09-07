@@ -1,6 +1,6 @@
 .program-shell {
   --program-topbar-height: var(--student-app-topbar-height, 58px);
-  --program-head-height: 142px;
+  --program-head-height: 166px;
   height: var(--app-viewport-height);
   min-height: var(--app-viewport-height);
   overflow: hidden;
@@ -318,6 +318,35 @@
 
 .program-title-line b {
   color: #176cf5;
+}
+
+.program-ideology-banner {
+  margin-top: 10px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid #f0c8c5;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #fff2f1 0%, #fffafa 100%);
+}
+
+.program-ideology-banner span {
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #b93632;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.program-ideology-banner p {
+  min-width: 0;
+  color: #536076;
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .program-scene-shortcut {
@@ -3588,7 +3617,7 @@ html.workspace-resizing-y * {
 
   .program-shell {
     --program-topbar-height: 58px;
-    --program-head-height: 136px;
+    --program-head-height: 190px;
     width: 100%;
     overflow: hidden;
   }
@@ -3653,6 +3682,12 @@ html.workspace-resizing-y * {
   .program-title-line h1,
   .question-title-line h1 {
     font-size: 21px;
+  }
+
+  .program-ideology-banner {
+    width: 100%;
+    flex-direction: column;
+    gap: 6px;
   }
 
   .program-head-actions,

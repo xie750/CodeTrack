@@ -7,21 +7,23 @@ import {
   Bot,
   CalendarCheck2,
   CheckCircle2,
+  Circle,
   ClipboardList,
   Database,
   FileText,
   Link2,
+  Loader2,
   PenLine,
+  Plus,
   RefreshCw,
   Sparkles,
   Target,
+  Trash2,
   TrendingUp
 } from "lucide-react";
-import { api, StudentProfile } from "../api";
+import { api, apiCache, StudentDailyTask, StudentDailyTaskCenter, StudentProfile } from "../api";
 import { StudentInlineNotice, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
 import selfStudyHeroArt from "../assets/self-study/self-study-ai-hero-wide.jpg";
-
-type TaskState = "done" | "active" | "pending";
 
 const loopSteps = [
   {
@@ -56,14 +58,6 @@ const loopSteps = [
   }
 ];
 
-const tasks: Array<{ title: string; state: TaskState }> = [
-  { title: "完成链表基础知识学习", state: "done" },
-  { title: "完成 LeetCode 206 反转链表练习", state: "active" },
-  { title: "整理本周学习笔记", state: "active" },
-  { title: "学习图的基本概念", state: "pending" },
-  { title: "完成每日学习反馈", state: "pending" }
-];
-
 const resourceCards = [
   {
     title: "B站课程：链表基础与专题练习",
@@ -92,51 +86,124 @@ function clamp(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
-function taskStateLabel(state: TaskState) {
-  if (state === "done") return "已完成";
-  if (state === "active") return "进行中";
-  return "待开始";
+function localTodayKey() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = `${now.getMonth() + 1}`.padStart(2, "0");
+  const day = `${now.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 export default function SelfStudy() {
   const navigate = useNavigate();
+  const todayKey = localTodayKey();
   const [profile, setProfile] = useState<StudentProfile | null>(null);
+  const [dailyTasks, setDailyTasks] = useState<StudentDailyTaskCenter | null>(() => apiCache.peekStudentDailyTasks(todayKey));
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
   const [profileDetail, setProfileDetail] = useState<string | null>(null);
+  const [dailyTaskError, setDailyTaskError] = useState<string | null>(null);
+  const [dailyTaskBusyId, setDailyTaskBusyId] = useState<string | null>(null);
+  const [dailyTaskCreating, setDailyTaskCreating] = useState(false);
+  const [newDailyTaskTitle, setNewDailyTaskTitle] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let alive = true;
     setProfileMessage(null);
     setProfileDetail(null);
+    setDailyTaskError(null);
     api.getLearningContext()
       .then((context) => {
         const courseId = context.courses[0]?.course_id;
-        return courseId ? api.getStudentProfile(courseId) : null;
+        return Promise.all([
+          courseId ? api.getStudentProfile(courseId) : Promise.resolve(null),
+          api.listStudentDailyTasks(todayKey)
+        ]);
       })
-      .then((data) => {
-        if (alive && data) setProfile(data);
+      .then(([profileData, dailyTaskData]) => {
+        if (!alive) return;
+        if (profileData) setProfile(profileData);
+        setDailyTasks(dailyTaskData);
       })
       .catch((err) => {
         if (!alive) return;
         setProfile(null);
         setProfileMessage(studentErrorMessage(err, "学习画像暂未同步，当前使用默认自学建议。"));
         setProfileDetail(studentErrorDetail(err));
+        setDailyTaskError(studentErrorMessage(err, "今日任务暂未同步。"));
       });
     return () => {
       alive = false;
     };
-  }, [reloadKey]);
+  }, [reloadKey, todayKey]);
 
   const weakPoint = profile?.knowledge_states.find((item) => item.state === "WEAK") ?? profile?.knowledge_states[0];
   const progress = clamp(profile?.overview.overall_progress ?? 68);
-  const completedCount = tasks.filter((task) => task.state === "done").length;
-  const activeCount = tasks.filter((task) => task.state !== "pending").length;
+  const dailyTaskItems = dailyTasks?.items ?? [];
+  const dailyCompleted = dailyTasks?.summary.completed ?? dailyTaskItems.filter((task) => task.completed).length;
+  const dailyTotal = dailyTasks?.summary.total ?? dailyTaskItems.length;
   const adviceTopic = weakPoint?.knowledge_point ?? "链表（数据结构）";
   const adviceReason = useMemo(() => {
     if (weakPoint?.last_evidence) return weakPoint.last_evidence;
     return "分析：节点链接与操作、上正逆单链表；插入和边界处理是你在本节操作中常见题型。";
   }, [weakPoint]);
+
+  function updateDailyState(items: StudentDailyTask[], taskDate = todayKey) {
+    const completed = items.filter((item) => item.completed).length;
+    setDailyTasks({
+      task_date: taskDate,
+      summary: {
+        total: items.length,
+        completed,
+        pending: items.length - completed
+      },
+      items
+    });
+  }
+
+  async function addDailyTask() {
+    const title = newDailyTaskTitle.trim();
+    if (!title || dailyTaskCreating) return;
+    setDailyTaskCreating(true);
+    setDailyTaskError(null);
+    try {
+      const created = await api.createStudentDailyTask(title, todayKey);
+      updateDailyState([...(dailyTasks?.items ?? []), created], created.task_date);
+      setNewDailyTaskTitle("");
+    } catch (err) {
+      setDailyTaskError(studentErrorMessage(err, "今日任务新增失败，请稍后重试。"));
+    } finally {
+      setDailyTaskCreating(false);
+    }
+  }
+
+  async function toggleDailyTask(task: StudentDailyTask) {
+    if (dailyTaskBusyId) return;
+    setDailyTaskBusyId(task.id);
+    setDailyTaskError(null);
+    try {
+      const updated = await api.updateStudentDailyTask(task.id, { completed: !task.completed });
+      updateDailyState((dailyTasks?.items ?? []).map((item) => (item.id === updated.id ? updated : item)), updated.task_date);
+    } catch (err) {
+      setDailyTaskError(studentErrorMessage(err, "今日任务状态更新失败，请稍后重试。"));
+    } finally {
+      setDailyTaskBusyId(null);
+    }
+  }
+
+  async function deleteDailyTask(task: StudentDailyTask) {
+    if (dailyTaskBusyId) return;
+    setDailyTaskBusyId(task.id);
+    setDailyTaskError(null);
+    try {
+      await api.deleteStudentDailyTask(task.id);
+      updateDailyState((dailyTasks?.items ?? []).filter((item) => item.id !== task.id), dailyTasks?.task_date ?? todayKey);
+    } catch (err) {
+      setDailyTaskError(studentErrorMessage(err, "今日任务删除失败，请稍后重试。"));
+    } finally {
+      setDailyTaskBusyId(null);
+    }
+  }
 
   return (
     <div className="study-home-page">
@@ -250,19 +317,45 @@ export default function SelfStudy() {
               <CalendarCheck2 size={20} />
               <h2>今日任务</h2>
             </div>
-            <span>{Math.max(activeCount, 4)}/{tasks.length} 完成</span>
+            <span>{dailyTotal ? `${dailyCompleted}/${dailyTotal} 完成` : "未添加"}</span>
           </header>
-          <div className="study-task-list">
-            {tasks.map((task) => (
-              <article className={task.state} key={task.title}>
-                <span>{task.state === "done" ? <CheckCircle2 size={18} /> : null}</span>
-                <strong>{task.title}</strong>
-                <em>{taskStateLabel(task.state)}</em>
-              </article>
-            ))}
+          <div className="study-task-composer">
+            <input
+              value={newDailyTaskTitle}
+              maxLength={160}
+              onChange={(event) => setNewDailyTaskTitle(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void addDailyTask();
+              }}
+              placeholder="添加今天要完成的任务"
+            />
+            <button type="button" disabled={dailyTaskCreating || !newDailyTaskTitle.trim()} onClick={() => void addDailyTask()}>
+              {dailyTaskCreating ? <Loader2 size={16} className="study-spin-icon" /> : <Plus size={16} />}
+            </button>
           </div>
-          <button className="study-task-more" type="button" onClick={() => navigate("/learning-home")}>
-            查看全部任务
+          {dailyTaskError ? <p className="study-task-error">{dailyTaskError}</p> : null}
+          <div className="study-task-list personal">
+            {dailyTaskItems.length ? dailyTaskItems.map((task) => (
+              <article className={task.completed ? "done" : "pending"} key={task.id}>
+                <button type="button" disabled={dailyTaskBusyId === task.id} onClick={() => void toggleDailyTask(task)} aria-label={task.completed ? "标记为未完成" : "标记为已完成"}>
+                  {dailyTaskBusyId === task.id ? <Loader2 size={17} className="study-spin-icon" /> : task.completed ? <CheckCircle2 size={18} /> : <Circle size={18} />}
+                </button>
+                <strong>{task.title}</strong>
+                <em>{task.completed ? "已完成" : "待完成"}</em>
+                <button type="button" disabled={dailyTaskBusyId === task.id} onClick={() => void deleteDailyTask(task)} aria-label={`删除 ${task.title}`} title="删除任务">
+                  <Trash2 size={16} />
+                </button>
+              </article>
+            )) : (
+              <div className="study-task-empty">
+                <ClipboardList size={26} />
+                <strong>今天还没有自定义任务</strong>
+                <p>在上方添加自己的学习安排。</p>
+              </div>
+            )}
+          </div>
+          <button className="study-task-more" type="button" onClick={() => navigate("/self-study/library")}>
+            前往资源中心
             <ArrowRight size={17} />
           </button>
         </aside>

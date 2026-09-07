@@ -241,6 +241,26 @@ export type StudentTaskCard = {
   latest_summary: string;
 };
 
+export type StudentDailyTask = {
+  id: string;
+  task_date: string;
+  title: string;
+  completed: boolean;
+  sort_order: number;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type StudentDailyTaskCenter = {
+  task_date: string;
+  summary: {
+    total: number;
+    completed: number;
+    pending: number;
+  };
+  items: StudentDailyTask[];
+};
+
 export type StudentInterventionItem = {
   id: string;
   type: "class_practice" | "class_reminder" | "student_feedback" | "risk_reminder" | "discussion" | string;
@@ -1262,6 +1282,10 @@ function studentTasksUrl(courseId?: string) {
   return `/api/v1/student/tasks${courseId ? `?course_id=${encodeURIComponent(courseId)}` : ""}`;
 }
 
+function studentDailyTasksUrl(taskDate?: string) {
+  return `/api/v1/student/daily-tasks${taskDate ? `?task_date=${encodeURIComponent(taskDate)}` : ""}`;
+}
+
 function studentProfileUrl(courseId?: string) {
   return `/api/v1/student/profile${courseId ? `?course_id=${encodeURIComponent(courseId)}` : ""}`;
 }
@@ -1579,6 +1603,33 @@ export const api = {
   getLearningContext: () => cachedGet<LearningContext>("/api/v1/student/learning-context"),
   listStudentTasks: (courseId?: string) =>
     cachedGet<StudentTaskCard[]>(studentTasksUrl(courseId)),
+  listStudentDailyTasks: (taskDate?: string) =>
+    cachedGet<StudentDailyTaskCenter>(studentDailyTasksUrl(taskDate), 5_000),
+  createStudentDailyTask: async (title: string, taskDate?: string) => {
+    const result = await request<StudentDailyTask>("/api/v1/student/daily-tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, task_date: taskDate })
+    });
+    clearApiCache((url) => url.startsWith("/api/v1/student/daily-tasks"));
+    return result;
+  },
+  updateStudentDailyTask: async (taskId: string, payload: { title?: string; completed?: boolean }) => {
+    const result = await request<StudentDailyTask>(`/api/v1/student/daily-tasks/${encodeURIComponent(taskId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    clearApiCache((url) => url.startsWith("/api/v1/student/daily-tasks"));
+    return result;
+  },
+  deleteStudentDailyTask: async (taskId: string) => {
+    const result = await request<{ deleted: boolean; id: string }>(`/api/v1/student/daily-tasks/${encodeURIComponent(taskId)}`, {
+      method: "DELETE"
+    });
+    clearApiCache((url) => url.startsWith("/api/v1/student/daily-tasks"));
+    return result;
+  },
   getStudentProfile: (courseId?: string) =>
     cachedGet<StudentProfile>(studentProfileUrl(courseId)),
   getStudentInterventions: (courseId?: string) =>
@@ -1884,6 +1935,7 @@ export const apiCache = {
   clear: clearApiCache,
   peekLearningContext: () => peekCachedGet<LearningContext>("/api/v1/student/learning-context"),
   peekStudentTasks: (courseId?: string) => peekCachedGet<StudentTaskCard[]>(studentTasksUrl(courseId)),
+  peekStudentDailyTasks: (taskDate?: string) => peekCachedGet<StudentDailyTaskCenter>(studentDailyTasksUrl(taskDate), 5_000),
   peekStudentProfile: (courseId?: string) => peekCachedGet<StudentProfile>(studentProfileUrl(courseId)),
   peekStudentInterventions: (courseId?: string) => peekCachedGet<StudentInterventionCenter>(studentInterventionsUrl(courseId), 10_000),
   peekStudentKnowledgeGraph: (courseId: string) => peekCachedGet<StudentKnowledgeGraph>(studentKnowledgeGraphUrl(courseId))

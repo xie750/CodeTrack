@@ -1093,7 +1093,7 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
         openAiTutorWithPrompt(`请基于我的错因记录，帮我复盘${firstPoint || title}相关错题，并给出下一次提交前的检查清单。`);
         return;
       case "OPEN_TASK":
-        navigate(selectedCourseId ? `/courses/${selectedCourseId}/tasks` : "/learning-home", {
+        navigate(selectedCourseId ? `/courses/${selectedCourseId}/tasks` : "/", {
           state: relatedTaskId ? { focusTaskId: relatedTaskId } : undefined
         });
         return;

@@ -2,7 +2,6 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ConfigProvider } from "antd";
 import zhCN from "antd/locale/zh_CN";
-import LearningHome from "./pages/LearningHome";
 import StudentEntryPortal from "./pages/StudentEntryPortal";
 import CourseHub from "./pages/CourseHub";
 import CourseTasks from "./pages/CourseTasks";
@@ -185,7 +184,7 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
         />
         <div className="route-stage" data-onboarding-id={activeRouteGroup === "/self-study" ? "tour-self-study-route" : undefined} key={activeRouteGroup}>
           <Routes location={location}>
-            <Route path="/learning-home" element={<LearningHome onNavigate={handleNavigate} onOpenWorkspace={openTask} />} />
+            <Route path="/learning-home" element={<Navigate to="/" replace />} />
             <Route path="/courses" element={<Navigate to="/" replace />} />
             <Route path="/courses/:courseId/*" element={<CourseHub onOpenWorkspace={openTask} />} />
             <Route path="/tasks" element={<Navigate to="/courses" replace />} />

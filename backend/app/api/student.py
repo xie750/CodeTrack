@@ -1,5 +1,7 @@
 import json
+from datetime import date, datetime, timezone
 from typing import Any
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile, status
 from fastapi.responses import FileResponse
@@ -17,6 +19,7 @@ from backend.app.models import (
     Course,
     LearnerEvent,
     StudentClassMembership,
+    StudentDailyTask,
     StudentKnowledgeGraph,
     StudentTaskProgress,
     Task,
@@ -164,6 +167,36 @@ class PracticeProjectMaterialRequest(BaseModel):
 
 class InterventionReplyRequest(BaseModel):
     content: str = Field(min_length=1, max_length=1200)
+
+
+class StudentDailyTaskCreateRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+    task_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+
+
+class StudentDailyTaskUpdateRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=160)
+    completed: bool | None = None
+
+
+def today_date_key() -> str:
+    return date.today().isoformat()
+
+
+def now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def serialize_daily_task(task: StudentDailyTask) -> dict:
+    return {
+        "id": task.id,
+        "task_date": task.task_date,
+        "title": task.title,
+        "completed": task.completed,
+        "sort_order": task.sort_order,
+        "created_at": iso(task.created_at),
+        "updated_at": iso(task.updated_at),
+    }
 
 
 def task_knowledge_points(task: Task) -> list[str]:
@@ -595,6 +628,113 @@ def reply_student_intervention(
     db.merge(response)
     db.commit()
     return ok({"event_id": event.id, "responded": True, "content": payload.content.strip()})
+
+
+@router.get("/daily-tasks")
+def list_student_daily_tasks(
+    task_date: str | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    require_active_class(db, user)
+    day_key = task_date or today_date_key()
+    tasks = list(
+        db.scalars(
+            select(StudentDailyTask)
+            .where(
+                StudentDailyTask.student_id == user.id,
+                StudentDailyTask.task_date == day_key,
+            )
+            .order_by(StudentDailyTask.sort_order.asc(), StudentDailyTask.created_at.asc())
+        ).all()
+    )
+    completed_count = sum(1 for task in tasks if task.completed)
+    return ok(
+        {
+            "task_date": day_key,
+            "summary": {
+                "total": len(tasks),
+                "completed": completed_count,
+                "pending": len(tasks) - completed_count,
+            },
+            "items": [serialize_daily_task(task) for task in tasks],
+        }
+    )
+
+
+@router.post("/daily-tasks", status_code=status.HTTP_201_CREATED)
+def create_student_daily_task(
+    payload: StudentDailyTaskCreateRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    require_active_class(db, user)
+    title = payload.title.strip()
+    if not title:
+        raise ApiError(422, "DAILY_TASK_TITLE_EMPTY", "今日任务名称不能为空")
+    day_key = payload.task_date or today_date_key()
+    max_order = db.scalar(
+        select(func.max(StudentDailyTask.sort_order)).where(
+            StudentDailyTask.student_id == user.id,
+            StudentDailyTask.task_date == day_key,
+        )
+    )
+    task = StudentDailyTask(
+        id=f"daily_{uuid4().hex[:12]}",
+        student_id=user.id,
+        task_date=day_key,
+        title=title,
+        completed=False,
+        sort_order=(max_order or 0) + 1,
+    )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    return ok(serialize_daily_task(task))
+
+
+@router.patch("/daily-tasks/{daily_task_id}")
+def update_student_daily_task(
+    daily_task_id: str,
+    payload: StudentDailyTaskUpdateRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    require_active_class(db, user)
+    task = db.get(StudentDailyTask, daily_task_id)
+    if task is None or task.student_id != user.id:
+        raise ApiError(404, "DAILY_TASK_NOT_FOUND", "今日任务不存在")
+    if payload.title is not None:
+        title = payload.title.strip()
+        if not title:
+            raise ApiError(422, "DAILY_TASK_TITLE_EMPTY", "今日任务名称不能为空")
+        task.title = title
+    if payload.completed is not None:
+        task.completed = payload.completed
+    task.updated_at = now_utc()
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    return ok(serialize_daily_task(task))
+
+
+@router.delete("/daily-tasks/{daily_task_id}")
+def delete_student_daily_task(
+    daily_task_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    require_active_class(db, user)
+    task = db.get(StudentDailyTask, daily_task_id)
+    if task is None or task.student_id != user.id:
+        raise ApiError(404, "DAILY_TASK_NOT_FOUND", "今日任务不存在")
+    db.delete(task)
+    db.commit()
+    return ok({"deleted": True, "id": daily_task_id})
 
 
 @router.get("/practice-projects")
