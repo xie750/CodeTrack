@@ -200,6 +200,7 @@ export default function AiUsage() {
   }), [featureBreakdown])
 
   const logColumns = [
+    { title: 'Run ID', dataIndex: 'id', width: 150, render: (v: string) => <code style={{ fontSize: 12 }}>{v}</code> },
     { title: '时间', dataIndex: 'time', width: 150, render: (v: string | null) => <span style={{ fontSize: 12 }}>{formatTime(v)}</span> },
     { title: '用户', dataIndex: 'user_name', width: 110 },
     { title: '角色', dataIndex: 'role', width: 76, render: (v: string) => <Tag>{v === 'STUDENT' ? '学生' : v === 'TEACHER' ? '教师' : '系统'}</Tag> },
@@ -407,7 +408,7 @@ export default function AiUsage() {
               columns={logColumns}
               dataSource={data.recent_logs}
               pagination={{ pageSize: 8, showSizeChanger: false }}
-              scroll={{ x: 980 }}
+              scroll={{ x: 1120 }}
             />
           </Card>
         </>

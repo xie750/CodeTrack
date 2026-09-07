@@ -348,6 +348,76 @@ class RagKnowledgeBase(Base):
     owner: Mapped[User] = relationship()
 
 
+class AuthoritativeKnowledgeBase(Base):
+    """管理员端维护的平台权威学科知识库。
+
+    业务治理对象与底层 RAG 知识库分开：本表描述学科、课程、审核和发布策略，
+    `rag_knowledge_base_id` 指向真正参与解析、切片、索引和检索的 RAG 知识库。
+    """
+
+    __tablename__ = "authoritative_knowledge_bases"
+    __table_args__ = (
+        UniqueConstraint("course_id", "version", name="uq_authoritative_kb_course_version"),
+        Index("ix_authoritative_kb_course_status", "course_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    subject: Mapped[str] = mapped_column(String(120), nullable=False)
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id"), nullable=False)
+    rag_knowledge_base_id: Mapped[str] = mapped_column(ForeignKey("knowledge_bases.id"), nullable=False)
+    version: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="DRAFT")
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    coverage_rate: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    citation_pass_rate: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    retrieval_priority: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    publish_scope: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    retrieval_policy: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    quality_gates_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    course: Mapped[Course] = relationship()
+    owner: Mapped[User] = relationship()
+    rag_knowledge_base: Mapped[RagKnowledgeBase] = relationship()
+    sources: Mapped[list["AuthoritativeKnowledgeSource"]] = relationship(
+        back_populates="authoritative_kb",
+        order_by="AuthoritativeKnowledgeSource.created_at.desc()",
+    )
+
+
+class AuthoritativeKnowledgeSource(Base):
+    __tablename__ = "authoritative_knowledge_sources"
+    __table_args__ = (
+        Index("ix_authoritative_source_kb_status", "authoritative_kb_id", "status"),
+        Index("ix_authoritative_source_document", "rag_document_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    authoritative_kb_id: Mapped[str] = mapped_column(ForeignKey("authoritative_knowledge_bases.id"), nullable=False)
+    rag_document_id: Mapped[str | None] = mapped_column(ForeignKey("documents.id"))
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    publisher: Mapped[str] = mapped_column(String(160), nullable=False)
+    source_url: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    license_note: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    chapter: Mapped[str] = mapped_column(String(160), nullable=False, default="")
+    knowledge_points_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    source_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="PENDING_REVIEW")
+    reviewer_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+    quality_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    authoritative_kb: Mapped[AuthoritativeKnowledgeBase] = relationship(back_populates="sources")
+    rag_document: Mapped["RagDocument | None"] = relationship()
+    reviewer: Mapped[User | None] = relationship()
+
+
 class RagDocument(Base):
     __tablename__ = "documents"
     __table_args__ = (

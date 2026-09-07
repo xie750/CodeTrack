@@ -275,6 +275,52 @@ function buildAiAdvicePrompt(profile: StudentProfile, dimensions: CourseProfileD
   ].join("\n").slice(0, 1900);
 }
 
+type AiAdviceRunStatus = "running" | "succeeded" | "failed";
+
+type PersistedAiAdviceRun = {
+  status: AiAdviceRunStatus;
+  courseId: string;
+  profileScope: "course" | "global";
+  prompt: string;
+  startedAt: string;
+  updatedAt: string;
+  advice?: StudentAiChatResponse;
+  error?: string;
+};
+
+const AI_ADVICE_RUN_STORAGE_PREFIX = "codetrack.profile.aiAdviceRun.v1:";
+const AI_ADVICE_RUNNING_TTL_MS = 5 * 60 * 1000;
+
+function aiAdviceRunStorageKey(courseId: string, profileScope: "course" | "global") {
+  return `${AI_ADVICE_RUN_STORAGE_PREFIX}${profileScope}:${courseId || "default"}`;
+}
+
+function readAiAdviceRun(courseId: string, profileScope: "course" | "global"): PersistedAiAdviceRun | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(aiAdviceRunStorageKey(courseId, profileScope)) ?? "null") as PersistedAiAdviceRun | null;
+    if (!parsed || parsed.courseId !== courseId || parsed.profileScope !== profileScope) return null;
+    const updatedAt = new Date(parsed.updatedAt).getTime();
+    if (parsed.status === "running" && (!Number.isFinite(updatedAt) || Date.now() - updatedAt > AI_ADVICE_RUNNING_TTL_MS)) {
+      const expired = {
+        ...parsed,
+        status: "failed" as const,
+        error: "上一次 AI 建议请求可能已被刷新中断，请重新生成。"
+      };
+      window.localStorage.setItem(aiAdviceRunStorageKey(courseId, profileScope), JSON.stringify(expired));
+      return expired;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeAiAdviceRun(run: PersistedAiAdviceRun) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(aiAdviceRunStorageKey(run.courseId, run.profileScope), JSON.stringify(run));
+}
+
 type BehaviorTrendMode = "day" | "month" | "year";
 
 type BehaviorTrendEvent = NonNullable<StudentProfile["behavior_events"]>[number];
@@ -888,13 +934,15 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
   useEffect(() => {
     if (!selectedCourseId) return;
     let alive = true;
+    const profileScope = initialCourseId ? "course" : "global";
     setProfileLoading(true);
     setError(null);
     setErrorDetail(null);
     setProfile(null);
-    setAiAdvice(null);
-    setAiAdviceError(null);
-    setAiAdviceLoading(false);
+    const persistedAdvice = readAiAdviceRun(selectedCourseId, profileScope);
+    setAiAdvice(persistedAdvice?.status === "succeeded" ? persistedAdvice.advice ?? null : null);
+    setAiAdviceError(persistedAdvice?.status === "failed" ? persistedAdvice.error ?? "AI 建议生成失败，请重试。" : null);
+    setAiAdviceLoading(persistedAdvice?.status === "running");
     api.getStudentProfile(selectedCourseId).then((data) => {
       if (alive) setProfile(data);
     }).catch((err) => {
@@ -908,7 +956,20 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
     return () => {
       alive = false;
     };
-  }, [selectedCourseId, reloadKey]);
+  }, [initialCourseId, selectedCourseId, reloadKey]);
+
+  useEffect(() => {
+    if (!selectedCourseId || !aiAdviceLoading) return undefined;
+    const profileScope = initialCourseId ? "course" : "global";
+    const timer = window.setInterval(() => {
+      const persisted = readAiAdviceRun(selectedCourseId, profileScope);
+      if (!persisted || persisted.status === "running") return;
+      setAiAdvice(persisted.status === "succeeded" ? persisted.advice ?? null : null);
+      setAiAdviceError(persisted.status === "failed" ? persisted.error ?? "AI 建议生成失败，请重试。" : null);
+      setAiAdviceLoading(false);
+    }, 900);
+    return () => window.clearInterval(timer);
+  }, [aiAdviceLoading, initialCourseId, selectedCourseId]);
 
   const currentCourse = useMemo(
     () => context?.courses.find((course) => course.course_id === selectedCourseId),
@@ -1043,11 +1104,22 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
 
   async function generateAiAdvice() {
     if (aiAdviceLoading) return;
+    const profileScope = isCourseLocked ? "course" : "global";
+    const prompt = buildAiAdvicePrompt(activeProfile, dimensions);
+    const now = new Date().toISOString();
     setAiAdviceLoading(true);
     setAiAdviceError(null);
+    writeAiAdviceRun({
+      status: "running",
+      courseId: selectedCourseId,
+      profileScope,
+      prompt,
+      startedAt: now,
+      updatedAt: now
+    });
     try {
       const result = await api.sendStudentAiChat(
-        buildAiAdvicePrompt(activeProfile, dimensions),
+        prompt,
         selectedCourseId,
         [],
         {
@@ -1062,8 +1134,27 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
         }
       );
       setAiAdvice(result);
+      writeAiAdviceRun({
+        status: "succeeded",
+        courseId: selectedCourseId,
+        profileScope,
+        prompt,
+        startedAt: now,
+        updatedAt: new Date().toISOString(),
+        advice: result
+      });
     } catch (err) {
-      setAiAdviceError(studentErrorMessage(err, "AI 建议暂时生成失败，请稍后重试。"));
+      const message = studentErrorMessage(err, "AI 建议暂时生成失败，请稍后重试。");
+      setAiAdviceError(message);
+      writeAiAdviceRun({
+        status: "failed",
+        courseId: selectedCourseId,
+        profileScope,
+        prompt,
+        startedAt: now,
+        updatedAt: new Date().toISOString(),
+        error: message
+      });
     } finally {
       setAiAdviceLoading(false);
     }
@@ -1266,7 +1357,7 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
                 </>
               ) : (
                 <p>
-                  {aiAdviceError || "点击右上角后，系统会读取薄弱信号、最近学习内容、资料沉淀和提示依赖，生成下一步学习安排。"}
+                  {aiAdviceLoading ? "系统正在读取薄弱信号、最近学习内容、资料沉淀和提示依赖；可以切换页面，回来后会继续显示生成状态或结果。" : aiAdviceError || "点击右上角后，系统会读取薄弱信号、最近学习内容、资料沉淀和提示依赖，生成下一步学习安排。"}
                 </p>
               )}
             </div>

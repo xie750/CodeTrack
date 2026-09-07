@@ -811,6 +811,42 @@ html.workspace-resizing-y * {
   color: #20bd79;
 }
 
+.program-run-banner {
+  margin: 12px 16px 0;
+  min-height: 58px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #cfe0ff;
+  border-radius: 8px;
+  color: #176cf5;
+  background: linear-gradient(180deg, #f7fbff 0%, #eef6ff 100%);
+}
+
+.program-run-banner .spinning {
+  flex: 0 0 auto;
+  animation: student-state-spin 1s linear infinite;
+}
+
+.program-run-banner div {
+  display: grid;
+  gap: 3px;
+}
+
+.program-run-banner strong {
+  color: #17345f;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.program-run-banner p {
+  margin: 0;
+  color: #5d7191;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .program-result table,
 .program-history table {
   width: 100%;

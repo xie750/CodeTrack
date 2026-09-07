@@ -14,11 +14,13 @@ from backend.app.core.security import current_user, require_role
 from backend.app.models import (
     AdministrativeClass,
     Course,
+    LearnerEvent,
     StudentClassMembership,
     StudentKnowledgeGraph,
     StudentTaskProgress,
     Task,
     TaskAssignment,
+    TeacherFeedback,
     TeachingAssignment,
     User,
 )
@@ -125,6 +127,10 @@ class PracticeProjectSubmissionRequest(BaseModel):
     title: str = Field(default="", max_length=180)
     description: str = Field(default="", max_length=2000)
     materials: list[str] = Field(default_factory=list, max_length=12)
+
+
+class InterventionReplyRequest(BaseModel):
+    content: str = Field(min_length=1, max_length=1200)
 
 
 def task_knowledge_points(task: Task) -> list[str]:
@@ -257,6 +263,38 @@ def serialize_student_knowledge_graph(graph: StudentKnowledgeGraph, course: Cour
     }
 
 
+def _safe_payload(raw: str | None) -> dict[str, Any]:
+    if not raw:
+        return {}
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _intervention_action_label(action: str) -> str:
+    labels = {
+        "class_practice": "去完成练习",
+        "class_reminder": "查看跟进要求",
+        "student_feedback": "查看教师反馈",
+        "risk_reminder": "查看跟进要求",
+        "discussion": "提交讨论回应",
+    }
+    return labels.get(action, "查看详情")
+
+
+def _intervention_tone(action: str) -> str:
+    tones = {
+        "class_practice": "practice",
+        "class_reminder": "reminder",
+        "student_feedback": "feedback",
+        "risk_reminder": "risk",
+        "discussion": "discussion",
+    }
+    return tones.get(action, "reminder")
+
+
 def generated_resource_model_name(resource: dict) -> str:
     payload = resource.get("render_payload") if isinstance(resource, dict) else {}
     metadata = payload.get("metadata") if isinstance(payload, dict) else {}
@@ -340,6 +378,189 @@ def learning_context(db: Session = Depends(get_db), user: User = Depends(current
             "courses": courses,
         }
     )
+
+
+@router.get("/interventions")
+def list_student_interventions(
+    course_id: str | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    administrative_class, _ = require_active_class(db, user)
+    teaching_query = select(TeachingAssignment).where(
+        TeachingAssignment.class_id == administrative_class.id,
+        TeachingAssignment.status == "ACTIVE",
+    )
+    if course_id:
+        teaching_query = teaching_query.where(TeachingAssignment.course_id == course_id)
+    teachings = list(db.scalars(teaching_query).all())
+    teaching_ids = [item.id for item in teachings]
+    course_ids = [item.course_id for item in teachings]
+    if not teachings:
+        return ok({"summary": {"total": 0, "unread": 0, "practice_count": 0, "response_count": 0}, "items": []})
+
+    courses = {row.id: row for row in db.scalars(select(Course).where(Course.id.in_(course_ids))).all()}
+    teachers = {
+        row.id: row
+        for row in db.scalars(select(User).where(User.id.in_({item.teacher_id for item in teachings}))).all()
+    }
+    teaching_by_id = {item.id: item for item in teachings}
+
+    events = list(
+        db.scalars(
+            select(LearnerEvent)
+            .where(
+                LearnerEvent.student_id == user.id,
+                LearnerEvent.class_id == administrative_class.id,
+                LearnerEvent.teaching_assignment_id.in_(teaching_ids),
+                LearnerEvent.event_type.in_(
+                    [
+                        "teacher_intervention_practice",
+                        "teacher_intervention_reminder",
+                        "teacher_intervention_feedback",
+                        "teacher_intervention_risk",
+                        "teacher_intervention_discussion",
+                    ]
+                ),
+            )
+            .order_by(LearnerEvent.created_at.desc())
+        ).all()
+    )
+
+    assignment_ids = [item.assignment_id for item in events if item.assignment_id]
+    task_ids = [item.task_id for item in events if item.task_id]
+    feedback_ids = [(_safe_payload(item.payload).get("feedback_id")) for item in events]
+    progress_by_assignment = {
+        row.assignment_id: row
+        for row in db.scalars(
+            select(StudentTaskProgress).where(
+                StudentTaskProgress.student_id == user.id,
+                StudentTaskProgress.assignment_id.in_(assignment_ids),
+            )
+        ).all()
+    } if assignment_ids else {}
+    assignments = {
+        row.id: row
+        for row in db.scalars(select(TaskAssignment).where(TaskAssignment.id.in_(assignment_ids))).all()
+    } if assignment_ids else {}
+    tasks = {row.id: row for row in db.scalars(select(Task).where(Task.id.in_(task_ids))).all()} if task_ids else {}
+    feedback = {
+        row.id: row
+        for row in db.scalars(
+            select(TeacherFeedback).where(
+                TeacherFeedback.id.in_([item for item in feedback_ids if item]),
+                TeacherFeedback.student_visible.is_(True),
+                TeacherFeedback.status == "PUBLISHED",
+            )
+        ).all()
+    } if any(feedback_ids) else {}
+    responses = list(
+        db.scalars(
+            select(LearnerEvent).where(
+                LearnerEvent.student_id == user.id,
+                LearnerEvent.class_id == administrative_class.id,
+                LearnerEvent.event_type == "teacher_intervention_response",
+            )
+        ).all()
+    )
+    responded_parent_ids = {
+        _safe_payload(item.payload).get("parent_event_id")
+        for item in responses
+        if _safe_payload(item.payload).get("parent_event_id")
+    }
+
+    items = []
+    for event in events:
+        payload = _safe_payload(event.payload)
+        action = payload.get("action") or event.event_type.replace("teacher_intervention_", "")
+        teaching = teaching_by_id.get(event.teaching_assignment_id or "")
+        course = courses.get(event.course_id)
+        teacher = teachers.get(teaching.teacher_id) if teaching else None
+        progress = progress_by_assignment.get(event.assignment_id or "")
+        task = tasks.get(event.task_id or "")
+        assignment = assignments.get(event.assignment_id or "")
+        feedback_item = feedback.get(payload.get("feedback_id"))
+        items.append(
+            {
+                "id": event.id,
+                "type": action,
+                "tone": _intervention_tone(action),
+                "title": payload.get("title") or (task.title if task else "教师学习跟进"),
+                "content": feedback_item.content if feedback_item else payload.get("content", ""),
+                "course_id": event.course_id,
+                "course_name": course.name if course else "",
+                "class_id": event.class_id,
+                "class_name": administrative_class.name,
+                "teacher_id": teacher.id if teacher else payload.get("teacher_id"),
+                "teacher_name": teacher.display_name if teacher else "",
+                "knowledge_point": payload.get("knowledge_point"),
+                "task_id": event.task_id,
+                "assignment_id": event.assignment_id,
+                "feedback_id": payload.get("feedback_id"),
+                "discussion_id": payload.get("discussion_id"),
+                "task_status": progress.status if progress else None,
+                "deadline": iso(assignment.deadline) if assignment else None,
+                "action_label": _intervention_action_label(action),
+                "responded": event.id in responded_parent_ids,
+                "created_at": iso(event.created_at),
+            }
+        )
+
+    return ok(
+        {
+            "summary": {
+                "total": len(items),
+                "unread": len([item for item in items if not item["responded"]]),
+                "practice_count": len([item for item in items if item["type"] == "class_practice"]),
+                "response_count": len(responded_parent_ids),
+            },
+            "items": items,
+        }
+    )
+
+
+@router.post("/interventions/{event_id}/reply", status_code=status.HTTP_201_CREATED)
+def reply_student_intervention(
+    event_id: str,
+    payload: InterventionReplyRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    administrative_class, _ = require_active_class(db, user)
+    event = db.get(LearnerEvent, event_id)
+    if (
+        event is None
+        or event.student_id != user.id
+        or event.class_id != administrative_class.id
+        or not event.event_type.startswith("teacher_intervention_")
+    ):
+        raise ApiError(404, "INTERVENTION_NOT_FOUND", "教师跟进事项不存在")
+    original = _safe_payload(event.payload)
+    response = LearnerEvent(
+        id=f"evt_intervention_reply_{event_id[-8:]}",
+        student_id=user.id,
+        course_id=event.course_id,
+        class_id=event.class_id,
+        teaching_assignment_id=event.teaching_assignment_id,
+        assignment_id=event.assignment_id,
+        task_id=event.task_id,
+        event_type="teacher_intervention_response",
+        knowledge_points=event.knowledge_points,
+        error_type=None,
+        payload=json.dumps(
+            {
+                "parent_event_id": event.id,
+                "parent_action": original.get("action"),
+                "content": payload.content.strip(),
+            },
+            ensure_ascii=False,
+        ),
+    )
+    db.merge(response)
+    db.commit()
+    return ok({"event_id": event.id, "responded": True, "content": payload.content.strip()})
 
 
 @router.get("/practice-projects")

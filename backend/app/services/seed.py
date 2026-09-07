@@ -8,6 +8,8 @@ from backend.app.core.security import hash_password, verify_password
 from backend.app.models import (
     AdministrativeClass,
     AgentRun,
+    AuthoritativeKnowledgeBase,
+    AuthoritativeKnowledgeSource,
     Capability,
     Course,
     CourseChapter,
@@ -215,6 +217,11 @@ def ensure_rag_profile_columns(db: Session) -> None:
     db.commit()
 
 
+def ensure_authoritative_knowledge_tables(db: Session) -> None:
+    AuthoritativeKnowledgeBase.__table__.create(bind=db.bind, checkfirst=True)
+    AuthoritativeKnowledgeSource.__table__.create(bind=db.bind, checkfirst=True)
+
+
 def seed_demo_data(db: Session) -> None:
     ensure_auth_columns(db)
     ensure_task_workspace_columns(db)
@@ -223,6 +230,7 @@ def seed_demo_data(db: Session) -> None:
     ensure_practice_project_tables(db)
     ensure_student_resource_folder_table(db)
     ensure_rag_profile_columns(db)
+    ensure_authoritative_knowledge_tables(db)
     users = {
         "user_admin_001": {
             "username": "admin",

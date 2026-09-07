@@ -11,11 +11,16 @@
 文本。教师看到的每个数字都能下钻到具体任务或学生。
 """
 
+import json
+from datetime import timedelta
+from uuid import uuid4
+
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.app.core.api_response import ok
+from backend.app.core.api_response import ApiError, ok
 from backend.app.core.database import get_db
 from backend.app.core.security import current_user, require_role
 from backend.app.models import (
@@ -26,11 +31,16 @@ from backend.app.models import (
     HintRecord,
     LearnerEvent,
     LearnerProfileSnapshot,
+    Question,
+    QuestionOption,
     StudentClassMembership,
     StudentTaskProgress,
     Submission,
     SubmissionVersion,
     Task,
+    TaskAssignment,
+    TeacherFeedback,
+    TeachingAssignment,
     User,
 )
 from backend.app.services.learner_profile import loads_list, serialize_learner_profile
@@ -40,6 +50,7 @@ from backend.app.services.learner_stats import (
 )
 from backend.app.services.learning_alerts import as_utc, compute_class_alerts
 from backend.app.services.submissions import iso
+from backend.app.models.entities import utc_now
 from backend.app.services.teacher_scope import (
     DiagnosisScope,
     derive_progress_status,
@@ -65,6 +76,34 @@ def _round(value: float, digits: int = 1) -> float:
 
 def _mean(values: list[float]) -> float:
     return _round(sum(values) / len(values)) if values else 0.0
+
+
+def _new_id(prefix: str) -> str:
+    return f"{prefix}_{uuid4().hex[:12]}"
+
+
+def _json_dump(value) -> str:
+    return json.dumps(value, ensure_ascii=False)
+
+
+def _json_load(raw: str | None, fallback):
+    if not raw:
+        return fallback
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        return fallback
+    return value
+
+
+class LearningInterventionRequest(BaseModel):
+    course_id: str
+    class_id: str
+    action: str = Field(pattern="^(class_practice|class_reminder|student_feedback|risk_reminder|discussion)$")
+    title: str = Field(min_length=1, max_length=160)
+    content: str = Field(min_length=1, max_length=3000)
+    knowledge_point: str | None = Field(default=None, max_length=120)
+    student_id: str | None = None
 
 
 # ---------------------------------------------------------------- 选项接口
@@ -698,3 +737,196 @@ def class_alerts(
     require_role(user, "TEACHER")
     scope = _scope(db, user.id, course_id, class_id)
     return ok(compute_class_alerts(db, scope))
+
+
+@router.post("/analytics/interventions", status_code=201)
+def create_learning_intervention(
+    payload: LearningInterventionRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    """把教师端学情干预落成学生端可见动作。
+
+    班级练习会创建并发布真实任务；提醒、个体反馈、风险跟进和讨论会写入
+    `LearnerEvent`，由学生端“教师跟进”区域读取。
+    """
+    require_role(user, "TEACHER")
+    scope = _scope(db, user.id, payload.course_id, payload.class_id, payload.student_id)
+    teaching = next((item for item in scope.assignments if item.class_id == payload.class_id), None)
+    if teaching is None:
+        raise ApiError(403, "AUTH_FORBIDDEN", "无权向该班级发起干预")
+
+    recipients = [payload.student_id] if payload.student_id else sorted(scope.student_ids)
+    recipients = [student_id for student_id in recipients if student_id in scope.student_ids]
+    if not recipients:
+        raise ApiError(422, "INTERVENTION_EMPTY_RECIPIENTS", "当前干预没有可触达的学生")
+    if payload.action == "student_feedback" and not payload.student_id:
+        raise ApiError(422, "INTERVENTION_STUDENT_REQUIRED", "个体反馈需要指定学生")
+
+    now = utc_now()
+    knowledge_points = [payload.knowledge_point or payload.title]
+    task_id: str | None = None
+    assignment_id: str | None = None
+    feedback_id: str | None = None
+    discussion_id: str | None = None
+
+    if payload.action == "class_practice":
+        capability_id = "cap_linked_list_boundary"
+        task = Task(
+            id=_new_id("task_intervention"),
+            course_id=payload.course_id,
+            title=payload.title.strip(),
+            description=payload.content.strip(),
+            workspace_type="QUESTION_SET",
+            language="CPP",
+            interface_spec="Concept practice generated from learning intervention.",
+            learning_objectives=_json_dump(knowledge_points),
+            capability_ids=_json_dump([capability_id]),
+            status="OPEN",
+        )
+        db.add(task)
+        db.flush()
+        question = Question(
+            id=_new_id("question_intervention"),
+            task_id=task.id,
+            question_type="SINGLE_CHOICE",
+            stem=f"{payload.content.strip()}\n\n本次专项练习首先要确认的关键点是什么？",
+            analysis=f"本题用于检查学生是否理解 {payload.knowledge_point or payload.title} 的核心薄弱点。",
+            knowledge_points=_json_dump(knowledge_points),
+            difficulty="BASIC",
+            score=100,
+            error_type="TEACHER_INTERVENTION_PRACTICE",
+            sort_order=1,
+        )
+        db.add(question)
+        db.flush()
+        db.add_all(
+            [
+                QuestionOption(
+                    id=_new_id("option"),
+                    question_id=question.id,
+                    label="A",
+                    content=f"先复盘 {payload.knowledge_point or '本知识点'} 的概念、边界和典型错误",
+                    is_correct=True,
+                    sort_order=1,
+                ),
+                QuestionOption(
+                    id=_new_id("option"),
+                    question_id=question.id,
+                    label="B",
+                    content="只看最终答案，不检查推理过程",
+                    is_correct=False,
+                    sort_order=2,
+                ),
+            ]
+        )
+        assignment = TaskAssignment(
+            id=_new_id("assign_intervention"),
+            task_id=task.id,
+            teaching_assignment_id=teaching.id,
+            published_by=user.id,
+            publish_status="PUBLISHED",
+            assignment_mode="QUIZ",
+            allow_hint_level_3=False,
+            published_at=now,
+            deadline=now + timedelta(days=7),
+        )
+        db.add(assignment)
+        db.flush()
+        for student_id in recipients:
+            db.add(
+                StudentTaskProgress(
+                    assignment_id=assignment.id,
+                    student_id=student_id,
+                    status="NOT_STARTED",
+                    total_required_count=1,
+                    updated_at=now,
+                )
+            )
+        task_id = task.id
+        assignment_id = assignment.id
+
+    if payload.action == "student_feedback" and payload.student_id:
+        latest_submission = db.scalar(
+            select(Submission)
+            .where(
+                Submission.student_id == payload.student_id,
+                Submission.task_id.in_(scope.task_ids),
+            )
+            .order_by(Submission.last_submitted_at.desc())
+        )
+        if latest_submission is not None:
+            feedback = TeacherFeedback(
+                id=_new_id("feedback_intervention"),
+                submission_id=latest_submission.id,
+                teacher_id=user.id,
+                content=payload.content.strip(),
+                status="PUBLISHED",
+                student_visible=True,
+                published_at=now,
+                updated_at=now,
+            )
+            db.add(feedback)
+            db.flush()
+            feedback_id = feedback.id
+
+    if payload.action == "discussion":
+        discussion_id = _new_id("discussion_intervention")
+
+    event_type_by_action = {
+        "class_practice": "teacher_intervention_practice",
+        "class_reminder": "teacher_intervention_reminder",
+        "student_feedback": "teacher_intervention_feedback",
+        "risk_reminder": "teacher_intervention_risk",
+        "discussion": "teacher_intervention_discussion",
+    }
+    for student_id in recipients:
+        db.add(
+            LearnerEvent(
+                id=_new_id("evt_intervention"),
+                student_id=student_id,
+                course_id=payload.course_id,
+                class_id=payload.class_id,
+                teaching_assignment_id=teaching.id,
+                assignment_id=assignment_id,
+                task_id=task_id,
+                event_type=event_type_by_action[payload.action],
+                knowledge_points=_json_dump(knowledge_points),
+                error_type=None,
+                payload=_json_dump(
+                    {
+                        "source": "teacher_learning_analytics",
+                        "action": payload.action,
+                        "title": payload.title.strip(),
+                        "content": payload.content.strip(),
+                        "teacher_id": user.id,
+                        "knowledge_point": payload.knowledge_point,
+                        "task_id": task_id,
+                        "assignment_id": assignment_id,
+                        "feedback_id": feedback_id,
+                        "discussion_id": discussion_id,
+                    }
+                ),
+                created_at=now,
+            )
+        )
+
+    db.commit()
+    return ok(
+        {
+            "action": payload.action,
+            "course_id": payload.course_id,
+            "class_id": payload.class_id,
+            "student_id": payload.student_id,
+            "recipients": len(recipients),
+            "recipient_ids": recipients,
+            "recipient_count": len(recipients),
+            "notification_ids": [],
+            "task_id": task_id,
+            "assignment_id": assignment_id,
+            "feedback_id": feedback_id,
+            "discussion_id": discussion_id,
+            "student_visible": True,
+            "created_at": iso(now),
+        }
+    )

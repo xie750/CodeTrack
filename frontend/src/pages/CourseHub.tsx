@@ -18,6 +18,7 @@ import {
   GraduationCap,
   MapPin,
   Megaphone,
+  MessageSquareText,
   Network,
   PencilLine,
   PlayCircle,
@@ -25,7 +26,7 @@ import {
   UserRound,
   UsersRound
 } from "lucide-react";
-import { api, apiCache, LearningContext, StudentProfile, StudentTaskCard } from "../api";
+import { api, apiCache, LearningContext, StudentInterventionCenter, StudentProfile, StudentTaskCard } from "../api";
 import type { TaskOpenTarget } from "../App";
 import StudentRouteBreadcrumb from "../components/StudentRouteBreadcrumb";
 import { StudentInlineNotice, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
@@ -192,9 +193,11 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
   const cachedContext = apiCache.peekLearningContext();
   const cachedTasks = apiCache.peekStudentTasks(courseId);
   const cachedProfile = apiCache.peekStudentProfile(courseId);
+  const cachedInterventions = apiCache.peekStudentInterventions(courseId);
   const [context, setContext] = useState<LearningContext | null>(cachedContext);
   const [tasks, setTasks] = useState<StudentTaskCard[]>(cachedTasks ?? []);
   const [profile, setProfile] = useState<StudentProfile | null>(cachedProfile);
+  const [interventions, setInterventions] = useState<StudentInterventionCenter | null>(cachedInterventions);
   const [loading, setLoading] = useState(!cachedContext || !cachedTasks);
   const [message, setMessage] = useState<string | null>(null);
   const [messageDetail, setMessageDetail] = useState<string | null>(null);
@@ -213,10 +216,12 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
           api.listStudentTasks(courseId),
           api.getStudentProfile(courseId).catch(() => null)
         ]);
+        const interventionData = await api.getStudentInterventions(courseId).catch(() => cachedInterventions);
         if (!alive) return;
         setContext(data);
         setTasks(taskData);
         setProfile(profileData);
+        setInterventions(interventionData);
       } catch (err) {
         if (!alive) return;
         setMessage(studentErrorMessage(err, "课程工作台数据加载失败，请稍后刷新。"));
@@ -248,6 +253,7 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
   const practiceScore = profile ? clampPercent(100 - profile.overview.logic_error_rate) : clampPercent(progress + 18);
   const activityScore = clampPercent((completed + inProgress) / Math.max(tasks.length, 1) * 100);
   const visibleTasks = tasks.slice(0, 5);
+  const visibleInterventions = interventions?.items.slice(0, 4) ?? [];
 
   const stats = [
     { label: "课程任务", value: loading ? "..." : String(tasks.length), sub: `待完成 ${pending} 项`, icon: <ClipboardList size={28} />, tone: "blue" },
@@ -396,6 +402,42 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
             ))}
             <button className="course-dashboard-all" type="button" onClick={() => navigate(coursePath(courseId, "profile"))}>查看学情分析 <ArrowRight size={14} /></button>
           </div>
+        </article>
+
+        <article className="course-dashboard-card course-dashboard-follow">
+          <header>
+            <h2>教师跟进</h2>
+            <span>{interventions?.summary.unread ?? 0} 项待响应</span>
+          </header>
+          {loading ? <div className="skeleton-block course-task-skeleton" /> : visibleInterventions.length ? (
+            <div className="course-follow-list">
+              {visibleInterventions.map((item) => (
+                <button
+                  className={`course-follow-row ${item.tone}`}
+                  type="button"
+                  key={item.id}
+                  onClick={() => item.task_id && item.assignment_id
+                    ? onOpenWorkspace({
+                        taskId: item.task_id,
+                        assignmentId: item.assignment_id,
+                        courseId: item.course_id,
+                        workspaceType: "QUESTION_SET",
+                        taskType: "QUIZ"
+                      })
+                    : navigate("/self-study/ai")}
+                >
+                  <span><MessageSquareText size={16} /></span>
+                  <div>
+                    <strong>{item.title}</strong>
+                    <small>{item.content}</small>
+                  </div>
+                  <em>{item.action_label}</em>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-panel">当前课程暂无教师跟进事项。</div>
+          )}
         </article>
 
         <article className="course-dashboard-card course-dashboard-knowledge">

@@ -3010,6 +3010,133 @@
   line-height: 1.65;
 }
 
+.teacher-follow-count {
+  padding: 5px 9px;
+  border-radius: 6px;
+  background: #eef6ff;
+  color: #176cf5;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.teacher-follow-list {
+  display: grid;
+  gap: 12px;
+}
+
+.teacher-follow-card {
+  min-height: 112px;
+  padding: 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid #e4eaf3;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.teacher-follow-card.practice { border-color: #cfe4ff; background: #f7fbff; }
+.teacher-follow-card.feedback { border-color: #d7ecdd; background: #f8fdf9; }
+.teacher-follow-card.risk { border-color: #ffd7d7; background: #fffafa; }
+.teacher-follow-card.discussion { border-color: #e1d9ff; background: #fbfaff; }
+
+.teacher-follow-main {
+  min-width: 0;
+  display: flex;
+  gap: 11px;
+}
+
+.teacher-follow-icon {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: #176cf5;
+  background: #eaf3ff;
+}
+
+.teacher-follow-card.feedback .teacher-follow-icon { color: #148a4c; background: #eaf8ef; }
+.teacher-follow-card.risk .teacher-follow-icon { color: #d14242; background: #fff0f0; }
+.teacher-follow-card.discussion .teacher-follow-icon { color: #6e52d9; background: #f1edff; }
+
+.teacher-follow-title {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.teacher-follow-title strong {
+  color: #17243b;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.teacher-follow-title em {
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: #eef2f8;
+  color: #5c6a80;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.teacher-follow-card p {
+  margin-top: 7px;
+  color: #516075;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.teacher-follow-card small {
+  margin-top: 8px;
+  display: block;
+  color: #7a8798;
+  font-size: 12px;
+}
+
+.teacher-follow-reply {
+  display: grid;
+  gap: 8px;
+}
+
+.teacher-follow-reply textarea {
+  width: min(360px, 32vw);
+  min-height: 76px;
+  resize: vertical;
+  padding: 9px 10px;
+  border: 1px solid #d7dfec;
+  border-radius: 8px;
+  color: #17243b;
+  font: inherit;
+  line-height: 1.5;
+}
+
+.teacher-follow-reply button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 7px;
+  color: #ffffff;
+  background: #176cf5;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.teacher-follow-reply button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .reminder-list {
   display: flex;
   flex-direction: column;

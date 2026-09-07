@@ -27,6 +27,7 @@ import {
   PanelRightOpen,
   Pause,
   Play,
+  RefreshCw,
   RotateCcw,
   Save,
   ShieldCheck,
@@ -97,6 +98,8 @@ type AlgorithmSceneAsset = {
 
 const WORKSPACE_LAYOUT_KEY = "codetrack.taskWorkspace.layout.v1";
 const ALGORITHM_SCENE_STORAGE_PREFIX = "codetrack.algorithmScene.v1:";
+const TASK_EXECUTION_STORAGE_PREFIX = "codetrack.taskWorkspace.execution.v1:";
+const TASK_EXECUTION_TTL_MS = 60 * 60 * 1000;
 const DEFAULT_PROBLEM_WIDTH = 316;
 const DEFAULT_EDITOR_HEIGHT = 407;
 const DEFAULT_PROBLEM_RATIO = 0.31;
@@ -124,6 +127,17 @@ const TERMINAL_STATUSES = new Set([
   "SECURITY_REJECTED",
   "INFRASTRUCTURE_ERROR"
 ]);
+
+type PersistedTaskExecution = {
+  taskId: string;
+  assignmentId?: string;
+  executionId: string | null;
+  versionId: string | null;
+  status: string;
+  message: string;
+  startedAt: string;
+  updatedAt: string;
+};
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), Math.max(min, max));
@@ -185,6 +199,36 @@ function statusClass(status: string) {
   if (status === "PASSED") return "pass";
   if (status === "FAILED") return "fail";
   return "";
+}
+
+function taskExecutionStorageKey(taskId: string, assignmentId?: string) {
+  return `${TASK_EXECUTION_STORAGE_PREFIX}${assignmentId || taskId}`;
+}
+
+function readTaskExecutionRun(taskId: string, assignmentId?: string): PersistedTaskExecution | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(taskExecutionStorageKey(taskId, assignmentId)) ?? "null") as PersistedTaskExecution | null;
+    if (!parsed || parsed.taskId !== taskId || (parsed.assignmentId || "") !== (assignmentId || "")) return null;
+    const updatedAt = new Date(parsed.updatedAt).getTime();
+    if (!Number.isFinite(updatedAt) || Date.now() - updatedAt > TASK_EXECUTION_TTL_MS) {
+      window.localStorage.removeItem(taskExecutionStorageKey(taskId, assignmentId));
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeTaskExecutionRun(run: PersistedTaskExecution) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(taskExecutionStorageKey(run.taskId, run.assignmentId), JSON.stringify(run));
+}
+
+function clearTaskExecutionRun(taskId: string, assignmentId?: string) {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(taskExecutionStorageKey(taskId, assignmentId));
 }
 
 function agentStepMeta(stepName: string) {
@@ -1890,6 +1934,7 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
     setActiveAlgorithmStepIndex(0);
     setAlgorithmScenePlaying(false);
     setAlgorithmSceneExpanded(false);
+    setActiveExecutionId(null);
     setActiveResultTab("cases");
     setSelectedCaseIndex(0);
 
@@ -1903,9 +1948,21 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
           setSelectedLanguage(defaultLanguage);
           setDrafts(nextTask.interface_spec.language_templates);
           setSourceCode(nextTask.interface_spec.language_templates[defaultLanguage] ?? nextTask.interface_spec.student_template);
-          setRunState("IDLE");
-          setRunMessage("等待提交");
           setAlgorithmScene(readAlgorithmSceneAsset(nextTask));
+          const persistedRun = readTaskExecutionRun(taskId, assignmentId);
+          if (persistedRun?.executionId && !TERMINAL_STATUSES.has(persistedRun.status)) {
+            setRunState(persistedRun.status === "QUEUED" ? "QUEUED" : "RUNNING");
+            setRunMessage(persistedRun.message || "正在恢复后端执行状态");
+            setActiveExecutionId(persistedRun.executionId);
+            setActiveResultTab("results");
+          } else if (persistedRun && !persistedRun.executionId) {
+            setRunState("QUEUED");
+            setRunMessage(persistedRun.message || "提交请求已发出，正在等待后端返回执行编号");
+            setActiveResultTab("results");
+          } else {
+            setRunState("IDLE");
+            setRunMessage("等待提交");
+          }
         } else {
           setError(studentErrorMessage(taskResult.reason, "任务详情加载失败，请返回任务列表后重试。"));
           setErrorDetail(studentErrorDetail(taskResult.reason));
@@ -1952,8 +2009,23 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
       try {
         const status = await api.getExecution(executionId);
         if (cancelled) return;
-        setRunMessage(status.status);
+        const statusMessage = TERMINAL_STATUSES.has(status.status)
+          ? status.status
+          : status.status === "QUEUED"
+            ? "已提交，等待执行"
+            : `后端正在执行与生成诊断 ${status.test_progress.completed}/${status.test_progress.total}`;
+        setRunMessage(statusMessage);
         setRunState(TERMINAL_STATUSES.has(status.status) ? "DONE" : "RUNNING");
+        writeTaskExecutionRun({
+          taskId,
+          assignmentId,
+          executionId,
+          versionId: status.version_id,
+          status: status.status,
+          message: statusMessage,
+          startedAt: status.started_at || new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
         if (status.result_url && status.version_id) {
           const result = await api.getResults(status.version_id);
           if (cancelled) return;
@@ -1992,6 +2064,7 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
             }
           }
           setActiveExecutionId(null);
+          clearTaskExecutionRun(taskId, assignmentId);
           return;
         }
         timer = window.setTimeout(poll, 1200);
@@ -2001,6 +2074,16 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
           setRunMessage(caught instanceof Error ? caught.message : "执行状态读取失败");
           setErrorDetail(studentErrorDetail(caught));
           setActiveExecutionId(null);
+          writeTaskExecutionRun({
+            taskId,
+            assignmentId,
+            executionId,
+            versionId: null,
+            status: "ERROR",
+            message: caught instanceof Error ? caught.message : "执行状态读取失败",
+            startedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          });
         }
       }
     }
@@ -2010,7 +2093,7 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
       cancelled = true;
       if (timer) window.clearTimeout(timer);
     };
-  }, [activeExecutionId]);
+  }, [activeExecutionId, assignmentId, taskId]);
 
   useEffect(() => {
     const diagnosisId = diagnosis?.diagnosis_id ?? latestResult?.diagnosis.diagnosis_id;
@@ -2144,6 +2227,7 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
     "--program-problem-width": `${problemWidth}px`,
     "--program-editor-height": `${editorHeight}px`
   } as CSSProperties;
+  const executionInFlight = runState === "QUEUED" || runState === "RUNNING";
 
   function updateCurrentDraft(value: string) {
     setSourceCode(value);
@@ -2162,12 +2246,24 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
     setActiveAgentStepId(null);
     setRunState("IDLE");
     setRunMessage("等待提交");
+    clearTaskExecutionRun(taskId, assignmentId);
   }
 
   async function submitCode() {
     if (!task || runState === "QUEUED" || runState === "RUNNING") return;
+    const startedAt = new Date().toISOString();
     setRunState("QUEUED");
     setRunMessage("已提交，等待执行");
+    writeTaskExecutionRun({
+      taskId,
+      assignmentId,
+      executionId: null,
+      versionId: null,
+      status: "QUEUED",
+      message: "已提交，等待后端创建执行任务",
+      startedAt,
+      updatedAt: startedAt
+    });
     setLatestResult(null);
     setDiagnosis(null);
     setHints([]);
@@ -2177,12 +2273,32 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
     setActiveAgentStepId(null);
     try {
       const response = await api.submitCode(task.task_id, selectedLanguage, sourceCode, assignmentId);
+      writeTaskExecutionRun({
+        taskId,
+        assignmentId,
+        executionId: response.execution_id,
+        versionId: response.version_id,
+        status: response.status,
+        message: response.status === "QUEUED" ? "已提交，等待执行" : response.status,
+        startedAt,
+        updatedAt: new Date().toISOString()
+      });
       setActiveExecutionId(response.execution_id);
       setRunMessage(response.status);
     } catch (caught) {
       setRunState("ERROR");
       setRunMessage(caught instanceof Error ? caught.message : "提交失败");
       setErrorDetail(studentErrorDetail(caught));
+      writeTaskExecutionRun({
+        taskId,
+        assignmentId,
+        executionId: null,
+        versionId: null,
+        status: "ERROR",
+        message: caught instanceof Error ? caught.message : "提交失败",
+        startedAt,
+        updatedAt: new Date().toISOString()
+      });
     }
   }
 
@@ -2461,6 +2577,15 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
                     </nav>
                     <div>执行状态：<b>{runMessage}</b></div>
                   </header>
+                  {executionInFlight ? (
+                    <div className="program-run-banner" role="status" aria-live="polite">
+                      <RefreshCw size={15} className="spinning" />
+                      <div>
+                        <strong>后端任务正在处理</strong>
+                        <p>可以切换到其他页面，返回本任务后会继续恢复执行和 AI 诊断状态。</p>
+                      </div>
+                    </div>
+                  ) : null}
                   {activeResultTab === "cases" ? (
                     <div className="program-case-panel">
                       {teacherCases.length ? (
@@ -2556,13 +2681,13 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
                       <>
                         <section>
                           <h3>AI诊断总结</h3>
-                          <p>{diagnosis?.explanation ?? (latestResult ? "当前版本暂无可用 AI 诊断，请先查看系统测试证据。" : "提交代码后，AI 会基于编译输出、失败用例和课程知识源给出诊断。")}</p>
+                          <p>{diagnosis?.explanation ?? (executionInFlight ? "代码已提交，后端正在运行测试并生成 AI 诊断。你可以切换到其他页面，返回后这里会继续恢复状态。" : latestResult ? "当前版本暂无可用 AI 诊断，请先查看系统测试证据。" : "提交代码后，AI 会基于编译输出、失败用例和课程知识源给出诊断。")}</p>
                         </section>
                         <section>
                           <h3>系统证据</h3>
                           <ul>
-                            <li><b>通过情况：</b>{latestResult ? `${latestResult.tests.filter((test) => test.status === "PASSED").length}/${latestResult.tests.length}` : "等待提交"}</li>
-                            <li><b>编译状态：</b>{latestResult?.execution.compile_exit_code === 0 ? "通过" : latestResult ? "未通过" : "等待提交"}</li>
+                            <li><b>通过情况：</b>{latestResult ? `${latestResult.tests.filter((test) => test.status === "PASSED").length}/${latestResult.tests.length}` : executionInFlight ? "执行中" : "等待提交"}</li>
+                            <li><b>编译状态：</b>{latestResult?.execution.compile_exit_code === 0 ? "通过" : latestResult ? "未通过" : executionInFlight ? "编译/运行中" : "等待提交"}</li>
                             <li><b>语言：</b>{task.interface_spec.language_labels[selectedLanguage] ?? selectedLanguage}</li>
                           </ul>
                         </section>
@@ -2582,12 +2707,12 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
                           )) : (
                             <article>
                               <div className="program-hint-title"><Lightbulb size={15} /> 第1层提示</div>
-                              <p>诊断生成后会先解锁方向性提示，不直接给完整答案。</p>
+                              <p>{executionInFlight ? "正在等待 AI 诊断完成，完成后会先解锁方向性提示。" : "诊断生成后会先解锁方向性提示，不直接给完整答案。"}</p>
                             </article>
                           )}
                         </section>
                         <div className="hint-usage">
-                          <p><Eye size={14} /> 第一层提示 <span>{hints.some((hint) => hint.level === 1) ? "已解锁" : "待诊断"}</span></p>
+                          <p><Eye size={14} /> 第一层提示 <span>{hints.some((hint) => hint.level === 1) ? "已解锁" : executionInFlight ? "生成中" : "待诊断"}</span></p>
                           <p><Eye size={14} /> 第二层提示 <span>{hints.some((hint) => hint.level === 2) ? "已解锁" : "按需解锁"}</span></p>
                           <p><Eye size={14} /> 第三层提示 <span>{hints.some((hint) => hint.level === 3) ? "已解锁" : "按任务规则控制"}</span></p>
                         </div>

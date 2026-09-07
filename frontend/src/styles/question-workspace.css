@@ -1668,6 +1668,97 @@
   margin-top: 14px;
 }
 
+.course-dashboard-follow {
+  grid-column: span 6;
+}
+
+.course-dashboard-follow > header span {
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: #176cf5;
+  background: #eef6ff;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.course-follow-list {
+  display: grid;
+  gap: 10px;
+}
+
+.course-follow-row {
+  width: 100%;
+  min-height: 74px;
+  padding: 11px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #e4eaf3;
+  border-radius: 8px;
+  background: #fbfdff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.course-follow-row:hover {
+  border-color: #bad5ff;
+  background: #f7fbff;
+}
+
+.course-follow-row.practice { border-left: 3px solid #176cf5; }
+.course-follow-row.feedback { border-left: 3px solid #18a957; }
+.course-follow-row.risk { border-left: 3px solid #e25555; }
+.course-follow-row.discussion { border-left: 3px solid #7c4dff; }
+
+.course-follow-row > span {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: #176cf5;
+  background: #eaf3ff;
+}
+
+.course-follow-row.feedback > span { color: #148a4c; background: #eaf8ef; }
+.course-follow-row.risk > span { color: #d14242; background: #fff0f0; }
+.course-follow-row.discussion > span { color: #6e52d9; background: #f1edff; }
+
+.course-follow-row div {
+  min-width: 0;
+}
+
+.course-follow-row strong,
+.course-follow-row small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.course-follow-row strong {
+  color: #17243b;
+  font-size: 14px;
+}
+
+.course-follow-row small {
+  margin-top: 5px;
+  color: #68758b;
+  font-size: 12px;
+}
+
+.course-follow-row em {
+  padding: 5px 8px;
+  border-radius: 6px;
+  color: #176cf5;
+  background: #eef6ff;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
 .course-dashboard-side {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 0.86fr);

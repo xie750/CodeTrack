@@ -23,6 +23,7 @@ from backend.app.models import (
     User,
 )
 from backend.app.models.entities import utc_now
+from backend.app.services.recommendation import sync_learning_recommendations
 from backend.app.services.submissions import iso
 
 
@@ -452,6 +453,13 @@ def update_learner_profile(
             recommendation.related_knowledge_points = json.dumps([weak.knowledge_point], ensure_ascii=False)
             recommendation.status = "ACTIVE"
             recommendation.created_at = now
+
+    sync_learning_recommendations(
+        db,
+        student_id=user.id,
+        class_id=class_id,
+        course_id=task.course_id,
+    )
 
     return {
         "overall_progress": profile.overall_progress,

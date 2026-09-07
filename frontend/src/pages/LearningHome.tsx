@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, CalendarClock, Check, ClipboardList, Code2, MonitorPlay, ShieldCheck } from "lucide-react";
-import { api, apiCache, LearningContext, StudentProfile, StudentTaskCard } from "../api";
+import { ArrowRight, CalendarClock, Check, ClipboardList, Code2, MessageSquareText, MonitorPlay, Send, ShieldCheck } from "lucide-react";
+import { api, apiCache, LearningContext, StudentInterventionCenter, StudentInterventionItem, StudentProfile, StudentTaskCard } from "../api";
 import type { TaskOpenTarget } from "../App";
 import heroArt from "../assets/ui-home/hero-art.png";
 import robotImg from "../assets/ui-home/robot-img.png";
@@ -34,13 +34,18 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
   const cachedCourseId = cachedContext?.courses[0]?.course_id;
   const cachedTasks = apiCache.peekStudentTasks();
   const cachedProfile = cachedCourseId ? apiCache.peekStudentProfile(cachedCourseId) : null;
+  const cachedInterventions = apiCache.peekStudentInterventions();
   const [context, setContext] = useState<LearningContext | null>(cachedContext);
   const [tasks, setTasks] = useState<StudentTaskCard[]>(cachedTasks ?? []);
   const [profile, setProfile] = useState<StudentProfile | null>(cachedProfile);
+  const [interventions, setInterventions] = useState<StudentInterventionCenter | null>(cachedInterventions);
   const [pageStatus, setPageStatus] = useState<"loading" | "ready" | "error">(cachedContext ? "ready" : "loading");
   const [loadMessage, setLoadMessage] = useState<string | null>(null);
   const [loadDetail, setLoadDetail] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [replyingId, setReplyingId] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState("");
+  const [replyLoading, setReplyLoading] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -61,16 +66,18 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
         setContext(data);
 
         const courseId = data.courses[0]?.course_id;
-        const [taskResult, profileResult] = await Promise.allSettled([
+        const [taskResult, profileResult, interventionResult] = await Promise.allSettled([
           api.listStudentTasks(),
-          courseId ? api.getStudentProfile(courseId) : Promise.resolve(null)
+          courseId ? api.getStudentProfile(courseId) : Promise.resolve(null),
+          api.getStudentInterventions()
         ]);
         if (!alive) return;
 
         setTasks(taskResult.status === "fulfilled" ? taskResult.value : []);
         setProfile(profileResult.status === "fulfilled" ? profileResult.value : null);
+        setInterventions(interventionResult.status === "fulfilled" ? interventionResult.value : cachedInterventions);
         setLoadMessage(
-          taskResult.status === "rejected" || profileResult.status === "rejected"
+          taskResult.status === "rejected" || profileResult.status === "rejected" || interventionResult.status === "rejected"
             ? "部分学习数据暂时没有读取成功，页面已按当前接口结果显示。"
             : null
         );
@@ -79,6 +86,8 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
             ? studentErrorDetail(taskResult.reason)
             : profileResult.status === "rejected"
               ? studentErrorDetail(profileResult.reason)
+              : interventionResult.status === "rejected"
+                ? studentErrorDetail(interventionResult.reason)
               : null
         );
         setPageStatus("ready");
@@ -100,6 +109,42 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
       alive = false;
     };
   }, [reloadKey]);
+
+  const teacherFollowUps = useMemo(() => interventions?.items.slice(0, 3) ?? [], [interventions]);
+
+  function openIntervention(item: StudentInterventionItem) {
+    if (item.task_id && item.assignment_id) {
+      onOpenWorkspace({
+        taskId: item.task_id,
+        assignmentId: item.assignment_id,
+        courseId: item.course_id,
+        workspaceType: "QUESTION_SET",
+        taskType: "QUIZ"
+      });
+      return;
+    }
+    if (item.type === "discussion") {
+      setReplyingId(item.id);
+      setReplyText("");
+      return;
+    }
+    onNavigate("/self-study/ai");
+  }
+
+  async function submitInterventionReply(item: StudentInterventionItem) {
+    const text = replyText.trim();
+    if (!text) return;
+    setReplyLoading(true);
+    try {
+      await api.replyStudentIntervention(item.id, text);
+      const next = await api.getStudentInterventions();
+      setInterventions(next);
+      setReplyingId(null);
+      setReplyText("");
+    } finally {
+      setReplyLoading(false);
+    }
+  }
 
   const todayTasks = useMemo(() => {
     return tasks.slice(0, 3).map((task, index) => ({
@@ -250,6 +295,53 @@ export default function LearningHome({ onNavigate, onOpenWorkspace }: PageProps)
               ))
             ) : (
               <div className="empty-panel">当前没有从接口读取到今日任务。切换到课程任务页后会按班级任务数据展示。</div>
+            )}
+          </div>
+        </section>
+
+        <section className="home-card home-section teacher-follow-section">
+          <div className="home-card-header">
+            <h2>教师跟进</h2>
+            {interventions ? <span className="teacher-follow-count">{interventions.summary.unread} 项待响应</span> : null}
+          </div>
+          <div className="teacher-follow-list">
+            {isLoading ? (
+              Array.from({ length: 2 }).map((_, index) => <div className="teacher-follow-card skeleton-block" key={index} />)
+            ) : teacherFollowUps.length ? (
+              teacherFollowUps.map((item) => (
+                <article className={`teacher-follow-card ${item.tone}`} key={item.id}>
+                  <div className="teacher-follow-main">
+                    <span className="teacher-follow-icon"><MessageSquareText size={18} /></span>
+                    <div>
+                      <div className="teacher-follow-title">
+                        <strong>{item.title}</strong>
+                        {item.knowledge_point ? <em>{item.knowledge_point}</em> : null}
+                      </div>
+                      <p>{item.content}</p>
+                      <small>{item.course_name} · {item.teacher_name || "授课教师"} · {deadlineLabel(item.created_at)}</small>
+                    </div>
+                  </div>
+                  {replyingId === item.id ? (
+                    <div className="teacher-follow-reply">
+                      <textarea
+                        value={replyText}
+                        onChange={(event) => setReplyText(event.target.value)}
+                        placeholder="写下你的理解、疑问或完成计划"
+                      />
+                      <button type="button" disabled={replyLoading || !replyText.trim()} onClick={() => void submitInterventionReply(item)}>
+                        <Send size={14} />
+                        提交回应
+                      </button>
+                    </div>
+                  ) : (
+                    <button className="outline-btn" type="button" onClick={() => openIntervention(item)}>
+                      {item.responded ? "已回应" : item.action_label}
+                    </button>
+                  )}
+                </article>
+              ))
+            ) : (
+              <div className="empty-panel wide">暂无教师跟进。老师从学情诊断发起干预后，会在这里形成提醒、反馈、讨论或专项练习。</div>
             )}
           </div>
         </section>

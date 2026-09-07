@@ -72,7 +72,11 @@ def safe_json(raw: str | None) -> dict[str, Any]:
 
 
 def iso(value: datetime | None) -> str | None:
-    return value.isoformat() if value else None
+    if not value:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.isoformat()
 
 
 def total_tokens(run: AgentRun) -> int:

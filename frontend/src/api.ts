@@ -93,6 +93,75 @@ export type AdminAiUsagePayload = {
   insights: string[];
 };
 
+export type AdminAuthoritativeKnowledgeSource = {
+  id: string;
+  authoritative_kb_id: string;
+  rag_document_id: string | null;
+  title: string;
+  source_kind: string;
+  publisher: string;
+  source_url: string;
+  license_note: string;
+  chapter: string;
+  knowledge_points: string[];
+  source_summary: string;
+  status: string;
+  reviewer_id: string | null;
+  quality_score: number;
+  chunk_count: number;
+  document_status: string;
+  document_progress: number;
+  active_version_id: string | null;
+  created_at: string;
+  updated_at: string;
+  reviewed_at: string | null;
+};
+
+export type AdminAuthoritativeKnowledgeBase = {
+  id: string;
+  subject: string;
+  course_id: string;
+  course_name: string;
+  rag_knowledge_base_id: string;
+  version: string;
+  status: string;
+  owner_id: string;
+  coverage_rate: number;
+  source_count: number;
+  chunk_count: number;
+  citation_pass_rate: number;
+  retrieval_priority: number;
+  publish_scope: string;
+  retrieval_policy: string;
+  quality_gates: string[];
+  created_at: string;
+  updated_at: string;
+  published_at: string | null;
+  sources: AdminAuthoritativeKnowledgeSource[];
+};
+
+export type AdminAuthoritativeRetrieveResult = {
+  chunk_id: string;
+  parent_chunk_id: string;
+  document_id: string;
+  document_name: string;
+  heading_path: string[];
+  content_preview: string;
+  fusion_score: number;
+  rerank_score: number | null;
+  source: null | {
+    id: string;
+    title: string;
+    source_kind: string;
+    publisher: string;
+    source_url: string;
+    chapter: string;
+    knowledge_points: string[];
+    status: string;
+    quality_score: number;
+  };
+};
+
 type ApiRequestErrorOptions = {
   kind: ApiErrorKind;
   status?: number;
@@ -170,6 +239,40 @@ export type StudentTaskCard = {
   total_required_count: number;
   highest_hint_level: number;
   latest_summary: string;
+};
+
+export type StudentInterventionItem = {
+  id: string;
+  type: "class_practice" | "class_reminder" | "student_feedback" | "risk_reminder" | "discussion" | string;
+  tone: "practice" | "reminder" | "feedback" | "risk" | "discussion" | string;
+  title: string;
+  content: string;
+  course_id: string;
+  course_name: string;
+  class_id: string;
+  class_name: string;
+  teacher_id: string | null;
+  teacher_name: string;
+  knowledge_point: string | null;
+  task_id: string | null;
+  assignment_id: string | null;
+  feedback_id: string | null;
+  discussion_id: string | null;
+  task_status: string | null;
+  deadline: string | null;
+  action_label: string;
+  responded: boolean;
+  created_at: string | null;
+};
+
+export type StudentInterventionCenter = {
+  summary: {
+    total: number;
+    unread: number;
+    practice_count: number;
+    response_count: number;
+  };
+  items: StudentInterventionItem[];
 };
 
 export type StudentProfile = {
@@ -1139,6 +1242,10 @@ function studentKnowledgeGraphUrl(courseId: string) {
   return `/api/v1/student/courses/${encodeURIComponent(courseId)}/knowledge-graph`;
 }
 
+function studentInterventionsUrl(courseId?: string) {
+  return `/api/v1/student/interventions${courseId ? `?course_id=${encodeURIComponent(courseId)}` : ""}`;
+}
+
 function studentPracticeProjectDetailUrl(projectId: string) {
   return `/api/v1/student/practice-projects/${encodeURIComponent(projectId)}`;
 }
@@ -1377,6 +1484,67 @@ export const api = {
       cache: "no-store"
     });
   },
+  listAdminAuthoritativeKnowledge: () =>
+    request<{ items: AdminAuthoritativeKnowledgeBase[] }>("/api/v1/admin/ai/authoritative-knowledge", {
+      headers: { "X-Demo-User-Id": "user_admin_001" },
+      skipAuth: true,
+      cache: "no-store"
+    }),
+  seedAdminMachineLearningKnowledge: () =>
+    request<AdminAuthoritativeKnowledgeBase>("/api/v1/admin/ai/authoritative-knowledge/seed-machine-learning", {
+      method: "POST",
+      headers: { "X-Demo-User-Id": "user_admin_001" },
+      skipAuth: true,
+      cache: "no-store"
+    }),
+  createAdminAuthoritativeSource: (payload: {
+    authoritative_kb_id: string;
+    title: string;
+    source_kind: string;
+    publisher: string;
+    source_url?: string;
+    license_note?: string;
+    chapter?: string;
+    knowledge_points?: string[];
+    source_summary?: string;
+    content: string;
+    auto_review?: boolean;
+  }) =>
+    request<AdminAuthoritativeKnowledgeSource>("/api/v1/admin/ai/authoritative-knowledge/sources", {
+      method: "POST",
+      headers: {
+        "X-Demo-User-Id": "user_admin_001",
+        "Content-Type": "application/json"
+      },
+      skipAuth: true,
+      cache: "no-store",
+      body: JSON.stringify(payload)
+    }),
+  reviewAdminAuthoritativeSource: (sourceId: string) =>
+    request<AdminAuthoritativeKnowledgeSource>(`/api/v1/admin/ai/authoritative-knowledge/sources/${encodeURIComponent(sourceId)}/review`, {
+      method: "POST",
+      headers: { "X-Demo-User-Id": "user_admin_001" },
+      skipAuth: true,
+      cache: "no-store"
+    }),
+  publishAdminAuthoritativeKnowledge: (kbId: string) =>
+    request<AdminAuthoritativeKnowledgeBase>(`/api/v1/admin/ai/authoritative-knowledge/${encodeURIComponent(kbId)}/publish`, {
+      method: "POST",
+      headers: { "X-Demo-User-Id": "user_admin_001" },
+      skipAuth: true,
+      cache: "no-store"
+    }),
+  retrieveAdminAuthoritativeKnowledge: (kbId: string, query: string) =>
+    request<{ query: string; results: AdminAuthoritativeRetrieveResult[] }>(`/api/v1/admin/ai/authoritative-knowledge/${encodeURIComponent(kbId)}/retrieve`, {
+      method: "POST",
+      headers: {
+        "X-Demo-User-Id": "user_admin_001",
+        "Content-Type": "application/json"
+      },
+      skipAuth: true,
+      cache: "no-store",
+      body: JSON.stringify({ query })
+    }),
   getTask: (taskId: string, assignmentId?: string) => request<TaskDetail>(`/api/v1/tasks/${taskId}${assignmentId ? `?assignment_id=${encodeURIComponent(assignmentId)}` : ''}`),
   getQuestionWorkspace: (assignmentId: string) =>
     request<QuestionWorkspace>(`/api/v1/student/assignments/${assignmentId}/workspace`),
@@ -1385,6 +1553,8 @@ export const api = {
     cachedGet<StudentTaskCard[]>(studentTasksUrl(courseId)),
   getStudentProfile: (courseId?: string) =>
     cachedGet<StudentProfile>(studentProfileUrl(courseId)),
+  getStudentInterventions: (courseId?: string) =>
+    cachedGet<StudentInterventionCenter>(studentInterventionsUrl(courseId), 10_000),
   getStudentKnowledgeGraph: (courseId: string) =>
     request<StudentKnowledgeGraph>(studentKnowledgeGraphUrl(courseId)),
   getPracticeProjectHome: () =>
@@ -1583,6 +1753,18 @@ export const api = {
     clearApiCache((url) => url.startsWith("/api/v1/student/"));
     return result;
   },
+  replyStudentIntervention: async (eventId: string, content: string) => {
+    const result = await request<{ event_id: string; responded: boolean; content: string }>(
+      `/api/v1/student/interventions/${encodeURIComponent(eventId)}/reply`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content })
+      }
+    );
+    clearApiCache((url) => url.startsWith("/api/v1/student/interventions"));
+    return result;
+  },
   getExecution: (executionId: string) =>
     request<ExecutionStatus>(`/api/v1/executions/${executionId}`),
   getResults: (versionId: string) =>
@@ -1608,5 +1790,6 @@ export const apiCache = {
   peekLearningContext: () => peekCachedGet<LearningContext>("/api/v1/student/learning-context"),
   peekStudentTasks: (courseId?: string) => peekCachedGet<StudentTaskCard[]>(studentTasksUrl(courseId)),
   peekStudentProfile: (courseId?: string) => peekCachedGet<StudentProfile>(studentProfileUrl(courseId)),
+  peekStudentInterventions: (courseId?: string) => peekCachedGet<StudentInterventionCenter>(studentInterventionsUrl(courseId), 10_000),
   peekStudentKnowledgeGraph: (courseId: string) => peekCachedGet<StudentKnowledgeGraph>(studentKnowledgeGraphUrl(courseId))
 };

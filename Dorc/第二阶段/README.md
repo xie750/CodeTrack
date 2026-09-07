@@ -32,6 +32,7 @@
 | `13_student_agent_workflow_registry.md` | 学生端智能体工作流登记册，用于后续持续补充工作流 |
 | `14_self_study_knowledge_base_design.md` | 自主学习知识库初版设计与开发规格 |
 | `15_admin_authoritative_subject_knowledge_base_design.md` | 管理员端权威学科知识库设计，用于降低垂类 AI 幻觉和治理引用来源 |
+| `16_algorithm_application_design.md` | 算法应用的内部落点、推荐逻辑和验收口径 |
 | `12_hifi_prototype_page_framework.md` | 高保真原型的三端页面框架、控件和功能清单 |
 | `../../AGENTS.md` | 项目级 agent harness 入口 |
 
@@ -40,4 +41,5 @@
 1. 先搭建学生端产品骨架。
 2. 先走通“教师任务 + 自主学习 + AI 助学 + 资料沉淀 + 画像更新”闭环。
 3. 先支持文档、笔记、知识卡片、思维导图这类轻量资料生成。
-4. 视频生成、完整 PPT 文件导出、多学科切换、助教、助研暂不进入第一轮落地。
+4. 算法应用优先落在画像驱动推荐、知识检索排序和下一步学习路径，不新增独立展示页。
+5. 视频生成、完整 PPT 文件导出、多学科切换、助教、助研暂不进入第一轮落地。

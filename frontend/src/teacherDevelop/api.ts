@@ -65,6 +65,15 @@ const legacyClassIds: Record<string, string> = Object.fromEntries(
   Object.entries(unifiedClassIds).map(([legacyId, unifiedId]) => [unifiedId, legacyId]),
 )
 
+const unifiedStudentIds: Record<string, string> = {
+  'student-01': 'user_student_001',
+  'student-02': 'user_student_001',
+  'student-03': 'user_student_001',
+  'student-04': 'user_student_001',
+  'student-05': 'user_student_001',
+  'student-06': 'user_student_001',
+}
+
 function unifiedUserId(userId: string) {
   if (userId === 'teacher-01') return 'user_teacher_001'
   if (userId === 'teacher-02') return 'user_teacher_002'
@@ -77,6 +86,11 @@ function unifiedCourseId(courseId: string) {
 
 function unifiedClassId(classId: string) {
   return unifiedClassIds[classId] || classId
+}
+
+function unifiedStudentId(studentId?: string | null) {
+  if (!studentId) return studentId
+  return unifiedStudentIds[studentId] || studentId
 }
 
 function legacyTaskStatus(contentStatus: string, rawStatus: string) {
@@ -891,8 +905,27 @@ export const api = {
   questionInsights: (courseId: string, classId: string) => request<ApiQuestionInsights>('/teacher/analytics/question-insights?course_id=' + courseId + '&class_id=' + classId),
   diagnoseQuestionInsights: (body: { course_id: string; class_id?: string | null; cluster_id?: string | null }) =>
     request<ApiQuestionInsightDiagnosis>('/teacher/analytics/question-insights/diagnose', { method: 'POST', body: JSON.stringify(body) }),
-  createLearningIntervention: (body: { course_id: string; class_id: string; action: string; title: string; content: string; knowledge_point?: string | null; student_id?: string | null }) =>
-    request<ApiLearningInterventionResult>('/teacher/analytics/interventions', { method: 'POST', body: JSON.stringify(body) }),
+  createLearningIntervention: async (body: { course_id: string; class_id: string; action: string; title: string; content: string; knowledge_point?: string | null; student_id?: string | null }) => {
+    if (unifiedCourseIds[body.course_id]) {
+      const payload = {
+        ...body,
+        course_id: unifiedCourseId(body.course_id),
+        class_id: unifiedClassId(body.class_id),
+        student_id: unifiedStudentId(body.student_id),
+      }
+      const result = await unifiedTaskRequest<ApiLearningInterventionResult>('/teacher/analytics/interventions', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+      return {
+        ...result,
+        course_id: body.course_id,
+        class_id: body.class_id,
+        student_id: body.student_id ?? null,
+      }
+    }
+    return request<ApiLearningInterventionResult>('/teacher/analytics/interventions', { method: 'POST', body: JSON.stringify(body) })
+  },
   teacherAiChat: (body: { course_id: string; class_id: string | null; session_id?: string | null; message: string; history: ApiTeacherAiHistoryMessage[] }) =>
     request<ApiTeacherAiChatResponse>('/teacher/ai-assistant/chat', { method: 'POST', body: JSON.stringify(body) }),
   streamTeacherAiChat,

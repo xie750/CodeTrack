@@ -26,6 +26,7 @@ from backend.app.models import (
     User,
 )
 from backend.app.services.submissions import iso
+from backend.app.services.recommendation import build_learning_recommendation_payloads
 
 
 def loads_list(value: str) -> list:
@@ -255,18 +256,13 @@ def serialize_learner_profile(
             }
             for item in error_stats
         ],
-        "recommendations": [
-            {
-                "id": item.id,
-                "title": item.title,
-                "reason": item.reason,
-                "priority": item.priority,
-                "related_task_id": item.related_task_id,
-                "related_knowledge_points": loads_list(item.related_knowledge_points),
-                "suggested_action": item.suggested_action,
-            }
-            for item in recommendations
-        ],
+        "recommendations": build_learning_recommendation_payloads(
+            db,
+            student_id=student_id,
+            class_id=profile.class_id,
+            course_id=profile.course_id,
+            stored_recommendations=list(recommendations),
+        ),
         "behavior_events": serialize_behavior_events(
             db,
             student_id=student_id,
