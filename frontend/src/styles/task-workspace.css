@@ -320,35 +320,6 @@
   color: #176cf5;
 }
 
-.program-ideology-banner {
-  margin-top: 10px;
-  padding: 10px 12px;
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  border: 1px solid #f0c8c5;
-  border-radius: 8px;
-  background: linear-gradient(90deg, #fff2f1 0%, #fffafa 100%);
-}
-
-.program-ideology-banner span {
-  min-height: 26px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: #b93632;
-  font-size: 12px;
-  font-weight: 900;
-  white-space: nowrap;
-}
-
-.program-ideology-banner p {
-  min-width: 0;
-  color: #536076;
-  font-size: 12px;
-  line-height: 1.55;
-}
-
 .program-scene-shortcut {
   min-width: 128px;
   min-height: 40px;
@@ -1204,15 +1175,17 @@ html.workspace-resizing-y * {
 }
 
 .program-ai section.program-ideology-note {
-  border-color: #f0d1ce;
-  background: linear-gradient(180deg, #fffafa 0%, #ffffff 72%);
+  border-color: #dce8ff;
+  background:
+    linear-gradient(180deg, rgba(248, 251, 255, 0.98) 0%, #ffffff 76%),
+    radial-gradient(circle at 100% 0%, rgba(23, 108, 245, 0.1), transparent 45%);
 }
 
 .program-ideology-note h3 {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #b93632;
+  color: #176cf5;
 }
 
 .program-ideology-note strong {
@@ -1227,7 +1200,7 @@ html.workspace-resizing-y * {
 .program-ideology-note em {
   display: block;
   margin-top: 8px;
-  color: #8b4b47;
+  color: #66738a;
   font-size: 11px;
   font-style: normal;
   line-height: 1.55;
@@ -2867,59 +2840,6 @@ html.workspace-resizing-y * {
   line-height: 1.45;
 }
 
-.program-ideology-summary {
-  border-color: #f0d1ce;
-  background: linear-gradient(180deg, #fffafa 0%, #ffffff 62%);
-}
-
-.program-ideology-summary header h2 {
-  color: #8f2724;
-}
-
-.program-ideology-summary > div {
-  margin-top: 16px;
-  display: grid;
-  grid-template-columns: 36px minmax(0, 1fr);
-  gap: 10px;
-}
-
-.program-ideology-summary > div > span {
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  border-radius: 8px;
-  color: #b93632;
-  background: #fff2f1;
-}
-
-.program-ideology-summary strong,
-.program-ideology-summary p,
-.program-ideology-summary em {
-  grid-column: 2;
-}
-
-.program-ideology-summary strong {
-  color: #17243b;
-  font-size: 13px;
-  font-weight: 900;
-  line-height: 1.45;
-}
-
-.program-ideology-summary p {
-  margin-top: 4px;
-  color: #536076;
-  font-size: 11px;
-  line-height: 1.55;
-}
-
-.program-ideology-summary em {
-  margin-top: 10px;
-  color: #8b4b47;
-  font-size: 11px;
-  font-style: normal;
-}
-
 .ant-list-item {
   gap: 10px;
 }
@@ -3682,12 +3602,6 @@ html.workspace-resizing-y * {
   .program-title-line h1,
   .question-title-line h1 {
     font-size: 21px;
-  }
-
-  .program-ideology-banner {
-    width: 100%;
-    flex-direction: column;
-    gap: 6px;
   }
 
   .program-head-actions,

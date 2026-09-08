@@ -7,6 +7,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api, type GeneratedResource } from "../api";
 import { authHeaders } from "../authSession";
+import AIContentDisclosure from "./AIContentDisclosure";
 
 type GeneratedResourcePreviewModalProps = {
   resource: GeneratedResource | null;
@@ -971,8 +972,11 @@ export default function GeneratedResourcePreviewModal({
                       ? `播客 · ${segments.length} 段`
                     : `${activeIndex + 1}/${Math.max(navItems.length, 1)}`}
               </span>
-              <span>AI 生成</span>
-              <span>置信度 {Math.round(resource.confidence * 100)}%</span>
+              <AIContentDisclosure
+                confidence={resource.confidence}
+                sourceLabel={resource.citations.length ? "课程知识库与引用资料" : "学习上下文与生成模板"}
+                citationsCount={resource.citations.length}
+              />
               {activeCitationIds.map((sourceId) => {
                 const source = citationMap.get(sourceId);
                 return source ? <span key={sourceId}>引用：{source.title}</span> : null;

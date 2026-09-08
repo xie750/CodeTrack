@@ -10,6 +10,7 @@ const globalPaths: Record<string, ExactView> = {
   '/teacher/dashboard': 'dashboard',
   '/teacher/courses': 'courses',
   '/teacher/courses/new': 'create-course',
+  '/teacher/research': 'research',
   // Legacy global URLs now resolve inside the global course-list shell before
   // ExactApp redirects them. Course management only exists under a course URL.
   '/teacher/classes': 'courses',
@@ -41,6 +42,7 @@ export function teacherPath(view: ExactView, courseId: string, courseMode: boole
   if (view === 'dashboard') return '/teacher/dashboard'
   if (view === 'courses') return '/teacher/courses'
   if (view === 'create-course') return '/teacher/courses/new'
+  if (view === 'research') return '/teacher/research'
   if (courseMode) return `/teacher/courses/${encodeURIComponent(courseId)}/${view}`
   return `/teacher/${view}`
 }

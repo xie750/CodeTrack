@@ -23,14 +23,24 @@ export class ApiError extends Error {
   status: number
 
   constructor(message: unknown, status: number) {
-    const normalizedMessage = Array.isArray(message)
+    const rawMessage = Array.isArray(message)
       ? message.map((item: any) => typeof item === 'string' ? item : item?.msg || item?.message || JSON.stringify(item)).join('; ')
       : message && typeof message === 'object'
         ? (message as any).message || JSON.stringify(message)
         : String(message || 'Request failed')
+    const normalizedMessage = translateApiMessage(rawMessage)
     super(normalizedMessage)
     this.status = status
   }
+}
+
+function translateApiMessage(message: string) {
+  const translated = message
+    .replace(/Value error, Single choice and true\/false questions must have exactly one correct option\./g, '单选题和判断题必须且只能设置 1 个正确答案。')
+    .replace(/Value error, Choice questions must have at least two options\./g, '选择题至少需要 2 个选项。')
+    .replace(/Value error, At least one option must be marked correct\./g, '每道题至少需要设置 1 个正确答案。')
+    .replace(/Value error, Fill blank questions must have at least one standard answer\./g, '填空题至少需要 1 个标准答案。')
+  return translated || message
 }
 
 async function request<T>(
@@ -114,27 +124,47 @@ export function taskDateTimeInputValue(value?: string | null, fallback = default
 }
 
 function unifiedTaskToLegacy(row: any): ApiTask {
-  const publication = row.publications?.find((item: any) => item.class_id === 'class_se_001') || row.publications?.[0]
-  const testCaseCount = Math.max(row.required_test_case_count || row.test_case_count || 0, 1)
+  const publications = Array.isArray(row.publications) ? row.publications : []
+  const publication = publications.find((item: any) => item.class_id === 'class_se_001') || publications[0]
+  const learningObjectives = Array.isArray(row.learning_objectives)
+    ? row.learning_objectives.map((item: unknown) => String(item || '').trim()).filter(Boolean)
+    : []
+  const isCoding = row.workspace_type === 'CODING'
+  const testCaseCount = isCoding ? Math.max(row.required_test_case_count || row.test_case_count || 0, 1) : 0
+  const questionCount = Number(row.question_count || 0)
+  const questionTotalScore = row.question_total_score == null ? null : Number(row.question_total_score)
+  const publishedClassNames = Array.isArray(row.published_class_names)
+    ? row.published_class_names
+    : publications.map((item: any) => item.class_name || item.class_id).filter(Boolean)
   return {
     id: row.task_id,
     course_id: 'course-ds',
     class_id: legacyClassIds[publication?.class_id] || null,
     title: row.title,
-    type: row.workspace_type === 'CODING' ? 'programming' : 'quiz',
-    chapter: row.learning_objectives?.[0] || '链表',
+    type: isCoding ? 'programming' : 'quiz',
+    chapter: learningObjectives[0] || '未设置知识点',
+    learning_objectives: learningObjectives,
     description: row.description || '',
     starter_code: row.interface_spec || '',
     status: legacyTaskStatus(row.content_status, row.raw_status),
-    difficulty: '进阶',
-    total_score: 100,
-    created_at: publication?.published_at || undefined,
+    difficulty: row.difficulty || '进阶',
+    total_score: questionTotalScore || 100,
+    created_at: row.created_at || publication?.published_at || undefined,
     publish_at: publication?.published_at || null,
     start_at: publication?.start_at || publication?.published_at || null,
     due_at: publication?.deadline || '2026-12-30T23:59:00',
     submitted: row.submitted_count || 0,
     total: row.roster_total || 0,
-    completion: row.completion_rate ? row.completion_rate * 100 : 0,
+    completion: row.completion_rate == null ? 0 : row.completion_rate * 100,
+    assignment_mode: publication?.assignment_mode || null,
+    publications,
+    published_class_names: publishedClassNames,
+    question_count: questionCount,
+    question_preview: row.question_preview || null,
+    question_total_score: questionTotalScore,
+    test_case_count: row.test_case_count || 0,
+    required_test_case_count: row.required_test_case_count || 0,
+    public_test_case_count: row.public_test_case_count || 0,
     test_cases: Array.from({ length: testCaseCount }, (_, index) => ({
       id: `${row.task_id}-case-${index + 1}`,
       name: `测试用例 ${index + 1}`,
@@ -151,6 +181,16 @@ const questionTypeMap: Record<string, ApiTaskQuestion['question_type']> = {
   true_false: 'TRUE_FALSE',
   fill_blank: 'FILL_BLANK',
   fill_in_blank: 'FILL_IN_BLANK',
+}
+
+function normalizeQuestionType(value: unknown, fallbackTaskType: string): ApiTaskQuestion['question_type'] {
+  const direct = String(value || '').toUpperCase()
+  if (['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'TRUE_FALSE', 'FILL_BLANK', 'FILL_IN_BLANK'].includes(direct)) {
+    return direct as ApiTaskQuestion['question_type']
+  }
+  const mapped = questionTypeMap[String(value || '').toLowerCase()]
+    || questionTypeMap[String(fallbackTaskType || '').toLowerCase()]
+  return mapped || 'SINGLE_CHOICE'
 }
 
 function defaultPaperQuestions(chapter: string[]): ApiTaskQuestion[] {
@@ -202,7 +242,7 @@ function defaultPaperQuestions(chapter: string[]): ApiTaskQuestion[] {
 function normalizeTaskQuestions(rawQuestions: any, taskType: string, chapter: string[]): ApiTaskQuestion[] {
   const source = Array.isArray(rawQuestions) && rawQuestions.length ? rawQuestions : defaultPaperQuestions(chapter)
   return source.map((question: any, index: number) => {
-    const questionType = questionTypeMap[question.question_type] || questionTypeMap[question.type] || questionTypeMap[taskType] || 'SINGLE_CHOICE'
+    const questionType = normalizeQuestionType(question.question_type || question.type, taskType)
     const isFill = questionType === 'FILL_BLANK' || questionType === 'FILL_IN_BLANK'
     const options = Array.isArray(question.options) ? question.options : []
     return {
@@ -265,6 +305,7 @@ function createUnifiedTaskPayload(body: any) {
 }
 
 function unifiedCreatedTaskToLegacy(data: any, body: any): ApiTask {
+  const learningObjectives = Array.isArray(body.chapter_label) ? body.chapter_label : [body.chapter_label || '链表']
   return unifiedTaskToLegacy({
     task_id: data.task_id,
     title: data.title || body.title,
@@ -272,8 +313,14 @@ function unifiedCreatedTaskToLegacy(data: any, body: any): ApiTask {
     workspace_type: data.workspace_type || (body.type === 'programming' ? 'CODING' : 'QUESTION_SET'),
     raw_status: data.status || 'OPEN',
     content_status: 'READY',
-    learning_objectives: Array.isArray(body.chapter_label) ? body.chapter_label : [body.chapter_label || '链表'],
+    learning_objectives: learningObjectives,
     publications: [],
+    created_at: data.created_at,
+    question_count: data.question_count || (Array.isArray(body.questions) ? body.questions.length : 0),
+    question_total_score: Array.isArray(body.questions)
+      ? body.questions.reduce((total: number, question: any) => total + Number(question.score || 0), 0)
+      : null,
+    question_preview: Array.isArray(body.questions) ? body.questions[0]?.stem || null : null,
     test_case_count: Array.isArray(body.test_cases) ? body.test_cases.length : 0,
   })
 }
@@ -404,6 +451,7 @@ export interface ApiTask {
   title: string
   type: string
   chapter: string
+  learning_objectives?: string[]
   description: string
   starter_code: string
   status: string
@@ -416,6 +464,26 @@ export interface ApiTask {
   submitted: number
   total: number
   completion: number
+  assignment_mode?: string | null
+  publications?: Array<{
+    assignment_id: string
+    class_id: string
+    class_name: string
+    term?: string
+    publish_status: string
+    assignment_mode: string
+    allow_hint_level_3?: boolean
+    published_at: string | null
+    start_at: string | null
+    deadline: string | null
+  }>
+  published_class_names?: string[]
+  question_count?: number
+  question_preview?: string | null
+  question_total_score?: number | null
+  test_case_count?: number
+  required_test_case_count?: number
+  public_test_case_count?: number
   test_cases: Array<{ id: string; name: string; hidden: boolean; weight: number }>
 }
 
@@ -743,6 +811,131 @@ export interface ApiTeacherAiSessionDetail {
   messages: ApiTeacherAiStoredMessage[]
 }
 
+export interface ApiTeacherResearchExternalSource {
+  platform: string
+  label: string
+  description: string
+  url: string
+}
+
+export interface ApiTeacherResearchTopic {
+  title: string
+  source: string
+  heat: number
+  summary: string
+  source_url?: string
+}
+
+export interface ApiTeacherResearchMaterial {
+  id: string
+  project_id: string
+  material_type: string
+  title: string
+  description: string
+  content: string
+  file_name?: string | null
+  file_size?: number | null
+  mime_type?: string | null
+  download_url?: string | null
+  external_url: string
+  source: string
+  status: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ApiTeacherResearchSubmission {
+  id: string
+  project_id: string
+  student_id: string
+  student_name: string
+  title: string
+  description: string
+  status: string
+  status_label: string
+  review_comment: string
+  content: Record<string, unknown>
+  submitted_at: string
+  created_at: string
+}
+
+export interface ApiTeacherResearchPublishStudent {
+  student_id: string
+  student_name: string
+  username?: string | null
+  class_id: string
+}
+
+export interface ApiTeacherResearchPublishClass {
+  class_id: string
+  class_name: string
+  grade: string
+  major_name: string
+  teaching_assignment_id: string
+  term: string
+  student_count: number
+  students: ApiTeacherResearchPublishStudent[]
+}
+
+export interface ApiTeacherResearchPublishScope {
+  basis: string
+  course_id: string | null
+  course_name: string
+  class_count: number
+  student_count: number
+  classes: ApiTeacherResearchPublishClass[]
+  students: ApiTeacherResearchPublishStudent[]
+}
+
+export interface ApiTeacherResearchProject {
+  id: string
+  teacher_id: string
+  course_id: string | null
+  course_name: string
+  student_project_id?: string | null
+  title: string
+  direction: string
+  description: string
+  stage: string
+  progress: number
+  status: string
+  status_label: string
+  tags: string[]
+  milestones: Array<{ title: string; status: string; description: string }>
+  frontier_topics: ApiTeacherResearchTopic[]
+  external_sources: ApiTeacherResearchExternalSource[]
+  harness: {
+    stage: string
+    guardrails: string[]
+    deviation_signal: string
+    pullback_action: string
+    next_actions: string[]
+  }
+  publish_scope: ApiTeacherResearchPublishScope
+  stats: {
+    student_count: number
+    submission_count: number
+    pending_review_count: number
+    material_count: number
+  }
+  materials: ApiTeacherResearchMaterial[]
+  activities: Array<{ id: string; project_id?: string | null; type: string; text: string; created_at: string }>
+  student_submissions: ApiTeacherResearchSubmission[]
+  created_at: string
+  updated_at: string
+}
+
+export interface ApiTeacherResearchHome {
+  projects: ApiTeacherResearchProject[]
+  courses: Array<{ id: string; name: string }>
+  harness_rules: string[]
+  summary: {
+    project_count: number
+    published_count: number
+    tracking_count: number
+  }
+}
+
 export type ApiTeacherAiStreamEvent =
   | { event: 'session'; data: { session: ApiTeacherAiSession; user_message: ApiTeacherAiStoredMessage } }
   | { event: 'assistant_start'; data: { session_id: string } }
@@ -823,6 +1016,32 @@ async function uploadMaterial(courseId: string, file: File, chapterLabel = '未�
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) throw new ApiError(payload.detail || 'Upload failed', response.status)
   return payload.data
+}
+
+async function uploadTeacherResearchMaterial(
+  projectId: string,
+  file: File,
+  fields: { title?: string; description?: string; material_type?: string } = {},
+) {
+  const body = new FormData()
+  body.append('file', file)
+  body.append('title', fields.title || file.name)
+  body.append('description', fields.description || '')
+  body.append('material_type', fields.material_type || 'CODE_FILE')
+  const tokenHeaders = authHeaders()
+  const response = await fetch(
+    UNIFIED_TASK_API_BASE + '/teacher/research/projects/' + encodeURIComponent(projectId) + '/materials/upload',
+    {
+      method: 'POST',
+      headers: {
+        ...(Object.keys(tokenHeaders).length ? tokenHeaders : { 'X-Demo-User-Id': unifiedUserId(_currentUserId) }),
+      },
+      body,
+    },
+  )
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) throw new ApiError(payload.error?.message || payload.detail || '科研文件上传失败', response.status)
+  return payload.data as { material: ApiTeacherResearchMaterial; project: ApiTeacherResearchProject }
 }
 
 async function createTeacherGraphFromFiles(files: File[], fields: { title: string; description: string; target_classes: string }) {
@@ -944,7 +1163,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({
         class_ids: [unifiedClassId(body.class_id || 'class-se1')],
-        assignment_mode: 'PRACTICE',
+        assignment_mode: body.assignment_mode || 'PRACTICE',
         allow_hint_level_3: true,
         start_at: body.start_at || body.publish_at || defaultTaskStartAt(),
         deadline: body.due_at || null,
@@ -952,6 +1171,9 @@ export const api = {
     })
     return payload
   },
+  deleteTask: (taskId: string) => isUnifiedTaskId(taskId)
+    ? unifiedTaskRequest<{ task_id: string; deleted: boolean }>('/teacher/tasks/' + encodeURIComponent(taskId), { method: 'DELETE' })
+    : request<{ task_id: string; deleted: boolean }>('/teacher/tasks/' + encodeURIComponent(taskId), { method: 'DELETE' }),
   trashMaterial: (materialId: string) => request<ApiMaterial>('/teacher/materials/' + materialId, { method: 'DELETE' }),
   restoreMaterial: (materialId: string) => request<ApiMaterial>('/teacher/materials/' + materialId + '/restore', { method: 'POST' }),
   trashMaterials: (courseId: string) => request<ApiMaterial[]>('/teacher/materials/trash?course_id=' + courseId),
@@ -966,6 +1188,50 @@ export const api = {
   aiMaterialOutline: (courseId: string) => request<any>('/teacher/material-folders/ai-outline', { method: 'POST', body: JSON.stringify({ course_id: courseId }) }),
   confirmMaterialOutline: (courseId: string, folders: string[]) => request<any>('/teacher/material-folders/confirm-outline', { method: 'POST', body: JSON.stringify({ course_id: courseId, folders }) }),
   uploadMaterial,
+  teacherResearchHome: () => unifiedTaskRequest<ApiTeacherResearchHome>('/teacher/research/projects'),
+  teacherResearchProject: (projectId: string) =>
+    unifiedTaskRequest<ApiTeacherResearchProject>('/teacher/research/projects/' + encodeURIComponent(projectId)),
+  createTeacherResearchProject: (body: {
+    title: string
+    direction?: string
+    description?: string
+    course_id?: string | null
+    tags?: string[]
+  }) => unifiedTaskRequest<ApiTeacherResearchProject>('/teacher/research/projects', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }),
+  refreshTeacherResearchFrontier: (projectId: string, focus = '') =>
+    unifiedTaskRequest<{ project: ApiTeacherResearchProject; activity: ApiTeacherResearchProject['activities'][number] }>(
+      '/teacher/research/projects/' + encodeURIComponent(projectId) + '/frontier-track',
+      { method: 'POST', body: JSON.stringify({ focus }) },
+    ),
+  createTeacherResearchMaterial: (projectId: string, body: {
+    material_type?: string
+    title: string
+    description?: string
+    content?: string
+    external_url?: string
+  }) => unifiedTaskRequest<{ material: ApiTeacherResearchMaterial; project: ApiTeacherResearchProject }>(
+    '/teacher/research/projects/' + encodeURIComponent(projectId) + '/materials',
+    { method: 'POST', body: JSON.stringify(body) },
+  ),
+  uploadTeacherResearchMaterial,
+  publishTeacherResearchProject: (projectId: string, classIds?: string[]) =>
+    unifiedTaskRequest<{ project: ApiTeacherResearchProject; student_project_id: string; created_enrollments: number }>(
+      '/teacher/research/projects/' + encodeURIComponent(projectId) + '/publish',
+      { method: 'POST', body: JSON.stringify({ class_ids: classIds }) },
+    ),
+  reviewTeacherResearchSubmission: (projectId: string, submissionId: string, body: { status: string; comment?: string }) =>
+    unifiedTaskRequest<{ submission: ApiTeacherResearchSubmission; project: ApiTeacherResearchProject }>(
+      '/teacher/research/projects/' + encodeURIComponent(projectId) + '/submissions/' + encodeURIComponent(submissionId) + '/review',
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
+  archiveTeacherResearchProject: (projectId: string) =>
+    unifiedTaskRequest<{ resource_id: string; project: ApiTeacherResearchProject }>(
+      '/teacher/research/projects/' + encodeURIComponent(projectId) + '/archive',
+      { method: 'POST' },
+    ),
   materials: (courseId: string) => request<ApiMaterial[]>('/teacher/materials?course_id=' + courseId),
   createMaterial: (body: unknown) => request<any>('/teacher/materials', { method: 'POST', body: JSON.stringify(body) }),
   importMaterialToGraph: (materialId: string, body: { knowledge_point_ids: string[]; create_from_material: boolean }) => request<any>('/teacher/materials/' + materialId + '/knowledge-graph', { method: 'POST', body: JSON.stringify(body) }),

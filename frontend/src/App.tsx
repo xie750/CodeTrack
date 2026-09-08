@@ -175,7 +175,7 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
               <button
                 type="button"
                 className={location.pathname.startsWith("/project-practice/projects") ? "active" : ""}
-                onClick={() => transitionTo(location.pathname.startsWith("/project-practice/projects") ? location.pathname : "/project-practice")}
+                onClick={() => transitionTo(location.pathname.startsWith("/project-practice/projects") ? location.pathname : "/project-practice/projects/sales-cleaning")}
               >
                 课题工作台
               </button>

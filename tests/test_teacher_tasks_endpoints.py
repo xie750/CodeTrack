@@ -2,7 +2,7 @@
 
 这里钉住的核心不变量：
 
-1. **只读**。本模块不写任何表，POST 必须 405。
+1. **写操作必须收窄到教师课程范围**。创建、发布和删除都不能越过当前教师的教学安排。
 2. **范围隔离**（§15.1）。只能看到当前教师生效教学安排覆盖的课程，`class_id` 越界 403。
 3. **两套状态分开**（§14.1 / §14.2）。`content_status` 是任务内容状态，
    `publications[].publish_status` 是各班级发布状态，不能合并。
@@ -84,6 +84,39 @@ def _cleanup_task(task_id: str | None) -> None:
         db.commit()
     finally:
         db.close()
+
+
+def _create_question_task(client: TestClient, title: str) -> str:
+    created = client.post(
+        "/api/v1/teacher/tasks",
+        headers=TEACHER,
+        json={
+            "course_id": DS_COURSE,
+            "title": title,
+            "description": "Question task created by endpoint tests.",
+            "workspace_type": "QUESTION_SET",
+            "language": "CPP",
+            "interface_spec": "",
+            "learning_objectives": ["delete endpoint"],
+            "capability_ids": [],
+            "questions": [
+                {
+                    "question_type": "SINGLE_CHOICE",
+                    "stem": "Which option is correct?",
+                    "analysis": "A is correct.",
+                    "knowledge_points": ["delete endpoint"],
+                    "difficulty": "BASIC",
+                    "score": 5,
+                    "options": [
+                        {"label": "A", "content": "Correct", "is_correct": True},
+                        {"label": "B", "content": "Incorrect", "is_correct": False},
+                    ],
+                }
+            ],
+        },
+    )
+    assert created.status_code == 201, created.text
+    return created.json()["data"]["task_id"]
 
 
 # ------------------------------------------------------------------ 范围与权限
@@ -169,6 +202,8 @@ def test_teacher_can_create_publish_and_student_can_open_question_workspace(requ
         draft_row = _row(_tasks(c, TEACHER, keyword=title), task_id)
         assert draft_row["content_status"] == "READY"
         assert draft_row["question_count"] == 1
+        assert draft_row["question_preview"] == "Which option is marked as correct?"
+        assert draft_row["learning_objectives"] == ["Verify publish chain"]
 
         start_at = "2026-09-01T08:00:00Z"
         deadline = "2026-09-30T23:59:00Z"
@@ -181,6 +216,7 @@ def test_teacher_can_create_publish_and_student_can_open_question_workspace(requ
         publication = published.json()["data"]["publications"][0]
         assert publication["class_id"] == SE_CLASS
         assert publication["publish_status"] == "PUBLISHED"
+        assert publication["assignment_mode"] == "QUIZ"
         assert publication["start_at"] == start_at
         assert publication["deadline"] == deadline
         assert publication["initialized_student_count"] > 0
@@ -188,6 +224,8 @@ def test_teacher_can_create_publish_and_student_can_open_question_workspace(requ
         published_row = _row(_tasks(c, TEACHER, keyword=title), task_id)
         assert published_row["content_status"] == "PUBLISHED"
         assert {item["class_id"] for item in published_row["publications"]} == {SE_CLASS}
+        assert published_row["published_class_names"] == ["人工智能 1 班"]
+        assert published_row["roster_total"] == publication["initialized_student_count"]
 
         student_tasks = c.get(
             "/api/v1/student/tasks",
@@ -197,6 +235,10 @@ def test_teacher_can_create_publish_and_student_can_open_question_workspace(requ
         assert student_tasks.status_code == 200, student_tasks.text
         student_row = next(item for item in student_tasks.json()["data"] if item["task_id"] == task_id)
         assert student_row["workspace_type"] == "QUESTION_SET"
+        assert student_row["title"] == title
+        assert student_row["task_type"] == "QUIZ"
+        assert student_row["assignment_mode"] == "QUIZ"
+        assert student_row["knowledge_points"] == ["Verify publish chain"]
         assert student_row["start_at"] == start_at
         assert student_row["status"] == "NOT_STARTED"
         assert student_row["total_required_count"] == 1
@@ -310,6 +352,104 @@ def test_teacher_can_publish_mixed_question_paper_and_student_submit(request):
         result = submitted.json()["data"]
         assert result["correct_count"] == 3
         assert result["score"] == 45
+
+
+def test_teacher_can_delete_ready_task(request):
+    task_id = None
+    request.addfinalizer(lambda: _cleanup_task(task_id))
+    with TestClient(app) as c:
+        title = f"delete-ready-{uuid4().hex[:8]}"
+        task_id = _create_question_task(c, title)
+        assert _row(_tasks(c, TEACHER, keyword=title), task_id)["content_status"] == "READY"
+
+        deleted = c.delete(f"/api/v1/teacher/tasks/{task_id}", headers=TEACHER)
+        assert deleted.status_code == 200, deleted.text
+        assert deleted.json()["data"] == {"task_id": task_id, "deleted": True}
+        assert _tasks(c, TEACHER, keyword=title)["items"] == []
+
+        db = SessionLocal()
+        try:
+            assert db.get(Task, task_id) is None
+            assert db.scalars(select(Question).where(Question.task_id == task_id)).all() == []
+        finally:
+            db.close()
+
+
+def test_teacher_delete_published_task_cleans_student_records(request):
+    task_id = None
+    request.addfinalizer(lambda: _cleanup_task(task_id))
+    with TestClient(app) as c:
+        title = f"delete-published-{uuid4().hex[:8]}"
+        task_id = _create_question_task(c, title)
+        published = c.post(
+            f"/api/v1/teacher/tasks/{task_id}/publish",
+            headers=TEACHER,
+            json={"class_ids": [SE_CLASS], "assignment_mode": "QUIZ", "start_at": "2026-09-01T08:00:00Z"},
+        )
+        assert published.status_code == 200, published.text
+        assignment_id = published.json()["data"]["publications"][0]["assignment_id"]
+
+        workspace = c.get(f"/api/v1/student/assignments/{assignment_id}/workspace", headers=STUDENT)
+        assert workspace.status_code == 200, workspace.text
+        question = workspace.json()["data"]["questions"][0]
+        correct_option_id = question["options"][0]["option_id"]
+        submitted = c.post(
+            f"/api/v1/student/assignments/{assignment_id}/submit-answers",
+            headers=STUDENT,
+            json={
+                "answers": [
+                    {"question_id": question["question_id"], "selected_option_ids": [correct_option_id]},
+                ]
+            },
+        )
+        assert submitted.status_code == 201, submitted.text
+
+        db = SessionLocal()
+        try:
+            attempt_ids = list(
+                db.scalars(select(QuestionAttempt.id).where(QuestionAttempt.assignment_id == assignment_id)).all()
+            )
+            question_ids = list(db.scalars(select(Question.id).where(Question.task_id == task_id)).all())
+            assert attempt_ids
+            assert question_ids
+        finally:
+            db.close()
+
+        deleted = c.delete(f"/api/v1/teacher/tasks/{task_id}", headers=TEACHER)
+        assert deleted.status_code == 200, deleted.text
+
+        student_tasks = c.get("/api/v1/student/tasks", headers=STUDENT, params={"course_id": DS_COURSE})
+        assert student_tasks.status_code == 200, student_tasks.text
+        assert all(item["task_id"] != task_id for item in student_tasks.json()["data"])
+
+        db = SessionLocal()
+        try:
+            assert db.get(Task, task_id) is None
+            assert db.get(TaskAssignment, assignment_id) is None
+            assert db.scalars(select(StudentTaskProgress).where(StudentTaskProgress.assignment_id == assignment_id)).all() == []
+            assert db.scalars(select(QuestionAttempt).where(QuestionAttempt.id.in_(attempt_ids))).all() == []
+            assert db.scalars(select(QuestionAnswer).where(QuestionAnswer.question_id.in_(question_ids))).all() == []
+        finally:
+            db.close()
+
+
+def test_other_teacher_cannot_delete_task_outside_scope(request):
+    task_id = None
+    request.addfinalizer(lambda: _cleanup_task(task_id))
+    with TestClient(app) as c:
+        task_id = _create_question_task(c, f"delete-forbidden-{uuid4().hex[:8]}")
+        response = c.delete(f"/api/v1/teacher/tasks/{task_id}", headers=OTHER_TEACHER)
+        assert response.status_code == 403
+        assert response.json()["error"]["code"] == "AUTH_FORBIDDEN"
+        assert db_task_exists(task_id)
+
+
+def db_task_exists(task_id: str) -> bool:
+    db = SessionLocal()
+    try:
+        return db.get(Task, task_id) is not None
+    finally:
+        db.close()
 
 
 def test_publish_rejects_deadline_before_start_time():

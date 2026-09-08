@@ -126,7 +126,7 @@
 
 .task-v2-data {
   display: grid;
-  grid-template-columns: 115px 140px 90px 100px 90px;
+  grid-template-columns: minmax(130px, 1.35fr) minmax(112px, .9fr) minmax(118px, .95fr) minmax(118px, .95fr) minmax(118px, 1fr) minmax(100px, .85fr) minmax(82px, .7fr);
   margin-bottom: 9px;
 }
 
@@ -141,6 +141,12 @@
 .task-v2-data > span:last-child { border-right: 0; }
 .task-v2-data small { color: #8b958d; font-size: 8px; }
 .task-v2-data b { display: flex; align-items: center; gap: 4px; color: #58635a; font-size: 9px; }
+.task-v2-data b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .task-state { width: 6px; height: 6px; border-radius: 50%; background: #43b81a; }
 .task-state.orange { background: #f19a1b; }.task-state.blue { background: #258ee2; }.task-state.default { background: #9da69f; }
 .task-v2-pagination { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; color: #7e8980; font-size: 9px; }
@@ -300,7 +306,8 @@
     padding: 11px;
   }
   .task-v2-data {
-    grid-template-columns: 100px 120px 75px 85px 75px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    row-gap: 8px;
   }
 }
 

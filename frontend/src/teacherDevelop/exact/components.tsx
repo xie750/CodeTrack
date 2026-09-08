@@ -16,6 +16,7 @@ export type ExactView =
   | 'dashboard'
   | 'courses'
   | 'create-course'
+  | 'research'
   | 'workspace'
   | 'content'
   | 'classes'

@@ -3420,7 +3420,7 @@ button.student-generated-thumb:hover {
   gap: 8px;
 }
 
-.ai-answer-meta span {
+.ai-answer-meta > span:not(.ai-content-disclosure) {
   min-height: 28px;
   padding: 0 9px;
   display: inline-flex;
@@ -5580,7 +5580,7 @@ button.student-generated-thumb:hover {
   background: rgba(255, 255, 255, 0.78);
 }
 
-.ai-resource-preview-meta span {
+.ai-resource-preview-meta > span:not(.ai-content-disclosure) {
   min-height: 28px;
   padding: 0 10px;
   display: inline-flex;
@@ -5593,8 +5593,8 @@ button.student-generated-thumb:hover {
   font-weight: 850;
 }
 
-.ai-resource-preview-meta button,
-.ai-resource-preview-meta a {
+.ai-resource-preview-meta > button,
+.ai-resource-preview-meta > a {
   min-height: 32px;
   padding: 0 12px;
   display: inline-flex;
@@ -5611,18 +5611,18 @@ button.student-generated-thumb:hover {
   cursor: pointer;
 }
 
-.ai-resource-preview-meta button:first-of-type {
+.ai-resource-preview-meta > button:first-of-type {
   margin-left: auto;
 }
 
-.ai-resource-preview-meta a {
+.ai-resource-preview-meta > a {
   margin-left: 0;
   border-color: #dbe6f5;
   color: #20324f;
   background: #ffffff;
 }
 
-.ai-resource-preview-meta button:disabled {
+.ai-resource-preview-meta > button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }

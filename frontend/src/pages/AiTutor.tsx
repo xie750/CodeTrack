@@ -36,6 +36,7 @@ import {
   type StudentProfile
 } from "../api";
 import robotImg from "../assets/ui-home/ai-tutor-bot.png";
+import AIContentDisclosure from "../components/AIContentDisclosure";
 import GeneratedResourcePreviewModal from "../components/GeneratedResourcePreviewModal";
 import {
   StudentImageFallback,
@@ -44,6 +45,11 @@ import {
   studentErrorDetail,
   studentErrorMessage
 } from "../components/StudentState";
+import {
+  fallbackStudentAiModelOptions,
+  readStudentAiModelKey,
+  saveStudentAiModelKey
+} from "../studentAiModels";
 
 type HistoryGroup = "今天" | "昨天" | "更早";
 
@@ -75,25 +81,6 @@ type AiTutorRouteState = {
 } | null;
 
 const fallbackSuggestedActions = ["继续解释", "生成练习", "保存为笔记", "只给一级提示"];
-const AI_MODEL_STORAGE_KEY = "codetrack.aiTutor.modelKey.v1";
-const fallbackModelOptions: StudentAiModelOption[] = [
-  {
-    key: "default",
-    label: "通用模型",
-    provider: "OPENAI_COMPATIBLE",
-    model_name: "默认配置",
-    configured: true,
-    description: "保留当前通用模型配置，适合常规助学问答。"
-  },
-  {
-    key: "fine_tuned",
-    label: "微调模型",
-    provider: "OPENAI_COMPATIBLE",
-    model_name: "/models/codetrack-q4_k_m.gguf",
-    configured: true,
-    description: "使用你训练后的本地微调模型，适合对比专业场景回答效果。"
-  }
-];
 const resourceOutputActions: Array<{ label: string; type: GeneratedResourceType; icon: JSX.Element }> = [
   { label: "PPT", type: "PPT", icon: <Presentation size={15} /> },
   { label: "思维导图", type: "MIND_MAP", icon: <Waypoints size={15} /> },
@@ -198,11 +185,6 @@ function scrollTurnIntoView(turnId: string) {
   target?.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
-function confidenceBadge(turn: AiChatTurn) {
-  if (!turn.sourceUsed) return "通用回答";
-  return `置信度 ${Math.round((turn.confidence ?? 0.7) * 100)}%`;
-}
-
 function compactCitationText(source: StudentAiChatCitation) {
   const rawText = (source.quote || source.summary || "").replace(/\s+/g, " ").trim();
   const briefText = rawText.length > 88 ? `${rawText.slice(0, 88)}...` : rawText;
@@ -228,15 +210,6 @@ function messageToTurn(message: StudentAiChatMessage): AiChatTurn {
     modelLabel: typeof metadata.model_label === "string" ? metadata.model_label : undefined,
     resource: metadata.resource
   };
-}
-
-function readInitialModelKey() {
-  try {
-    const stored = window.localStorage.getItem(AI_MODEL_STORAGE_KEY);
-    return stored === "fine_tuned" ? "fine_tuned" : "default";
-  } catch {
-    return "default";
-  }
 }
 
 function ModelSwitcher({
@@ -482,7 +455,17 @@ function GeneratedResourceCard({
           )}
         </span>
         <span className="ai-resource-card-copy">
-          <b>{resource.title}</b>
+          <span className="ai-resource-card-title-line">
+            <b>{resource.title}</b>
+            <AIContentDisclosure
+              compact
+              interactive={false}
+              confidence={resource.confidence}
+              modelLabel={generatedResourceModelName(resource)}
+              sourceLabel={resource.citations.length ? "课程知识库与引用资料" : "学习上下文与生成模板"}
+              citationsCount={resource.citations.length}
+            />
+          </span>
           <small>{resourcePreviewSubtitle(resource)} · {metric} · {Math.round(resource.confidence * 100)}% 置信度</small>
           <em>{presentonSlide?.summary || resource.summary}</em>
         </span>
@@ -518,8 +501,8 @@ export default function AiTutor() {
   const [sessions, setSessions] = useState<StudentAiChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [turns, setTurns] = useState<AiChatTurn[]>([]);
-  const [modelOptions, setModelOptions] = useState<StudentAiModelOption[]>(fallbackModelOptions);
-  const [selectedModelKey, setSelectedModelKey] = useState(readInitialModelKey);
+  const [modelOptions, setModelOptions] = useState<StudentAiModelOption[]>(fallbackStudentAiModelOptions);
+  const [selectedModelKey, setSelectedModelKey] = useState(readStudentAiModelKey);
   const [activeResourceType, setActiveResourceType] = useState<GeneratedResourceType | null>(null);
   const [previewResource, setPreviewResource] = useState<GeneratedResource | null>(null);
   const hydratedRef = useRef(false);
@@ -552,12 +535,12 @@ export default function AiTutor() {
     let alive = true;
     api.listStudentAiChatModels().then((data) => {
       if (!alive) return;
-      setModelOptions(data.items.length ? data.items : fallbackModelOptions);
+      setModelOptions(data.items.length ? data.items : fallbackStudentAiModelOptions);
       if (data.items.length) {
         setSelectedModelKey((current) => data.items.some((item) => item.key === current) ? current : data.items[0].key);
       }
     }).catch(() => {
-      if (alive) setModelOptions(fallbackModelOptions);
+      if (alive) setModelOptions(fallbackStudentAiModelOptions);
     });
     setLoadingContext(true);
     setError(null);
@@ -595,11 +578,7 @@ export default function AiTutor() {
 
   function updateSelectedModel(key: string) {
     setSelectedModelKey(key);
-    try {
-      window.localStorage.setItem(AI_MODEL_STORAGE_KEY, key);
-    } catch {
-      // 浏览器隐私模式下可能禁用 localStorage，切换状态留在当前页面即可。
-    }
+    saveStudentAiModelKey(key);
   }
 
   useEffect(() => {
@@ -1003,7 +982,13 @@ export default function AiTutor() {
                         <section>
                           <h2>回答依据</h2>
                           <div className="ai-answer-meta">
-                            <span>{confidenceBadge(turn)}</span>
+                            <AIContentDisclosure
+                              compact
+                              confidence={turn.confidence ?? 0.7}
+                              modelLabel={turn.modelLabel || turn.modelName || undefined}
+                              sourceLabel={turn.sourceUsed ? "课程知识库、学习画像与对话上下文" : "对话上下文与通用模型知识"}
+                              citationsCount={turn.citations?.length ?? 0}
+                            />
                             <span>{turn.profileUsed ? "已结合学习画像" : "未使用学习画像"}</span>
                             <span>{turn.sourceUsed ? "已引用资料" : "未引用资料"}</span>
                             {turn.modelLabel ? <span>{turn.modelLabel}</span> : null}

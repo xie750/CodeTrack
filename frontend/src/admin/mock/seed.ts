@@ -2,8 +2,6 @@ import type {
   Teacher,
   Student,
   CourseItem,
-  ProjectItem,
-  ComplianceItem,
   SubjectRoute,
   SwitchHistory,
   SubjectAvailability,
@@ -82,120 +80,6 @@ export const seedCourses: CourseItem[] = [
       { id: 'U2024005', name: '陈同学', gender: '女' },
     ],
     enrollmentChanges: [],
-  },
-]
-
-// ===================== 科研管理 =====================
-export const seedProjects: ProjectItem[] = [
-  {
-    id: 'P2026001', name: '人工智能专业学习画像评估', discipline: '人工智能', leader: '张伟明',
-    status: '进行中',
-    members: [
-      { name: '张伟明', id: 'T1001', role: '负责人' },
-      { name: '李慧', id: 'T1002', role: '核心成员' },
-      { name: '王芳', id: 'U2024001', role: '参与学生' },
-      { name: '陈博士', id: 'E01', role: '外部协作' },
-    ],
-    outputs: [
-      { id: 'O1', type: '前沿报告', title: '人工智能专业助学模型前沿综述', status: '已入库', aiGenerated: true, generatedAt: '2026-07-18', refCount: 23 },
-      { id: 'O2', type: '数据分析报告', title: '人工智能课程学习画像多维度分析', status: '已入库', aiGenerated: true, generatedAt: '2026-07-25', refCount: 11 },
-    ],
-    milestones: [
-      { name: '文献调研与需求梳理', progress: 100, dueDate: '2026-06-30' },
-      { name: '评估指标体系构建', progress: 80, dueDate: '2026-08-15' },
-      { name: '模型训练与验证', progress: 30, dueDate: '2026-10-31' },
-    ],
-    changes: [
-      { time: '2026-07-02', content: '核心成员加入：李慧', operator: '张伟明' },
-      { time: '2026-07-19', content: '研究方向微调：聚焦人工智能专业形成性评估', operator: '张伟明' },
-    ],
-    createdAt: '2026-05-20', updatedAt: '2026-08-06', stageProgress: 70,
-  },
-  {
-    id: 'P2026002', name: '机器学习课程自适应学习路径规划', discipline: '人工智能', leader: '王建国',
-    status: '待审核',
-    members: [{ name: '王建国', id: 'T1003', role: '负责人' }],
-    outputs: [],
-    milestones: [{ name: '立项书提交', progress: 100, dueDate: '2026-08-10' }],
-    changes: [],
-    createdAt: '2026-08-01', updatedAt: '2026-08-07', stageProgress: 20,
-  },
-  {
-    id: 'P2026003', name: '机器学习薄弱点诊断与提示控制', discipline: '人工智能', leader: '王建国',
-    status: '已结项',
-    members: [
-      { name: '王建国', id: 'T1003', role: '负责人' },
-      { name: '刘洋', id: 'U2024004', role: '参与学生' },
-    ],
-    outputs: [
-      { id: 'O3', type: '热点图谱', title: '机器学习薄弱知识点热点图谱', status: '已入库', aiGenerated: true, generatedAt: '2026-06-12', refCount: 34 },
-      { id: 'O4', type: '论文框架', title: '基于学习画像的提示控制模型框架', status: '已入库', aiGenerated: true, generatedAt: '2026-06-20', refCount: 17 },
-    ],
-    milestones: [{ name: '全阶段', progress: 100, dueDate: '2026-06-30' }],
-    changes: [],
-    createdAt: '2026-03-01', updatedAt: '2026-07-01', stageProgress: 100,
-  },
-  {
-    id: 'P2026004', name: 'Python 程序设计学习行为分析', discipline: '人工智能', leader: '李慧',
-    status: '草稿',
-    members: [{ name: '李慧', id: 'T1002', role: '负责人' }],
-    outputs: [],
-    milestones: [],
-    changes: [],
-    createdAt: '2026-08-05', updatedAt: '2026-08-05', stageProgress: 5,
-  },
-  {
-    id: 'P2026005', name: '数据结构知识图谱资源推荐', discipline: '人工智能', leader: '张伟明',
-    status: '已驳回',
-    rejectReason: '立项论证不足，请补充技术可行性与数据来源说明',
-    members: [{ name: '张伟明', id: 'T1001', role: '负责人' }],
-    outputs: [],
-    milestones: [],
-    changes: [],
-    createdAt: '2026-07-10', updatedAt: '2026-07-22', stageProgress: 10,
-  },
-]
-
-export const seedCompliance: ComplianceItem[] = [
-  {
-    id: 'CM1', projectName: '人工智能专业学习画像评估', outputTitle: '人工智能课程学习画像多维度分析',
-    dimension: '数据合规', result: '疑似违规', severity: '高', status: '待处理',
-    aiDetected: true, summary: '样本数据疑似包含未脱敏的学生姓名与学号',
-    aiHints: ['检测到连续学号序列', '存在未掩码的个人信息字段'],
-    issue: '科研数据未完成脱敏处理，报告中出现真实学生信息',
-    detectedAt: '2026-08-06 10:20',
-  },
-  {
-    id: 'CM2', projectName: '人工智能专业学习画像评估', outputTitle: '人工智能专业助学模型前沿综述',
-    dimension: '引用真实性', result: '疑似违规', severity: '中', status: '待处理',
-    aiDetected: true, summary: '第 5 节引用「Zhang et al., 2024」未在知识库中检索到对应文献',
-    aiHints: ['引用条目在学术论文库中不存在'],
-    issue: '文献引用真实性无法核验，疑似引用虚构来源',
-    detectedAt: '2026-08-07 09:15',
-  },
-  {
-    id: 'CM3', projectName: '机器学习薄弱点诊断与提示控制', outputTitle: '基于学习画像的提示控制模型框架',
-    dimension: 'AI 标识', result: '疑似违规', severity: '中', status: '已处置',
-    aiDetected: true, summary: '产出由 AI 辅助生成但未标注 AI 生成标记',
-    aiHints: ['文本相似度与生成模板高度一致'],
-    issue: '未标注 AI 生成标记',
-    detectedAt: '2026-06-22', handledAt: '2026-06-23', handler: '管理员', handleMethod: '修改',
-  },
-  {
-    id: 'CM4', projectName: '机器学习课程自适应学习路径规划', outputTitle: '立项书中训练数据来源说明',
-    dimension: '伪造检测', result: '疑似违规', severity: '高', status: '待处理',
-    aiDetected: true, summary: '反应收率数据与公共数据库记录存在明显偏差',
-    aiHints: ['收率数值异常集中于 95%-98%'],
-    issue: '训练数据来源无法核验，疑似数据伪造',
-    detectedAt: '2026-08-08 08:40',
-  },
-  {
-    id: 'CM5', projectName: '数据结构知识图谱资源推荐', outputTitle: '课程资源推荐系统架构说明',
-    dimension: '学术伦理', result: '合规', severity: '低', status: '已处置',
-    aiDetected: false, summary: '内容未发现学术不端风险',
-    aiHints: [],
-    issue: '轻微格式问题：参考文献编号顺序不规范',
-    detectedAt: '2026-07-20', handledAt: '2026-07-21', handler: '管理员', handleMethod: '通知整改',
   },
 ]
 

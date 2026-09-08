@@ -18,6 +18,7 @@ import type {
 } from '../api'
 import type { ExactView } from './components'
 import robotImg from '../../assets/ui-home/ai-tutor-bot.png'
+import AIContentDisclosure from '../../components/AIContentDisclosure'
 
 type TeacherAiMessage = {
   id: string
@@ -52,6 +53,11 @@ function splitAnswer(content: string) {
     .split(/\n{2,}|\n(?=\d+[.、])|(?=[-*]\s)/)
     .map((item) => item.trim().replace(/^[-*]\s*/, ''))
     .filter(Boolean)
+}
+
+function normalizedConfidence(value?: number) {
+  if (typeof value !== 'number') return undefined
+  return value > 1 ? value / 100 : value
 }
 
 function toAssistantMessage(reply: ApiTeacherAiChatResponse): TeacherAiMessage {
@@ -419,7 +425,13 @@ export function ExactTeacherAiAssistant({
                   {message.confidence !== undefined ? <section>
                     <h2>回答依据</h2>
                     <div className="teacher-ai-answer-meta">
-                      <span>置信度 {message.confidence}%</span>
+                      <AIContentDisclosure
+                        compact
+                        confidence={normalizedConfidence(message.confidence)}
+                        modelLabel={message.modelName}
+                        sourceLabel="教师端课程、班级、提交与知识图谱数据"
+                        citationsCount={message.citations?.length ?? 0}
+                      />
                       <span>已结合教师端真实数据</span>
                       {message.modelName ? <span>模型 {message.modelName}</span> : null}
                     </div>

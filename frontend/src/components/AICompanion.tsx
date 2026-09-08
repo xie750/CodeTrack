@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FocusEvent, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { Rnd, type DraggableData, type Position } from "react-rnd";
 import {
+  Check,
+  ChevronDown,
   ChevronRight,
+  Cpu,
   History,
   Lightbulb,
   MessageSquarePlus,
@@ -11,7 +14,13 @@ import {
   Send,
   X
 } from "lucide-react";
-import { api, type StudentAiChatStreamEvent } from "../api";
+import { api, type StudentAiChatStreamEvent, type StudentAiModelOption } from "../api";
+import {
+  fallbackStudentAiModelOptions,
+  readStudentAiModelKey,
+  saveStudentAiModelKey
+} from "../studentAiModels";
+import AIContentDisclosure from "./AIContentDisclosure";
 
 type CompanionMode = "floating" | "expanded" | "chat";
 type MessageRole = "assistant" | "user";
@@ -23,6 +32,9 @@ type CompanionMessage = {
   time: string;
   loading?: boolean;
   error?: boolean;
+  confidence?: number;
+  citationsCount?: number;
+  modelLabel?: string;
 };
 
 type AICompanionProps = {
@@ -169,6 +181,7 @@ function pageContextLabel(routeGroup: string) {
     "/workspace": "编码工作区",
     "/question-workspace": "题目工作区",
     "/self-study": "自主学习",
+    "/project-practice": "项目实践",
     "/ai-tutor": "AI 导师",
     "/library": "资源中心",
     "/profile": "学习者画像"
@@ -214,6 +227,73 @@ function CompanionBot({ size = "large" }: { size?: "large" | "medium" | "small" 
   );
 }
 
+function CompanionModelSelect({
+  options,
+  selectedKey,
+  disabled,
+  onChange
+}: {
+  options: StudentAiModelOption[];
+  selectedKey: string;
+  disabled?: boolean;
+  onChange: (key: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedModel = options.find((item) => item.key === selectedKey) ?? options[0];
+
+  function handleBlur(event: FocusEvent<HTMLDivElement>) {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      setOpen(false);
+    }
+  }
+
+  return (
+    <div className="ai-companion-model-select" onBlur={handleBlur}>
+      <button
+        type="button"
+        className="ai-companion-model-trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={`当前模型：${selectedModel?.label ?? "通用模型"}`}
+        disabled={disabled}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <Cpu size={14} strokeWidth={2.4} />
+        <span>模型</span>
+        <strong>{selectedModel?.label ?? "通用模型"}</strong>
+        <ChevronDown size={14} strokeWidth={2.4} />
+      </button>
+      {open ? (
+        <div className="ai-companion-model-menu" role="listbox" aria-label="选择 AI 模型">
+          {options.map((option) => {
+            const selected = option.key === selectedModel?.key;
+            return (
+              <button
+                type="button"
+                key={option.key}
+                role="option"
+                aria-selected={selected}
+                disabled={!option.configured}
+                title={option.configured ? option.description : `${option.label}尚未配置`}
+                onClick={() => {
+                  onChange(option.key);
+                  setOpen(false);
+                }}
+              >
+                <span>
+                  <strong>{option.label}</strong>
+                  <small>{option.configured ? option.model_name || option.description : "暂未配置"}</small>
+                </span>
+                {selected ? <Check size={16} strokeWidth={2.6} /> : null}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function AICompanion({ routePath, routeGroup }: AICompanionProps) {
   const [mode, setMode] = useState<CompanionMode>("floating");
   const [frame, setFrame] = useState<CompanionFrame>(readInitialFrame);
@@ -224,6 +304,8 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
   const [messages, setMessages] = useState<CompanionMessage[]>(() => [initialMessage(routeGroup)]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [modelOptions, setModelOptions] = useState<StudentAiModelOption[]>(fallbackStudentAiModelOptions);
+  const [selectedModelKey, setSelectedModelKey] = useState(readStudentAiModelKey);
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const draggedRef = useRef(false);
   const pointerStartRef = useRef<Position | null>(null);
@@ -234,6 +316,7 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
   const isFloating = mode === "floating";
   const isChat = mode === "chat";
   const minChatSize = chatMinSize();
+  const selectedModel = modelOptions.find((item) => item.key === selectedModelKey) ?? modelOptions[0];
 
   useEffect(() => {
     function syncFrameToViewport() {
@@ -260,6 +343,21 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
 
     window.addEventListener("resize", syncFrameToViewport);
     return () => window.removeEventListener("resize", syncFrameToViewport);
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    api.listStudentAiChatModels().then((data) => {
+      if (!alive) return;
+      const items = data.items.length ? data.items : fallbackStudentAiModelOptions;
+      setModelOptions(items);
+      setSelectedModelKey((current) => items.some((item) => item.key === current) ? current : items[0].key);
+    }).catch(() => {
+      if (alive) setModelOptions(fallbackStudentAiModelOptions);
+    });
+    return () => {
+      alive = false;
+    };
   }, []);
 
   function persistFrame(nextFrame: CompanionFrame) {
@@ -324,6 +422,11 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
     setInput("");
   }
 
+  function updateSelectedModel(key: string) {
+    setSelectedModelKey(key);
+    saveStudentAiModelKey(key);
+  }
+
   function updateMessage(messageId: string, update: Partial<CompanionMessage>) {
     setMessages((prev) => prev.map((message) => (
       message.id === messageId ? { ...message, ...update } : message
@@ -355,7 +458,10 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
         content: event.data.answer,
         loading: false,
         error: false,
-        time: nowLabel()
+        time: nowLabel(),
+        confidence: event.data.confidence,
+        citationsCount: event.data.citations?.length ?? 0,
+        modelLabel: event.data.model_label || event.data.model_name
       });
       return;
     }
@@ -385,7 +491,14 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
     setMessages((prev) => [
       ...prev,
       { id: userMessageId, role: "user", content: value, time: nowLabel() },
-      { id: assistantMessageId, role: "assistant", content: "正在思考...", time: nowLabel(), loading: true }
+      {
+        id: assistantMessageId,
+        role: "assistant",
+        content: "正在思考...",
+        time: nowLabel(),
+        loading: true,
+        modelLabel: selectedModel?.label
+      }
     ]);
     setSending(true);
     requestAnimationFrame(() => {
@@ -396,10 +509,12 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
         {
           message: value,
           sessionId,
+          modelKey: selectedModelKey,
           pageContext: {
             route_path: routePath,
             route_group: routeGroup,
-            page_label: contextLabel
+            page_label: contextLabel,
+            model_label: selectedModel?.label
           },
           history
         },
@@ -516,6 +631,12 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
                     </div>
                   </div>
                   <div className="ai-panel-tools">
+                    <CompanionModelSelect
+                      options={modelOptions}
+                      selectedKey={selectedModelKey}
+                      disabled={sending}
+                      onChange={updateSelectedModel}
+                    />
                     <button type="button" aria-label="最小化 AI 助手" onClick={minimize}>
                       <Minus size={17} strokeWidth={2.4} />
                     </button>
@@ -535,6 +656,17 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
                       )}
                       <div className="ai-message-bubble">
                         <p>{message.content}</p>
+                        {message.role === "assistant" ? (
+                          <span className="ai-message-disclosure-row">
+                            <AIContentDisclosure
+                              compact
+                              confidence={message.confidence}
+                              modelLabel={message.modelLabel}
+                              sourceLabel={message.citationsCount ? "课程知识库与页面上下文" : "页面上下文与对话输入"}
+                              citationsCount={message.citationsCount}
+                            />
+                          </span>
+                        ) : null}
                         <time>{message.time}</time>
                       </div>
                     </article>
@@ -590,6 +722,12 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
                     </div>
                   </div>
                   <div className="ai-panel-tools">
+                    <CompanionModelSelect
+                      options={modelOptions}
+                      selectedKey={selectedModelKey}
+                      disabled={sending}
+                      onChange={updateSelectedModel}
+                    />
                     <button type="button" aria-label="关闭 AI 助手" onClick={closePanel}>
                       <X size={18} strokeWidth={2.4} />
                     </button>

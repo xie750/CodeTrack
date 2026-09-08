@@ -206,10 +206,12 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
   useEffect(() => {
     let alive = true;
 
-    async function loadCourse() {
-      setLoading(!context || !tasks.length);
-      setMessage(null);
-      setMessageDetail(null);
+    async function loadCourse(silent = false) {
+      if (!silent) {
+        setLoading(!context || !tasks.length);
+        setMessage(null);
+        setMessageDetail(null);
+      }
       try {
         const data = await api.getLearningContext();
         const [taskData, profileData] = await Promise.all([
@@ -227,13 +229,20 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
         setMessage(studentErrorMessage(err, "课程工作台数据加载失败，请稍后刷新。"));
         setMessageDetail(studentErrorDetail(err));
       } finally {
-        if (alive) setLoading(false);
+        if (alive && !silent) setLoading(false);
       }
     }
 
     loadCourse();
+    const refreshIfVisible = () => {
+      if (document.visibilityState === "visible") void loadCourse(true);
+    };
+    window.addEventListener("focus", refreshIfVisible);
+    const refreshTimer = window.setInterval(refreshIfVisible, 15000);
     return () => {
       alive = false;
+      window.removeEventListener("focus", refreshIfVisible);
+      window.clearInterval(refreshTimer);
     };
   }, [courseId, reloadKey]);
 

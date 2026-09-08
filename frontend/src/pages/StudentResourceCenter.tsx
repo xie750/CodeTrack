@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { api, type GeneratedResource, type StudentResourceFolder } from "../api";
 import { authHeaders } from "../authSession";
+import AIContentDisclosure from "../components/AIContentDisclosure";
 import GeneratedResourcePreviewModal from "../components/GeneratedResourcePreviewModal";
 import { StudentInlineNotice, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
 
@@ -516,7 +517,16 @@ export default function StudentResourceCenter() {
                 <div className="student-resource-card-body">
                   <header>
                     <div>
-                      <h2>{item.title}</h2>
+                      <div className="student-resource-title-line">
+                        <h2>{item.title}</h2>
+                        <AIContentDisclosure
+                          compact
+                          interactive={false}
+                          confidence={item.resource.confidence}
+                          sourceLabel={(item.resource.citations ?? []).length ? "课程知识库与引用资料" : "AI 生成资源"}
+                          citationsCount={(item.resource.citations ?? []).length}
+                        />
+                      </div>
                       <p>{item.summary}</p>
                     </div>
                   </header>

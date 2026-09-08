@@ -168,7 +168,7 @@ export function ExactPortal({
             <div className="teacher-card-visual research-visual" aria-hidden="true"><span className="visual-microscope"><Microscope size={98} strokeWidth={1.45} /></span><span className="visual-flask"><FlaskConical size={42} strokeWidth={1.6} /></span><span className="visual-dot dot-a" /><span className="visual-dot dot-b" /></div>
             <h2>科研入口</h2>
             <p>论文阅读、代码复现与科研协作空间</p>
-            <button type="button" onClick={() => window.alert('科研工作区将在后续版本接入')}>进入科研 <ArrowRight size={24} strokeWidth={2.2} /></button>
+            <button type="button" onClick={() => onNavigate('/teacher/research')}>进入科研 <ArrowRight size={24} strokeWidth={2.2} /></button>
           </article>
         </div>
       </>

@@ -9,10 +9,6 @@
   cursor: pointer;
 }
 
-.ai-companion[data-route^="/project-practice"] {
-  display: none;
-}
-
 .project-practice-home h1,
 .project-practice-home h2,
 .project-practice-home p {
@@ -927,12 +923,12 @@
   margin-top: 14px;
   padding: 24px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 128px 360px;
+  grid-template-columns: minmax(0, 1fr) 132px 210px;
   grid-template-areas:
     "title ring metrics"
     "facts ring metrics";
-  gap: 20px;
-  align-items: center;
+  gap: 18px;
+  align-items: stretch;
   border: 1px solid #e1e8f2;
   border-radius: 8px;
   background: #ffffff;
@@ -1023,15 +1019,22 @@
 .project-progress-ring {
   grid-area: ring;
   position: relative;
-  width: 118px;
-  height: 118px;
+  width: 132px;
+  min-height: 132px;
+  align-self: center;
+  justify-self: center;
   display: grid;
+  grid-template: 1fr / 1fr;
   place-items: center;
+  border: 1px solid #e4ebf3;
+  border-radius: 8px;
+  background: #f8fbff;
 }
 
 .project-progress-ring svg {
-  position: absolute;
-  inset: 0;
+  grid-area: 1 / 1;
+  width: 104px;
+  height: 104px;
   transform: rotate(-90deg);
 }
 
@@ -1047,33 +1050,27 @@
 }
 
 .project-progress-ring::after {
-  content: "";
-  position: absolute;
-  inset: 10px;
-  border-radius: 50%;
-  border: 10px solid transparent;
-  border-right-color: #12b8a6;
-  transform: rotate(42deg);
+  content: none;
 }
 
 .project-progress-ring span,
 .project-progress-ring strong {
-  position: relative;
+  grid-area: 1 / 1;
   z-index: 1;
   display: block;
 }
 
 .project-progress-ring span {
-  margin-top: -18px;
+  transform: translateY(-23px);
   color: #64748b;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 850;
 }
 
 .project-progress-ring strong {
-  margin-top: 14px;
+  transform: translateY(15px);
   color: #10213c;
-  font-size: 30px;
+  font-size: 28px;
   line-height: 1;
   font-weight: 950;
 }
@@ -1082,27 +1079,34 @@
   grid-area: metrics;
   min-width: 0;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  padding-left: 18px;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  padding-left: 16px;
   border-left: 1px solid #e4ebf3;
 }
 
 .project-detail-metrics div {
-  grid-template-columns: 42px minmax(0, 1fr);
-  column-gap: 8px;
+  min-height: 38px;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  column-gap: 9px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid #e7eef7;
+  border-radius: 8px;
+  background: #fbfdff;
 }
 
 .project-detail-metrics svg {
-  width: 38px;
-  height: 38px;
-  padding: 8px;
+  grid-row: auto;
+  width: 32px;
+  height: 32px;
+  padding: 7px;
   border-radius: 8px;
   background: #edf5ff;
 }
 
 .project-detail-metrics strong {
-  font-size: 22px;
+  font-size: 20px;
   white-space: nowrap;
 }
 
@@ -1667,7 +1671,7 @@
 .project-resource-card,
 .project-timeline-card {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .project-resource-card article {
@@ -1698,13 +1702,16 @@
 
 .project-timeline-card article {
   position: relative;
-  min-height: 34px;
-  padding-left: 24px;
+  min-height: 54px;
+  padding: 10px 10px 10px 30px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
+  gap: 10px;
   align-items: start;
+  border: 1px solid #e7eef7;
+  border-radius: 8px;
   color: #526174;
+  background: #fbfdff;
   font-size: 12px;
   font-weight: 850;
 }
@@ -1712,9 +1719,9 @@
 .project-timeline-card article::before {
   content: "";
   position: absolute;
-  top: 19px;
-  bottom: -10px;
-  left: 7px;
+  top: 42px;
+  bottom: -9px;
+  left: 17px;
   width: 1px;
   background: #e2e8f0;
 }
@@ -1725,12 +1732,14 @@
 
 .project-timeline-card i {
   position: absolute;
-  left: 0;
-  top: 2px;
-  width: 15px;
-  height: 15px;
+  left: 10px;
+  top: 15px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
+  border: 3px solid #ffffff;
   background: #176cf5;
+  box-shadow: 0 0 0 1px rgba(23, 108, 245, 0.18);
 }
 
 .project-timeline-card article:nth-of-type(2) i {
@@ -1746,13 +1755,36 @@
 }
 
 .project-timeline-card span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.project-timeline-card span b {
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.45;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.project-timeline-card span small {
+  width: fit-content;
+  min-height: 20px;
+  padding: 0 7px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  color: #176cf5;
+  background: #edf5ff;
+  font-size: 11px;
+  font-weight: 850;
 }
 
 .project-timeline-card time {
   color: #94a3b8;
+  font-size: 12px;
+  font-weight: 850;
   white-space: nowrap;
 }
 
@@ -1834,7 +1866,7 @@
 
 @media (max-width: 1280px) {
   .project-detail-summary {
-    grid-template-columns: minmax(0, 1fr) 124px 320px;
+    grid-template-columns: minmax(0, 1fr) 128px 200px;
   }
 
   .project-detail-facts {

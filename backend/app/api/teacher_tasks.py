@@ -1,15 +1,13 @@
 """教师端任务中心接口（开发方案 §八 8.1 任务列表）。
 
-本模块**全程只读**：不 commit、不写审计。原因是 §八 8.1 的行内写操作（新建、编辑、
-复制、归档、发布）都缺少可写落点：
+本模块目前支持任务列表、创建、发布和删除。编辑、复制、归档这些动作仍缺少完整写落点：
 
-- `Task` 表没有 §14.1 的五态内容状态字段（种子数据里 `status` 只有 `OPEN` 一种取值），
-  也没有章节、知识点、难度、创建时间。归档和复制一旦现在写，写进去的状态没有任何
-  接口读得懂。
-- 发布会批量初始化全班 `StudentTaskProgress`（§八 8.6「发布后必须初始化所有学生任务
-  进度」），必须与写接口、二次确认和审计日志一起上线，不能先放一个能点的按钮。
+- `Task` 表没有 §14.1 的五态内容状态字段（种子数据里 `status` 只有 `OPEN` 一种取值）。
+  归档和复制一旦现在写，写进去的状态没有任何接口读得懂。
+- 任务删除是硬删除：教师确认后会同步移除发布记录、学生进度、答题尝试、提交版本、
+  执行/诊断/反馈等从属记录，学生端不再展示该任务。
 
-所以列表页把这些动作按 `unavailable_actions` 渲染成不可用，并显示后端给出的原因 ——
+所以列表页仍把未接入的动作按 `unavailable_actions` 渲染成不可用，并显示后端给出的原因。
 理由文案放后端，前端只负责渲染，避免两边各编一套说辞。
 
 **内容状态是推导出来的，不是存的**。见 `_derive_content_status`：现有数据只能可靠地区分
@@ -459,6 +457,110 @@ def publish_teacher_task(
     return ok({"task_id": task.id, "publications": rows})
 
 
+@router.delete("/tasks/{task_id}")
+def delete_teacher_task(
+    task_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "TEACHER")
+    task, _assignments = _ensure_task_owned_by_teacher(db, user, task_id)
+    assignment_ids = list(
+        db.scalars(select(TaskAssignment.id).where(TaskAssignment.task_id == task.id)).all()
+    )
+    _delete_task_records(db, task.id, assignment_ids)
+    db.commit()
+    return ok({"task_id": task.id, "deleted": True})
+
+
+def _delete_task_records(db: Session, task_id: str, assignment_ids: list[str]) -> None:
+    """Delete a teacher task and all student-facing records tied to it."""
+    submission_ids = list(
+        db.scalars(select(Submission.id).where(Submission.task_id == task_id)).all()
+    )
+    version_ids = (
+        list(
+            db.scalars(
+                select(SubmissionVersion.id).where(
+                    SubmissionVersion.submission_id.in_(submission_ids)
+                )
+            ).all()
+        )
+        if submission_ids
+        else []
+    )
+    execution_ids = (
+        list(
+            db.scalars(
+                select(ExecutionRun.id).where(ExecutionRun.submission_version_id.in_(version_ids))
+            ).all()
+        )
+        if version_ids
+        else []
+    )
+    diagnosis_ids = (
+        list(
+            db.scalars(
+                select(Diagnosis.id).where(Diagnosis.submission_version_id.in_(version_ids))
+            ).all()
+        )
+        if version_ids
+        else []
+    )
+    question_ids = list(db.scalars(select(Question.id).where(Question.task_id == task_id)).all())
+
+    attempt_filters = [QuestionAttempt.task_id == task_id]
+    if assignment_ids:
+        attempt_filters.append(QuestionAttempt.assignment_id.in_(assignment_ids))
+    attempt_ids = list(
+        db.scalars(select(QuestionAttempt.id).where(or_(*attempt_filters))).all()
+    )
+
+    if assignment_ids:
+        db.execute(delete(StudentTaskProgress).where(StudentTaskProgress.assignment_id.in_(assignment_ids)))
+        db.execute(delete(LearnerEvent).where(LearnerEvent.assignment_id.in_(assignment_ids)))
+
+    db.execute(delete(LearnerEvent).where(LearnerEvent.task_id == task_id))
+    db.execute(delete(Recommendation).where(Recommendation.related_task_id == task_id))
+    db.execute(delete(CapabilityEvidence).where(CapabilityEvidence.task_id == task_id))
+    db.execute(delete(IdempotencyRecord).where(IdempotencyRecord.task_id == task_id))
+
+    if attempt_ids:
+        db.execute(delete(QuestionAnswer).where(QuestionAnswer.attempt_id.in_(attempt_ids)))
+        db.execute(delete(QuestionAttempt).where(QuestionAttempt.id.in_(attempt_ids)))
+
+    if question_ids:
+        db.execute(delete(QuestionAnswer).where(QuestionAnswer.question_id.in_(question_ids)))
+        db.execute(delete(QuestionOption).where(QuestionOption.question_id.in_(question_ids)))
+        db.execute(delete(Question).where(Question.id.in_(question_ids)))
+
+    if submission_ids:
+        db.execute(delete(Grade).where(Grade.submission_id.in_(submission_ids)))
+        db.execute(delete(TeacherFeedback).where(TeacherFeedback.submission_id.in_(submission_ids)))
+
+    if diagnosis_ids:
+        db.execute(delete(HintRecord).where(HintRecord.diagnosis_id.in_(diagnosis_ids)))
+        db.execute(delete(DiagnosisReview).where(DiagnosisReview.diagnosis_id.in_(diagnosis_ids)))
+        db.execute(delete(Diagnosis).where(Diagnosis.id.in_(diagnosis_ids)))
+
+    if execution_ids:
+        db.execute(delete(TestResult).where(TestResult.execution_run_id.in_(execution_ids)))
+        db.execute(delete(ExecutionRun).where(ExecutionRun.id.in_(execution_ids)))
+
+    if version_ids:
+        db.execute(delete(CapabilityEvidence).where(CapabilityEvidence.submission_version_id.in_(version_ids)))
+        db.execute(delete(SubmissionVersion).where(SubmissionVersion.id.in_(version_ids)))
+
+    if submission_ids:
+        db.execute(delete(Submission).where(Submission.id.in_(submission_ids)))
+
+    if assignment_ids:
+        db.execute(delete(TaskAssignment).where(TaskAssignment.id.in_(assignment_ids)))
+
+    db.execute(delete(TestCase).where(TestCase.task_id == task_id))
+    db.execute(delete(Task).where(Task.id == task_id))
+
+
 def _json_list(raw: str | None) -> list:
     """capability_ids / learning_objectives 都是 JSON 文本列，脏数据不该让整页 500。"""
     if not raw:
@@ -768,6 +870,9 @@ def _attach_content_counts(db: Session, rows: list[dict]) -> None:
         )
         row["required_test_case_count"] = len([item for item in task_cases if item.required])
         row["question_count"] = len(task_questions)
+        row["question_preview"] = (
+            task_questions[0].stem if task_questions else None
+        )
         # 没题目时是 None 而不是 0：「没有题目」和「题目总分 0」是两件事
         row["question_total_score"] = (
             round(sum(item.score for item in task_questions), 2) if task_questions else None

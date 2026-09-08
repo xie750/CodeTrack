@@ -1,8 +1,8 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Alert, Button, Drawer, message, Tag, Typography } from 'antd'
+import { Alert, Badge, Button, Drawer, message, Tag, Typography } from 'antd'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useRef } from 'react'
-import { CheckCircle2, CircleAlert } from 'lucide-react'
+import { Bell, CheckCircle2, CircleAlert } from 'lucide-react'
 
 import { api, TEACHER_API_BASE, type ApiCourse, type BootstrapData } from '../api'
 import { ExactShell, type ExactView } from './components'
@@ -15,8 +15,11 @@ import { ExactMaterialsV2 } from './ExactMaterialsV2'
 import { ExactGraphV2 } from './ExactGraphV2'
 import { ExactCourseContent } from './ExactCourseContent'
 import { ExactTeacherAiAssistant } from './ExactTeacherAiAssistant'
+import { ExactResearch } from './ExactResearch'
 import { matchTeacherRoute, teacherPath } from '../routes/routeConfig'
 import type { AuthUser } from '../../authSession'
+import AccountMenu from '../../components/AccountMenu'
+import brandLogo from '../../assets/ui-home/logo-img.png'
 import './exact.css'
 
 const { Text } = Typography
@@ -115,7 +118,7 @@ export default function ExactApp({ authUser, loggedIn, onLogin, onLogout }: { au
     [bootstrap?.classes, courseId],
   )
 
-  const notify = (text: string) => messageApi.success(text)
+  const notify = (text: string, type: 'success' | 'error' | 'warning' = 'success') => messageApi[type](text)
   const navigate = (next: ExactView) => {
     if (next === 'discussion') {
       routerNavigate(`/teacher/courses/${encodeURIComponent(courseIdRef.current)}/workspace?discussion=1`)
@@ -155,6 +158,18 @@ export default function ExactApp({ authUser, loggedIn, onLogin, onLogout }: { au
   const refresh = useCallback(async (requestedCourseId?: string) => {
     await load(requestedCourseId ?? courseIdRef.current, classId)
   }, [classId, load])
+
+  const navigateAccountPath = (path: string) => {
+    if (path === '/teacher/dashboard') {
+      routerNavigate('/teacher/dashboard')
+      return
+    }
+    if (path === '/teacher/materials') {
+      routerNavigate(teacherPath('materials', courseIdRef.current, true))
+      return
+    }
+    if (path === '/teacher/settings') routerNavigate('/teacher/settings')
+  }
 
   const enterWorkbench = async () => {
     if (bootstrap) {
@@ -221,6 +236,7 @@ export default function ExactApp({ authUser, loggedIn, onLogin, onLogout }: { au
     <Route path="dashboard" element={dashboard} />
     <Route path="courses" element={<ExactCourses courses={bootstrap.courses} onReload={refresh} onCourse={chooseCourse} onNavigate={navigate} />} />
     <Route path="courses/new" element={<ExactCreateCourse teacher={bootstrap.teacher} onDone={courseCreated} onCancel={() => navigate('courses')} />} />
+    <Route path="research" element={<ExactResearch />} />
     <Route path="classes" element={<Navigate to="/teacher/courses" replace />} />
     <Route path="tasks" element={<Navigate to="/teacher/courses" replace />} />
     <Route path="materials" element={<Navigate to="/teacher/courses" replace />} />
@@ -241,6 +257,41 @@ export default function ExactApp({ authUser, loggedIn, onLogin, onLogout }: { au
     <Route path="courses/:courseId/course-settings" element={<ExactCourseSettings {...common} />} />
     <Route path="*" element={<Navigate to="/teacher/dashboard" replace />} />
   </Routes>
+
+  if (view === 'research' && !matchedRoute.courseMode) {
+    return <>
+      {contextHolder}
+      <div className="research-standalone-shell">
+        <header className="research-standalone-topbar">
+          <div className="research-standalone-brand">
+            <img src={brandLogo} alt="CodeTrack" />
+            <div>
+              <strong>CodeTrack Teacher</strong>
+              <small>科研工作台</small>
+            </div>
+          </div>
+          <div className="research-standalone-actions">
+            <Tag color="cyan">AI 专业科研入口</Tag>
+            <Badge count={bootstrap.notifications.filter((item) => !item.read).length} size="small">
+              <Button type="text" icon={<Bell size={17} />} onClick={() => setNoticeOpen(true)}>通知</Button>
+            </Badge>
+            <AccountMenu
+              authUser={authUser}
+              onLogout={onLogout}
+              onNavigate={navigateAccountPath}
+            />
+          </div>
+        </header>
+        <main className="research-standalone-main">
+          {error && <Alert className="exact-inline-error" type="warning" showIcon message={error} action={<Button size="small" onClick={() => void load()}>重新加载</Button>} />}
+          {content}
+        </main>
+      </div>
+      <Drawer title="通知中心" open={noticeOpen} onClose={() => setNoticeOpen(false)} size="large">
+        <div className="exact-notifications">{bootstrap.notifications.map((item) => <button key={item.id} onClick={() => readNotice(item.id)}><span className={item.read ? '' : 'unread'} />{item.type === 'ai' ? <Tag color="purple">AI</Tag> : item.type === 'risk' ? <Tag color="red">预警</Tag> : <Tag color="green">任务</Tag>}<div><strong>{item.title}</strong><Text>{item.content}</Text><small>{item.created_at.slice(0,16).replace('T',' ')}</small></div>{item.read && <CheckCircle2 size={15} />}</button>)}</div>
+      </Drawer>
+    </>
+  }
 
   return <>
     {contextHolder}

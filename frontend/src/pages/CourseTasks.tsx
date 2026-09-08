@@ -227,22 +227,35 @@ export default function CourseTasks({ onOpenWorkspace, courseId, embedded = fals
     setError(null);
     setErrorDetail(null);
     setTasks(cachedTaskData ?? []);
-    api
-      .listStudentTasks(selectedCourseId)
-      .then((data) => {
+
+    async function loadTasks(silent = false) {
+      if (!silent) {
+        setError(null);
+        setErrorDetail(null);
+      }
+      try {
+        const data = await api.listStudentTasks(selectedCourseId);
         if (alive) setTasks(data);
-      })
-      .catch((err) => {
+      } catch (err) {
         if (!alive) return;
-        setTasks([]);
+        if (!silent) setTasks([]);
         setError(studentErrorMessage(err, "任务数据加载失败，请稍后刷新。"));
         setErrorDetail(studentErrorDetail(err));
-      })
-      .finally(() => {
-        if (alive) setLoadingTasks(false);
-      });
+      } finally {
+        if (alive && !silent) setLoadingTasks(false);
+      }
+    }
+
+    void loadTasks();
+    const refreshIfVisible = () => {
+      if (document.visibilityState === "visible") void loadTasks(true);
+    };
+    window.addEventListener("focus", refreshIfVisible);
+    const refreshTimer = window.setInterval(refreshIfVisible, 15000);
     return () => {
       alive = false;
+      window.removeEventListener("focus", refreshIfVisible);
+      window.clearInterval(refreshTimer);
     };
   }, [context, selectedTab, courseId, reloadKey]);
 

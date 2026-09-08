@@ -3,8 +3,6 @@ import type {
   Teacher,
   Student,
   CourseItem,
-  ProjectItem,
-  ComplianceItem,
   SubjectRoute,
   SwitchHistory,
   SubjectAvailability,
@@ -27,8 +25,6 @@ import {
   seedTeachers,
   seedStudents,
   seedCourses,
-  seedProjects,
-  seedCompliance,
   seedSubjectRoutes,
   seedSwitchHistories,
   seedSubjectAvailabilities,
@@ -92,15 +88,6 @@ export const useAppStore = create<{
   addCourse: (c: CourseItem) => void
   updateCourse: (id: string, patch: Partial<CourseItem>) => void
   deleteCourse: (id: string) => void
-
-  // 科研
-  projects: ProjectItem[]
-  addProject: (p: ProjectItem) => void
-  updateProject: (id: string, patch: Partial<ProjectItem>) => void
-
-  compliance: ComplianceItem[]
-  updateCompliance: (id: string, patch: Partial<ComplianceItem>) => void
-  addCompliance: (c: ComplianceItem) => void
 
   // AI 运维管控
   subjectRoutes: SubjectRoute[]
@@ -267,16 +254,6 @@ export const useAppStore = create<{
   updateCourse: (id, patch) =>
     set((s) => ({ courses: s.courses.map((c) => (c.id === id ? { ...c, ...patch } : c)) })),
   deleteCourse: (id) => set((s) => ({ courses: s.courses.filter((c) => c.id !== id) })),
-
-  projects: seedProjects,
-  addProject: (p) => set((s) => ({ projects: [p, ...s.projects] })),
-  updateProject: (id, patch) =>
-    set((s) => ({ projects: s.projects.map((p) => (p.id === id ? { ...p, ...patch } : p)) })),
-
-  compliance: seedCompliance,
-  updateCompliance: (id, patch) =>
-    set((s) => ({ compliance: s.compliance.map((c) => (c.id === id ? { ...c, ...patch } : c)) })),
-  addCompliance: (c) => set((s) => ({ compliance: [c, ...s.compliance] })),
 
   subjectRoutes: seedSubjectRoutes,
   updateSubjectRoute: (id, patch) =>

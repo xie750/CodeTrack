@@ -200,6 +200,14 @@ def serialize_daily_task(task: StudentDailyTask) -> dict:
 
 
 def task_knowledge_points(task: Task) -> list[str]:
+    try:
+        objectives = json.loads(task.learning_objectives or "[]")
+    except (TypeError, ValueError):
+        objectives = []
+    if isinstance(objectives, list):
+        points = [str(item).strip() for item in objectives if str(item).strip()]
+        if points:
+            return points
     if task.course_id == "course_arch_001":
         return ["机器学习", "过拟合", "模型评估"]
     if task.course_id == "course_network_001":
@@ -1482,6 +1490,9 @@ def list_student_tasks(
 
     data = []
     for assignment, task, teaching, course, teacher, progress in db.execute(query).all():
+        fallback_required_count = (
+            len(task.questions) if task.workspace_type == "QUESTION_SET" else len(task.test_cases)
+        )
         data.append(
             {
                 "assignment_id": assignment.id,
@@ -1504,7 +1515,7 @@ def list_student_tasks(
                 "knowledge_points": task_knowledge_points(task),
                 "status": progress.status if progress else "NOT_STARTED",
                 "passed_count": progress.passed_count if progress else 0,
-                "total_required_count": progress.total_required_count if progress else len(task.test_cases),
+                "total_required_count": progress.total_required_count if progress else fallback_required_count,
                 "highest_hint_level": progress.highest_hint_level if progress else 0,
                 "latest_summary": latest_task_summary(task, progress),
             }

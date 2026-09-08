@@ -1602,7 +1602,7 @@ export const api = {
     request<QuestionWorkspace>(`/api/v1/student/assignments/${assignmentId}/workspace`),
   getLearningContext: () => cachedGet<LearningContext>("/api/v1/student/learning-context"),
   listStudentTasks: (courseId?: string) =>
-    cachedGet<StudentTaskCard[]>(studentTasksUrl(courseId)),
+    cachedGet<StudentTaskCard[]>(studentTasksUrl(courseId), 0),
   listStudentDailyTasks: (taskDate?: string) =>
     cachedGet<StudentDailyTaskCenter>(studentDailyTasksUrl(taskDate), 5_000),
   createStudentDailyTask: async (title: string, taskDate?: string) => {

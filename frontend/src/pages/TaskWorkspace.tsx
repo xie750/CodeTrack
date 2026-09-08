@@ -38,6 +38,7 @@ import {
   Zap
 } from "lucide-react";
 import { api, LearningContext, TaskDetail, VersionResult, Diagnosis, Hint, AgentWorkflowRun } from "../api";
+import AIContentDisclosure from "../components/AIContentDisclosure";
 import StudentRouteBreadcrumb from "../components/StudentRouteBreadcrumb";
 import { StudentState, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
 
@@ -2486,10 +2487,6 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
                     {algorithmScene ? "查看算法演示" : "生成算法演示"}
                   </button>
                 </div>
-                <div className="program-ideology-banner">
-                  <span><ShieldCheck size={16} /> AI 课程思政融入</span>
-                  <p>本任务已纳入“知识学习 + 工程实践 + 价值引导”闭环，系统会在诊断、提示和总结中提示 AI 专业学习的责任意识、严谨精神与技术向善。</p>
-                </div>
               </div>
             </section>
 
@@ -2677,7 +2674,16 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
                     {aiPanelMode === "hint" ? (
                       <>
                         <section>
-                          <h3>AI诊断总结</h3>
+                          <div className="program-ai-title-line">
+                            <h3>AI诊断总结</h3>
+                            <AIContentDisclosure
+                              compact
+                              confidence={diagnosis?.confidence}
+                              modelLabel={diagnosis?.model_name}
+                              sourceLabel={diagnosis?.knowledge_sources?.length ? "系统执行证据、题目说明与课程知识库" : "当前题目与提交状态"}
+                              citationsCount={diagnosis?.knowledge_sources?.length ?? 0}
+                            />
+                          </div>
                           <p>{diagnosis?.explanation ?? (executionInFlight ? "代码已提交，后端正在运行测试并生成 AI 诊断。你可以切换到其他页面，返回后这里会继续恢复状态。" : latestResult ? "当前版本暂无可用 AI 诊断，请先查看系统测试证据。" : "提交代码后，AI 会基于编译输出、失败用例和课程知识源给出诊断。")}</p>
                         </section>
                         <section>
@@ -2802,16 +2808,6 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
                     <div><strong>复习{item}</strong><p>先对照公开样例自测，再根据系统证据逐步修正。</p></div>
                   </div>
                 ))}
-              </article>
-
-              <article className="program-card program-ideology-summary">
-                <header><h2>价值引导闭环</h2><span className="program-panel-meta">AI 专业素养</span></header>
-                <div>
-                  <span><ShieldCheck size={17} /></span>
-                  <strong>从会做题走向会负责任地使用技术</strong>
-                  <p>{isPassed(latestResult) ? "本次实践已形成技术掌握、调试过程和专业素养三类学习证据，可继续沉淀到学习总结与个人画像。" : "完成提交后，系统会结合代码结果、提示使用和学习总结，帮助你复盘专业能力与责任意识。"}</p>
-                  <em>科技向善 · 工程责任 · 严谨求证 · 创新实践</em>
-                </div>
               </article>
             </section>
             {(task.teacher_review?.grade || task.teacher_review?.feedback.length) ? (

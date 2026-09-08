@@ -4,8 +4,8 @@ import {
   Select, Space, Steps, Tabs, Tag, Tooltip, Typography,
 } from 'antd'
 import {
-  Activity, Bot, CheckCircle2, ChevronDown, Code2, Copy, Edit3, Eye, GitBranch, ListChecks,
-  MessageSquareText, MoreHorizontal, Plus, Search, Settings2, Sparkles, X,
+  Activity, Bot, CheckCircle2, ChevronDown, Code2, Copy, Edit3, Eye, ListChecks,
+  MessageSquareText, MoreHorizontal, Plus, Search, Settings2, Sparkles, Trash2, X,
 } from 'lucide-react'
 
 import {
@@ -31,7 +31,7 @@ interface Props {
   classes: ApiClass[]
   onNavigate: (view: ExactView) => void
   onRefresh: () => void
-  notify: (text: string) => void
+  notify: (text: string, type?: 'success' | 'error' | 'warning') => void
 }
 
 function taskStatus(task: ApiTask) {
@@ -53,6 +53,33 @@ function taskTypeLabel(type: string) {
     project: '综合项目',
   }
   return labels[type] || type
+}
+
+function compactValues(values: Array<string | null | undefined>, fallback: string, limit = 2) {
+  const clean = values.map((value) => String(value || '').trim()).filter(Boolean)
+  if (!clean.length) return fallback
+  if (clean.length <= limit) return clean.join(' / ')
+  return `${clean.slice(0, limit).join(' / ')} 等 ${clean.length} 项`
+}
+
+function taskQuantityLabel(task: ApiTask) {
+  if (task.type === 'programming' || task.type === 'project') {
+    const required = task.required_test_case_count ?? task.test_case_count ?? task.test_cases.length
+    const publicCount = task.public_test_case_count ?? task.test_cases.filter((item) => !item.hidden).length
+    return `${required} 个用例（公开 ${publicCount}）`
+  }
+  const count = task.question_count ?? 0
+  const score = task.question_total_score ?? task.total_score
+  return `${count} 题 / ${score} 分`
+}
+
+function taskClassLabel(task: ApiTask) {
+  return compactValues(task.published_class_names || task.publications?.map((item) => item.class_name || item.class_id) || [], '未下发', 2)
+}
+
+function taskSubmissionLabel(task: ApiTask) {
+  if (!task.total) return task.status === 'published' || task.status === 'closed' ? `${task.submitted}/0 提交` : '未发布'
+  return `${task.submitted}/${task.total} 提交`
 }
 
 type TaskKind = 'programming' | 'question_set'
@@ -150,6 +177,7 @@ export function ExactTasksV2(props: Props) {
   const [step, setStep] = useState(0)
   const [saving, setSaving] = useState(false)
   const [draftId, setDraftId] = useState('')
+  const [draftPayloadKey, setDraftPayloadKey] = useState('')
   const [aiOpen, setAiOpen] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('请为链表边界条件生成一道进阶编程练习，包含公开与隐藏测试。')
   const [aiLoading, setAiLoading] = useState(false)
@@ -160,6 +188,7 @@ export function ExactTasksV2(props: Props) {
   const [statusFilter, setStatusFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest')
+  const [deletingTaskId, setDeletingTaskId] = useState('')
   const [form] = Form.useForm()
   const taskKind = Form.useWatch('task_kind', form) as TaskKind | undefined
   const currentTaskKind: TaskKind = taskKind || 'question_set'
@@ -231,14 +260,14 @@ export function ExactTasksV2(props: Props) {
     setPanelOpen(true)
     setStep(0)
     setDraftId('')
+    setDraftPayloadKey('')
     setPaperQuestions(createDefaultPaperQuestions())
     form.resetFields()
     form.setFieldValue('start_at', defaultTaskStartAt())
   }
 
-  const createDraft = async () => {
-    if (draftId) return tasks.find((item) => item.id === draftId)
-    const values = form.getFieldsValue()
+  const buildTaskPayload = async () => {
+    const values = await form.validateFields()
     const kind: TaskKind = values.task_kind || currentTaskKind
     const chapter = Array.isArray(values.chapter) ? values.chapter : [values.chapter].filter(Boolean)
     const normalizedQuestions = paperQuestions.map((question, index) => normalizeQuestionForSubmit(question, chapter, index))
@@ -251,10 +280,10 @@ export function ExactTasksV2(props: Props) {
       })
       if (invalidQuestion) throw new Error('请补全题干、选项和正确答案后再保存')
     }
-    const task = await api.createTask({
+    return {
       course_id: props.courseId,
       class_id: null,
-      title: values.title || (kind === 'question_set' ? '链表边界条件诊断小卷' : '单链表指定位置节点删除'),
+      title: String(values.title || '').trim(),
       task_kind: kind,
       type: kind === 'programming' ? 'programming' : 'quiz',
       chapter_label: chapter.length ? chapter : ['链表'],
@@ -271,8 +300,21 @@ export function ExactTasksV2(props: Props) {
         { name: '边界用例', input_data: 'values=[], position=0', expected_output: '[]', hidden: false, weight: 30 },
         { name: '隐藏用例', input_data: 'values=[1,2,3], position=2', expected_output: '[1,2]', hidden: true, weight: 40 },
       ] : [],
-    })
+    }
+  }
+
+  const createDraft = async (replaceChangedDraft = false) => {
+    const payload = await buildTaskPayload()
+    const payloadKey = JSON.stringify(payload)
+    const currentDraft = draftId ? tasks.find((item) => item.id === draftId) : null
+    if (currentDraft && draftPayloadKey === payloadKey) return currentDraft
+
+    const task = await api.createTask(payload)
+    if (replaceChangedDraft && currentDraft && currentDraft.status !== 'published' && currentDraft.status !== 'closed') {
+      await api.deleteTask(currentDraft.id).catch(() => undefined)
+    }
     setDraftId(task.id)
+    setDraftPayloadKey(payloadKey)
     await load()
     return task
   }
@@ -280,32 +322,45 @@ export function ExactTasksV2(props: Props) {
   const saveDraft = async () => {
     setSaving(true)
     try {
-      await createDraft()
+      await createDraft(true)
       props.notify('作业已保存到草稿箱')
       setPanelOpen(false)
     } catch (reason: any) {
-      props.notify(reason.message)
+      props.notify(reason.message, 'error')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const goNextStep = async () => {
+    try {
+      if (step === 0) await form.validateFields(['title', 'task_kind', 'chapter'])
+      if (step === 2) await form.validateFields(['start_at', 'due_at'])
+      setStep(step + 1)
+    } catch {
+      props.notify('请先补全当前步骤的必填信息', 'warning')
     }
   }
 
   const publish = async () => {
     setSaving(true)
     try {
-      const task = await createDraft()
+      const task = await createDraft(true)
       if (!task) throw new Error('创建任务失败')
       await api.publishTask(task.id, {
         class_id: props.classId,
+        assignment_mode: task.type === 'programming' || task.type === 'project' ? 'PRACTICE' : 'QUIZ',
         start_at: form.getFieldValue('start_at') || defaultTaskStartAt(),
         due_at: form.getFieldValue('due_at') || '2026-12-30T23:59:00',
       })
       props.notify('作业已发布到教学班')
       setPanelOpen(false)
       setStep(0)
+      setDraftId('')
+      setDraftPayloadKey('')
       await load()
     } catch (reason: any) {
-      props.notify(reason.message)
+      props.notify(reason.message, 'error')
     } finally {
       setSaving(false)
     }
@@ -375,13 +430,14 @@ export function ExactTasksV2(props: Props) {
 
   const editTask = (task: ApiTask, nextStep = 0) => {
     setDraftId(task.id)
+    setDraftPayloadKey('')
     setPanelOpen(true)
     setStep(nextStep)
     setPaperQuestions(createDefaultPaperQuestions())
     form.setFieldsValue({
       ...task,
       task_kind: task.type === 'programming' || task.type === 'project' ? 'programming' : 'question_set',
-      chapter: task.chapter ? [task.chapter] : [],
+      chapter: task.learning_objectives?.length ? task.learning_objectives : task.chapter ? [task.chapter] : [],
       start_at: taskDateTimeInputValue(task.start_at),
       due_at: taskDateTimeInputValue(task.due_at, '2026-12-30T23:59'),
     })
@@ -415,8 +471,37 @@ export function ExactTasksV2(props: Props) {
       props.notify('任务已复制到草稿箱')
       await load()
     } catch (reason: any) {
-      props.notify(reason.message || '复制任务失败')
+      props.notify(reason.message || '复制任务失败', 'error')
     }
+  }
+
+  const deleteTask = async (task: ApiTask) => {
+    setDeletingTaskId(task.id)
+    try {
+      await api.deleteTask(task.id)
+      props.notify('任务已删除')
+      await load()
+    } catch (reason: any) {
+      props.notify(reason.message || '删除任务失败', 'error')
+    } finally {
+      setDeletingTaskId('')
+    }
+  }
+
+  const requestDeleteTask = (task: ApiTask) => {
+    if (task.status === 'closed') {
+      void deleteTask(task)
+      return
+    }
+    const status = taskStatus(task).text
+    Modal.confirm({
+      title: '确认删除未结束任务？',
+      content: `任务「${task.title}」当前为${status}，删除后学生端将不再显示该任务，相关提交、答题、成绩和 AI 诊断记录会同步删除。`,
+      okText: '确认删除',
+      cancelText: '取消',
+      okButtonProps: { danger: true },
+      onOk: () => deleteTask(task),
+    })
   }
 
   const taskMenu = (task: ApiTask) => ({
@@ -425,11 +510,13 @@ export function ExactTasksV2(props: Props) {
       { key: 'edit-settings', icon: <Settings2 size={14} />, label: '打开发布设置', disabled: task.status === 'closed' },
       { type: 'divider' as const },
       { key: 'duplicate', icon: <Copy size={14} />, label: '复制为草稿' },
+      { key: 'delete', danger: true, icon: <Trash2 size={14} />, label: task.status === 'closed' ? '删除任务' : '删除任务（需确认）' },
     ],
     onClick: ({ key }: { key: string }) => {
       if (key === 'monitor') openTaskView('monitor', task.id)
       if (key === 'edit-settings') editTask(task, 2)
       if (key === 'duplicate') void duplicateTask(task)
+      if (key === 'delete') requestDeleteTask(task)
     },
   })
 
@@ -455,7 +542,7 @@ export function ExactTasksV2(props: Props) {
       props.notify('AI 生成结果已进入草稿，需教师修改确认后发布')
       await load()
     } catch (reason: any) {
-      props.notify(reason.message)
+      props.notify(reason.message, 'error')
     } finally {
       setAiLoading(false)
     }
@@ -507,19 +594,23 @@ export function ExactTasksV2(props: Props) {
           {visibleTasks.map((task, index) => {
             const status = taskStatus(task)
             const canViewGrades = task.status === 'published' || task.status === 'closed'
-            const Icon = index === 0 ? GitBranch : index === 1 ? ListChecks : Code2
+            const isProgramming = task.type === 'programming' || task.type === 'project'
+            const Icon = isProgramming ? Code2 : ListChecks
+            const knowledgeLabel = compactValues(task.learning_objectives?.length ? task.learning_objectives : [task.chapter], '未设置知识点', 3)
+            const summaryText = task.question_preview ? `首题：${task.question_preview}` : task.description
             return <article id={`task-${task.id}`} className={focusedTaskId === task.id ? 'focused' : ''} key={task.id}>
               <span className={'task-v2-icon i' + index}><Icon size={26} /></span>
               <div className="task-v2-main">
-                <div className="task-v2-meta-top"><Tag color="green">{task.chapter}</Tag><small>创建时间<b>{task.created_at?.slice(0,16).replace('T',' ') || '2024-05-21 10:30'}</b></small></div>
+                <div className="task-v2-meta-top"><Tag color={isProgramming ? 'blue' : 'purple'}>{taskTypeLabel(task.type)}</Tag><Tag color="green">{task.chapter}</Tag><small>创建时间<b>{task.created_at?.slice(0,16).replace('T',' ') || '未记录'}</b></small></div>
                 <Title level={4}>{task.title}</Title>
-                <Paragraph ellipsis={{ rows: 1 }}>{task.description}</Paragraph>
+                <Paragraph ellipsis={{ rows: 1 }}>{summaryText}</Paragraph>
                 <div className="task-v2-data">
-                  <span><small>知识点</small><b>链表 / 链表删除</b></span>
+                  <span><small>知识点</small><b>{knowledgeLabel}</b></span>
+                  <span><small>{isProgramming ? '测试用例' : '题组规模'}</small><b>{taskQuantityLabel(task)}</b></span>
                   <span><small>开始时间</small><b>{formatTaskDateTime(task.start_at)}</b></span>
                   <span><small>截止时间</small><b>{formatTaskDateTime(task.due_at)}</b></span>
-                  <span><small>下发班级</small><b>{Math.max(task.total ? 1 : 0, index + 1)} 个班级</b></span>
-                  <span><small>提交概览</small><b>{task.submitted}/{task.total || 68} 提交</b></span>
+                  <span><small>下发班级</small><b>{taskClassLabel(task)}</b></span>
+                  <span><small>提交概览</small><b>{taskSubmissionLabel(task)}</b></span>
                   <span><small>发布状态</small><b><i className={'task-state ' + status.color} />{status.text}</b></span>
                 </div>
                 <Space size={8}>
@@ -530,7 +621,7 @@ export function ExactTasksV2(props: Props) {
                   </Tooltip>
                   {task.status !== 'published' && <Button size="small" type="primary" onClick={() => editTask(task, 2)}>发布任务</Button>}
                   <Dropdown trigger={['click']} menu={taskMenu(task)}>
-                    <Button size="small" icon={<MoreHorizontal size={13} />}>更多 <ChevronDown size={12} /></Button>
+                    <Button size="small" loading={deletingTaskId === task.id} icon={<MoreHorizontal size={13} />}>更多 <ChevronDown size={12} /></Button>
                   </Dropdown>
                 </Space>
               </div>
@@ -644,7 +735,7 @@ export function ExactTasksV2(props: Props) {
 
         <div className="task-v2-panel-actions">
           {step > 0 ? <Button onClick={() => setStep(step - 1)}>上一步</Button> : <Button onClick={saveDraft} loading={saving}>保存为草稿</Button>}
-          {step < 3 ? <Button type="primary" onClick={() => setStep(step + 1)}>下一步</Button> : <Button type="primary" onClick={publish} loading={saving}>确认发布</Button>}
+          {step < 3 ? <Button type="primary" onClick={goNextStep}>下一步</Button> : <Button type="primary" onClick={publish} loading={saving}>确认发布</Button>}
         </div>
       </aside>}
     </div>

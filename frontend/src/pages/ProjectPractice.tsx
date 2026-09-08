@@ -1290,11 +1290,15 @@ function ProjectPracticeDetail({
           <section className="project-timeline-card">
             <div className="project-card-head">
               <h2>阶段动态</h2>
+              <span>{activityRows.length} 条</span>
             </div>
             {activityRows.map((item, index) => (
               <article key={item.id} data-step={index + 1}>
                 <i />
-                <span>{item.text}</span>
+                <span>
+                  <b>{item.text}</b>
+                  <small>{index === 0 ? "最新助研动作" : "过程留痕"}</small>
+                </span>
                 <time>{item.time}</time>
               </article>
             ))}

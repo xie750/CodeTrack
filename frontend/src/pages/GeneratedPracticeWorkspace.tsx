@@ -15,6 +15,7 @@ import {
   XCircle
 } from "lucide-react";
 import { api, type GeneratedPracticeWorkspace as GeneratedPracticeWorkspaceData, type QuestionItem, type SubmitQuestionResult } from "../api";
+import AIContentDisclosure from "../components/AIContentDisclosure";
 import StudentRouteBreadcrumb from "../components/StudentRouteBreadcrumb";
 import { StudentState, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
 
@@ -192,6 +193,12 @@ export default function GeneratedPracticeWorkspace({ resourceId, onBack }: PageP
           <button className="program-back" type="button" onClick={onBack}><ArrowLeft size={16} /> 返回资源中心</button>
           <div className="question-title-line">
             <h1>{workspace.resource.title}</h1>
+            <AIContentDisclosure
+              compact
+              confidence={workspace.resource.confidence}
+              sourceLabel={(workspace.resource.citations ?? []).length ? "课程知识库与引用资料" : "自主学习上下文"}
+              citationsCount={(workspace.resource.citations ?? []).length}
+            />
             <span>资源中心练习 · {submitted ? "已提交" : "作答中"}</span>
           </div>
           <p>{workspace.course.course_name} · 知识点：{workspace.resource.knowledge_point || "自主学习"} · 来源：AI 生成练习题</p>

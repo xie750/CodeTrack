@@ -31,14 +31,6 @@ export const colors = {
   info: '#A0B2C6',
   purple: '#A78BFA',
 
-  // StatCard 图标底色调（5 种 tone）
-  statIconBg: {
-    primary: '#E8F1FF',
-    info: '#F4F7FC',
-    warning: '#FFF9F0',
-    success: '#EDFAF5',
-    purple: '#F6F0FF',
-  },
 } as const
 
 const fontFamily =
