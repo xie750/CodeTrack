@@ -86,6 +86,10 @@ function taskTone(task: StudentTaskCard, index: number) {
   return index % 2 === 0 ? "blue" : "purple";
 }
 
+function startTimeLabel(value: string | null) {
+  return formatStudentDateTime(value, "未设置");
+}
+
 function deadlineLabel(value: string | null) {
   return formatStudentDateTime(value, "暂无截止");
 }
@@ -273,7 +277,7 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
   ];
 
   const announcements = [
-    activeTask ? { title: `${activeTask.title} 开始信息`, date: getScheduleInfo(activeTask.start_at).isOpen ? `已开放：${deadlineLabel(activeTask.start_at)}` : `将开放：${deadlineLabel(activeTask.start_at)}` } : null,
+    activeTask ? { title: `${activeTask.title} 开始信息`, date: getScheduleInfo(activeTask.start_at).isOpen ? `已开放：${startTimeLabel(activeTask.start_at)}` : `将开放：${startTimeLabel(activeTask.start_at)}` } : null,
     activeTask?.deadline ? { title: `${taskTypeLabel(activeTask)} 截止提醒`, date: deadlineLabel(activeTask.deadline) } : null,
     knowledgePoints[0] ? { title: `${knowledgePoints[0]} 知识点已更新`, date: "最近" } : null,
     profile ? { title: "学习画像已生成", date: "持续更新" } : null
@@ -345,7 +349,7 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
                   <span className={`course-task-icon ${taskTone(task, index)}`}>{taskIcon(task)}</span>
                   <span>
                     <strong>{task.title}</strong>
-                    <small>{taskTypeLabel(task)} <i /> 开始：{deadlineLabel(task.start_at)} <i /> 截止：{deadlineLabel(task.deadline)}</small>
+                    <small>{taskTypeLabel(task)} <i /> 开始：{startTimeLabel(task.start_at)} <i /> 截止：{deadlineLabel(task.deadline)}</small>
                   </span>
                   <em className={task.status === "COMPLETED" ? "done" : ""}>{statusLabel(task)}</em>
                 </button>

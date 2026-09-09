@@ -11,6 +11,8 @@ import {
   ClipboardCheck,
   FileText,
   ListChecks,
+  Mic,
+  MicOff,
   Send,
   XCircle
 } from "lucide-react";
@@ -18,6 +20,7 @@ import { api, type GeneratedPracticeWorkspace as GeneratedPracticeWorkspaceData,
 import AIContentDisclosure from "../components/AIContentDisclosure";
 import StudentRouteBreadcrumb from "../components/StudentRouteBreadcrumb";
 import { StudentState, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
+import { useQuestionVoiceControl, type QuestionAnswerMap } from "../questionVoiceControl";
 
 type PageProps = {
   resourceId: string;
@@ -25,6 +28,11 @@ type PageProps = {
 };
 
 type AnswerMap = Record<string, string[]>;
+type SubmitConfirmState = {
+  answers: AnswerMap;
+  answeredCount: number;
+  unanswered: number;
+};
 
 function typeText(type: string) {
   if (type === "MULTIPLE_CHOICE") return "多选题";
@@ -63,7 +71,9 @@ export default function GeneratedPracticeWorkspace({ resourceId, onBack }: PageP
   const [error, setError] = useState<string | null>(null);
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [submitConfirm, setSubmitConfirm] = useState<SubmitConfirmState | null>(null);
   const questionRefs = useRef<Array<HTMLElement | null>>([]);
+  const submitConfirmRef = useRef<SubmitConfirmState | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -95,6 +105,10 @@ export default function GeneratedPracticeWorkspace({ resourceId, onBack }: PageP
   const answeredCount = useMemo(() => questions.filter((question) => isAnswerPresent(question, answers)).length, [answers, questions]);
   const progress = questions.length ? Math.round((answeredCount / questions.length) * 100) : 0;
 
+  useEffect(() => {
+    submitConfirmRef.current = submitConfirm;
+  }, [submitConfirm]);
+
   function chooseOption(question: QuestionItem, optionId: string) {
     if (submitted) return;
     setAnswers((current) => {
@@ -124,18 +138,34 @@ export default function GeneratedPracticeWorkspace({ resourceId, onBack }: PageP
     questionRefs.current[index]?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  async function submitAnswers() {
+  function requestSubmitAnswers(answerOverride?: QuestionAnswerMap) {
     if (!workspace || submitted) return;
-    const unanswered = questions.length - answeredCount;
-    const confirmed = unanswered > 0
-      ? window.confirm(`还有 ${unanswered} 道题未作答，确认提交本次练习吗？`)
-      : window.confirm("确认提交本次资源练习吗？提交后会写入学习画像。");
-    if (!confirmed) return;
+    const pendingAnswers = answerOverride ?? answers;
+    const pendingAnsweredCount = questions.filter((question) => isAnswerPresent(question, pendingAnswers)).length;
+    const nextConfirm = {
+      answers: pendingAnswers,
+      answeredCount: pendingAnsweredCount,
+      unanswered: questions.length - pendingAnsweredCount
+    };
+    submitConfirmRef.current = nextConfirm;
+    setSubmitConfirm(nextConfirm);
+  }
+
+  function cancelSubmitConfirm() {
+    submitConfirmRef.current = null;
+    setSubmitConfirm(null);
+  }
+
+  async function confirmSubmitAnswers() {
+    const pending = submitConfirmRef.current;
+    if (!pending || !workspace || submitted || submitting) return;
     setSubmitting(true);
     setNotice(null);
     try {
-      const submittedResult = await api.submitGeneratedPractice(resourceId, toAnswerPayload(answers));
+      const submittedResult = await api.submitGeneratedPractice(resourceId, toAnswerPayload(pending.answers));
       setResult(submittedResult);
+      submitConfirmRef.current = null;
+      setSubmitConfirm(null);
       setNotice("已提交，本次资源练习已纳入学习画像。");
     } catch (err) {
       setNotice("提交失败，请稍后重试。");
@@ -144,6 +174,21 @@ export default function GeneratedPracticeWorkspace({ resourceId, onBack }: PageP
       setSubmitting(false);
     }
   }
+
+  const voiceControl = useQuestionVoiceControl({
+    questions,
+    answers,
+    activeIndex,
+    submitted,
+    submitting,
+    submitConfirmOpen: Boolean(submitConfirm),
+    onAnswersChange: setAnswers,
+    onJumpToQuestion: jumpToQuestion,
+    onClearNotice: () => setNotice(null),
+    onRequestSubmit: requestSubmitAnswers,
+    onConfirmSubmit: confirmSubmitAnswers,
+    onCancelSubmit: cancelSubmitConfirm
+  });
 
   function questionState(question: QuestionItem) {
     if (submitted) return question.is_correct ? "correct" : "wrong";
@@ -204,7 +249,7 @@ export default function GeneratedPracticeWorkspace({ resourceId, onBack }: PageP
           <p>{workspace.course.course_name} · 知识点：{workspace.resource.knowledge_point || "自主学习"} · 来源：AI 生成练习题</p>
         </div>
         <div className="question-head-actions">
-          <button className="primary" type="button" disabled={submitting || submitted} onClick={submitAnswers}>
+          <button className="primary" type="button" disabled={submitting || submitted} onClick={() => requestSubmitAnswers()}>
             <Send size={16} /> {submitted ? "已提交" : submitting ? "提交中" : "提交练习"}
           </button>
         </div>
@@ -358,6 +403,30 @@ export default function GeneratedPracticeWorkspace({ resourceId, onBack }: PageP
             </div>
           </section>
 
+          <section className={`question-voice-panel ${voiceControl.voiceListening ? "listening" : ""}`}>
+            <header>
+              <div>
+                <h2><Mic size={20} /> 语音作答控制</h2>
+                <p>{voiceControl.voiceStatus}</p>
+              </div>
+              <button type="button" disabled={!voiceControl.voiceSupported || submitted} onClick={voiceControl.toggleVoiceListening} aria-pressed={voiceControl.voiceListening}>
+                {voiceControl.voiceListening ? <MicOff size={16} /> : <Mic size={16} />}
+                {voiceControl.voiceListening ? "暂停" : "开启"}
+              </button>
+            </header>
+            <div className="question-voice-transcript" aria-live="polite">
+              <span>最近识别</span>
+              <strong>{voiceControl.voiceTranscript || "等待语音命令"}</strong>
+            </div>
+            {voiceControl.voiceLogs.length > 0 ? (
+              <div className="question-voice-log">
+                {voiceControl.voiceLogs.map((item) => (
+                  <p className={item.tone} key={item.id}>{item.text}</p>
+                ))}
+              </div>
+            ) : null}
+          </section>
+
           <section className="question-ai-panel">
             <h2><Bot size={20} /> 学习画像反馈</h2>
             {result ? (
@@ -375,6 +444,48 @@ export default function GeneratedPracticeWorkspace({ resourceId, onBack }: PageP
           </section>
         </aside>
       </section>
+
+      {submitConfirm ? (
+        <div className="question-submit-confirm-backdrop" role="presentation">
+          <section
+            className={`question-submit-confirm ${submitting ? "submitting" : ""}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="generated-practice-submit-confirm-title"
+            aria-describedby="generated-practice-submit-confirm-desc"
+          >
+            <div className="question-submit-confirm-icon">
+              <ClipboardCheck size={26} />
+            </div>
+            <div>
+              <span className="question-submit-confirm-eyebrow">练习提交确认</span>
+              <h2 id="generated-practice-submit-confirm-title">{submitting ? "正在提交批改" : "确认提交本次自主练习吗？"}</h2>
+              <p id="generated-practice-submit-confirm-desc">
+                {submitConfirm.unanswered > 0
+                  ? `当前已完成 ${submitConfirm.answeredCount}/${questions.length} 题，还有 ${submitConfirm.unanswered} 题未作答。提交后会更新学习画像。`
+                  : "当前所有题目已作答。提交后会生成批改结果并更新学习画像。"}
+              </p>
+            </div>
+            <div className="question-submit-confirm-stats">
+              <span><strong>{questions.length}</strong> 总题数</span>
+              <span><strong>{submitConfirm.answeredCount}</strong> 已作答</span>
+              <span><strong>{submitConfirm.unanswered}</strong> 未作答</span>
+            </div>
+            {voiceControl.voiceSupported ? (
+              <p className="question-submit-confirm-voice">
+                语音确认：说“确认提交”继续批改，说“取消交卷”返回修改。
+              </p>
+            ) : null}
+            <footer>
+              <button type="button" disabled={submitting} onClick={cancelSubmitConfirm}>取消</button>
+              <button className="primary" type="button" disabled={submitting} onClick={confirmSubmitAnswers}>
+                <Send size={16} />
+                {submitting ? "提交中" : "确认提交"}
+              </button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }

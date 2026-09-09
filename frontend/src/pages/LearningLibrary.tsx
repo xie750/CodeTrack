@@ -325,9 +325,10 @@ export default function LearningLibrary({ initialCourseId = "", scope = "global"
                   <span className={`favorite-badge ${item.badgeClass}`}>{isFavorite ? item.type : "已取消"}</span>
                   <h2>{item.title}</h2>
                   <div className="favorite-tags">
-                    {item.tags.map((tag) => (
+                    {item.tags.slice(0, 3).map((tag) => (
                       <span key={tag}>{tag}</span>
                     ))}
+                    {item.tags.length > 3 ? <span>+{item.tags.length - 3}</span> : null}
                   </div>
                   <p>{item.description}</p>
                   <div className="favorite-meta">

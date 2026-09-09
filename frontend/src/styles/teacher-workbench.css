@@ -3509,9 +3509,10 @@
   margin: 0 auto;
   padding: 40px 24px 28px 31px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 270px;
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 270px);
   gap: 24px;
   color: #24304a;
+  overflow-x: hidden;
 }
 
 .library-page h1,
@@ -3773,16 +3774,18 @@
 
 .favorite-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
   gap: 16px;
 }
 
 .favorite-card {
   position: relative;
+  min-width: 0;
   height: 304px;
   padding: 15px 16px 13px;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   border: 1px solid #e6edf6;
   border-radius: 8px;
   background: #ffffff;
@@ -3818,15 +3821,18 @@
 }
 
 .favorite-badge {
-  width: max-content;
+  max-width: calc(100% - 38px);
   height: 22px;
   margin-bottom: 12px;
   padding: 0 8px;
   display: inline-flex;
   align-items: center;
+  overflow: hidden;
   border-radius: 5px;
   font-size: 12px;
   font-weight: 800;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .favorite-badge.green {
@@ -3846,6 +3852,11 @@
 
 .favorite-card h2 {
   margin: 0 34px 10px 0;
+  min-height: 48px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   color: #101a31;
   font-size: 17px;
   line-height: 24px;
@@ -3853,22 +3864,28 @@
 }
 
 .favorite-tags {
+  max-height: 52px;
   margin-bottom: 10px;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  overflow: hidden;
 }
 
 .favorite-tags span {
+  max-width: 100%;
   height: 22px;
   padding: 0 9px;
   display: inline-flex;
   align-items: center;
+  overflow: hidden;
   border-radius: 5px;
   color: #5e6b81;
   background: #f2f5fa;
   font-size: 12px;
   font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .favorite-card p {
@@ -3884,6 +3901,10 @@
 }
 
 .favorite-meta {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   color: #68758b;
   font-size: 12px;
   line-height: 1.68;
@@ -3893,15 +3914,20 @@
   margin-top: auto;
   padding-top: 11px;
   display: grid;
-  grid-template-columns: 112px minmax(0, 1fr);
+  grid-template-columns: minmax(78px, 112px) minmax(0, 1fr);
   align-items: start;
   gap: 10px;
+  min-width: 0;
 }
 
 .favorite-progress-row > span {
+  min-width: 0;
+  overflow: hidden;
   color: #4d5a70;
   font-size: 12px;
   font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .favorite-progress-row .warn {
@@ -3913,14 +3939,20 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
   color: #4d5a70;
   font-size: 12px;
   font-weight: 700;
 }
 
 .favorite-progress-label b {
+  min-width: 0;
+  overflow: hidden;
   color: #176cf5;
   font-weight: 900;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .favorite-track {
@@ -3940,20 +3972,24 @@
 
 .favorite-actions {
   margin-top: 11px;
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
 .favorite-actions button {
+  min-width: 0;
   height: 34px;
   padding: 0 12px;
+  overflow: hidden;
   border: 1px solid #2c78ff;
   border-radius: 5px;
   color: #176cf5;
   background: #ffffff;
   font-size: 12px;
   font-weight: 800;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .favorite-actions .solid {
@@ -5457,9 +5493,11 @@ button.student-resource-thumb {
 .recent-favorite {
   padding: 7px 0 14px;
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto;
+  grid-template-columns: 34px minmax(0, 1fr) minmax(58px, auto);
   align-items: center;
   gap: 10px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .recent-favorite + .recent-favorite {
@@ -5490,22 +5528,31 @@ button.student-resource-thumb {
 .recent-favorite strong {
   display: block;
   margin-bottom: 4px;
+  overflow: hidden;
   color: #152037;
   font-size: 12px;
   font-weight: 900;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .recent-favorite span:not(.recent-icon) {
+  display: block;
+  overflow: hidden;
   color: #68758c;
   font-size: 11px;
   white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .recent-favorite em {
+  max-width: 76px;
+  overflow: hidden;
   color: #68758c;
   font-size: 11px;
   font-style: normal;
   white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .library-advice-item {
