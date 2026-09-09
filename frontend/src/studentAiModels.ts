@@ -15,9 +15,9 @@ export const fallbackStudentAiModelOptions: StudentAiModelOption[] = [
     key: "fine_tuned",
     label: "微调模型",
     provider: "OPENAI_COMPATIBLE",
-    model_name: "/models/codetrack-q4_k_m.gguf",
-    configured: true,
-    description: "使用你训练后的本地微调模型，适合对比专业场景回答效果。"
+    model_name: "等待后端配置",
+    configured: false,
+    description: "需要后端返回可用的本地微调模型配置后才能切换。"
   }
 ];
 

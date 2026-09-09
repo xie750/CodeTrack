@@ -6157,6 +6157,25 @@ button.student-generated-thumb:hover {
   align-items: start;
 }
 
+.ai-classroom-shell {
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr) 344px;
+  gap: 14px;
+  align-items: start;
+}
+
+.ai-classroom-page.openmaic-like {
+  max-width: 1560px;
+}
+
+.ai-classroom-hero.compact {
+  min-height: 118px;
+}
+
+.ai-classroom-pipeline.openmaic {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .ai-classroom-loading {
   min-height: 280px;
   display: grid;
@@ -6179,6 +6198,107 @@ button.student-generated-thumb:hover {
 .ai-classroom-player {
   min-width: 0;
   overflow: hidden;
+}
+
+.ai-classroom-scenes {
+  min-width: 0;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+  border: 1px solid #dfe8f4;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 12px 30px rgba(31, 69, 125, 0.045);
+}
+
+.ai-classroom-scenes header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #0f1b45;
+}
+
+.ai-classroom-scenes header strong {
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.ai-classroom-scenes header span {
+  color: #697890;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.ai-classroom-scenes button {
+  min-width: 0;
+  min-height: 74px;
+  padding: 10px;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #d7e4f5;
+  border-radius: 8px;
+  color: #243553;
+  background: #ffffff;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.ai-classroom-scenes button:hover {
+  transform: translateY(-1px);
+}
+
+.ai-classroom-scenes button > span {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: #697890;
+  background: #eef3f8;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.ai-classroom-scenes button.active {
+  border-color: #0f766e;
+  background: #ecfdf5;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+}
+
+.ai-classroom-scenes button.active > span {
+  color: #ffffff;
+  background: #0f766e;
+}
+
+.ai-classroom-scenes button.done > span {
+  color: #0f8f5e;
+  background: #e3f8ed;
+}
+
+.ai-classroom-scenes strong,
+.ai-classroom-scenes small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-classroom-scenes button strong {
+  color: #17243b;
+  font-size: 13px;
+  line-height: 1.38;
+  font-weight: 950;
+}
+
+.ai-classroom-scenes button small {
+  margin-top: 3px;
+  color: #66748a;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .ai-classroom-toolbar {
@@ -6321,7 +6441,8 @@ button.student-generated-thumb:hover {
 .ai-classroom-stage[data-target="curve"] [data-id="curve"],
 .ai-classroom-stage[data-target="formula"] [data-id="formula"],
 .ai-classroom-stage[data-target="code"] [data-id="code"],
-.ai-classroom-stage[data-target="summary"] [data-id="summary"] {
+.ai-classroom-stage[data-target="summary"] [data-id="summary"],
+.ai-classroom-stage[data-target="interactive"] [data-id="interactive"] {
   border-color: #176cf5;
   background: #ffffff;
   box-shadow: 0 0 0 5px rgba(23, 108, 245, 0.13), 0 18px 40px rgba(23, 108, 245, 0.18);
@@ -6556,6 +6677,142 @@ button.student-generated-thumb:hover {
 .ai-classroom-summary svg {
   color: #0f9f67;
   flex: 0 0 auto;
+}
+
+.ai-classroom-stage.scene-interactive,
+.ai-classroom-stage.scene-quiz {
+  min-height: 660px;
+}
+
+.ai-classroom-stage.scene-interactive::before,
+.ai-classroom-stage.scene-quiz::before {
+  inset: 18px;
+  background: #f8fafc;
+}
+
+.ai-classroom-interactive-wrap {
+  left: 36px;
+  right: 36px;
+  top: 112px;
+  bottom: 126px;
+  padding: 12px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
+  background: #ffffff;
+}
+
+.ai-classroom-interactive-head {
+  min-height: 58px;
+  padding: 0 4px;
+  display: grid;
+  gap: 3px;
+}
+
+.ai-classroom-interactive-head span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.ai-classroom-interactive-head strong {
+  color: #0f1b45;
+  font-size: 18px;
+  line-height: 1.25;
+  font-weight: 950;
+}
+
+.ai-classroom-interactive-head small {
+  color: #61718a;
+  font-size: 12px;
+  line-height: 1.45;
+  font-weight: 820;
+}
+
+.ai-classroom-interactive-wrap iframe {
+  width: 100%;
+  height: 100%;
+  min-height: 390px;
+  border: 0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.ai-classroom-quiz {
+  left: 50%;
+  top: 124px;
+  width: min(680px, calc(100% - 72px));
+  min-height: 360px;
+  padding: 30px;
+  transform: translateX(-50%);
+}
+
+.ai-classroom-stage[data-target="summary"] .ai-classroom-quiz {
+  transform: translateX(-50%) translateY(-2px);
+}
+
+.ai-classroom-quiz span {
+  width: fit-content;
+  min-height: 26px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 7px;
+  color: #0f766e;
+  background: #e8f8f1;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.ai-classroom-quiz h2 {
+  margin: 16px 0 18px;
+  color: #0f1b45;
+  font-size: 28px;
+  line-height: 1.3;
+  font-weight: 950;
+}
+
+.ai-classroom-quiz div {
+  display: grid;
+  gap: 10px;
+}
+
+.ai-classroom-quiz button {
+  min-height: 48px;
+  padding: 10px 14px;
+  border: 1px solid #d7e4f5;
+  border-radius: 8px;
+  color: #243553;
+  background: #f8fbff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 850;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ai-classroom-quiz button.correct {
+  border-color: #18a66b;
+  color: #0f6848;
+  background: #e8f8f1;
+}
+
+.ai-classroom-quiz button.wrong {
+  border-color: #f2bd75;
+  color: #8a4c05;
+  background: #fff8e8;
+}
+
+.ai-classroom-quiz p {
+  margin-top: 18px;
+  color: #40506a;
+  font-size: 14px;
+  line-height: 1.7;
+  font-weight: 800;
 }
 
 .ai-classroom-whiteboard {
@@ -6806,13 +7063,23 @@ button.student-generated-thumb:hover {
 }
 
 @media (max-width: 1180px) {
+  .ai-classroom-shell,
   .ai-classroom-grid,
   .ai-classroom-intake {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .ai-classroom-scenes,
   .ai-classroom-side {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ai-classroom-scenes {
+    display: grid;
+  }
+
+  .ai-classroom-scenes header {
+    grid-column: 1 / -1;
   }
 }
 
@@ -6833,6 +7100,8 @@ button.student-generated-thumb:hover {
   }
 
   .ai-classroom-pipeline,
+  .ai-classroom-pipeline.openmaic,
+  .ai-classroom-scenes,
   .ai-classroom-side {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -6877,6 +7146,34 @@ button.student-generated-thumb:hover {
   .ai-classroom-summary {
     top: 780px;
     bottom: auto;
+  }
+
+  .ai-classroom-stage.scene-interactive,
+  .ai-classroom-stage.scene-quiz {
+    min-height: 760px;
+  }
+
+  .ai-classroom-interactive-wrap {
+    left: 24px;
+    right: 24px;
+    top: 104px;
+    bottom: 128px;
+  }
+
+  .ai-classroom-interactive-wrap iframe {
+    min-height: 470px;
+  }
+
+  .ai-classroom-quiz {
+    left: 24px;
+    right: 24px;
+    top: 112px;
+    width: auto;
+    transform: none;
+  }
+
+  .ai-classroom-stage[data-target="summary"] .ai-classroom-quiz {
+    transform: translateY(-2px);
   }
 
   .ai-classroom-whiteboard {

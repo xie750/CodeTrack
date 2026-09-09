@@ -793,6 +793,9 @@ export type StudentAiChatResponse = {
   model_name: string;
   model_key?: string;
   model_label?: string;
+  fallback_from_model_key?: string;
+  fallback_from_model_label?: string;
+  model_fallback_reason?: string;
   run_id: string;
   session?: StudentAiChatSession;
   user_message_id?: string;

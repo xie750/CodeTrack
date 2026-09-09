@@ -171,6 +171,54 @@ def _missing_model_config(model_config: AiTutorModelConfig) -> list[str]:
     if not model_config.model_name:
         missing.append(f"{prefix}_NAME")
     return missing
+
+
+def _can_fallback_to_default(settings: Any, model_config: AiTutorModelConfig) -> bool:
+    if model_config.key != FINE_TUNED_MODEL_KEY:
+        return False
+    default_model = _default_model_config(settings)
+    return default_model.configured and not _missing_model_config(default_model)
+
+
+def _mark_model_fallback(result: dict[str, Any], *, failed_model: AiTutorModelConfig, reason: str) -> dict[str, Any]:
+    note = f"{failed_model.label}暂时不可用，已自动切换到通用模型。"
+    result["fallback_from_model_key"] = failed_model.key
+    result["fallback_from_model_label"] = failed_model.label
+    result["model_fallback_reason"] = reason
+    result["model_label"] = f"{result.get('model_label') or '通用模型'}（微调不可用时自动切换）"
+    safety_note = str(result.get("safety_note") or "").strip()
+    result["safety_note"] = f"{safety_note} {note}".strip()
+    return result
+
+
+async def _fallback_to_default_ai_reply(
+    db: Session,
+    *,
+    user: User,
+    class_id: str,
+    course: Course,
+    message: str,
+    failed_model: AiTutorModelConfig,
+    reason: str,
+    page_context: dict[str, Any] | None = None,
+    history: list[dict[str, str]] | None = None,
+) -> dict[str, Any]:
+    result = await generate_student_ai_reply(
+        db,
+        user=user,
+        class_id=class_id,
+        course=course,
+        message=message,
+        model_key=DEFAULT_MODEL_KEY,
+        page_context={
+            **(page_context or {}),
+            "fallback_from_model_key": failed_model.key,
+            "fallback_from_model_label": failed_model.label,
+        },
+        history=history,
+    )
+    return _mark_model_fallback(result, failed_model=failed_model, reason=reason)
+
 LOW_VALUE_QUERY_PHRASES = [
     "帮我",
     "请你",
@@ -1177,6 +1225,18 @@ async def generate_student_ai_reply(
             attempts=getattr(exc, "attempts", 1),
         )
         db.commit()
+        if _can_fallback_to_default(settings, model_config):
+            return await _fallback_to_default_ai_reply(
+                db,
+                user=user,
+                class_id=class_id,
+                course=course,
+                message=message,
+                failed_model=model_config,
+                reason=exc.detail or str(exc),
+                page_context=page_context,
+                history=history,
+            )
         raise ApiError(
             502,
             "AI_MODEL_REQUEST_FAILED",
@@ -1193,6 +1253,18 @@ async def generate_student_ai_reply(
             attempts=1,
         )
         db.commit()
+        if _can_fallback_to_default(settings, model_config):
+            return await _fallback_to_default_ai_reply(
+                db,
+                user=user,
+                class_id=class_id,
+                course=course,
+                message=message,
+                failed_model=model_config,
+                reason=str(exc),
+                page_context=page_context,
+                history=history,
+            )
         raise ApiError(
             502,
             "AI_MODEL_REQUEST_FAILED",
@@ -1349,6 +1421,32 @@ async def stream_student_ai_reply(
                 attempts=getattr(exc, "attempts", 1),
             )
             db.commit()
+            if _can_fallback_to_default(settings, model_config):
+                async for fallback_event in stream_student_ai_reply(
+                    db,
+                    user=user,
+                    class_id=class_id,
+                    course=course,
+                    message=message,
+                    model_key=DEFAULT_MODEL_KEY,
+                    page_context={
+                        **(page_context or {}),
+                        "fallback_from_model_key": model_config.key,
+                        "fallback_from_model_label": model_config.label,
+                    },
+                    history=history,
+                ):
+                    if fallback_event["type"] == "final":
+                        fallback_event = {
+                            **fallback_event,
+                            "data": _mark_model_fallback(
+                                fallback_event["data"],
+                                failed_model=model_config,
+                                reason=exc.detail or str(exc),
+                            ),
+                        }
+                    yield fallback_event
+                return
             raise ApiError(
                 502,
                 "AI_MODEL_REQUEST_FAILED",
@@ -1365,6 +1463,32 @@ async def stream_student_ai_reply(
                 attempts=1,
             )
             db.commit()
+            if _can_fallback_to_default(settings, model_config):
+                async for fallback_event in stream_student_ai_reply(
+                    db,
+                    user=user,
+                    class_id=class_id,
+                    course=course,
+                    message=message,
+                    model_key=DEFAULT_MODEL_KEY,
+                    page_context={
+                        **(page_context or {}),
+                        "fallback_from_model_key": model_config.key,
+                        "fallback_from_model_label": model_config.label,
+                    },
+                    history=history,
+                ):
+                    if fallback_event["type"] == "final":
+                        fallback_event = {
+                            **fallback_event,
+                            "data": _mark_model_fallback(
+                                fallback_event["data"],
+                                failed_model=model_config,
+                                reason=str(exc),
+                            ),
+                        }
+                    yield fallback_event
+                return
             raise ApiError(
                 502,
                 "AI_MODEL_REQUEST_FAILED",

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Archive,
   CalendarDays,
@@ -17,6 +17,7 @@ import {
   Grid2X2,
   LibraryBig,
   List,
+  MonitorPlay,
   MoreVertical,
   MoveRight,
   Podcast,
@@ -31,10 +32,11 @@ import { authHeaders } from "../authSession";
 import AIContentDisclosure from "../components/AIContentDisclosure";
 import GeneratedResourcePreviewModal from "../components/GeneratedResourcePreviewModal";
 import { StudentInlineNotice, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
+import { readAIClassroomResources, type AIClassroomResource } from "../features/ai-classroom/classroomResourceStore";
 
-type ResourceType = "AI 生成";
+type ResourceType = "AI 生成" | "AI 讲解";
 type ResourceFolder = string;
-type ResourceSource = "全部" | "AI 生成";
+type ResourceSource = "全部" | "AI 生成" | "AI 讲解";
 type SortMode = "收藏时间" | "标题";
 type SortOrder = "降序" | "升序";
 type PageMarker = number | "ellipsis-left" | "ellipsis-right";
@@ -53,11 +55,25 @@ type GeneratedResourceItem = {
   resource: GeneratedResource;
 };
 
-type ResourceListItem = GeneratedResourceItem;
+type AIClassroomResourceItem = {
+  kind: "ai_classroom";
+  id: string;
+  type: "AI 讲解";
+  folder: ResourceFolder;
+  title: string;
+  source: "AI 讲解";
+  domain: string;
+  summary: string;
+  collectedAt: string;
+  tags: string[];
+  resource: AIClassroomResource;
+};
 
-const defaultFolderOptions: ResourceFolder[] = ["全部收藏", "知识卡片", "已归档"];
-const resourceTypeOptions: Array<"全部" | ResourceType> = ["全部", "AI 生成"];
-const sourceOptions: ResourceSource[] = ["全部", "AI 生成"];
+type ResourceListItem = GeneratedResourceItem | AIClassroomResourceItem;
+
+const defaultFolderOptions: ResourceFolder[] = ["全部收藏", "AI讲解课堂", "知识卡片", "已归档"];
+const resourceTypeOptions: Array<"全部" | ResourceType> = ["全部", "AI 生成", "AI 讲解"];
+const sourceOptions: ResourceSource[] = ["全部", "AI 生成", "AI 讲解"];
 const sortModeOptions: SortMode[] = ["收藏时间", "标题"];
 const sortOrderOptions: SortOrder[] = ["降序", "升序"];
 const pageSizeOptions = [6, 12, 24];
@@ -78,6 +94,13 @@ function generatedResourceMetric(resource: GeneratedResource) {
   if (resource.resource_type === "PODCAST_SCRIPT") return { value: resource.item_count, label: "段播客" };
   if (resource.resource_type === "KNOWLEDGE_CARD") return { value: resource.item_count, label: "张卡片" };
   return { value: resource.item_count || 1, label: "节内容" };
+}
+
+function classroomResourceMetric(resource: AIClassroomResource) {
+  return {
+    value: resource.classroom.scenes.reduce((total, scene) => total + scene.actions.length, 0),
+    label: "个动作"
+  };
 }
 
 function generatedToResource(resource: GeneratedResource): GeneratedResourceItem {
@@ -148,6 +171,7 @@ function pageMarkers(currentPage: number, totalPages: number): PageMarker[] {
 
 export default function StudentResourceCenter() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [activeFolder, setActiveFolder] = useState<ResourceFolder>("全部收藏");
   const [resourceType, setResourceType] = useState<"全部" | ResourceType>("全部");
   const [source, setSource] = useState<ResourceSource>("全部");
@@ -162,6 +186,7 @@ export default function StudentResourceCenter() {
   const [jumpPage, setJumpPage] = useState("1");
   const [folderOverrides, setFolderOverrides] = useState<Record<string, ResourceFolder>>({});
   const [generatedResources, setGeneratedResources] = useState<GeneratedResource[]>([]);
+  const [classroomResources, setClassroomResources] = useState<AIClassroomResource[]>(() => readAIClassroomResources());
   const [resourcesLoading, setResourcesLoading] = useState(true);
   const [generatedError, setGeneratedError] = useState<string | null>(null);
   const [generatedErrorDetail, setGeneratedErrorDetail] = useState<string | null>(null);
@@ -175,6 +200,7 @@ export default function StudentResourceCenter() {
     let alive = true;
     setResourcesLoading(true);
     setGeneratedResources([]);
+    setClassroomResources(readAIClassroomResources());
     setGeneratedError(null);
     setGeneratedErrorDetail(null);
     api.listGeneratedResources()
@@ -196,6 +222,16 @@ export default function StudentResourceCenter() {
   }, [reloadKey]);
 
   useEffect(() => {
+    const focusedResourceId = new URLSearchParams(location.search).get("resource");
+    if (!focusedResourceId) return;
+    if (readAIClassroomResources().some((item) => item.id === focusedResourceId)) {
+      setActiveFolder("AI讲解课堂");
+      setCurrentPage(1);
+      setActionNotice("已定位到刚保存的 AI讲解课堂资源。");
+    }
+  }, [location.search]);
+
+  useEffect(() => {
     let alive = true;
     api.listStudentResourceFolders()
       .then((result) => {
@@ -211,6 +247,7 @@ export default function StudentResourceCenter() {
   }, []);
 
   const generatedItems = useMemo(() => generatedResources.map(generatedToResource), [generatedResources]);
+  const classroomItems = useMemo(() => classroomResources.map(classroomToResource), [classroomResources]);
 
   const folderOptions = useMemo<ResourceFolder[]>(() => {
     const folders = [...defaultFolderOptions];
@@ -223,11 +260,11 @@ export default function StudentResourceCenter() {
   }, [customFolders]);
 
   const allItems = useMemo<ResourceListItem[]>(() => {
-    return generatedItems.map((item) => ({
+    return [...classroomItems, ...generatedItems].map((item) => ({
       ...item,
       folder: folderOverrides[item.id] ?? item.folder
     }));
-  }, [folderOverrides, generatedItems]);
+  }, [classroomItems, folderOverrides, generatedItems]);
 
   const allTags = useMemo(() => {
     return ["全部", ...Array.from(new Set(allItems.flatMap((item) => item.tags))).slice(0, 10)];
@@ -342,7 +379,9 @@ export default function StudentResourceCenter() {
   }
 
   async function copyResourceLink(item: ResourceListItem) {
-    const text = `${window.location.origin}/self-study/library?resource=${encodeURIComponent(item.id)}`;
+    const text = item.kind === "ai_classroom"
+      ? `${window.location.origin}/self-study/library/classroom/${encodeURIComponent(item.id)}`
+      : `${window.location.origin}/self-study/library?resource=${encodeURIComponent(item.id)}`;
     try {
       await navigator.clipboard.writeText(text);
       setActionNotice("资源链接已复制。");
@@ -353,6 +392,10 @@ export default function StudentResourceCenter() {
 
   function openGeneratedPractice(resource: GeneratedResource) {
     navigate(`/self-study/library/practice/${encodeURIComponent(resource.id)}`);
+  }
+
+  function openAIClassroom(resource: AIClassroomResource) {
+    navigate(`/self-study/library/classroom/${encodeURIComponent(resource.id)}`);
   }
 
   async function downloadGeneratedResource(resource: GeneratedResource) {
@@ -506,12 +549,16 @@ export default function StudentResourceCenter() {
               <article className={`student-resource-card ${item.kind}`} key={`${item.kind}-${item.id}`}>
                 <button
                   type="button"
-                  className="student-resource-thumb generated"
-                  onClick={() => setPreviewResource(item.resource)}
-                  aria-label={`预览 ${item.title}`}
+                  className={`student-resource-thumb ${item.kind === "ai_classroom" ? "classroom" : "generated"}`}
+                  onClick={() => item.kind === "ai_classroom" ? openAIClassroom(item.resource) : setPreviewResource(item.resource)}
+                  aria-label={item.kind === "ai_classroom" ? `进入课堂 ${item.title}` : `预览 ${item.title}`}
                 >
-                  <span>{generatedResourceIcon(item.resource)}</span>
-                  <em>{generatedResourceMetric(item.resource).value}{generatedResourceMetric(item.resource).label}</em>
+                  <span>{item.kind === "ai_classroom" ? <MonitorPlay size={24} /> : generatedResourceIcon(item.resource)}</span>
+                  <em>
+                    {item.kind === "ai_classroom"
+                      ? `${classroomResourceMetric(item.resource).value}${classroomResourceMetric(item.resource).label}`
+                      : `${generatedResourceMetric(item.resource).value}${generatedResourceMetric(item.resource).label}`}
+                  </em>
                 </button>
 
                 <div className="student-resource-card-body">
@@ -522,9 +569,9 @@ export default function StudentResourceCenter() {
                         <AIContentDisclosure
                           compact
                           interactive={false}
-                          confidence={item.resource.confidence}
-                          sourceLabel={(item.resource.citations ?? []).length ? "课程知识库与引用资料" : "AI 生成资源"}
-                          citationsCount={(item.resource.citations ?? []).length}
+                          confidence={item.kind === "ai_classroom" ? item.resource.confidence : item.resource.confidence}
+                          sourceLabel={item.kind === "ai_classroom" ? "上传资料、输入内容与学习画像" : (item.resource.citations ?? []).length ? "课程知识库与引用资料" : "AI 生成资源"}
+                          citationsCount={item.kind === "ai_classroom" ? item.resource.classroom.citations.length : (item.resource.citations ?? []).length}
                         />
                       </div>
                       <p>{item.summary}</p>
@@ -539,7 +586,11 @@ export default function StudentResourceCenter() {
                     <span><Archive size={14} /> {item.folder}</span>
                   </div>
                   <div className="student-resource-actions">
-                    {item.resource.resource_type === "PRACTICE_SET" ? (
+                    {item.kind === "ai_classroom" ? (
+                      <button type="button" className="primary" onClick={() => openAIClassroom(item.resource)}>
+                        <MonitorPlay size={15} /> 进入课堂
+                      </button>
+                    ) : item.resource.resource_type === "PRACTICE_SET" ? (
                       <button type="button" className="primary" onClick={() => openGeneratedPractice(item.resource)}>
                         <FileQuestion size={15} /> 开始练习
                       </button>
@@ -552,9 +603,11 @@ export default function StudentResourceCenter() {
                         <Eye size={15} /> 预览
                       </button>
                     )}
-                    <button type="button" onClick={() => downloadGeneratedResource(item.resource)} disabled={!item.resource.download_available}>
-                      <Download size={15} /> 导出
-                    </button>
+                    {item.kind === "generated" ? (
+                      <button type="button" onClick={() => downloadGeneratedResource(item.resource)} disabled={!item.resource.download_available}>
+                        <Download size={15} /> 导出
+                      </button>
+                    ) : null}
                     <label className="student-resource-move">
                       <MoveRight size={15} />
                       <select value={item.folder} onChange={(event) => moveResource(item, event.target.value as ResourceFolder)} aria-label={`移动 ${item.title}`}>
@@ -654,4 +707,26 @@ function FilterSelect({
       </select>
     </label>
   );
+}
+
+function classroomToResource(resource: AIClassroomResource): AIClassroomResourceItem {
+  const actionCount = resource.classroom.scenes.reduce((total, scene) => total + scene.actions.length, 0);
+  return {
+    kind: "ai_classroom",
+    id: resource.id,
+    type: "AI 讲解",
+    folder: "AI讲解课堂",
+    title: resource.title,
+    source: "AI 讲解",
+    domain: "AI 助学",
+    summary: resource.summary,
+    collectedAt: resource.savedAt,
+    tags: [
+      "AI讲解课堂",
+      resource.knowledgePoint || "自主学习",
+      `${resource.classroom.scenes.length} 个场景`,
+      `${actionCount} 个动作`
+    ],
+    resource
+  };
 }

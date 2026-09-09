@@ -1,5 +1,6 @@
 import json
 
+import httpx
 from fastapi.testclient import TestClient
 
 from backend.app.ai import llm_client
@@ -204,6 +205,65 @@ def test_student_knowledge_graph_node_diagnosis_uses_ai_model(monkeypatch):
     assert calls
 
 
+def test_student_knowledge_graph_node_diagnosis_falls_back_when_model_fails(monkeypatch):
+    monkeypatch.setenv("CODETRACK_MODEL_API_KEY", "sk-test")
+    monkeypatch.setenv("CODETRACK_MODEL_NAME", "test-chat-model")
+    monkeypatch.setenv("CODETRACK_MODEL_API_BASE_URL", "https://model.test/v1")
+    monkeypatch.setenv("CODETRACK_MODEL_GATEWAY_URL", "")
+    get_settings.cache_clear()
+
+    async def failing_post(url, *, json, headers=None, timeout=llm_client.DEFAULT_TIMEOUT):
+        raise httpx.ConnectError("All connection attempts failed")
+
+    monkeypatch.setattr(llm_client, "_post_json", failing_post)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/student/knowledge-graphs/node-diagnosis",
+            headers=STUDENT,
+            json={
+                "course_id": "course_ds_001",
+                "model_key": "default",
+                "is_self_study": True,
+                "graph": {
+                    "title": "自学知识图谱",
+                    "course_name": "自主学习",
+                    "node_count": 3,
+                    "edge_count": 2,
+                    "nodes": [
+                        {"id": "n1", "label": "Google Cloud"},
+                        {"id": "n2", "label": "Cloudflare"},
+                        {"id": "n3", "label": "CDN"},
+                    ],
+                },
+                "node": {
+                    "id": "n2",
+                    "label": "Cloudflare",
+                    "type": "概念",
+                    "description": "托管 DNS、CDN 和证书相关服务。",
+                    "difficulty": 3,
+                    "source": "student",
+                },
+                "related_edges": [
+                    {"id": "e1", "source": "n1", "target": "n2", "type": "前驱", "label": "前驱"},
+                    {"id": "e2", "source": "n2", "target": "n3", "type": "后继", "label": "后继"},
+                ],
+                "page_context": {"route": "/self-study/knowledge-map"},
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["source"] == "RULE_FALLBACK"
+    assert data["ai_generated"] is False
+    assert data["model_provider"] == "RULE_FALLBACK"
+    assert data["model_label"] == "本地兜底诊断"
+    assert data["fallback_reason"] == "AI_MODEL_REQUEST_FAILED"
+    assert "Cloudflare" in data["summary"]
+    assert data["evidence"]
+    assert data["next_actions"]
+
+
 def test_student_ai_chat_lists_switchable_models(monkeypatch):
     monkeypatch.setenv("CODETRACK_MODEL_API_KEY", "sk-general")
     monkeypatch.setenv("CODETRACK_MODEL_NAME", "general-chat-model")
@@ -268,6 +328,74 @@ def test_student_ai_chat_can_use_fine_tuned_model(monkeypatch):
     assert calls[0]["body"]["model"] == "/models/codetrack-q4_k_m.gguf"
     assert calls[0]["body"]["stream"] is True
     assert calls[0]["body"]["max_tokens"] == 192
+
+
+def test_student_ai_chat_falls_back_when_fine_tuned_model_is_unreachable(monkeypatch):
+    fine_calls = []
+    default_calls = []
+    monkeypatch.setenv("CODETRACK_MODEL_API_KEY", "sk-general")
+    monkeypatch.setenv("CODETRACK_MODEL_NAME", "general-chat-model")
+    monkeypatch.setenv("CODETRACK_MODEL_API_BASE_URL", "https://general.model/v1")
+    monkeypatch.setenv("CODETRACK_MODEL_GATEWAY_URL", "")
+    monkeypatch.setenv("CODETRACK_FINE_TUNED_MODEL_API_KEY", "sk-fine")
+    monkeypatch.setenv("CODETRACK_FINE_TUNED_MODEL_NAME", "/models/codetrack-q4_k_m.gguf")
+    monkeypatch.setenv("CODETRACK_FINE_TUNED_MODEL_API_BASE_URL", "http://127.0.0.1:18080/v1")
+    monkeypatch.setenv("CODETRACK_FINE_TUNED_MODEL_LABEL", "CodeTrack 微调模型")
+    get_settings.cache_clear()
+
+    async def failing_stream(url, *, json, headers=None, timeout=llm_client.DEFAULT_TIMEOUT):
+        fine_calls.append({"url": url, "body": json, "headers": headers})
+        raise httpx.ConnectError("All connection attempts failed")
+        yield {}
+
+    async def fake_post(url, *, json, headers=None, timeout=llm_client.DEFAULT_TIMEOUT):
+        default_calls.append({"url": url, "body": json, "headers": headers})
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json_module.dumps(
+                            {
+                                "answer": "微调模型暂时不可用时，可以先用通用模型解释：边界测试负责覆盖临界输入，等价类负责减少重复用例。",
+                                "confidence": 0.78,
+                                "knowledge_source_ids": ["kb_boundary_test_reasoning"],
+                                "suggested_actions": ["检查微调服务", "继续追问"],
+                                "profile_used": True,
+                                "source_used": True,
+                                "safety_note": "",
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ],
+            "usage": {"prompt_tokens": 88, "completion_tokens": 24},
+        }
+
+    json_module = json
+    monkeypatch.setattr(llm_client, "_stream_json_lines", failing_stream)
+    monkeypatch.setattr(llm_client, "_post_json", fake_post)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/student/ai-chat",
+            headers=STUDENT,
+            json={
+                "message": "边界测试为什么要结合等价类？",
+                "course_id": "course_ds_001",
+                "model_key": "fine_tuned",
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["model_key"] == "default"
+    assert data["fallback_from_model_key"] == "fine_tuned"
+    assert data["fallback_from_model_label"] == "CodeTrack 微调模型"
+    assert "微调不可用时自动切换" in data["model_label"]
+    assert "CodeTrack 微调模型暂时不可用" in data["safety_note"]
+    assert fine_calls[0]["url"] == "http://127.0.0.1:18080/v1/chat/completions"
+    assert default_calls[0]["url"] == "https://general.model/v1/chat/completions"
 
 
 def test_student_ai_chat_can_cite_personal_knowledge_base(monkeypatch):
@@ -623,6 +751,82 @@ def test_student_ai_chat_stream_persists_session_and_messages(monkeypatch):
         assert message_count >= 2
     finally:
         db.close()
+
+
+def test_student_ai_chat_stream_falls_back_when_fine_tuned_model_is_unreachable(monkeypatch):
+    stream_urls = []
+    monkeypatch.setenv("CODETRACK_MODEL_API_KEY", "sk-general")
+    monkeypatch.setenv("CODETRACK_MODEL_NAME", "general-chat-model")
+    monkeypatch.setenv("CODETRACK_MODEL_API_BASE_URL", "https://general.model/v1")
+    monkeypatch.setenv("CODETRACK_MODEL_GATEWAY_URL", "")
+    monkeypatch.setenv("CODETRACK_FINE_TUNED_MODEL_API_KEY", "sk-fine")
+    monkeypatch.setenv("CODETRACK_FINE_TUNED_MODEL_NAME", "/models/codetrack-q4_k_m.gguf")
+    monkeypatch.setenv("CODETRACK_FINE_TUNED_MODEL_API_BASE_URL", "http://127.0.0.1:18080/v1")
+    monkeypatch.setenv("CODETRACK_FINE_TUNED_MODEL_LABEL", "CodeTrack 微调模型")
+    get_settings.cache_clear()
+
+    async def fake_stream(url, *, json, headers=None, timeout=llm_client.DEFAULT_TIMEOUT):
+        stream_urls.append(url)
+        if "127.0.0.1:18080" in url:
+            raise httpx.ConnectError("All connection attempts failed")
+        yield {"choices": [{"delta": {"content": "通用模型已接管回答。"}}]}
+
+    async def fake_post(url, *, json, headers=None, timeout=llm_client.DEFAULT_TIMEOUT):
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json_module.dumps(
+                            {
+                                "confidence": 0.76,
+                                "knowledge_source_ids": [],
+                                "suggested_actions": ["检查微调服务", "继续追问"],
+                                "profile_used": True,
+                                "source_used": False,
+                                "safety_note": "",
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ],
+            "usage": {"prompt_tokens": 66, "completion_tokens": 18},
+        }
+
+    json_module = json
+    monkeypatch.setattr(llm_client, "_stream_json_lines", fake_stream)
+    monkeypatch.setattr(llm_client, "_post_json", fake_post)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/student/ai-chat/stream",
+            headers=STUDENT,
+            json={
+                "message": "边界测试怎么理解？",
+                "course_id": "course_ds_001",
+                "model_key": "fine_tuned",
+            },
+        )
+        assert response.status_code == 200
+        stream_text = response.text
+        assert "event: delta" in stream_text
+        assert "event: final" in stream_text
+        assert "event: error" not in stream_text
+        assert "fallback_from_model_key" in stream_text
+        assert "fine_tuned" in stream_text
+
+        sessions = client.get("/api/v1/student/ai-chat/sessions?course_id=course_ds_001", headers=STUDENT)
+        assert sessions.status_code == 200
+        session_id = sessions.json()["data"][0]["id"]
+        detail = client.get(f"/api/v1/student/ai-chat/sessions/{session_id}", headers=STUDENT)
+        messages = detail.json()["data"]["messages"]
+        assert messages[-1]["content"] == "通用模型已接管回答。"
+        assert messages[-1]["metadata"]["fallback_from_model_key"] == "fine_tuned"
+
+    assert stream_urls == [
+        "http://127.0.0.1:18080/v1/chat/completions",
+        "https://general.model/v1/chat/completions",
+    ]
 
 
 def test_student_ai_chat_session_can_be_deleted(monkeypatch):

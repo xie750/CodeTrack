@@ -10,6 +10,7 @@ import QuestionWorkspace from "./pages/QuestionWorkspace";
 import SelfStudyHub from "./pages/SelfStudyHub";
 import ProjectPractice from "./pages/ProjectPractice";
 import LoginPage from "./pages/LoginPage";
+import AIClassroom from "./pages/AIClassroom";
 import AICompanion from "./components/AICompanion";
 import AccountMenu from "./components/AccountMenu";
 import StudentOnboardingTour from "./components/StudentOnboardingTour";
@@ -90,7 +91,8 @@ function StudentAppTopbar({
 function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogout: () => void }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const isWorkspace = location.pathname.startsWith("/workspace") || location.pathname.startsWith("/question-workspace");
+  const isClassroomWorkspace = location.pathname.startsWith("/self-study/library/classroom") || location.pathname.startsWith("/self-study/classroom");
+  const isWorkspace = location.pathname.startsWith("/workspace") || location.pathname.startsWith("/question-workspace") || isClassroomWorkspace;
   const activeRouteGroup = routeGroup(location.pathname);
   const isEntryRoute = location.pathname === "/" || location.pathname === "";
 
@@ -145,10 +147,12 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
             <Routes location={location}>
               <Route path="/workspace/:taskId" element={<TaskWorkspaceWrapper onBack={() => transitionTo(workspaceBackPath)} />} />
               <Route path="/question-workspace/:assignmentId" element={<QuestionWorkspaceWrapper onBack={() => transitionTo(workspaceBackPath)} />} />
+              <Route path="/self-study/library/classroom/:resourceId" element={<AIClassroom />} />
+              <Route path="/self-study/classroom" element={<AIClassroom />} />
             </Routes>
           </div>
         </div>
-        <AICompanion routePath={location.pathname} routeGroup={activeRouteGroup} />
+        {!isClassroomWorkspace ? <AICompanion routePath={location.pathname} routeGroup={activeRouteGroup} /> : null}
       </>
     );
   } else if (isEntryRoute) {

@@ -51,6 +51,7 @@ import {
   readStudentAiModelKey,
   saveStudentAiModelKey
 } from "../studentAiModels";
+import { saveAIClassroomResource, type AIClassroomResource } from "../features/ai-classroom/classroomResourceStore";
 import { generateClassroomFromFile, generateClassroomFromPrompt, type OpenMaicClassroom } from "../features/ai-classroom/openmaicCompat";
 
 type AiTutorResourceType = GeneratedResourceType | "AI_CLASSROOM";
@@ -75,6 +76,7 @@ type AiChatTurn = {
   modelLabel?: string;
   resource?: GeneratedResource;
   classroom?: OpenMaicClassroom;
+  classroomResource?: AIClassroomResource;
   resourceSaving?: boolean;
 };
 
@@ -105,9 +107,37 @@ const selfStudyScopeLabel = "综合技能维度";
 const selfStudyKnowledgeScopeLabel = "跨课程知识库";
 const selfStudySkillSummary = "覆盖编程基础、算法结构与 AI 专业能力";
 const previewLimit = 76;
+const aiTutorLocalTurnsKey = "codetrack.selfStudy.aiTutor.turns.v1";
 
 function nowLabel() {
   return new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+}
+
+function readPersistedAiTutorTurns(): AiChatTurn[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(aiTutorLocalTurnsKey);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((turn): turn is AiChatTurn => (
+      Boolean(turn)
+      && typeof turn === "object"
+      && (turn.role === "student" || turn.role === "assistant")
+      && typeof turn.id === "string"
+      && typeof turn.content === "string"
+    ));
+  } catch {
+    return [];
+  }
+}
+
+function writePersistedAiTutorTurns(turns: AiChatTurn[]) {
+  if (typeof window === "undefined") return;
+  const stableTurns = turns
+    .filter((turn) => !turn.loading)
+    .map((turn) => ({ ...turn, resourceSaving: false }));
+  window.localStorage.setItem(aiTutorLocalTurnsKey, JSON.stringify(stableTurns));
 }
 
 function timeLabel(value?: string | null) {
@@ -491,16 +521,17 @@ function GeneratedResourceCard({
 }
 
 function ClassroomResourceCard({
-  classroom,
-  onOpen
+  resource,
+  onOpenLibrary
 }: {
-  classroom: OpenMaicClassroom;
-  onOpen: () => void;
+  resource: AIClassroomResource;
+  onOpenLibrary: () => void;
 }) {
+  const classroom = resource.classroom;
   const actionCount = classroom.scenes.reduce((total, scene) => total + (scene.actions?.length ?? 0), 0);
   return (
     <div className="ai-resource-card-shell">
-      <button type="button" className="ai-resource-card-main ai-classroom-resource-card" onClick={onOpen}>
+      <button type="button" className="ai-resource-card-main ai-classroom-resource-card" onClick={onOpenLibrary}>
         <span className="ai-resource-thumb-preview classroom">
           <i />
           <MonitorPlay size={26} />
@@ -519,18 +550,18 @@ function ClassroomResourceCard({
               citationsCount={classroom.citations.length}
             />
           </span>
-          <small>AI讲解课堂 · 独立工作区 · {classroom.material.fileName}</small>
-          <em>已生成可播放课堂：讲解字幕、目标高亮、白板标注、互动提问会在新工作区中按动作脚本执行。</em>
+          <small>已保存到资源中心 · {classroom.material.fileName}</small>
+          <em>课堂资源已入库。请从资源中心点击该资源，进入独立 AI 讲解课堂工作区。</em>
         </span>
       </button>
       <button
         type="button"
         className="ai-resource-bookmark saved"
-        aria-label="进入 AI讲解课堂工作区"
-        title="进入 AI讲解课堂工作区"
-        onClick={onOpen}
+        aria-label="去资源中心查看"
+        title="去资源中心查看"
+        onClick={onOpenLibrary}
       >
-        <MonitorPlay size={19} />
+        <Bookmark size={19} fill="currentColor" />
       </button>
     </div>
   );
@@ -554,13 +585,14 @@ export default function AiTutor() {
   const [creatingSession, setCreatingSession] = useState(false);
   const [sessions, setSessions] = useState<StudentAiChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const [turns, setTurns] = useState<AiChatTurn[]>([]);
+  const [turns, setTurns] = useState<AiChatTurn[]>(() => readPersistedAiTutorTurns());
   const [modelOptions, setModelOptions] = useState<StudentAiModelOption[]>(fallbackStudentAiModelOptions);
   const [selectedModelKey, setSelectedModelKey] = useState(readStudentAiModelKey);
   const [activeResourceType, setActiveResourceType] = useState<AiTutorResourceType | null>(null);
   const [classroomAttachment, setClassroomAttachment] = useState<File | null>(null);
   const [previewResource, setPreviewResource] = useState<GeneratedResource | null>(null);
   const hydratedRef = useRef(false);
+  const restoredLocalTurnsRef = useRef(turns.length > 0);
   const routeDraftHydratedKeyRef = useRef<string | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
   const routeState = location.state as AiTutorRouteState;
@@ -644,6 +676,10 @@ export default function AiTutor() {
   }, [turns]);
 
   useEffect(() => {
+    writePersistedAiTutorTurns(turns);
+  }, [turns]);
+
+  useEffect(() => {
     const initialMessage = routeState?.initialMessage?.trim();
     const initialResourceType = routeState?.initialResourceType;
     const hydrationKey = `${location.key}:${initialMessage ?? ""}:${initialResourceType ?? ""}`;
@@ -658,7 +694,7 @@ export default function AiTutor() {
     if (!courseId || hydratedRef.current) return;
     hydratedRef.current = true;
     refreshSessions(courseId).then((items) => {
-      if (items[0]) {
+      if (items[0] && !restoredLocalTurnsRef.current) {
         loadSession(items[0].id);
       }
     }).catch((err) => {
@@ -862,12 +898,13 @@ export default function AiTutor() {
         const classroom = classroomAttachment
           ? await generateClassroomFromFile(classroomAttachment)
           : generateClassroomFromPrompt(message);
+        const classroomResource = saveAIClassroomResource({ classroom, courseId, prompt: message });
         setTurns((current) => current.map((turn) => (
           turn.id === pendingId
             ? {
                 id: pendingId,
                 role: "assistant",
-                content: `已生成 AI讲解课堂：${classroom.stage.name}`,
+                content: `已生成 AI讲解课堂并保存到资源中心：${classroom.stage.name}`,
                 time: nowLabel(),
                 confidence: 0.86,
                 citations: classroom.citations.map((source, index) => ({
@@ -878,12 +915,13 @@ export default function AiTutor() {
                   version: "openmaic-compatible-local",
                   authority_level: "COURSE_CONTEXT"
                 })),
-                suggestedActions: ["进入 AI讲解课堂", "保存到资源中心"],
+                suggestedActions: ["去资源中心查看", "继续追问"],
                 profileUsed: true,
                 sourceUsed: Boolean(classroom.citations.length),
-                safetyNote: "当前课堂按 OpenMAIC 兼容的 Stage / Scene / Action 结构生成，真实后端接入后可替换为服务端解析和模型生成结果。",
+                safetyNote: "AI讲解课堂已作为资源保存。正式学习时请从资源中心进入独立工作区，课堂会按 Stage / Scene / Action 动作脚本播放。",
                 modelName: "OpenMAIC-compatible classroom renderer",
-                classroom
+                classroom,
+                classroomResource
               }
             : turn
         )));
@@ -1085,12 +1123,12 @@ export default function AiTutor() {
                         </section>
                       ) : null}
 
-                      {turn.classroom && !turn.loading ? (
+                      {turn.classroomResource && !turn.loading ? (
                         <section>
                           <h2>生成资源</h2>
                           <ClassroomResourceCard
-                            classroom={turn.classroom}
-                            onOpen={() => navigate("/self-study/classroom", { state: { classroom: turn.classroom } })}
+                            resource={turn.classroomResource}
+                            onOpenLibrary={() => navigate(`/self-study/library?resource=${encodeURIComponent(turn.classroomResource?.id ?? "")}`)}
                           />
                         </section>
                       ) : null}
@@ -1144,8 +1182,8 @@ export default function AiTutor() {
                               type="button"
                               key={action}
                               onClick={() => {
-                                if (turn.classroom && action.includes("进入 AI讲解课堂")) {
-                                  navigate("/self-study/classroom", { state: { classroom: turn.classroom } });
+                                if (turn.classroomResource && action.includes("资源中心")) {
+                                  navigate(`/self-study/library?resource=${encodeURIComponent(turn.classroomResource.id)}`);
                                   return;
                                 }
                                 setDraft(action);

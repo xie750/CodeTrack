@@ -4858,6 +4858,16 @@ button.student-resource-thumb {
   background: linear-gradient(135deg, #eef6ff, #ffffff 56%, #ecfbf4);
 }
 
+.student-resource-thumb.classroom {
+  color: #0f766e;
+  background: linear-gradient(135deg, #ecfeff, #ffffff 52%, #f0fdfa);
+}
+
+.student-resource-thumb.classroom em {
+  color: #115e59;
+  background: rgba(255, 255, 255, 0.9);
+}
+
 .student-resource-thumb.pytorch {
   background: linear-gradient(145deg, #fff6f2, #ffd8c8);
   color: #e64a19;

@@ -490,6 +490,96 @@ def _node_diagnosis_prompt(
     )
 
 
+def _fallback_node_diagnosis_response(
+    *,
+    payload: StudentKnowledgeNodeDiagnosisRequest,
+    node_label: str,
+    mastery_score: int,
+    knowledge_state: dict[str, Any] | None,
+    error_code: str = "AI_MODEL_UNAVAILABLE",
+) -> dict[str, Any]:
+    node_id = str(payload.node.get("id", ""))
+    prereq_nodes = [
+        _graph_node_label(payload.graph, str(edge.get("source", "")))
+        for edge in payload.related_edges
+        if str(edge.get("target", "")) == node_id and str(edge.get("type", "")) == "前驱"
+    ][:4]
+    successor_nodes = [
+        _graph_node_label(payload.graph, str(edge.get("target", "")))
+        for edge in payload.related_edges
+        if str(edge.get("source", "")) == node_id and str(edge.get("type", "")) == "后继"
+    ][:4]
+    has_profile = knowledge_state is not None
+    mastery_label = _mastery_label_from_score(mastery_score, has_profile)
+    graph_title = _compact_text(payload.graph.get("title"), 80) or ("自学知识图谱" if payload.is_self_study else "课程知识图谱")
+    relation_hint = "、".join(prereq_nodes or successor_nodes[:2])
+    summary_parts = [
+        f"当前节点「{node_label}」已根据{graph_title}结构和学习画像做本地兜底诊断。",
+        f"掌握状态为「{mastery_label}」。" if has_profile else "当前没有匹配到该节点的真实画像证据，建议先通过练习补齐可验证记录。",
+    ]
+    if relation_hint:
+        summary_parts.append(f"学习时优先结合相邻节点「{relation_hint}」一起复盘。")
+    else:
+        summary_parts.append("当前节点关系较少，建议先补充前驱、后继或相关概念，提升图谱可诊断性。")
+
+    evidence = [
+        "模型服务暂时不可用，本次使用规则兜底诊断，未编造真实 AI 结论。",
+        f"图谱中与该节点直接相连的关系共 {len(payload.related_edges)} 条。",
+    ]
+    if has_profile:
+        evidence.append(f"学习画像中匹配到「{node_label}」掌握度 {mastery_score}%。")
+    else:
+        evidence.append("学习画像中暂未匹配到该节点的掌握度记录。")
+
+    risk_factors = []
+    if not has_profile:
+        risk_factors.append("缺少真实作答或资料使用证据，掌握度判断可信度较低。")
+    if mastery_score < 70:
+        risk_factors.append("该节点建议先做基础诊断题，再进入迁移应用。")
+    if not prereq_nodes:
+        risk_factors.append("前驱节点不清晰，容易跳过必要基础。")
+
+    misconceptions = [
+        f"只记住「{node_label}」的表面定义，没有说明适用条件或边界。",
+        "把相邻概念当作同义词，忽略它们在任务中的分工。",
+    ]
+    next_actions = [
+        f"先复盘「{node_label}」的核心定义和一个典型例子。",
+        "补充 2 道基础自测题，形成可验证学习证据。",
+    ]
+    if prereq_nodes:
+        next_actions.insert(1, f"回看前驱节点：{', '.join(prereq_nodes[:2])}。")
+    if successor_nodes:
+        next_actions.append(f"完成后再连接后继节点：{', '.join(successor_nodes[:2])}。")
+
+    return {
+        "status": "ready",
+        "source": "RULE_FALLBACK",
+        "ai_generated": False,
+        "node_id": node_id,
+        "mastery_score": mastery_score,
+        "mastery_label": mastery_label,
+        "confidence": 0.36 if has_profile else 0.24,
+        "summary": " ".join(summary_parts),
+        "evidence": evidence[:8],
+        "risk_factors": risk_factors[:5],
+        "misconceptions": misconceptions[:5],
+        "prerequisites": prereq_nodes,
+        "next_actions": next_actions[:4],
+        "recommended_practice": f"围绕「{node_label}」生成一组 3-5 道诊断题，覆盖定义理解、相邻概念区分和一个应用场景。",
+        "profile_used": has_profile,
+        "source_used": bool(payload.related_edges),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "model_provider": "RULE_FALLBACK",
+        "model_name": "knowledge-graph-local-diagnosis",
+        "model_key": payload.model_key,
+        "model_label": "本地兜底诊断",
+        "run_id": None,
+        "citations": [],
+        "fallback_reason": error_code,
+    }
+
+
 def _safe_payload(raw: str | None) -> dict[str, Any]:
     if not raw:
         return {}
@@ -1108,6 +1198,9 @@ async def student_ai_chat(
             "model_name": result["model_name"],
             "model_key": result.get("model_key"),
             "model_label": result.get("model_label"),
+            "fallback_from_model_key": result.get("fallback_from_model_key"),
+            "fallback_from_model_label": result.get("fallback_from_model_label"),
+            "model_fallback_reason": result.get("model_fallback_reason"),
         },
         run_id=result["run_id"],
     )
@@ -1138,19 +1231,20 @@ async def student_knowledge_graph_node_diagnosis(
     model_key = normalize_ai_tutor_model_key(payload.model_key)
     model_options = list_ai_tutor_model_options()
     selected_model = next((item for item in model_options if item["key"] == model_key), None)
-    if not selected_model or not selected_model.get("configured"):
-        raise ApiError(
-            503,
-            "AI_MODEL_NOT_CONFIGURED",
-            "AI 模型配置还不完整，暂时不能生成真实知识诊断。",
-            details={"model_key": model_key, "model_label": selected_model.get("label") if selected_model else ""},
-        )
 
     administrative_class, _ = require_active_class(db, user)
     course = resolve_student_course(db, administrative_class, payload.course_id)
     profile = serialize_learner_profile(db, student_id=user.id, course_id=course.id, class_id=administrative_class.id)
     knowledge_state = _knowledge_state_for_node(profile, node_label)
     mastery_score = _bounded_percent(knowledge_state.get("mastery_score") if knowledge_state else None)
+    if not selected_model or not selected_model.get("configured"):
+        return ok(_fallback_node_diagnosis_response(
+            payload=payload,
+            node_label=node_label,
+            mastery_score=mastery_score,
+            knowledge_state=knowledge_state,
+            error_code="AI_MODEL_NOT_CONFIGURED",
+        ))
     prompt = _node_diagnosis_prompt(
         node=payload.node,
         graph=payload.graph,
@@ -1158,22 +1252,34 @@ async def student_knowledge_graph_node_diagnosis(
         profile=profile,
         is_self_study=payload.is_self_study,
     )
-    result = await generate_student_ai_reply(
-        db,
-        user=user,
-        class_id=administrative_class.id,
-        course=course,
-        message=prompt,
-        model_key=model_key,
-        page_context={
-            **payload.page_context,
-            "feature": "knowledge_graph_node_diagnosis",
-            "node_id": payload.node.get("id"),
-            "node_label": node_label,
-            "scope": "self_study" if payload.is_self_study else "course",
-        },
-        history=[],
-    )
+    try:
+        result = await generate_student_ai_reply(
+            db,
+            user=user,
+            class_id=administrative_class.id,
+            course=course,
+            message=prompt,
+            model_key=model_key,
+            page_context={
+                **payload.page_context,
+                "feature": "knowledge_graph_node_diagnosis",
+                "node_id": payload.node.get("id"),
+                "node_label": node_label,
+                "scope": "self_study" if payload.is_self_study else "course",
+            },
+            history=[],
+        )
+    except ApiError as exc:
+        error_code = str(exc.detail.get("code", "")) if isinstance(exc.detail, dict) else ""
+        if error_code not in {"AI_MODEL_NOT_CONFIGURED", "AI_MODEL_REQUEST_FAILED"}:
+            raise
+        return ok(_fallback_node_diagnosis_response(
+            payload=payload,
+            node_label=node_label,
+            mastery_score=mastery_score,
+            knowledge_state=knowledge_state,
+            error_code=error_code,
+        ))
     structured = _parse_diagnosis_answer(str(result.get("answer", "")))
     summary = _compact_text(structured.get("summary") or result.get("answer"), 800)
     evidence = _safe_string_list(structured.get("evidence"), 6)
@@ -1682,6 +1788,9 @@ async def student_ai_chat_stream(
                     "model_name": result["model_name"],
                     "model_key": result.get("model_key"),
                     "model_label": result.get("model_label"),
+                    "fallback_from_model_key": result.get("fallback_from_model_key"),
+                    "fallback_from_model_label": result.get("fallback_from_model_label"),
+                    "model_fallback_reason": result.get("model_fallback_reason"),
                 },
                 run_id=result["run_id"],
             )
