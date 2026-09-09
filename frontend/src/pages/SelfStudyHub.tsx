@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Bot, BookOpen, ChartNoAxesColumnIncreasing, ChevronsLeft, ChevronsRight, Database, FolderOpen, Network, Route as RouteIcon } from "lucide-react";
+import { ArrowLeft, Bot, BookOpen, ChartNoAxesColumnIncreasing, ChevronsLeft, ChevronsRight, Database, FolderOpen, MonitorPlay, Network, Route as RouteIcon } from "lucide-react";
 import StudentRouteBreadcrumb from "../components/StudentRouteBreadcrumb";
 import StudentBehaviorPopover from "../components/StudentBehaviorPopover";
 import SelfStudy from "./SelfStudy";
@@ -10,6 +10,7 @@ import StudentKnowledgeMap from "./StudentKnowledgeMap";
 import StudentResourceCenter from "./StudentResourceCenter";
 import StudentKnowledgeBase from "./StudentKnowledgeBase";
 import GeneratedPracticeWorkspace from "./GeneratedPracticeWorkspace";
+import AIClassroom from "./AIClassroom";
 
 const selfStudyTabs = [
   { path: "", label: "学习主页", icon: <BookOpen size={18} /> },
@@ -17,6 +18,7 @@ const selfStudyTabs = [
   { path: "knowledge-base", label: "知识库", icon: <Database size={18} /> },
   { path: "library", label: "资源中心", icon: <FolderOpen size={18} /> },
   { path: "knowledge-map", label: "知识图谱", icon: <Network size={18} /> },
+  { path: "classroom", label: "AI讲解课堂", icon: <MonitorPlay size={18} /> },
   { path: "ai", label: "AI 助学", icon: <Bot size={18} /> }
 ];
 
@@ -35,6 +37,7 @@ export default function SelfStudyHub() {
         <Route path="library/practice/:resourceId" element={<GeneratedPracticeRoute />} />
         <Route path="resources" element={<Navigate to="/self-study/library" replace />} />
         <Route path="knowledge-map" element={<StudentKnowledgeMap scope="self-study" />} />
+        <Route path="classroom" element={<AIClassroom />} />
         <Route path="ai" element={<AiTutor />} />
         <Route path="*" element={<Navigate to="/self-study" replace />} />
       </Routes>

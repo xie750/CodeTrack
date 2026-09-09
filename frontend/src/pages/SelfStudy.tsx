@@ -13,6 +13,7 @@ import {
   FileText,
   Link2,
   Loader2,
+  MonitorPlay,
   PenLine,
   Plus,
   RefreshCw,
@@ -306,6 +307,10 @@ export default function SelfStudy() {
               <button type="button" onClick={() => navigate("/self-study/ai")}>
                 <Sparkles size={17} />
                 生成讲解
+              </button>
+              <button type="button" onClick={() => navigate("/self-study/classroom")}>
+                <MonitorPlay size={17} />
+                AI讲解课堂
               </button>
             </footer>
           </section>
