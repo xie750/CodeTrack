@@ -250,10 +250,10 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
               <div className="login-demo-accounts" aria-label="演示账号">
                 <span>演示账号</span>
-                <button type="button" onClick={() => selectDemoAccount("wang")}>王同学 / wang</button>
-                <button type="button" onClick={() => selectDemoAccount("liu")}>刘同学 / liu</button>
-                <button type="button" onClick={() => selectDemoAccount("teacher_wang")}>王老师 / teacher_wang</button>
-                <button type="button" onClick={() => selectDemoAccount("teacher_li")}>李老师 / teacher_li</button>
+                <button type="button" onClick={() => selectDemoAccount("wang")}>王同学 / wang · 演示数据</button>
+                <button type="button" onClick={() => selectDemoAccount("liu")}>刘同学 / liu · 初始状态</button>
+                <button type="button" onClick={() => selectDemoAccount("teacher_wang")}>王老师 / teacher_wang · 演示数据</button>
+                <button type="button" onClick={() => selectDemoAccount("teacher_li")}>李老师 / teacher_li · 初始状态</button>
               </div>
             </form>
           </div>

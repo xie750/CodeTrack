@@ -5,11 +5,16 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .models import (
+    AnnouncementRead,
+    AuditLog,
     Chapter,
     ClassGroup,
     Course,
+    CourseAnnouncement,
+    CourseDiscussion,
     DiagnosisResult,
     DiagnosisReview,
+    DiscussionReply,
     Enrollment,
     EvaluationResult,
     Grade,
@@ -23,8 +28,57 @@ from .models import (
 )
 
 
+INITIAL_TEACHER_ID = "teacher-02"
+
+
+def reset_initial_teacher_account(db: Session) -> None:
+    teacher = db.get(User, INITIAL_TEACHER_ID)
+    if teacher:
+        teacher.name = "李老师"
+        teacher.number = "T2024002"
+        teacher.email = "li.teacher@university.edu.cn"
+        teacher.department = "人工智能学院"
+
+    courses = db.scalars(select(Course).where(Course.teacher_id == INITIAL_TEACHER_ID)).all()
+    for course in courses:
+        announcement_ids = [
+            row[0]
+            for row in db.query(CourseAnnouncement.id)
+            .filter(CourseAnnouncement.course_id == course.id)
+            .all()
+        ]
+        if announcement_ids:
+            db.query(AnnouncementRead).filter(AnnouncementRead.announcement_id.in_(announcement_ids)).delete(
+                synchronize_session=False
+            )
+            db.query(CourseAnnouncement).filter(CourseAnnouncement.id.in_(announcement_ids)).delete(
+                synchronize_session=False
+            )
+
+        discussion_ids = [
+            row[0]
+            for row in db.query(CourseDiscussion.id)
+            .filter(CourseDiscussion.course_id == course.id)
+            .all()
+        ]
+        if discussion_ids:
+            db.query(DiscussionReply).filter(DiscussionReply.discussion_id.in_(discussion_ids)).delete(
+                synchronize_session=False
+            )
+            db.query(CourseDiscussion).filter(CourseDiscussion.id.in_(discussion_ids)).delete(
+                synchronize_session=False
+            )
+
+        db.delete(course)
+
+    db.query(Notification).filter(Notification.user_id == INITIAL_TEACHER_ID).delete(synchronize_session=False)
+    db.query(AuditLog).filter(AuditLog.actor_id == INITIAL_TEACHER_ID).delete(synchronize_session=False)
+
+
 def seed_database(db: Session) -> None:
     if db.scalar(select(User.id).limit(1)):
+        reset_initial_teacher_account(db)
+        db.commit()
         return
 
     teacher = User(
@@ -37,10 +91,10 @@ def seed_database(db: Session) -> None:
     )
     teacher_lin = User(
         id="teacher-02",
-        name="林老师",
+        name="李老师",
         role="teacher",
         number="T2024002",
-        email="lin.teacher@university.edu.cn",
+        email="li.teacher@university.edu.cn",
         department="人工智能学院",
     )
     student_rows = [
@@ -75,10 +129,6 @@ def seed_database(db: Session) -> None:
         Course(id="course-se", teacher_id=teacher.id, name="软件系统测试", code="CST3050", term="2024-2025 学年秋季", description="软件质量保障与自动化测试。", status="preparing", progress=18),
         Course(id="course-cpp", teacher_id=teacher.id, name="C++ 程序设计", code="CST1018", term=course.term, description="C++ 语言基础与面向对象程序设计。", status="preparing", progress=12),
         Course(id="course-network", teacher_id=teacher.id, name="计算机网络", code="CST2060", term="2023-2024 学年秋季", description="计算机网络体系结构与协议。", status="archived", student_visible=True, progress=100),
-        # 林老师的课程
-        Course(id="course-py", teacher_id=teacher_lin.id, name="Python 数据分析", code="CST3105", term="2024-2025 学年春季", description="使用 Python 进行数据清洗、分析与可视化。", status="active", student_visible=True, progress=55),
-        Course(id="course-ml", teacher_id=teacher_lin.id, name="机器学习导论", code="CST3208", term="2024-2025 学年春季", description="监督学习、无监督学习与深度学习基础。", status="active", student_visible=True, progress=38),
-        Course(id="course-os", teacher_id=teacher_lin.id, name="操作系统原理", code="CST2075", term="2024-2025 学年秋季", description="进程管理、内存管理与文件系统。", status="preparing", progress=10),
     ]
     db.add_all([course, *other_courses])
 
@@ -195,6 +245,7 @@ def seed_database(db: Session) -> None:
         Notification(id="notice-02", user_id=teacher.id, type="ai", title="AI 审核", content="2 条低置信度诊断等待确认"),
         Notification(id="notice-03", user_id=teacher.id, type="risk", title="学生预警", content="王子轩连续 2 个任务未完成"),
     ])
+    reset_initial_teacher_account(db)
     db.commit()
 
 

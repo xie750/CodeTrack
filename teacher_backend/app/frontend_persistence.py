@@ -239,35 +239,26 @@ def update_preferences(payload: TeacherPreferenceUpdate, teacher: User = Depends
 
 
 def ensure_frontend_persistence_seed(db: Session) -> None:
-    if db.get(User, "teacher-02") is None:
-        db.add(User(
+    teacher_two = db.get(User, "teacher-02")
+    if teacher_two is None:
+        teacher_two = User(
             id="teacher-02",
-            name="林老师",
+            name="李老师",
             role="teacher",
             number="T2024002",
-            email="lin.teacher@university.edu.cn",
-            department="软件学院",
-        ))
+            email="li.teacher@university.edu.cn",
+            department="人工智能学院",
+        )
+        db.add(teacher_two)
+    else:
+        teacher_two.name = "李老师"
+        teacher_two.number = "T2024002"
+        teacher_two.email = "li.teacher@university.edu.cn"
+        teacher_two.department = "人工智能学院"
         db.flush()
 
-    supplemental_courses = [
-        ("course-py", "Python 数据分析", "CST3105", "使用 Python 进行数据清洗、分析与可视化。", "active", 55),
-        ("course-ml", "机器学习导论", "CST3208", "监督学习、无监督学习与深度学习基础。", "active", 38),
-        ("course-os", "操作系统原理", "CST2075", "进程管理、内存管理与文件系统。", "preparing", 10),
-    ]
-    for course_id, name, code, description, course_status, progress in supplemental_courses:
-        if db.get(Course, course_id) is None:
-            db.add(Course(
-                id=course_id,
-                teacher_id="teacher-02",
-                name=name,
-                code=code,
-                term="2024-2025 学年春季" if course_id != "course-os" else "2024-2025 学年秋季",
-                description=description,
-                status=course_status,
-                student_visible=course_status == "active",
-                progress=progress,
-            ))
+    for course in db.scalars(select(Course).where(Course.teacher_id == "teacher-02")).all():
+        db.delete(course)
     db.flush()
 
     teachers = db.scalars(select(User).where(User.role == "teacher")).all()

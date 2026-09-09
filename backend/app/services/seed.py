@@ -8,13 +8,25 @@ from backend.app.core.security import hash_password, verify_password
 from backend.app.models import (
     AdministrativeClass,
     AgentRun,
+    AgentStep,
     AuthoritativeKnowledgeBase,
     AuthoritativeKnowledgeSource,
+    AiTutorMessage,
+    AiTutorSession,
+    AuditLog,
     Capability,
+    CapabilityEvidence,
+    CapabilityState,
     Course,
     CourseChapter,
     CourseKnowledgePoint,
+    Diagnosis,
+    DiagnosisReview,
     Enrollment,
+    ExecutionRun,
+    Grade,
+    HintRecord,
+    IdempotencyRecord,
     KnowledgeSource,
     LearnerErrorStat,
     LearnerEvent,
@@ -26,16 +38,33 @@ from backend.app.models import (
     PracticeProjectMaterial,
     PracticeProjectSubmission,
     Question,
+    QuestionAnswer,
+    QuestionAttempt,
     QuestionOption,
     Recommendation,
+    RagChunk,
+    RagDocument,
+    RagDocumentElement,
+    RagDocumentVersion,
+    RagIngestJob,
+    RagKnowledgeBase,
+    StudentDailyTask,
+    StudentGeneratedResource,
     StudentClassMembership,
     StudentKnowledgeGraph,
     StudentResourceFolder,
     StudentTaskProgress,
+    Submission,
+    SubmissionVersion,
     Task,
     TaskAssignment,
+    TeacherFeedback,
+    TeacherResearchActivity,
+    TeacherResearchMaterial,
+    TeacherResearchProject,
     TeachingAssignment,
     TestCase,
+    TestResult,
     User,
 )
 
@@ -95,6 +124,227 @@ STANDARD_CORRECT_CODE = """ListNode* deleteAt(ListNode* head, int position) {
     prev->next = prev->next->next;
     return head;
 }"""
+
+
+INITIAL_STUDENT_ID = "user_student_002"
+INITIAL_TEACHER_ID = "user_teacher_002"
+DEMO_TEACHER_ID = "user_teacher_001"
+
+
+def reset_initial_demo_accounts(db: Session) -> None:
+    """Keep the second student/teacher accounts clean for evaluator first-look demos."""
+    initial_submission_ids = [
+        row[0]
+        for row in db.query(Submission.id)
+        .filter(Submission.student_id == INITIAL_STUDENT_ID)
+        .all()
+    ]
+    initial_version_ids = []
+    initial_diagnosis_ids = []
+    initial_execution_ids = []
+    if initial_submission_ids:
+        initial_version_ids = [
+            row[0]
+            for row in db.query(SubmissionVersion.id)
+            .filter(SubmissionVersion.submission_id.in_(initial_submission_ids))
+            .all()
+        ]
+        if initial_version_ids:
+            initial_diagnosis_ids = [
+                row[0]
+                for row in db.query(Diagnosis.id)
+                .filter(Diagnosis.submission_version_id.in_(initial_version_ids))
+                .all()
+            ]
+            initial_execution_ids = [
+                row[0]
+                for row in db.query(ExecutionRun.id)
+                .filter(ExecutionRun.submission_version_id.in_(initial_version_ids))
+                .all()
+            ]
+
+    initial_attempt_ids = [
+        row[0]
+        for row in db.query(QuestionAttempt.id)
+        .filter(QuestionAttempt.student_id == INITIAL_STUDENT_ID)
+        .all()
+    ]
+    if initial_attempt_ids:
+        db.query(QuestionAnswer).filter(QuestionAnswer.attempt_id.in_(initial_attempt_ids)).delete(synchronize_session=False)
+    db.query(QuestionAttempt).filter(QuestionAttempt.student_id == INITIAL_STUDENT_ID).delete(synchronize_session=False)
+
+    if initial_diagnosis_ids:
+        db.query(HintRecord).filter(HintRecord.diagnosis_id.in_(initial_diagnosis_ids)).delete(synchronize_session=False)
+        db.query(DiagnosisReview).filter(DiagnosisReview.diagnosis_id.in_(initial_diagnosis_ids)).delete(synchronize_session=False)
+        db.query(Diagnosis).filter(Diagnosis.id.in_(initial_diagnosis_ids)).delete(synchronize_session=False)
+    if initial_execution_ids:
+        db.query(TestResult).filter(TestResult.execution_run_id.in_(initial_execution_ids)).delete(synchronize_session=False)
+        db.query(ExecutionRun).filter(ExecutionRun.id.in_(initial_execution_ids)).delete(synchronize_session=False)
+
+    if initial_submission_ids:
+        db.query(Grade).filter(Grade.submission_id.in_(initial_submission_ids)).delete(synchronize_session=False)
+        db.query(TeacherFeedback).filter(TeacherFeedback.submission_id.in_(initial_submission_ids)).delete(synchronize_session=False)
+        db.query(StudentTaskProgress).filter(StudentTaskProgress.student_id == INITIAL_STUDENT_ID).update(
+            {"latest_submission_id": None, "latest_version_id": None},
+            synchronize_session=False,
+        )
+        db.query(IdempotencyRecord).filter(IdempotencyRecord.user_id == INITIAL_STUDENT_ID).delete(synchronize_session=False)
+        db.query(CapabilityEvidence).filter(CapabilityEvidence.student_id == INITIAL_STUDENT_ID).delete(synchronize_session=False)
+        db.query(SubmissionVersion).filter(SubmissionVersion.submission_id.in_(initial_submission_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(Submission).filter(Submission.id.in_(initial_submission_ids)).delete(synchronize_session=False)
+
+    initial_run_ids = [
+        row[0]
+        for row in db.query(AgentRun.id)
+        .filter(AgentRun.student_id == INITIAL_STUDENT_ID)
+        .all()
+    ]
+    if initial_run_ids:
+        db.query(AgentStep).filter(AgentStep.run_id.in_(initial_run_ids)).delete(synchronize_session=False)
+        db.query(AgentRun).filter(AgentRun.id.in_(initial_run_ids)).delete(synchronize_session=False)
+
+    initial_session_ids = [
+        row[0]
+        for row in db.query(AiTutorSession.id)
+        .filter(AiTutorSession.student_id == INITIAL_STUDENT_ID)
+        .all()
+    ]
+    if initial_session_ids:
+        db.query(AiTutorMessage).filter(AiTutorMessage.session_id.in_(initial_session_ids)).delete(synchronize_session=False)
+        db.query(AiTutorSession).filter(AiTutorSession.id.in_(initial_session_ids)).delete(synchronize_session=False)
+
+    initial_project_ids = [
+        row[0]
+        for row in db.query(TeacherResearchProject.id)
+        .filter(TeacherResearchProject.teacher_id == INITIAL_TEACHER_ID)
+        .all()
+    ]
+    if initial_project_ids:
+        db.query(TeacherResearchActivity).filter(TeacherResearchActivity.project_id.in_(initial_project_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(TeacherResearchMaterial).filter(TeacherResearchMaterial.project_id.in_(initial_project_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(TeacherResearchProject).filter(TeacherResearchProject.id.in_(initial_project_ids)).delete(
+            synchronize_session=False
+        )
+    db.query(TeacherResearchActivity).filter(TeacherResearchActivity.teacher_id == INITIAL_TEACHER_ID).delete(
+        synchronize_session=False
+    )
+    db.query(TeacherResearchMaterial).filter(TeacherResearchMaterial.teacher_id == INITIAL_TEACHER_ID).delete(
+        synchronize_session=False
+    )
+
+    initial_kb_ids = [
+        row[0]
+        for row in db.query(RagKnowledgeBase.id)
+        .filter(RagKnowledgeBase.owner_id == INITIAL_STUDENT_ID)
+        .all()
+    ]
+    if initial_kb_ids:
+        initial_doc_ids = [
+            row[0]
+            for row in db.query(RagDocument.id)
+            .filter(RagDocument.knowledge_base_id.in_(initial_kb_ids))
+            .all()
+        ]
+        initial_doc_version_ids = []
+        if initial_doc_ids:
+            initial_doc_version_ids = [
+                row[0]
+                for row in db.query(RagDocumentVersion.id)
+                .filter(RagDocumentVersion.document_id.in_(initial_doc_ids))
+                .all()
+            ]
+            if initial_doc_version_ids:
+                db.query(RagDocumentElement).filter(RagDocumentElement.document_version_id.in_(initial_doc_version_ids)).delete(
+                    synchronize_session=False
+                )
+                db.query(RagChunk).filter(RagChunk.document_version_id.in_(initial_doc_version_ids)).delete(
+                    synchronize_session=False
+                )
+                db.query(RagIngestJob).filter(RagIngestJob.document_version_id.in_(initial_doc_version_ids)).delete(
+                    synchronize_session=False
+                )
+                db.query(RagDocumentVersion).filter(RagDocumentVersion.id.in_(initial_doc_version_ids)).delete(
+                    synchronize_session=False
+                )
+            db.query(RagDocument).filter(RagDocument.id.in_(initial_doc_ids)).delete(synchronize_session=False)
+        db.query(RagKnowledgeBase).filter(RagKnowledgeBase.id.in_(initial_kb_ids)).delete(synchronize_session=False)
+
+    db.query(StudentGeneratedResource).filter(StudentGeneratedResource.student_id == INITIAL_STUDENT_ID).delete(
+        synchronize_session=False
+    )
+    db.query(StudentResourceFolder).filter(StudentResourceFolder.student_id == INITIAL_STUDENT_ID).delete(
+        synchronize_session=False
+    )
+    db.query(PracticeProjectActivity).filter(PracticeProjectActivity.student_id == INITIAL_STUDENT_ID).delete(
+        synchronize_session=False
+    )
+    db.query(PracticeProjectMaterial).filter(PracticeProjectMaterial.student_id == INITIAL_STUDENT_ID).delete(
+        synchronize_session=False
+    )
+    db.query(PracticeProjectSubmission).filter(PracticeProjectSubmission.student_id == INITIAL_STUDENT_ID).delete(
+        synchronize_session=False
+    )
+    db.query(PracticeProjectEnrollment).filter(PracticeProjectEnrollment.student_id == INITIAL_STUDENT_ID).delete(
+        synchronize_session=False
+    )
+    db.query(StudentTaskProgress).filter(StudentTaskProgress.student_id == INITIAL_STUDENT_ID).update(
+        {
+            "status": "NOT_STARTED",
+            "latest_submission_id": None,
+            "latest_version_id": None,
+            "passed_count": 0,
+            "highest_hint_level": 0,
+            "score": None,
+            "started_at": None,
+            "last_submitted_at": None,
+            "completed_at": None,
+        },
+        synchronize_session=False,
+    )
+    db.query(CapabilityState).filter(CapabilityState.student_id == INITIAL_STUDENT_ID).delete(synchronize_session=False)
+    db.query(LearnerEvent).filter(LearnerEvent.student_id == INITIAL_STUDENT_ID).delete(synchronize_session=False)
+    db.query(StudentDailyTask).filter(StudentDailyTask.student_id == INITIAL_STUDENT_ID).delete(synchronize_session=False)
+    db.query(LearnerProfileSnapshot).filter(LearnerProfileSnapshot.student_id == INITIAL_STUDENT_ID).delete(
+        synchronize_session=False
+    )
+    db.query(LearnerKnowledgeState).filter(LearnerKnowledgeState.student_id == INITIAL_STUDENT_ID).delete(
+        synchronize_session=False
+    )
+    db.query(LearnerErrorStat).filter(LearnerErrorStat.student_id == INITIAL_STUDENT_ID).delete(synchronize_session=False)
+    db.query(Recommendation).filter(Recommendation.student_id == INITIAL_STUDENT_ID).delete(synchronize_session=False)
+    db.query(Enrollment).filter(Enrollment.user_id == INITIAL_TEACHER_ID).delete(
+        synchronize_session=False
+    )
+
+    db.query(KnowledgeSource).filter(KnowledgeSource.created_by == INITIAL_TEACHER_ID).update(
+        {"created_by": DEMO_TEACHER_ID},
+        synchronize_session=False,
+    )
+    db.query(StudentKnowledgeGraph).filter(StudentKnowledgeGraph.teacher_id == INITIAL_TEACHER_ID).update(
+        {"teacher_id": DEMO_TEACHER_ID},
+        synchronize_session=False,
+    )
+    db.query(TaskAssignment).filter(TaskAssignment.published_by == INITIAL_TEACHER_ID).update(
+        {"published_by": DEMO_TEACHER_ID},
+        synchronize_session=False,
+    )
+    db.query(TeachingAssignment).filter(TeachingAssignment.teacher_id == INITIAL_TEACHER_ID).update(
+        {"teacher_id": DEMO_TEACHER_ID},
+        synchronize_session=False,
+    )
+    db.query(Course).filter(Course.owner_teacher_id == INITIAL_TEACHER_ID).update(
+        {"owner_teacher_id": DEMO_TEACHER_ID},
+        synchronize_session=False,
+    )
+    db.query(AuditLog).filter(AuditLog.user_id.in_([INITIAL_STUDENT_ID, INITIAL_TEACHER_ID])).delete(
+        synchronize_session=False
+    )
 
 
 def upsert(db: Session, model, key: str, values: dict) -> None:
@@ -308,7 +558,7 @@ def seed_demo_data(db: Session) -> None:
             "description": "人工智能专业基础支撑课程，面向 Python 语法、数据处理和实验编程。",
             "term": "2026-demo",
             "status": "ACTIVE",
-            "owner_teacher_id": "user_teacher_002",
+            "owner_teacher_id": "user_teacher_001",
         },
     )
     upsert(
@@ -329,7 +579,7 @@ def seed_demo_data(db: Session) -> None:
         ("course_ds_001", "user_teacher_001", "TEACHER"),
         ("course_ds_001", "user_student_001", "STUDENT"),
         ("course_ds_001", "user_student_002", "STUDENT"),
-        ("course_network_001", "user_teacher_002", "TEACHER"),
+        ("course_network_001", "user_teacher_001", "TEACHER"),
         ("course_network_001", "user_student_001", "STUDENT"),
         ("course_arch_001", "user_teacher_001", "TEACHER"),
         ("course_arch_001", "user_student_001", "STUDENT"),
@@ -365,7 +615,6 @@ def seed_demo_data(db: Session) -> None:
 
     memberships = [
         ("class_se_001", "user_student_001", "ACTIVE"),
-        ("class_se_001", "user_student_002", "TRANSFERRED"),
         ("class_cs_001", "user_student_002", "ACTIVE"),
     ]
     for class_id, student_id, status in memberships:
@@ -387,7 +636,7 @@ def seed_demo_data(db: Session) -> None:
         "ta_se1_network_001": {
             "class_id": "class_se_001",
             "course_id": "course_network_001",
-            "teacher_id": "user_teacher_002",
+            "teacher_id": "user_teacher_001",
             "term": "2026-demo",
             "status": "ACTIVE",
         },
@@ -673,7 +922,7 @@ def seed_demo_data(db: Session) -> None:
         {
             "task_id": "task_subnet_mask_001",
             "teaching_assignment_id": "ta_se1_network_001",
-            "published_by": "user_teacher_002",
+            "published_by": "user_teacher_001",
             "publish_status": "PUBLISHED",
             "assignment_mode": "PRACTICE",
             "allow_hint_level_3": True,
@@ -1192,11 +1441,16 @@ def seed_demo_data(db: Session) -> None:
         StudentTaskProgress,
         {"assignment_id": "assign_cs1_ds_linked_list_001", "student_id": "user_student_002"},
         {
-            "status": "NEEDS_REVISION",
-            "passed_count": 3,
+            "status": "NOT_STARTED",
+            "passed_count": 0,
             "total_required_count": 5,
-            "highest_hint_level": 2,
+            "highest_hint_level": 0,
             "score": None,
+            "started_at": None,
+            "last_submitted_at": None,
+            "completed_at": None,
+            "latest_submission_id": None,
+            "latest_version_id": None,
         },
     )
 
@@ -1604,7 +1858,7 @@ def seed_demo_data(db: Session) -> None:
             "teaching_assignment_id": "ta_se1_network_001",
             "class_id": "class_se_001",
             "course_id": "course_network_001",
-            "teacher_id": "user_teacher_002",
+            "teacher_id": "user_teacher_001",
             "title": "Python 程序设计数据处理知识图谱",
             "description": "人工智能 1 班 Python 程序设计课程的列表与字典查找学习路径。",
             "status": "published",
@@ -2447,5 +2701,7 @@ def seed_demo_data(db: Session) -> None:
     for run_id, values in demo_agent_runs.items():
         upsert(db, AgentRun, run_id, values)
 
+    db.flush()
+    reset_initial_demo_accounts(db)
     db.commit()
 
