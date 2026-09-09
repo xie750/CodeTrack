@@ -232,7 +232,7 @@
 .course-task-table-head,
 .course-task-row {
   display: grid;
-  grid-template-columns: 34px minmax(260px, 1fr) 112px 104px minmax(190px, 0.72fr) 112px;
+  grid-template-columns: 34px minmax(240px, 1fr) 96px 92px minmax(170px, 0.64fr) minmax(178px, 0.68fr) 112px;
   align-items: center;
   gap: 12px;
 }
@@ -341,6 +341,7 @@
 .course-task-status.purple { color: #7249e8; background: #f2edff; }
 .course-task-status.red { color: #ff4d4f; background: #fff0f0; }
 
+.course-task-start,
 .course-task-due {
   min-width: 0;
   display: grid;
@@ -352,6 +353,7 @@
   font-weight: 900;
 }
 
+.course-task-start small,
 .course-task-due small {
   grid-column: 2;
   margin-top: 2px;
@@ -359,6 +361,12 @@
   font-size: 11px;
   font-weight: 700;
 }
+
+.course-task-start.blue { color: #176cf5; }
+.course-task-start.green { color: #16a66d; }
+.course-task-start.orange { color: #f27b0c; }
+.course-task-start.red { color: #ff4d4f; }
+.course-task-start.muted { color: #73839a; }
 
 .course-task-due.orange { color: #f27b0c; }
 .course-task-due.red { color: #ff4d4f; }
@@ -488,7 +496,7 @@
 
   .course-task-table-head,
   .course-task-row {
-    min-width: 860px;
+    min-width: 1040px;
   }
 }
 

@@ -38,6 +38,31 @@ def test_student_practice_project_home_returns_seeded_projects():
     assert len(data["path_steps"]) == 6
 
 
+def test_student_can_run_practice_project_auto_analysis():
+    with TestClient(app) as client:
+        response = client.post("/api/v1/student/practice-projects/auto-analysis", headers=STUDENT_HEADERS)
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["analysis"]["project_id"] == "sales-cleaning"
+    assert data["analysis"]["confidence"] >= 0.8
+    assert data["analysis"]["next_actions"]
+    assert data["activity"]["type"] == "analysis"
+    assert data["home"]["activities"][0]["type"] == "analysis"
+    assert data["home"]["research_recommendation"]["signals"][0]["label"] == "研究方向"
+
+    with SessionLocal() as db:
+        event = db.scalar(
+            select(LearnerEvent)
+            .where(
+                LearnerEvent.student_id == "user_student_001",
+                LearnerEvent.event_type == "RESEARCH_PROFILE_ANALYZED",
+            )
+            .order_by(LearnerEvent.created_at.desc())
+        )
+    assert event is not None
+
+
 def test_student_practice_project_detail_returns_workflow_sections():
     with TestClient(app) as client:
         response = client.get(

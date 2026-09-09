@@ -30,7 +30,7 @@ from backend.app.models import (
 )
 from backend.app.services.learner_profile import serialize_learner_profile
 from backend.app.services.submissions import iso
-from backend.app.services.assignment_schedule import assignment_start_at
+from backend.app.services.assignment_schedule import assignment_schedule_status, assignment_start_at
 from backend.app.services.ai_tutor import (
     ai_tutor_history_payload,
     append_ai_tutor_message,
@@ -41,6 +41,7 @@ from backend.app.services.ai_tutor import (
     list_ai_tutor_model_options,
     list_ai_tutor_messages,
     list_ai_tutor_sessions,
+    normalize_ai_tutor_model_key,
     serialize_ai_tutor_message,
     serialize_ai_tutor_session,
     stream_student_ai_reply,
@@ -51,6 +52,7 @@ from backend.app.services.question_workflow import (
     submit_question_answers,
 )
 from backend.app.services.practice_projects import (
+    analyze_practice_project_fit,
     create_practice_material,
     create_practice_material_file,
     create_practice_submission,
@@ -119,6 +121,18 @@ class StudentAiChatRequest(BaseModel):
 class StudentAiChatSessionRequest(BaseModel):
     course_id: str | None = None
     first_message: str = Field(default="新的 AI 助学会话", max_length=2000)
+
+
+class StudentKnowledgeNodeDiagnosisRequest(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
+    course_id: str | None = None
+    model_key: str | None = Field(default=None, max_length=40)
+    is_self_study: bool = False
+    graph: dict[str, Any] = Field(default_factory=dict)
+    node: dict[str, Any] = Field(default_factory=dict)
+    related_edges: list[dict[str, Any]] = Field(default_factory=list, max_length=120)
+    page_context: dict[str, Any] = Field(default_factory=dict)
 
 
 class StudentPptGenerateRequest(BaseModel):
@@ -335,6 +349,145 @@ def serialize_student_knowledge_graph(graph: StudentKnowledgeGraph, course: Cour
         "updated_at": iso(graph.updated_at),
         "published_at": iso(graph.published_at),
     }
+
+
+def _compact_text(value: Any, limit: int = 260) -> str:
+    text = " ".join(str(value or "").split())
+    if len(text) <= limit:
+        return text
+    return f"{text[:limit]}..."
+
+
+def _bounded_ratio(value: Any, default: float = 0.0) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        number = default
+    return max(0.0, min(1.0, number))
+
+
+def _bounded_percent(value: Any, default: int = 0) -> int:
+    try:
+        number = int(round(float(value)))
+    except (TypeError, ValueError):
+        number = default
+    return max(0, min(100, number))
+
+
+def _graph_node_label(graph_context: dict[str, Any], node_id: str | None) -> str:
+    nodes = graph_context.get("nodes")
+    if not node_id or not isinstance(nodes, list):
+        return str(node_id or "")
+    for node in nodes:
+        if isinstance(node, dict) and str(node.get("id", "")) == node_id:
+            return str(node.get("label") or node_id)
+    return node_id
+
+
+def _knowledge_state_for_node(profile: dict[str, Any] | None, node_label: str) -> dict[str, Any] | None:
+    if not profile:
+        return None
+    states = profile.get("knowledge_states")
+    if not isinstance(states, list):
+        return None
+    normalized_label = node_label.strip()
+    for item in states:
+        if isinstance(item, dict) and str(item.get("knowledge_point", "")).strip() == normalized_label:
+            return item
+    return None
+
+
+def _mastery_label_from_score(score: int, has_profile: bool) -> str:
+    if not has_profile:
+        return "暂无真实证据"
+    if score >= 85:
+        return "掌握稳定"
+    if score >= 70:
+        return "基本掌握"
+    if score >= 45:
+        return "需要巩固"
+    return "薄弱待补"
+
+
+def _safe_string_list(value: Any, limit: int = 5) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    items = [_compact_text(item, 180) for item in value]
+    return [item for item in items if item][:limit]
+
+
+def _parse_diagnosis_answer(answer: str) -> dict[str, Any]:
+    text = answer.strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError:
+        return {"summary": answer}
+    return value if isinstance(value, dict) else {"summary": answer}
+
+
+def _node_diagnosis_prompt(
+    *,
+    node: dict[str, Any],
+    graph: dict[str, Any],
+    related_edges: list[dict[str, Any]],
+    profile: dict[str, Any] | None,
+    is_self_study: bool,
+) -> str:
+    node_id = str(node.get("id", ""))
+    prereq_nodes = [
+        _graph_node_label(graph, str(edge.get("source", "")))
+        for edge in related_edges
+        if str(edge.get("target", "")) == node_id and str(edge.get("type", "")) == "前驱"
+    ][:6]
+    successor_nodes = [
+        _graph_node_label(graph, str(edge.get("target", "")))
+        for edge in related_edges
+        if str(edge.get("source", "")) == node_id and str(edge.get("type", "")) == "后继"
+    ][:6]
+    related_nodes = [
+        _graph_node_label(graph, str(edge.get("target") if str(edge.get("source", "")) == node_id else edge.get("source", "")))
+        for edge in related_edges
+        if str(edge.get("type", "")) == "相关"
+    ][:6]
+    context = {
+        "page": "自学知识图谱" if is_self_study else "课程知识图谱",
+        "node": {
+            "id": node_id,
+            "label": _compact_text(node.get("label"), 120),
+            "type": _compact_text(node.get("type"), 40),
+            "description": _compact_text(node.get("description"), 500),
+            "difficulty": node.get("difficulty"),
+            "source": node.get("source"),
+        },
+        "graph": {
+            "title": _compact_text(graph.get("title"), 120),
+            "course_name": _compact_text(graph.get("course_name"), 80),
+            "source_summary": _compact_text(graph.get("source_summary"), 360),
+            "node_count": graph.get("node_count"),
+            "edge_count": graph.get("edge_count"),
+            "source_file_count": len(graph.get("source_files") or []) if isinstance(graph.get("source_files"), list) else 0,
+            "prerequisites": prereq_nodes,
+            "successors": successor_nodes,
+            "related_nodes": related_nodes,
+        },
+        "learner_profile": profile,
+    }
+    return (
+        "请为学生当前知识图谱节点生成一次真实 AI 诊断。请只基于给定上下文、学习画像和可引用资料判断；"
+        "如果缺少证据，必须明确说明证据不足，不能编造学习记录、引用或掌握度。\n\n"
+        "请把 answer 字段写成一个 JSON 对象字符串，不要 Markdown，不要代码块。JSON 对象字段："
+        "summary(string, 80-180字), evidence(string[]), risk_factors(string[]), misconceptions(string[]), "
+        "prerequisites(string[]), next_actions(string[]), recommended_practice(string), mastery_label(string)。"
+        "其中 evidence 要说明使用了哪些真实画像、图谱关系或课程资料；next_actions 给 2-4 个可执行动作。\n\n"
+        f"节点诊断上下文：{json.dumps(context, ensure_ascii=False)}"
+    )
 
 
 def _safe_payload(raw: str | None) -> dict[str, Any]:
@@ -752,6 +905,15 @@ def student_practice_projects(db: Session = Depends(get_db), user: User = Depend
     return ok(list_practice_projects(db, student_id=user.id, class_id=administrative_class.id))
 
 
+@router.post("/practice-projects/auto-analysis")
+def student_analyze_practice_project_fit(db: Session = Depends(get_db), user: User = Depends(current_user)):
+    require_role(user, "STUDENT")
+    administrative_class, _ = require_active_class(db, user)
+    result = analyze_practice_project_fit(db, student=user, class_id=administrative_class.id)
+    db.commit()
+    return ok(result)
+
+
 @router.get("/practice-projects/{project_id}")
 def student_practice_project_detail(
     project_id: str,
@@ -960,6 +1122,99 @@ async def student_ai_chat(
 def student_ai_chat_models(user: User = Depends(current_user)):
     require_role(user, "STUDENT")
     return ok({"items": list_ai_tutor_model_options()})
+
+
+@router.post("/knowledge-graphs/node-diagnosis")
+async def student_knowledge_graph_node_diagnosis(
+    payload: StudentKnowledgeNodeDiagnosisRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    node_label = _compact_text(payload.node.get("label"), 120)
+    if not node_label:
+        raise ApiError(400, "KNOWLEDGE_NODE_REQUIRED", "请选择需要诊断的知识节点")
+
+    model_key = normalize_ai_tutor_model_key(payload.model_key)
+    model_options = list_ai_tutor_model_options()
+    selected_model = next((item for item in model_options if item["key"] == model_key), None)
+    if not selected_model or not selected_model.get("configured"):
+        raise ApiError(
+            503,
+            "AI_MODEL_NOT_CONFIGURED",
+            "AI 模型配置还不完整，暂时不能生成真实知识诊断。",
+            details={"model_key": model_key, "model_label": selected_model.get("label") if selected_model else ""},
+        )
+
+    administrative_class, _ = require_active_class(db, user)
+    course = resolve_student_course(db, administrative_class, payload.course_id)
+    profile = serialize_learner_profile(db, student_id=user.id, course_id=course.id, class_id=administrative_class.id)
+    knowledge_state = _knowledge_state_for_node(profile, node_label)
+    mastery_score = _bounded_percent(knowledge_state.get("mastery_score") if knowledge_state else None)
+    prompt = _node_diagnosis_prompt(
+        node=payload.node,
+        graph=payload.graph,
+        related_edges=payload.related_edges,
+        profile=profile,
+        is_self_study=payload.is_self_study,
+    )
+    result = await generate_student_ai_reply(
+        db,
+        user=user,
+        class_id=administrative_class.id,
+        course=course,
+        message=prompt,
+        model_key=model_key,
+        page_context={
+            **payload.page_context,
+            "feature": "knowledge_graph_node_diagnosis",
+            "node_id": payload.node.get("id"),
+            "node_label": node_label,
+            "scope": "self_study" if payload.is_self_study else "course",
+        },
+        history=[],
+    )
+    structured = _parse_diagnosis_answer(str(result.get("answer", "")))
+    summary = _compact_text(structured.get("summary") or result.get("answer"), 800)
+    evidence = _safe_string_list(structured.get("evidence"), 6)
+    if not evidence:
+        evidence = [
+            "AI 模型已返回诊断正文，但未拆分独立判断依据；请以诊断摘要和引用资料为准。",
+        ]
+    citations = result.get("citations", [])
+    if citations:
+        evidence.extend(
+            f"引用资料：{_compact_text(citation.get('title'), 80)}"
+            for citation in citations[:3]
+            if isinstance(citation, dict)
+        )
+
+    return ok({
+        "status": "ready",
+        "source": "AI_MODEL",
+        "ai_generated": True,
+        "node_id": str(payload.node.get("id", "")),
+        "mastery_score": mastery_score,
+        "mastery_label": _compact_text(structured.get("mastery_label"), 40)
+        or _mastery_label_from_score(mastery_score, knowledge_state is not None),
+        "confidence": _bounded_ratio(result.get("confidence"), 0.0),
+        "summary": summary,
+        "evidence": evidence[:8],
+        "risk_factors": _safe_string_list(structured.get("risk_factors"), 5),
+        "misconceptions": _safe_string_list(structured.get("misconceptions"), 5),
+        "prerequisites": _safe_string_list(structured.get("prerequisites"), 5),
+        "next_actions": _safe_string_list(structured.get("next_actions") or result.get("suggested_actions"), 4),
+        "recommended_practice": _compact_text(structured.get("recommended_practice"), 220),
+        "profile_used": bool(result.get("profile_used")),
+        "source_used": bool(result.get("source_used")),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "model_provider": result.get("model_provider"),
+        "model_name": result.get("model_name"),
+        "model_key": result.get("model_key"),
+        "model_label": result.get("model_label"),
+        "run_id": result.get("run_id"),
+        "citations": citations,
+    })
 
 
 @router.get("/ai-chat/sessions")
@@ -1510,6 +1765,7 @@ def list_student_tasks(
                 "description": task.description,
                 "published_at": iso(assignment.published_at),
                 "start_at": iso(assignment_start_at(assignment)),
+                "schedule_status": assignment_schedule_status(assignment),
                 "deadline": iso(assignment.deadline),
                 "difficulty": task_difficulty(task),
                 "knowledge_points": task_knowledge_points(task),

@@ -105,6 +105,105 @@ def test_student_ai_chat_calls_openai_compatible_model(monkeypatch):
         db.close()
 
 
+def test_student_knowledge_graph_node_diagnosis_uses_ai_model(monkeypatch):
+    calls = []
+    monkeypatch.setenv("CODETRACK_MODEL_API_KEY", "sk-test")
+    monkeypatch.setenv("CODETRACK_MODEL_NAME", "test-chat-model")
+    monkeypatch.setenv("CODETRACK_MODEL_API_BASE_URL", "https://model.test/v1")
+    monkeypatch.setenv("CODETRACK_MODEL_GATEWAY_URL", "")
+    get_settings.cache_clear()
+
+    async def fake_post(url, *, json, headers=None, timeout=llm_client.DEFAULT_TIMEOUT):
+        prompt_text = json["messages"][1]["content"]
+        payload_text = prompt_text.split("\n\n", 1)[1]
+        payload = json_module.loads(payload_text)
+        calls.append(payload)
+        assert payload["page_context"]["feature"] == "knowledge_graph_node_diagnosis"
+        assert "边界测试" in payload["message"]
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json_module.dumps(
+                            {
+                                "answer": json_module.dumps(
+                                    {
+                                        "summary": "边界测试当前需要继续用等价类和临界输入验证，诊断依据来自课程资料和学习画像。",
+                                        "evidence": ["学习画像显示该节点已有提交证据。"],
+                                        "risk_factors": ["容易只测普通输入，遗漏临界值。"],
+                                        "misconceptions": ["把边界值测试理解成随便多测几个数。"],
+                                        "prerequisites": ["等价类划分"],
+                                        "next_actions": ["先复盘等价类划分", "完成 2 道临界值练习"],
+                                        "recommended_practice": "生成一组边界测试诊断题，并要求说明每个用例覆盖的边界。",
+                                        "mastery_label": "需要巩固",
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                "confidence": 0.82,
+                                "knowledge_source_ids": [],
+                                "personal_knowledge_source_ids": [],
+                                "suggested_actions": ["生成练习", "保存诊断"],
+                                "profile_used": True,
+                                "source_used": True,
+                                "safety_note": "",
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ],
+            "usage": {"prompt_tokens": 120, "completion_tokens": 42},
+        }
+
+    json_module = json
+    monkeypatch.setattr(llm_client, "_post_json", fake_post)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/student/knowledge-graphs/node-diagnosis",
+            headers=STUDENT,
+            json={
+                "course_id": "course_ds_001",
+                "model_key": "default",
+                "is_self_study": False,
+                "graph": {
+                    "title": "数据结构知识图谱",
+                    "course_name": "数据结构",
+                    "node_count": 2,
+                    "edge_count": 1,
+                    "nodes": [
+                        {"id": "n1", "label": "等价类划分"},
+                        {"id": "n2", "label": "边界测试"},
+                    ],
+                },
+                "node": {
+                    "id": "n2",
+                    "label": "边界测试",
+                    "type": "知识点",
+                    "description": "结合临界输入验证程序是否遗漏边界。",
+                    "difficulty": 3,
+                    "source": "custom",
+                },
+                "related_edges": [
+                    {"id": "e1", "source": "n1", "target": "n2", "type": "前驱", "label": "前驱"},
+                ],
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["ai_generated"] is True
+    assert data["source"] == "AI_MODEL"
+    assert data["summary"].startswith("边界测试当前需要继续")
+    assert data["risk_factors"] == ["容易只测普通输入，遗漏临界值。"]
+    assert data["next_actions"] == ["先复盘等价类划分", "完成 2 道临界值练习"]
+    assert data["recommended_practice"].startswith("生成一组边界测试")
+    assert data["citations"] == []
+    assert data["model_key"] == "default"
+    assert data["run_id"].startswith("run_")
+    assert calls
+
+
 def test_student_ai_chat_lists_switchable_models(monkeypatch):
     monkeypatch.setenv("CODETRACK_MODEL_API_KEY", "sk-general")
     monkeypatch.setenv("CODETRACK_MODEL_NAME", "general-chat-model")

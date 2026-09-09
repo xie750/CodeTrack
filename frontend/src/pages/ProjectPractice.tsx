@@ -31,6 +31,7 @@ import {
   ApiRequestError,
   api,
   type PracticeProjectActivity,
+  type PracticeProjectAutoAnalysis,
   type PracticeProjectDetail,
   type PracticeExternalSource,
   type PracticeProjectHome,
@@ -454,6 +455,8 @@ export default function ProjectPractice() {
   const [homeLoading, setHomeLoading] = useState(false);
   const [homeError, setHomeError] = useState<string | null>(null);
   const [startingProject, setStartingProject] = useState(false);
+  const [analysisRunning, setAnalysisRunning] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<PracticeProjectAutoAnalysis | null>(null);
 
   useEffect(() => {
     if (projectId) return;
@@ -494,6 +497,20 @@ export default function ProjectPractice() {
       setHomeError(apiErrorMessage(error));
     } finally {
       setStartingProject(false);
+    }
+  }
+
+  async function runAutoAnalysis() {
+    setAnalysisRunning(true);
+    setHomeError(null);
+    try {
+      const result = await api.analyzePracticeProjectFit();
+      setHomeData(result.home);
+      setAnalysisResult(result.analysis);
+    } catch (error) {
+      setHomeError(apiErrorMessage(error));
+    } finally {
+      setAnalysisRunning(false);
     }
   }
 
@@ -599,7 +616,15 @@ export default function ProjectPractice() {
             <section className="practice-stats-card">
               <div className="practice-section-title compact">
                 <span><LineChart size={19} /> 科研画像信号</span>
-                <em className="practice-section-meta">自动分析</em>
+                <button
+                  type="button"
+                  className="practice-section-action"
+                  disabled={analysisRunning}
+                  onClick={runAutoAnalysis}
+                >
+                  {analysisRunning ? <Loader2 className="practice-spin-icon" size={14} /> : <Sparkles size={14} />}
+                  {analysisRunning ? "分析中" : "自动分析"}
+                </button>
               </div>
               <div className="research-signal-list">
                 {researchSignals.map((signal) => (
@@ -610,6 +635,20 @@ export default function ProjectPractice() {
                   </article>
                 ))}
               </div>
+              {analysisResult ? (
+                <div className="research-analysis-result">
+                  <div>
+                    <strong>{analysisResult.title}</strong>
+                    <span>{Math.round(analysisResult.confidence * 100)}%</span>
+                  </div>
+                  <p>{analysisResult.summary}</p>
+                  <ul>
+                    {analysisResult.next_actions.slice(0, 3).map((action) => (
+                      <li key={action}>{action}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </section>
 
             <section className="practice-activity-card">

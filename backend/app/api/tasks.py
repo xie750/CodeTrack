@@ -27,6 +27,7 @@ from backend.app.services.audit import record_audit
 from backend.app.services.programming_specs import get_programming_spec
 from backend.app.services.submissions import create_submission_version, iso, run_execution
 from backend.app.services.assignment_schedule import (
+    assignment_schedule_status,
     assert_assignment_started,
     assignment_start_at,
 )
@@ -264,6 +265,7 @@ def get_task(
             "allow_hint_level_3": assignment.allow_hint_level_3,
             "published_at": iso(assignment.published_at),
             "start_at": iso(assignment_start_at(assignment)),
+            "schedule_status": assignment_schedule_status(assignment),
             "deadline": iso(assignment.deadline),
         }
     submission = db.scalar(

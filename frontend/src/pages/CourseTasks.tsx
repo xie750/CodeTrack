@@ -16,6 +16,14 @@ import {
 import { api, apiCache, LearningContext, StudentTaskCard } from "../api";
 import type { TaskOpenTarget } from "../App";
 import { StudentInlineNotice, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
+import {
+  formatStudentDateTime,
+  getScheduleInfo,
+  resolveVisibleTaskStatus,
+  visibleTaskStatusLabel,
+  visibleTaskStatusTone,
+  type StudentVisibleTaskStatus
+} from "../studentTaskSchedule";
 
 type PageProps = {
   onOpenWorkspace: (target?: TaskOpenTarget | string) => void;
@@ -24,7 +32,7 @@ type PageProps = {
 };
 
 type TaskTab = "全部课程" | string;
-type StatusFilter = "ALL" | "NOT_STARTED" | "IN_PROGRESS" | "SUBMITTED" | "COMPLETED" | "NEEDS_REVISION" | "EXPIRED";
+type StatusFilter = "ALL" | "PENDING_START" | "READY_TO_START" | "IN_PROGRESS" | "SUBMITTED" | "COMPLETED" | "NEEDS_REVISION" | "EXPIRED";
 type TypeFilter = "ALL" | "ASSIGNMENT" | "QUIZ" | "EXAM" | "SURVEY";
 type DeadlineFilter = "ALL" | "WEEK" | "SOON" | "OVERDUE";
 
@@ -32,7 +40,11 @@ type TaskViewItem = {
   task: StudentTaskCard;
   statusLabel: string;
   statusTone: string;
+  visibleStatus: StudentVisibleTaskStatus;
   typeLabel: string;
+  startLabel: string;
+  startTimeLabel: string;
+  startTone: string;
   dueLabel: string;
   dueTone: string;
   actionLabel: string;
@@ -41,7 +53,8 @@ type TaskViewItem = {
 
 const statusFilters: Array<{ key: StatusFilter; label: string }> = [
   { key: "ALL", label: "全部状态" },
-  { key: "NOT_STARTED", label: "未开始" },
+  { key: "READY_TO_START", label: "可开始" },
+  { key: "PENDING_START", label: "待开放" },
   { key: "IN_PROGRESS", label: "进行中" },
   { key: "SUBMITTED", label: "已提交" },
   { key: "COMPLETED", label: "已批阅" },
@@ -62,39 +75,6 @@ const deadlineFilters: Array<{ key: DeadlineFilter; label: string }> = [
   { key: "SOON", label: "即将截止" },
   { key: "OVERDUE", label: "已过期" }
 ];
-
-function formatDeadline(value: string | null) {
-  if (!value) return "未设置";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false
-  }).format(date);
-}
-
-function statusText(status: string) {
-  const map: Record<string, string> = {
-    NOT_STARTED: "未开始",
-    IN_PROGRESS: "进行中",
-    SUBMITTED: "已提交",
-    NEEDS_REVISION: "迟交",
-    COMPLETED: "已批阅",
-    EXPIRED: "已过期"
-  };
-  return map[status] ?? status;
-}
-
-function statusTone(status: string) {
-  if (status === "COMPLETED") return "green";
-  if (status === "SUBMITTED") return "cyan";
-  if (status === "IN_PROGRESS") return "orange";
-  if (status === "NEEDS_REVISION" || status === "EXPIRED") return "red";
-  return "blue";
-}
 
 function taskTypeText(task: StudentTaskCard) {
   if (task.task_type === "QUIZ") return "测验";
@@ -263,7 +243,7 @@ export default function CourseTasks({ onOpenWorkspace, courseId, embedded = fals
   const courseTabs = useMemo(() => ["全部课程", ...(context?.courses.map((course) => course.course_name) ?? [])], [context]);
   const currentCourse = selectedTab === "全部课程" ? null : context?.courses.find((course) => course.course_name === selectedTab);
   const allCount = tasks.length;
-  const inProgress = tasks.filter((task) => ["IN_PROGRESS"].includes(task.status)).length;
+  const readyToStart = tasks.filter((task) => resolveVisibleTaskStatus(task.status, task.start_at) === "READY_TO_START").length;
   const submitted = tasks.filter((task) => task.status === "SUBMITTED").length;
   const reviewed = tasks.filter((task) => task.status === "COMPLETED").length;
   const late = tasks.filter((task) => task.status === "NEEDS_REVISION" || task.status === "EXPIRED" || isOverdue(task.deadline)).length;
@@ -272,14 +252,27 @@ export default function CourseTasks({ onOpenWorkspace, courseId, embedded = fals
     () =>
       tasks.map((task) => {
         const due = dueInfo(task.deadline);
+        const schedule = getScheduleInfo(task.start_at);
+        const visibleStatus = resolveVisibleTaskStatus(task.status, task.start_at);
         return {
           task,
-          statusLabel: statusText(task.status),
-          statusTone: statusTone(task.status),
+          statusLabel: visibleStatus === "COMPLETED" ? "已批阅" : visibleTaskStatusLabel(visibleStatus),
+          statusTone: visibleTaskStatusTone(visibleStatus),
+          visibleStatus,
           typeLabel: taskTypeText(task),
+          startLabel: schedule.label,
+          startTimeLabel: schedule.absoluteLabel,
+          startTone: schedule.tone,
           dueLabel: due.label,
           dueTone: due.tone,
-          actionLabel: task.status === "COMPLETED" || task.status === "SUBMITTED" ? "查看详情" : "进入任务",
+          actionLabel:
+            visibleStatus === "COMPLETED" || visibleStatus === "SUBMITTED"
+              ? "查看结果"
+              : visibleStatus === "PENDING_START"
+                ? "查看安排"
+                : task.workspace_type === "QUESTION_SET" || task.task_type === "QUIZ" || task.task_type === "EXAM"
+                  ? "开始作答"
+                  : "开始编程",
           progress: progressOf(task)
         };
       }),
@@ -298,7 +291,7 @@ export default function CourseTasks({ onOpenWorkspace, courseId, embedded = fals
         item.typeLabel,
         ...task.knowledge_points
       ].some((value) => value.toLocaleLowerCase("zh-CN").includes(keyword));
-      const matchesStatus = statusFilter === "ALL" || task.status === statusFilter;
+      const matchesStatus = statusFilter === "ALL" || item.visibleStatus === statusFilter;
       const matchesType = typeFilter === "ALL" || taskTypeKey(task) === typeFilter;
       const matchesDeadline =
         deadlineFilter === "ALL" ||
@@ -334,7 +327,7 @@ export default function CourseTasks({ onOpenWorkspace, courseId, embedded = fals
 
   const stats = [
     { label: "全部任务", value: allCount, icon: <ClipboardList size={24} />, tone: "blue" },
-    { label: "进行中", value: inProgress, icon: <CalendarDays size={24} />, tone: "orange" },
+    { label: "可开始", value: readyToStart, icon: <CalendarDays size={24} />, tone: "orange" },
     { label: "已提交", value: submitted, icon: <Send size={24} />, tone: "green" },
     { label: "已批阅", value: reviewed, icon: <CheckCircle2 size={24} />, tone: "purple" },
     { label: "迟交", value: late, icon: <XCircle size={24} />, tone: "red" }
@@ -426,6 +419,7 @@ export default function CourseTasks({ onOpenWorkspace, courseId, embedded = fals
             <span>任务名称</span>
             <span>类型</span>
             <span>任务状态</span>
+            <span>开始时间</span>
             <span>截止日期</span>
             <span>操作</span>
           </div>
@@ -460,6 +454,7 @@ function CourseTaskLoading() {
         <span>任务名称</span>
         <span>类型</span>
         <span>任务状态</span>
+        <span>开始时间</span>
         <span>截止日期</span>
         <span>操作</span>
       </div>
@@ -494,10 +489,15 @@ function TaskRow({ item, opening, disabled, onOpen }: { item: TaskViewItem; open
       </div>
       <span className="course-task-type">{item.typeLabel}</span>
       <span className={`course-task-status ${item.statusTone}`}>{item.statusLabel}</span>
+      <span className={`course-task-start ${item.startTone}`}>
+        <CalendarDays size={15} />
+        <span>{item.startLabel}</span>
+        <small>开始：{item.startTimeLabel}</small>
+      </span>
       <span className={`course-task-due ${item.dueTone}`}>
         <TimerReset size={15} />
         <span>{item.dueLabel}</span>
-        <small>{formatDeadline(task.deadline)}</small>
+        <small>截止：{formatStudentDateTime(task.deadline)}</small>
       </span>
       <button type="button" disabled={disabled} onClick={onOpen}>
         {opening ? <Loader2 size={15} /> : null}

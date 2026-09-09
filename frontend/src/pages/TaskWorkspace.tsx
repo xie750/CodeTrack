@@ -4,6 +4,7 @@ import * as THREE from "three";
 import {
   Activity,
   ArrowLeft,
+  Bookmark,
   BookOpen,
   Bot,
   Brain,
@@ -12,6 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Circle,
+  Clock3,
   Code2,
   Database,
   Eye,
@@ -41,6 +43,8 @@ import { api, LearningContext, TaskDetail, VersionResult, Diagnosis, Hint, Agent
 import AIContentDisclosure from "../components/AIContentDisclosure";
 import StudentRouteBreadcrumb from "../components/StudentRouteBreadcrumb";
 import { StudentState, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
+import { favoriteRecordId, readStudentFavorites, removeStudentFavorite, subscribeStudentFavorites, upsertStudentFavorite } from "../studentFavorites";
+import { formatStudentDateTime, getScheduleInfo, resolveVisibleTaskStatus, visibleTaskStatusLabel } from "../studentTaskSchedule";
 
 type PageProps = {
   taskId: string;
@@ -1892,6 +1896,7 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
   const [selectedLanguage, setSelectedLanguage] = useState("CPP");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [sourceCode, setSourceCode] = useState("");
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(() => new Set(readStudentFavorites().map((item) => item.id)));
   const [runState, setRunState] = useState<RunState>("IDLE");
   const [runMessage, setRunMessage] = useState("等待提交");
   const [activeResultTab, setActiveResultTab] = useState<ResultPanelTab>("cases");
@@ -1982,6 +1987,12 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
   useEffect(() => {
     window.localStorage.setItem(WORKSPACE_LAYOUT_KEY, JSON.stringify(layout));
   }, [layout]);
+
+  useEffect(() => {
+    return subscribeStudentFavorites(() => {
+      setFavoriteIds(new Set(readStudentFavorites().map((item) => item.id)));
+    });
+  }, []);
 
   useEffect(() => {
     if (!algorithmScenePlaying || !algorithmScene) return undefined;
@@ -2234,6 +2245,11 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
   }, [selectedCaseIndex, teacherCases.length]);
 
   const knowledgeTags = task?.learning_objectives.length ? task.learning_objectives : ["等待任务知识点"];
+  const taskFavoriteId = task ? favoriteRecordId("CODING_TASK", assignmentId || task.task_id) : "";
+  const taskFavorited = Boolean(task && favoriteIds.has(taskFavoriteId));
+  const scheduleInfo = getScheduleInfo(task?.assignment?.start_at);
+  const assignmentOpen = scheduleInfo.isOpen;
+  const visibleProgressStatus = task ? resolveVisibleTaskStatus(latestResult?.submission_status ?? task.current_progress.status, task.assignment?.start_at) : "NOT_STARTED";
   const problemWidth = resolveProblemWidth(metrics, layout.problemRatio);
   const editorHeight = resolveEditorHeight(metrics, layout.editorRatio);
   const workspaceStyle = {
@@ -2241,6 +2257,50 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
     "--program-editor-height": `${editorHeight}px`
   } as CSSProperties;
   const executionInFlight = runState === "QUEUED" || runState === "RUNNING";
+
+  function toggleTaskFavorite() {
+    if (!task) return;
+    const id = favoriteRecordId("CODING_TASK", assignmentId || task.task_id);
+    if (favoriteIds.has(id)) {
+      removeStudentFavorite(id);
+      setFavoriteIds((current) => {
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      });
+      setRunMessage("已取消收藏任务");
+      return;
+    }
+
+    const course = context?.courses.find((item) => item.course_id === task.course_id);
+    const total = Math.max(task.current_progress.total_required_count, 1);
+    const passed = task.current_progress.passed_count;
+    const progressPercent = Math.round((passed / total) * 100);
+    upsertStudentFavorite({
+      id,
+      kind: "CODING_TASK",
+      title: task.title,
+      description: task.description,
+      courseId: task.course_id,
+      courseName: course?.course_name ?? "人工智能专业课程",
+      className: context?.student.class_name ?? "课程任务",
+      teacherName: course?.teacher_name ?? "教师端",
+      taskId: task.task_id,
+      assignmentId,
+      workspaceType: "CODING",
+      taskType: "CODING",
+      difficulty: "MEDIUM",
+      knowledgePoints: task.learning_objectives,
+      publishedAt: null,
+      progressPercent,
+      countLabel: `${passed}/${task.current_progress.total_required_count}`,
+      reason: latestResult && !isPassed(latestResult) ? "错题收藏" : "手动收藏",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    setFavoriteIds((current) => new Set(current).add(id));
+    setRunMessage(latestResult && !isPassed(latestResult) ? "已收藏到错题复盘" : "已收藏任务");
+  }
 
   function updateCurrentDraft(value: string) {
     setSourceCode(value);
@@ -2263,7 +2323,7 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
   }
 
   async function submitCode() {
-    if (!task || runState === "QUEUED" || runState === "RUNNING") return;
+    if (!task || !assignmentOpen || runState === "QUEUED" || runState === "RUNNING") return;
     const startedAt = new Date().toISOString();
     setRunState("QUEUED");
     setRunMessage("已提交，等待执行");
@@ -2480,11 +2540,22 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
                 <div className="program-title-line">
                   <div>
                     <h1>编程任务：{task.title}</h1>
-                    <span>状态：<b>{latestResult?.submission_status ?? task.current_progress.status}</b></span>
+                    <span>状态：<b>{visibleTaskStatusLabel(visibleProgressStatus)}</b></span>
+                    <span>开始：<b>{formatStudentDateTime(task.assignment?.start_at, "未设置")}</b></span>
+                    <span>截止：<b>{formatStudentDateTime(task.assignment?.deadline, "未设置")}</b></span>
                   </div>
                   <button className="program-scene-shortcut" type="button" onClick={openAlgorithmScene}>
                     <Box size={16} />
                     {algorithmScene ? "查看算法演示" : "生成算法演示"}
+                  </button>
+                  <button
+                    className={`program-favorite-shortcut ${taskFavorited ? "active" : ""}`}
+                    type="button"
+                    onClick={toggleTaskFavorite}
+                    aria-pressed={taskFavorited}
+                  >
+                    <Bookmark size={16} fill={taskFavorited ? "currentColor" : "none"} />
+                    {taskFavorited ? "已收藏" : latestResult && !isPassed(latestResult) ? "收藏错题" : "收藏任务"}
                   </button>
                 </div>
               </div>
@@ -2492,6 +2563,15 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
 
             <section className="program-grid" data-ai-collapsed={aiCollapsed ? "true" : "false"} ref={gridRef}>
               <article className="program-card program-problem">
+                {!assignmentOpen ? (
+                  <section className="program-schedule-notice">
+                    <Clock3 size={16} />
+                    <div>
+                      <strong>任务尚未开放</strong>
+                      <p>开始时间：{scheduleInfo.absoluteLabel}。开放前可查看题目说明，暂不能编辑、运行或提交。</p>
+                    </div>
+                  </section>
+                ) : null}
                 <h2>题目描述</h2>
                 <p>{task.description}</p>
 
@@ -2547,15 +2627,16 @@ export default function TaskWorkspace({ taskId, assignmentId, onBack }: PageProp
                         lineHeight: 21,
                         scrollBeyondLastLine: false,
                         automaticLayout: true,
-                        tabSize: 2
+                        tabSize: 2,
+                        readOnly: !assignmentOpen
                       }}
                       onChange={(value) => updateCurrentDraft(value ?? "")}
                     />
                   </div>
                   <footer>
-                    <button type="button" onClick={() => updateCurrentDraft(sourceCode)}><Save size={16} /> 保存草稿</button>
-                    <button className="primary" type="button" disabled={runState === "QUEUED" || runState === "RUNNING"} onClick={submitCode}><Play size={16} /> 运行代码</button>
-                    <button className="primary" type="button" disabled={runState === "QUEUED" || runState === "RUNNING"} onClick={submitCode}><Upload size={16} /> 提交判题</button>
+                    <button type="button" disabled={!assignmentOpen} onClick={() => updateCurrentDraft(sourceCode)}><Save size={16} /> 保存草稿</button>
+                    <button className="primary" type="button" disabled={!assignmentOpen || runState === "QUEUED" || runState === "RUNNING"} onClick={submitCode}><Play size={16} /> {assignmentOpen ? "运行代码" : "未开放"}</button>
+                    <button className="primary" type="button" disabled={!assignmentOpen || runState === "QUEUED" || runState === "RUNNING"} onClick={submitCode}><Upload size={16} /> 提交判题</button>
                   </footer>
                 </article>
 

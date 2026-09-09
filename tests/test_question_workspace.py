@@ -91,6 +91,10 @@ def test_question_workspace_blocks_save_and_submit_before_start_time():
             db.close()
 
         try:
+            workspace = c.get(f"/api/v1/student/assignments/{assignment_id}/workspace")
+            assert workspace.status_code == 200
+            assert workspace.json()["data"]["assignment"]["schedule_status"] == "PENDING_START"
+
             draft = c.post(
                 f"/api/v1/student/assignments/{assignment_id}/answers",
                 json={"answers": answer_payload},

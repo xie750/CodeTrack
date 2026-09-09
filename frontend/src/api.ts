@@ -231,6 +231,8 @@ export type StudentTaskCard = {
   assignment_mode: string;
   description: string;
   published_at: string | null;
+  start_at: string | null;
+  schedule_status?: string;
   deadline: string | null;
   difficulty: string;
   knowledge_points: string[];
@@ -476,6 +478,18 @@ export type PracticeResearchRecommendation = {
   recommendation_reason: string;
   signals: PracticeResearchSignal[];
   confidence: number;
+};
+
+export type PracticeProjectAutoAnalysis = {
+  project_id: string | null;
+  title: string;
+  summary: string;
+  confidence: number;
+  signals: PracticeResearchSignal[];
+  fit_reasons: string[];
+  risk_flags: string[];
+  next_actions: string[];
+  generated_at: string | null;
 };
 
 export type PracticeProjectHome = {
@@ -785,6 +799,32 @@ export type StudentAiChatResponse = {
   assistant_message_id?: string;
 };
 
+export type StudentKnowledgeNodeDiagnosisResponse = {
+  status: "ready";
+  source: "AI_MODEL" | string;
+  ai_generated: boolean;
+  node_id: string;
+  mastery_score: number;
+  mastery_label: string;
+  confidence: number;
+  summary: string;
+  evidence: string[];
+  risk_factors: string[];
+  misconceptions: string[];
+  prerequisites: string[];
+  next_actions: string[];
+  recommended_practice: string;
+  profile_used: boolean;
+  source_used: boolean;
+  generated_at: string;
+  model_provider?: string;
+  model_name?: string;
+  model_key?: string;
+  model_label?: string;
+  run_id?: string;
+  citations: StudentAiChatCitation[];
+};
+
 export type StudentAiModelOption = {
   key: "default" | "fine_tuned" | string;
   label: string;
@@ -1045,6 +1085,15 @@ export type TaskDetail = {
     total_required_count: number;
     highest_hint_level: number;
   };
+  assignment?: {
+    assignment_id: string;
+    assignment_mode: string;
+    allow_hint_level_3: boolean;
+    published_at: string | null;
+    start_at: string | null;
+    schedule_status?: string;
+    deadline: string | null;
+  };
   teacher_review?: {
     grade: null | {
       id: string;
@@ -1190,6 +1239,8 @@ export type QuestionWorkspace = {
     assignment_mode: string;
     allow_hint_level_3: boolean;
     published_at: string | null;
+    start_at: string | null;
+    schedule_status?: string;
     deadline: string | null;
   };
   task: {
@@ -1218,6 +1269,7 @@ export type QuestionWorkspace = {
     submitted_at: string | null;
   };
   questions: QuestionItem[];
+  ai_feedback: QuestionAiFeedback | null;
 };
 
 export type QuestionItem = {
@@ -1250,6 +1302,7 @@ export type SubmitQuestionResult = {
   total_count: number;
   submitted_at: string | null;
   questions: QuestionItem[];
+  ai_feedback: QuestionAiFeedback | null;
   profile_signal: {
     overall_progress: number;
     logic_error_rate: number;
@@ -1257,6 +1310,33 @@ export type SubmitQuestionResult = {
     summary: string;
     recommendation: string;
   };
+};
+
+export type QuestionAiFeedback = {
+  status: string;
+  workflow_type: string;
+  source: string;
+  summary: string;
+  score_basis: string;
+  weak_knowledge_points: string[];
+  wrong_question_explanations: Array<{
+    question_id: string;
+    question_index: number;
+    error_type: string;
+    error_label: string;
+    knowledge_points: string[];
+    explanation: string;
+    next_step: string;
+    confidence: number;
+  }>;
+  recommended_actions: Array<{
+    action: string;
+    label: string;
+    reason: string;
+  }>;
+  risk_flags: string[];
+  confidence: number;
+  needs_teacher_review: boolean;
 };
 
 export type GeneratedPracticeWorkspace = {
@@ -1636,8 +1716,32 @@ export const api = {
     cachedGet<StudentInterventionCenter>(studentInterventionsUrl(courseId), 10_000),
   getStudentKnowledgeGraph: (courseId: string) =>
     request<StudentKnowledgeGraph>(studentKnowledgeGraphUrl(courseId)),
+  createStudentKnowledgeNodeDiagnosis: (payload: {
+    course_id?: string;
+    model_key?: string;
+    is_self_study: boolean;
+    graph: Record<string, unknown>;
+    node: Record<string, unknown>;
+    related_edges: Array<Record<string, unknown>>;
+    page_context?: Record<string, unknown>;
+  }) =>
+    request<StudentKnowledgeNodeDiagnosisResponse>("/api/v1/student/knowledge-graphs/node-diagnosis", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }),
   getPracticeProjectHome: () =>
     cachedGet<PracticeProjectHome>("/api/v1/student/practice-projects"),
+  analyzePracticeProjectFit: async () => {
+    const result = await request<{
+      analysis: PracticeProjectAutoAnalysis;
+      activity: PracticeProjectActivity | null;
+      home: PracticeProjectHome;
+    }>("/api/v1/student/practice-projects/auto-analysis", { method: "POST" });
+    clearApiCache((url) => url.startsWith("/api/v1/student/practice-projects"));
+    clearApiCache((url) => url.startsWith("/api/v1/student/profile"));
+    return result;
+  },
   getPracticeProjectDetail: (projectId: string) =>
     cachedGet<PracticeProjectDetail>(studentPracticeProjectDetailUrl(projectId)),
   startFirstPracticeProject: async () => {

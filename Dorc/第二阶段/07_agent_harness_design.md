@@ -41,6 +41,9 @@
 | Artifact Generator Agent | 生成笔记、卡片、思维导图、PPT 大纲 | P0 |
 | Learner Profile Agent | 更新学习画像 | P0 |
 | Citation Guard Agent | 检查引用来源和回答可信度 | P1 |
+| Rubric Grading Agent | 面向助教场景，对简答、报告和主观题按评分标准生成 AI 预评 | P0 |
+| Feedback Draft Agent | 为教师批改生成面向学生的评语草稿和改进建议 | P0 |
+| Grading Risk Guard Agent | 标记低置信度、引用不足、答案配置异常或疑似高相似风险 | P0 |
 
 ## 5. Learning Navigator Agent
 
@@ -323,6 +326,22 @@ safe_to_show
 -> Learner Profile Agent
 ```
 
+### 12.4 助教智能批改链路
+
+```text
+学生提交题目或作业
+-> Rule Grader
+-> Rubric Grading Agent
+-> Citation Guard Agent
+-> Grading Risk Guard Agent
+-> Feedback Draft Agent
+-> Teacher Review
+-> Learner Profile Agent
+-> Learning Navigator Agent
+```
+
+客观题和标准填空题由规则先给出事实得分，AI 只负责错因解释和建议。简答、报告和综合作业由 Rubric Grading Agent 给出预评分、证据和缺失点，但最终分数必须由教师确认后发布。
+
 ## 13. Harness 实现建议
 
 第一版实现时，不要求所有 agent 都真实调用大模型。
@@ -339,9 +358,12 @@ safe_to_show
   Learner Profile Agent
   Artifact Generator Agent
   Citation Guard Agent
+  Feedback Draft Agent
+  Grading Risk Guard Agent
 
 可替换接口:
   Concept Tutor Agent
+  Rubric Grading Agent
 ```
 
 所有 agent 都应暴露稳定输入输出结构，方便后续从 mock 切换到真实模型、RAG 或工作流编排。

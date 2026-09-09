@@ -30,6 +30,12 @@ import { api, apiCache, LearningContext, StudentInterventionCenter, StudentProfi
 import type { TaskOpenTarget } from "../App";
 import StudentRouteBreadcrumb from "../components/StudentRouteBreadcrumb";
 import { StudentInlineNotice, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
+import {
+  formatStudentDateTime,
+  getScheduleInfo,
+  resolveVisibleTaskStatus,
+  visibleTaskStatusLabel
+} from "../studentTaskSchedule";
 import CourseTasks from "./CourseTasks";
 import LearningProfile from "./LearningProfile";
 import LearningLibrary from "./LearningLibrary";
@@ -56,16 +62,8 @@ function progressOf(task: StudentTaskCard) {
   return Math.round((task.passed_count / Math.max(task.total_required_count, 1)) * 100);
 }
 
-function statusLabel(status: string) {
-  const map: Record<string, string> = {
-    NOT_STARTED: "未开始",
-    IN_PROGRESS: "进行中",
-    SUBMITTED: "已提交",
-    NEEDS_REVISION: "待修正",
-    COMPLETED: "已完成",
-    EXPIRED: "已截止"
-  };
-  return map[status] ?? status;
+function statusLabel(task: StudentTaskCard) {
+  return visibleTaskStatusLabel(resolveVisibleTaskStatus(task.status, task.start_at));
 }
 
 function taskTypeLabel(task: StudentTaskCard) {
@@ -82,16 +80,14 @@ function taskIcon(task: StudentTaskCard) {
 
 function taskTone(task: StudentTaskCard, index: number) {
   if (task.status === "COMPLETED") return "green";
+  if (resolveVisibleTaskStatus(task.status, task.start_at) === "PENDING_START") return "blue";
   if (task.workspace_type === "QUESTION_SET" || task.task_type === "QUIZ" || task.task_type === "EXAM") return "orange";
   if (task.task_type === "RESOURCE") return "cyan";
   return index % 2 === 0 ? "blue" : "purple";
 }
 
 function deadlineLabel(value: string | null) {
-  if (!value) return "暂无截止";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return `${date.getMonth() + 1}月${date.getDate()}日 ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  return formatStudentDateTime(value, "暂无截止");
 }
 
 function clampPercent(value: number) {
@@ -247,9 +243,13 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
   }, [courseId, reloadKey]);
 
   const course = context?.courses.find((item) => item.course_id === courseId);
-  const activeTask = tasks.find((task) => task.status !== "COMPLETED") ?? tasks[0];
+  const activeTask =
+    tasks.find((task) => resolveVisibleTaskStatus(task.status, task.start_at) === "READY_TO_START") ??
+    tasks.find((task) => task.status !== "COMPLETED" && resolveVisibleTaskStatus(task.status, task.start_at) !== "PENDING_START") ??
+    tasks.find((task) => task.status !== "COMPLETED") ??
+    tasks[0];
   const completed = tasks.filter((task) => task.status === "COMPLETED").length;
-  const inProgress = tasks.filter((task) => ["IN_PROGRESS", "SUBMITTED", "NEEDS_REVISION"].includes(task.status)).length;
+  const inProgress = tasks.filter((task) => ["READY_TO_START", "IN_PROGRESS", "SUBMITTED", "NEEDS_REVISION"].includes(resolveVisibleTaskStatus(task.status, task.start_at))).length;
   const pending = tasks.filter((task) => task.status !== "COMPLETED").length;
   const progress = tasks.length ? Math.round((completed / tasks.length) * 100) : 0;
   const knowledgePoints = Array.from(new Set(tasks.flatMap((task) => task.knowledge_points)));
@@ -273,7 +273,7 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
   ];
 
   const announcements = [
-    activeTask ? { title: `${activeTask.title} 已发布`, date: activeTask.published_at ? deadlineLabel(activeTask.published_at) : "待同步" } : null,
+    activeTask ? { title: `${activeTask.title} 开始信息`, date: getScheduleInfo(activeTask.start_at).isOpen ? `已开放：${deadlineLabel(activeTask.start_at)}` : `将开放：${deadlineLabel(activeTask.start_at)}` } : null,
     activeTask?.deadline ? { title: `${taskTypeLabel(activeTask)} 截止提醒`, date: deadlineLabel(activeTask.deadline) } : null,
     knowledgePoints[0] ? { title: `${knowledgePoints[0]} 知识点已更新`, date: "最近" } : null,
     profile ? { title: "学习画像已生成", date: "持续更新" } : null
@@ -345,9 +345,9 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
                   <span className={`course-task-icon ${taskTone(task, index)}`}>{taskIcon(task)}</span>
                   <span>
                     <strong>{task.title}</strong>
-                    <small>{taskTypeLabel(task)} <i /> 截止时间：{deadlineLabel(task.deadline)}</small>
+                    <small>{taskTypeLabel(task)} <i /> 开始：{deadlineLabel(task.start_at)} <i /> 截止：{deadlineLabel(task.deadline)}</small>
                   </span>
-                  <em className={task.status === "COMPLETED" ? "done" : ""}>{statusLabel(task.status)}</em>
+                  <em className={task.status === "COMPLETED" ? "done" : ""}>{statusLabel(task)}</em>
                 </button>
               ))}
               <button className="course-dashboard-all" type="button" onClick={() => navigate(coursePath(courseId, "tasks"))}>

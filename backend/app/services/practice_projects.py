@@ -717,6 +717,113 @@ def list_practice_projects(db: Session, student_id: str, class_id: str) -> dict:
     }
 
 
+def analyze_practice_project_fit(db: Session, student: User, class_id: str) -> dict:
+    home = list_practice_projects(db, student_id=student.id, class_id=class_id)
+    recommended_project_id = home.get("recommended_project_id")
+    if not recommended_project_id:
+        return {
+            "analysis": {
+                "project_id": None,
+                "title": "科研画像信号不足",
+                "summary": "当前还没有可进入的科研项目。建议先完成课程任务、自主学习或资料沉淀，让系统获得足够画像信号后再自动推荐课题。",
+                "confidence": 0,
+                "signals": [],
+                "fit_reasons": ["暂无已绑定的科研课题", "课程任务和资料沉淀记录还不足以支撑推荐"],
+                "risk_flags": ["缺少可沉淀的项目活动记录"],
+                "next_actions": ["先完成一项课程任务", "保存一份学习资料", "回到科研入口生成第一个科研课题"],
+                "generated_at": iso(utc_now()),
+            },
+            "activity": None,
+            "home": home,
+        }
+
+    row = db.execute(
+        project_scope_query(student.id, class_id).where(PracticeProject.id == recommended_project_id)
+    ).first()
+    if row is None:
+        raise ApiError(404, "PRACTICE_PROJECT_NOT_FOUND", "科研项目实践不存在或当前学生无权访问。")
+
+    project, enrollment, _ = row
+    now = utc_now()
+    recommendation = home.get("research_recommendation") or {}
+    signals = recommendation.get("signals") or []
+    brief = research_brief_for_project(project)
+    progress = int(enrollment.progress if enrollment else 0)
+    confidence = float(recommendation.get("confidence") or brief.get("confidence") or 0.72)
+    next_actions = list(brief.get("next_actions") or [])[:3]
+    if progress < 30:
+        next_actions = ["先补一份前沿追踪笔记", *next_actions][:3]
+    elif progress >= 70:
+        next_actions = ["整理阶段成果并提交审核", *next_actions][:3]
+
+    fit_reasons = [
+        str(recommendation.get("profile_fit") or brief.get("profile_fit")),
+        f"当前项目处于「{project.current_stage}」，已完成度 {progress}%，适合继续沿同一科研轨道推进。",
+        "系统已把课程表现、资料沉淀、实验记录和提交质量合并为可复查的画像信号。",
+    ]
+    risk_flags = []
+    if progress < 40:
+        risk_flags.append("阶段证据偏少，需要先补前沿资料或实验记录。")
+    if enrollment and enrollment.submission_count == 0:
+        risk_flags.append("还没有正式阶段提交，建议尽快用文件或材料沉淀成果。")
+    if not risk_flags:
+        risk_flags.append("未发现明显偏离，继续按当前课题轨道推进。")
+
+    summary = (
+        f"系统复核后建议继续推进「{project.title}」。"
+        f"该课题与当前画像的匹配置信度为 {round(confidence * 100)}%，"
+        "下一步应优先把前沿来源、实验记录和阶段成果绑定到同一项目中。"
+    )
+    analysis = {
+        "project_id": project.id,
+        "title": f"{project.title} · 科研画像自动分析",
+        "summary": summary,
+        "confidence": confidence,
+        "signals": signals,
+        "fit_reasons": fit_reasons,
+        "risk_flags": risk_flags,
+        "next_actions": next_actions,
+        "generated_at": iso(now),
+    }
+
+    activity = PracticeProjectActivity(
+        id=prefixed_id("practice_activity"),
+        project_id=project.id,
+        student_id=student.id,
+        activity_type="analysis",
+        text=f"自动分析了「{project.title}」科研画像与下一步路径",
+        time_label="刚刚",
+        created_at=now,
+    )
+    db.add(activity)
+    _update_enrollment_for_activity(
+        enrollment,
+        progress_delta=1,
+        experiment_delta=0,
+        summary="完成科研画像自动分析并更新下一步建议",
+    )
+    _add_learner_event(
+        db,
+        project=project,
+        student_id=student.id,
+        class_id=class_id,
+        event_type="RESEARCH_PROFILE_ANALYZED",
+        payload={
+            "project_id": project.id,
+            "confidence": confidence,
+            "signals": signals,
+            "next_actions": next_actions,
+            "risk_flags": risk_flags,
+        },
+    )
+    db.flush()
+    return {
+        "analysis": analysis,
+        "activity": serialize_activity(activity),
+        "home": list_practice_projects(db, student_id=student.id, class_id=class_id),
+    }
+
+
 def start_first_practice_project(db: Session, student: User, class_id: str) -> dict:
     existing = db.execute(project_scope_query(student.id, class_id)).first()
     if existing is not None:

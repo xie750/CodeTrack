@@ -17,6 +17,10 @@ def assignment_start_at(assignment: TaskAssignment) -> datetime:
     return as_utc(getattr(assignment, "start_at", None) or assignment.published_at) or utc_now()
 
 
+def assignment_schedule_status(assignment: TaskAssignment) -> str:
+    return "PENDING_START" if assignment_start_at(assignment) > utc_now() else "OPEN"
+
+
 def assert_assignment_started(assignment: TaskAssignment) -> None:
     start_at = assignment_start_at(assignment)
     now = utc_now()

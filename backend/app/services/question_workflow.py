@@ -24,6 +24,7 @@ from backend.app.models import (
 )
 from backend.app.models.entities import utc_now
 from backend.app.services.assignment_schedule import (
+    assignment_schedule_status,
     assert_assignment_started,
     assignment_start_at,
 )
@@ -176,6 +177,7 @@ def question_workspace_payload(
             "allow_hint_level_3": assignment.allow_hint_level_3,
             "published_at": iso(assignment.published_at),
             "start_at": iso(assignment_start_at(assignment)),
+            "schedule_status": assignment_schedule_status(assignment),
             "deadline": iso(assignment.deadline),
         },
         "task": {
@@ -212,6 +214,18 @@ def question_workspace_payload(
             )
             for question in questions
         ],
+        "ai_feedback": (
+            build_question_ai_feedback(
+                task,
+                questions,
+                results,
+                attempt.score or 0,
+                attempt.max_score,
+                attempt.correct_count,
+            )
+            if attempt and attempt.status == "SUBMITTED"
+            else None
+        ),
     }
 
 
@@ -288,6 +302,137 @@ def mastery_state(score: float) -> str:
     if score >= 60:
         return "DEVELOPING"
     return "WEAK"
+
+
+def _question_error_label(question: Question) -> str:
+    if question.error_type:
+        return ERROR_LABELS.get(question.error_type, question.error_type)
+    if question.question_type in FILL_QUESTION_TYPES:
+        return "标准答案匹配不足"
+    if question.question_type == "MULTIPLE_CHOICE":
+        return "多选项组合判断有误"
+    return "关键概念判断有误"
+
+
+def _question_feedback_text(question: Question, result: dict) -> str:
+    points = loads_json(question.knowledge_points, [])
+    point_text = "、".join(points[:2]) if points else "本题相关知识点"
+    analysis = str(result.get("analysis") or "").strip()
+    if question.question_type in FILL_QUESTION_TYPES:
+        return (
+            f"这道填空题按标准答案匹配未通过，建议先复盘 {point_text} 的定义、关键词和表达方式。"
+            + (f" 题目解析提示：{analysis}" if analysis else "")
+        )
+    if question.question_type == "MULTIPLE_CHOICE":
+        return (
+            f"这道多选题需要完整选中所有正确项且不能多选，当前错误通常说明 {point_text} 的边界或包含关系还不够稳定。"
+            + (f" 题目解析提示：{analysis}" if analysis else "")
+        )
+    return (
+        f"这道题反映出 {point_text} 的判断还需要巩固。建议对照题干关键词，先说明概念，再判断选项。"
+        + (f" 题目解析提示：{analysis}" if analysis else "")
+    )
+
+
+def build_question_ai_feedback(
+    task: Task,
+    questions: list[Question],
+    results: dict,
+    earned_score: float,
+    total_score: float,
+    correct_count: int,
+) -> dict:
+    """客观题批改的第一版 AI 反馈契约。
+
+    规则判分仍是事实来源；这里先用确定性兜底产出错因解释、知识点映射和下一步动作。
+    """
+    wrong_questions = [question for question in questions if not results.get(question.id, {}).get("is_correct")]
+    score_percent = round((earned_score / max(total_score, 1)) * 100, 1)
+    weak_points = sorted(
+        {
+            point
+            for question in wrong_questions
+            for point in loads_json(question.knowledge_points, [])
+            if point
+        }
+    )
+    risk_flags = []
+    if any(question.question_type in FILL_QUESTION_TYPES for question in wrong_questions):
+        risk_flags.append("FILL_BLANK_TEXT_MATCH_REVIEW_SUGGESTED")
+    if total_score and score_percent < 60:
+        risk_flags.append("LOW_SCORE_NEEDS_TARGETED_REVIEW")
+
+    explanations = []
+    for index, question in enumerate(questions, start=1):
+        result = results.get(question.id, {})
+        if result.get("is_correct"):
+            continue
+        points = loads_json(question.knowledge_points, [])
+        explanations.append(
+            {
+                "question_id": question.id,
+                "question_index": index,
+                "error_type": question.error_type or "QUESTION_MISCONCEPTION",
+                "error_label": _question_error_label(question),
+                "knowledge_points": points,
+                "explanation": _question_feedback_text(question, result),
+                "next_step": (
+                    f"先复盘 {points[0]}，再完成 1 道同类巩固题。"
+                    if points
+                    else "先复盘本题解析，再完成 1 道同类巩固题。"
+                ),
+                "confidence": 0.72 if question.error_type else 0.64,
+            }
+        )
+
+    if not wrong_questions:
+        summary = f"本次《{task.title}》规则判分显示全部答对，可以进入下一组迁移练习。"
+        confidence = 0.86
+    elif weak_points:
+        summary = f"本次《{task.title}》得分 {score_percent}%，AI 反馈建议优先复盘：{'、'.join(weak_points[:3])}。"
+        confidence = 0.72
+    else:
+        summary = f"本次《{task.title}》得分 {score_percent}%，建议先查看错题解析，再做同类巩固题。"
+        confidence = 0.66
+
+    recommended_actions = []
+    if wrong_questions:
+        recommended_actions.append(
+            {
+                "action": "REVIEW_WRONG_QUESTIONS",
+                "label": "复盘错题解析",
+                "reason": "优先处理本次规则判分未通过的题目。",
+            }
+        )
+    if weak_points:
+        recommended_actions.append(
+            {
+                "action": "GENERATE_SIMILAR_PRACTICE",
+                "label": f"生成 {weak_points[0]} 巩固题",
+                "reason": "围绕最低掌握知识点做短练习。",
+            }
+        )
+    recommended_actions.append(
+        {
+            "action": "SAVE_WRONG_NOTE",
+            "label": "保存错题总结",
+            "reason": "把本次错因沉淀到资料库，便于后续复习。",
+        }
+    )
+
+    return {
+        "status": "READY",
+        "workflow_type": "objective_grading_feedback",
+        "source": "RULE_FALLBACK",
+        "summary": summary,
+        "score_basis": "客观题和标准填空先由规则判分，AI 反馈只解释错因和下一步建议。",
+        "weak_knowledge_points": weak_points,
+        "wrong_question_explanations": explanations,
+        "recommended_actions": recommended_actions,
+        "risk_flags": risk_flags,
+        "confidence": confidence,
+        "needs_teacher_review": bool(risk_flags),
+    }
 
 
 def update_learner_profile(
@@ -593,5 +738,13 @@ def submit_question_answers(db: Session, assignment_id: str, class_id: str, user
             )
             for question in questions
         ],
+        "ai_feedback": build_question_ai_feedback(
+            task,
+            questions,
+            results,
+            earned_score,
+            total_score,
+            correct_count,
+        ),
         "profile_signal": profile_signal,
     }

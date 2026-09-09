@@ -240,6 +240,7 @@ def test_teacher_can_create_publish_and_student_can_open_question_workspace(requ
         assert student_row["assignment_mode"] == "QUIZ"
         assert student_row["knowledge_points"] == ["Verify publish chain"]
         assert student_row["start_at"] == start_at
+        assert student_row["schedule_status"] == "OPEN"
         assert student_row["status"] == "NOT_STARTED"
         assert student_row["total_required_count"] == 1
 
@@ -251,6 +252,7 @@ def test_teacher_can_create_publish_and_student_can_open_question_workspace(requ
         workspace_data = workspace.json()["data"]
         assert workspace_data["task"]["task_id"] == task_id
         assert workspace_data["assignment"]["start_at"] == start_at
+        assert workspace_data["assignment"]["schedule_status"] == "OPEN"
         assert len(workspace_data["questions"]) == 1
         assert workspace_data["questions"][0]["stem"] == "Which option is marked as correct?"
 
@@ -352,6 +354,45 @@ def test_teacher_can_publish_mixed_question_paper_and_student_submit(request):
         result = submitted.json()["data"]
         assert result["correct_count"] == 3
         assert result["score"] == 45
+        assert result["ai_feedback"]["source"] == "RULE_FALLBACK"
+        assert result["ai_feedback"]["wrong_question_explanations"] == []
+
+
+def test_question_submit_returns_ai_grading_feedback_and_workspace_rebuilds_it(request):
+    task_id = None
+    request.addfinalizer(lambda: _cleanup_task(task_id))
+    with TestClient(app) as c:
+        task_id = _create_question_task(c, f"ai-feedback-{uuid4().hex[:8]}")
+        published = c.post(
+            f"/api/v1/teacher/tasks/{task_id}/publish",
+            headers=TEACHER,
+            json={"class_ids": [SE_CLASS], "assignment_mode": "QUIZ", "start_at": "2026-09-01T08:00:00Z"},
+        )
+        assert published.status_code == 200, published.text
+        assignment_id = published.json()["data"]["publications"][0]["assignment_id"]
+
+        workspace = c.get(f"/api/v1/student/assignments/{assignment_id}/workspace", headers=STUDENT)
+        assert workspace.status_code == 200, workspace.text
+        question = workspace.json()["data"]["questions"][0]
+        wrong_option_id = next(option for option in question["options"] if option["label"] == "B")["option_id"]
+
+        submitted = c.post(
+            f"/api/v1/student/assignments/{assignment_id}/submit-answers",
+            headers=STUDENT,
+            json={"answers": [{"question_id": question["question_id"], "selected_option_ids": [wrong_option_id]}]},
+        )
+        assert submitted.status_code == 201, submitted.text
+        feedback = submitted.json()["data"]["ai_feedback"]
+        assert feedback["workflow_type"] == "objective_grading_feedback"
+        assert feedback["source"] == "RULE_FALLBACK"
+        assert feedback["wrong_question_explanations"][0]["question_id"] == question["question_id"]
+        assert feedback["recommended_actions"][0]["action"] == "REVIEW_WRONG_QUESTIONS"
+
+        reopened = c.get(f"/api/v1/student/assignments/{assignment_id}/workspace", headers=STUDENT)
+        assert reopened.status_code == 200, reopened.text
+        rebuilt = reopened.json()["data"]["ai_feedback"]
+        assert rebuilt["summary"] == feedback["summary"]
+        assert rebuilt["wrong_question_explanations"][0]["error_label"] == feedback["wrong_question_explanations"][0]["error_label"]
 
 
 def test_teacher_can_delete_ready_task(request):

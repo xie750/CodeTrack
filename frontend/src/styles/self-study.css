@@ -486,6 +486,8 @@
 .study-task-card {
   height: 100%;
   min-height: 470px;
+  max-height: 628px;
+  overflow: hidden;
   padding: 18px 22px;
   display: flex;
   flex-direction: column;
@@ -570,10 +572,31 @@
 .study-task-list.personal {
   min-height: 0;
   flex: 1;
+  max-height: 352px;
   align-content: start;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding-right: 4px;
+  padding-bottom: 4px;
   scrollbar-gutter: stable;
+}
+
+.study-task-list.personal::-webkit-scrollbar {
+  width: 8px;
+}
+
+.study-task-list.personal::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.study-task-list.personal::-webkit-scrollbar-thumb {
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  background: #cbd7e8;
+}
+
+.study-task-list.personal::-webkit-scrollbar-thumb:hover {
+  background: #aebed4;
 }
 
 .study-task-list article {
@@ -3414,22 +3437,29 @@ button.student-generated-thumb:hover {
 }
 
 .ai-answer-meta {
+  position: relative;
+  min-width: 0;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   flex-wrap: wrap;
   gap: 8px;
 }
 
 .ai-answer-meta > span:not(.ai-content-disclosure) {
+  max-width: 100%;
   min-height: 28px;
   padding: 0 9px;
   display: inline-flex;
   align-items: center;
+  overflow: hidden;
   border-radius: 7px;
   color: #37506f;
   background: #f4f8ff;
   font-size: 12px;
   font-weight: 850;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ai-answer-flow ul {

@@ -177,10 +177,28 @@
 
 .ai-answer-meta .ai-content-disclosure {
   min-height: 28px;
+  max-width: 100%;
+  display: inline-grid;
+  justify-items: start;
 }
 
 .ai-answer-meta .ai-content-disclosure .ai-content-trigger {
   min-height: 28px;
+}
+
+.ai-answer-meta .ai-content-popover {
+  position: relative;
+  left: 0;
+  right: auto;
+  top: auto;
+  width: min(320px, calc(100vw - 64px));
+  max-width: 320px;
+  margin-top: 8px;
+}
+
+.ai-answer-meta .ai-content-popover::before {
+  left: 18px;
+  right: auto;
 }
 
 .ai-resource-preview-meta > button:first-of-type {

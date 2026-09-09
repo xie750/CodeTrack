@@ -5828,20 +5828,26 @@ button.student-resource-thumb {
 
 .global-advice-grid {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  align-items: stretch;
+  align-items: start;
 }
 
 .global-left-stack {
   display: grid;
   gap: 16px;
   min-width: 0;
+  align-self: start;
 }
 
 .global-advice-card {
-  min-height: 100%;
+  align-self: start;
+  max-height: min(720px, calc(100vh - 156px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .global-advice-card .profile-section-head {
+  flex: 0 0 auto;
   align-items: flex-start;
 }
 
@@ -5879,11 +5885,37 @@ button.student-resource-thumb {
 }
 
 .ai-advice-brief {
+  flex: 0 0 auto;
+  max-height: 260px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   margin-bottom: 14px;
   padding: 14px;
   border: 1px solid #dce8f7;
   border-radius: 8px;
   background: #f7fbff;
+}
+
+.global-advice-card .ai-advice-brief::-webkit-scrollbar,
+.global-advice-card .advice-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.global-advice-card .ai-advice-brief::-webkit-scrollbar-track,
+.global-advice-card .advice-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.global-advice-card .ai-advice-brief::-webkit-scrollbar-thumb,
+.global-advice-card .advice-list::-webkit-scrollbar-thumb {
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  background: #cbd7e8;
+}
+
+.global-advice-card .ai-advice-brief::-webkit-scrollbar-thumb:hover,
+.global-advice-card .advice-list::-webkit-scrollbar-thumb:hover {
+  background: #aebed4;
 }
 
 .ai-advice-brief.ready {
@@ -6183,6 +6215,15 @@ button.student-resource-thumb {
 .profile-timeline {
   display: flex;
   flex-direction: column;
+}
+
+.global-advice-card .advice-list {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
 }
 
 .weak-row {

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import * as echarts from "echarts";
 import type { EChartsOption } from "echarts";
 import {
+  AlertTriangle,
   ArrowRight,
   BookOpen,
   BrainCircuit,
@@ -28,7 +29,18 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { api, apiCache, StudentKnowledgeGraph, StudentKnowledgeGraphEdge, StudentKnowledgeGraphNode, type GeneratedResourceType, type StudentProfile } from "../api";
+import {
+  ApiRequestError,
+  api,
+  apiCache,
+  StudentKnowledgeGraph,
+  StudentKnowledgeGraphEdge,
+  StudentKnowledgeGraphNode,
+  type GeneratedResourceType,
+  type StudentKnowledgeNodeDiagnosisResponse,
+  type StudentProfile
+} from "../api";
+import { readStudentAiModelKey } from "../studentAiModels";
 
 type KnowledgeMapProps = {
   scope?: "course" | "self-study";
@@ -49,7 +61,7 @@ type RelationType = "前驱" | "后继" | "相关";
 type InspectorTab = "knowledge" | "resources" | "questions" | "diagnosis";
 
 type NodeDiagnosis = {
-  status: "running" | "ready";
+  status: "running" | "ready" | "error";
   nodeId: string;
   masteryScore: number;
   masteryLabel: string;
@@ -62,7 +74,14 @@ type NodeDiagnosis = {
   nextActions: string[];
   recommendedPractice: string;
   profileUsed: boolean;
+  sourceUsed?: boolean;
   generatedAt: string;
+  aiGenerated?: boolean;
+  modelName?: string;
+  modelLabel?: string;
+  runId?: string;
+  citations?: StudentKnowledgeNodeDiagnosisResponse["citations"];
+  errorCode?: string;
 };
 
 type PendingRelation = {
@@ -244,103 +263,48 @@ function withGraphCounts(graph: StudentKnowledgeGraph): StudentKnowledgeGraph {
   };
 }
 
-function buildNodeDiagnosis({
-  node,
-  graph,
-  edges,
-  profile,
-  isSelfStudy,
-}: {
-  node: StudentKnowledgeGraphNode;
-  graph: StudentKnowledgeGraph;
-  edges: StudentKnowledgeGraphEdge[];
-  profile: StudentProfile | null;
-  isSelfStudy: boolean;
-}): NodeDiagnosis {
-  const knowledgeState = profile?.knowledge_states.find((item) => item.knowledge_point === node.label) ?? null;
-  const profileUsed = Boolean(knowledgeState);
-  const prereqCount = edges.filter((edge) => edge.target === node.id && edge.type === "前驱").length;
-  const nextCount = edges.filter((edge) => edge.source === node.id && edge.type === "后继").length;
-  const peerCount = edges.filter((edge) => edge.type === "相关").length;
-  const difficulty = clampDifficulty(node.difficulty);
-  const masteryScore = profileUsed ? clampKnownMastery(knowledgeState?.mastery_score ?? 0) : 0;
-  const weak = !profileUsed || masteryScore < 70;
-  const highDifficulty = difficulty >= 4;
-  const hasDefinition = Boolean(node.description.trim());
-  const confidence = profileUsed
-    ? clampKnownMastery(78 + Math.min(12, edges.length * 3) + (hasDefinition ? 6 : 0)) / 100
-    : Math.min(0.45, (32 + Math.min(8, edges.length * 2) + (hasDefinition ? 4 : 0)) / 100);
-  const prerequisites = edges
-    .filter((edge) => edge.target === node.id && edge.type === "前驱")
-    .map((edge) => graph.nodes.find((item) => item.id === edge.source)?.label ?? edge.source)
-    .slice(0, 4);
-  const nextNodes = edges
-    .filter((edge) => edge.source === node.id && edge.type === "后继")
-    .map((edge) => graph.nodes.find((item) => item.id === edge.target)?.label ?? edge.target)
-    .slice(0, 3);
-  const relatedErrors = profile?.frequent_errors
-    .filter((item) => item.related_knowledge_points.includes(node.label))
-    .map((item) => `${item.label} ${item.count} 次`)
-    .slice(0, 3) ?? [];
-
-  const riskFactors = [
-    !profileUsed ? "暂无学习画像或提交证据匹配该节点，不能判定真实掌握度。" : "",
-    profileUsed && weak ? `掌握度 ${masteryScore}%，低于稳定线 70%。` : "",
-    highDifficulty ? "节点难度较高，适合拆成概念、例题和迁移练习三步巩固。" : "",
-    prereqCount === 0 ? "当前节点缺少前驱知识标注，学习路径可能不够清晰。" : "",
-    !hasDefinition ? "节点定义为空，AI 难以判断你是否能用自己的话解释。" : "",
-    relatedErrors.length ? `画像中关联错因：${relatedErrors.join("、")}。` : "",
-  ].filter(Boolean);
-
-  const misconceptions = [
-    node.label.includes("链表") || node.label.includes("头节点") ? "容易把“修改当前节点”误认为“更新链表入口”，删除头节点时需要特别检查返回值。" : "",
-    node.label.includes("栈") ? "容易只记住后进先出定义，却忽略它适合处理最近未闭合状态。" : "",
-    node.label.includes("队列") ? "容易把队列和栈的出入顺序混用，建议用连续操作手推验证。" : "",
-    node.label.includes("递归") || node.label.includes("遍历") || node.label.includes("二叉树") ? "容易只背遍历顺序，没有说清递归出口、访问时机和子问题边界。" : "",
-    node.label.includes("过拟合") || node.label.includes("正则化") ? "容易把训练集表现好当成模型真正掌握规律，需要结合验证集表现判断。" : "",
-    node.label.includes("Python") || node.label.includes("函数") ? "容易停在语法记忆，建议用参数、返回值和边界输入解释程序行为。" : "",
-  ].filter(Boolean);
-
-  if (!misconceptions.length) {
-    misconceptions.push("当前节点需要重点检查：能否说出定义、适用场景、一个反例，以及和相邻节点的关系。");
-  }
-
-  const nextActions = [
-    prerequisites.length ? `先复盘前驱：${prerequisites.join("、")}。` : "先补一条前驱知识或写下该节点依赖的基础概念。",
-    weak ? "完成 3 道基础题，优先验证定义和边界条件。" : "完成 1 道迁移题，验证能否在新场景中使用。",
-    nextNodes.length ? `再连接到后继：${nextNodes.join("、")}。` : "补充一个后继应用场景，避免知识点孤立。",
-    "把诊断结果整理成一张知识卡片，并在资料库中保留来源。",
-  ];
-
-  const evidence = [
-    profileUsed ? `学习画像：${knowledgeState?.state}，掌握度 ${masteryScore}%，证据 ${knowledgeState?.evidence_count ?? 0} 条。` : "暂无精确画像匹配，未输出掌握度分数。",
-    `图谱结构：前驱 ${prereqCount} 个，后继 ${nextCount} 个，相关 ${peerCount} 个。`,
-    `节点属性：类型 ${node.type}，难度 ${difficulty} / 5，来源 ${node.source === "ai" ? "AI 草稿" : isSelfStudy ? "学生自定义" : "教师自定义"}。`,
-    graph.source_files.length ? `${isSelfStudy ? "学习资料" : "课程资料"}来源：${graph.source_files.length} 份。` : "当前节点暂无独立来源文件证据。",
-  ];
-
+function diagnosisFromApiResponse(response: StudentKnowledgeNodeDiagnosisResponse): NodeDiagnosis {
   return {
     status: "ready",
-    nodeId: node.id,
-    masteryScore,
-    masteryLabel: profileUsed ? masteryLabel(masteryScore) : "暂无真实证据",
-    confidence,
-    summary: !profileUsed
-      ? `${node.label} 当前只有图谱结构和导入内容，还没有真实学习证据。建议先生成练习或完成相关任务，让系统形成画像后再判断掌握度。`
-      : weak
-      ? `${node.label} 当前还需要巩固，建议先补齐前驱理解，再用小题验证边界和应用。`
-      : `${node.label} 当前学习状态较稳定，建议进入迁移练习或连接后继知识。`,
-    evidence,
-    riskFactors: riskFactors.length ? riskFactors : ["暂未发现明显风险，建议保持低频复盘。"],
-    misconceptions,
-    prerequisites: prerequisites.length ? prerequisites : ["暂无显式前驱节点"],
-    nextActions,
-    recommendedPractice: weak
-      ? `生成一组围绕“${node.label}”的基础诊断题，要求每题说明判断依据。`
-      : `生成一组围绕“${node.label}”的应用迁移题，要求关联相邻知识点。`,
-    profileUsed,
-    generatedAt: new Date().toISOString(),
+    nodeId: response.node_id,
+    masteryScore: response.mastery_score,
+    masteryLabel: response.mastery_label,
+    confidence: response.confidence,
+    summary: response.summary,
+    evidence: response.evidence,
+    riskFactors: response.risk_factors,
+    misconceptions: response.misconceptions,
+    prerequisites: response.prerequisites,
+    nextActions: response.next_actions,
+    recommendedPractice: response.recommended_practice,
+    profileUsed: response.profile_used,
+    sourceUsed: response.source_used,
+    generatedAt: response.generated_at,
+    aiGenerated: response.ai_generated,
+    modelName: response.model_name,
+    modelLabel: response.model_label,
+    runId: response.run_id,
+    citations: response.citations,
   };
+}
+
+function nodeDiagnosisError(error: unknown): { summary: string; code?: string } {
+  if (error instanceof ApiRequestError) {
+    if (error.code === "AI_MODEL_NOT_CONFIGURED") {
+      return {
+        code: error.code,
+        summary: "AI 模型配置还不完整，暂时不能生成真实知识诊断。请先配置通用模型或微调模型后再试。",
+      };
+    }
+    if (error.code === "AI_MODEL_REQUEST_FAILED") {
+      return {
+        code: error.code,
+        summary: "AI 模型请求失败，可能是模型服务、密钥、额度或网络暂时异常。请稍后重试。",
+      };
+    }
+    return { code: error.code, summary: error.message };
+  }
+  return { summary: "AI 诊断请求没有完成，请稍后重试。" };
 }
 
 function readSelfStudyGraph(): StudentKnowledgeGraph {
@@ -751,7 +715,7 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
   const chartContainerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
-  const diagnosisTimerRef = useRef<number | null>(null);
+  const diagnosisRequestRef = useRef(0);
   const isSelfStudy = scope === "self-study";
   const [graph, setGraph] = useState<StudentKnowledgeGraph | null>(() => (
     isSelfStudy ? readSelfStudyGraph() : (courseId ? apiCache.peekStudentKnowledgeGraph(courseId) : null)
@@ -921,9 +885,6 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
 
   useEffect(() => {
     return () => {
-      if (diagnosisTimerRef.current) {
-        window.clearTimeout(diagnosisTimerRef.current);
-      }
       disposeChart();
     };
   }, []);
@@ -936,9 +897,6 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
   const selectedTone = stateTone(activeNode?.difficulty);
   const activeDiagnosis = activeNode ? diagnosesByNode[activeNode.id] ?? null : null;
   const activeNodeAttachments = !isSelfStudy ? activeNode?.attachments ?? [] : [];
-  const matchedKnowledgeState = activeNode
-    ? studentProfile?.knowledge_states.find((item) => item.knowledge_point === activeNode.label)
-    : null;
   const activeMasteryScore = activeNode ? masteryByNode.get(activeNode.id) : undefined;
 
   function selectNode(nodeId: string) {
@@ -949,11 +907,10 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
     setInspectorTab("knowledge");
   }
 
-  function runNodeDiagnosis(node: StudentKnowledgeGraphNode) {
+  async function runNodeDiagnosis(node: StudentKnowledgeGraphNode) {
     if (!graph) return;
-    if (diagnosisTimerRef.current) {
-      window.clearTimeout(diagnosisTimerRef.current);
-    }
+    const requestId = diagnosisRequestRef.current + 1;
+    diagnosisRequestRef.current = requestId;
     setSelection({ kind: "node", id: node.id });
     setNodeEditor(null);
     setPendingRelation(null);
@@ -978,20 +935,82 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
         generatedAt: new Date().toISOString(),
       },
     }));
-    diagnosisTimerRef.current = window.setTimeout(() => {
-      const latestGraph = graph;
-      const latestRelatedEdges = latestGraph.edges.filter((edge) => edge.source === node.id || edge.target === node.id);
+    const latestGraph = graph;
+    const latestRelatedEdges = latestGraph.edges.filter((edge) => edge.source === node.id || edge.target === node.id);
+    try {
+      const response = await api.createStudentKnowledgeNodeDiagnosis({
+        course_id: isSelfStudy ? undefined : courseId || latestGraph.course_id || undefined,
+        model_key: readStudentAiModelKey(),
+        is_self_study: isSelfStudy,
+        graph: {
+          id: latestGraph.id,
+          title: latestGraph.title,
+          course_id: latestGraph.course_id,
+          course_name: latestGraph.course_name || displayCourseName,
+          source_summary: latestGraph.source_summary,
+          source_files: latestGraph.source_files,
+          node_count: latestGraph.node_count,
+          edge_count: latestGraph.edge_count,
+          nodes: latestGraph.nodes.map((item) => ({
+            id: item.id,
+            label: item.label,
+            type: item.type,
+            description: item.description,
+            difficulty: item.difficulty,
+            source: item.source,
+          })),
+        },
+        node: {
+          id: node.id,
+          label: node.label,
+          type: node.type,
+          description: node.description,
+          difficulty: node.difficulty,
+          source: node.source,
+        },
+        related_edges: latestRelatedEdges.map((edge) => ({
+          id: edge.id,
+          source: edge.source,
+          target: edge.target,
+          type: edge.type,
+          label: edge.label,
+        })),
+        page_context: {
+          route: isSelfStudy ? "/self-study/knowledge-map" : "/courses/:courseId/knowledge-map",
+          course_name: displayCourseName,
+        },
+      });
+      if (diagnosisRequestRef.current !== requestId) return;
       setDiagnosesByNode((current) => ({
         ...current,
-        [node.id]: buildNodeDiagnosis({
-          node,
-          graph: latestGraph,
-          edges: latestRelatedEdges,
-          profile: studentProfile,
-          isSelfStudy,
-        }),
+        [node.id]: diagnosisFromApiResponse(response),
       }));
-    }, 900);
+    } catch (error) {
+      if (diagnosisRequestRef.current !== requestId) return;
+      const detail = nodeDiagnosisError(error);
+      setDiagnosesByNode((current) => ({
+        ...current,
+        [node.id]: {
+          status: "error",
+          nodeId: node.id,
+          masteryScore: 0,
+          masteryLabel: "未生成",
+          confidence: 0,
+          summary: detail.summary,
+          evidence: [],
+          riskFactors: [],
+          misconceptions: [],
+          prerequisites: [],
+          nextActions: [],
+          recommendedPractice: "",
+          profileUsed: false,
+          sourceUsed: false,
+          generatedAt: new Date().toISOString(),
+          aiGenerated: false,
+          errorCode: detail.code,
+        },
+      }));
+    }
   }
 
   function selectEdge(edge: StudentKnowledgeGraphEdge) {
@@ -1746,8 +1765,25 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
                               <strong>正在分析 {activeNode.label}</strong>
                               <p>{activeDiagnosis.summary}</p>
                             </section>
+                          ) : activeDiagnosis.status === "error" ? (
+                            <section className="student-graph-diagnosis-error">
+                              <AlertTriangle size={18} />
+                              <strong>真实 AI 诊断未生成</strong>
+                              <p>{activeDiagnosis.summary}</p>
+                              {activeDiagnosis.errorCode ? <small>错误码：{activeDiagnosis.errorCode}</small> : null}
+                              <button type="button" onClick={() => runNodeDiagnosis(activeNode)}>
+                                <RefreshCw size={14} />
+                                重新诊断
+                              </button>
+                            </section>
                           ) : (
                             <>
+                              <div className="student-graph-diagnosis-disclosure">
+                                <span><Sparkles size={13} /> AI生成</span>
+                                <span>{activeDiagnosis.modelLabel || activeDiagnosis.modelName || "当前模型"}</span>
+                                {activeDiagnosis.runId ? <span>运行记录 {activeDiagnosis.runId.slice(0, 8)}</span> : null}
+                              </div>
+
                               <section className={`student-graph-diagnosis-score ${!activeDiagnosis.profileUsed || activeDiagnosis.masteryScore < 70 ? "weak" : "stable"}`}>
                                 <div>
                                   <strong>{activeDiagnosis.profileUsed ? `${activeDiagnosis.masteryScore}%` : "暂无"}</strong>
@@ -1759,7 +1795,7 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
                               <div className="student-graph-diagnosis-metrics">
                                 <span>置信度 <strong>{Math.round(activeDiagnosis.confidence * 100)}%</strong></span>
                                 <span>画像匹配 <strong>{activeDiagnosis.profileUsed ? "已使用" : "未匹配"}</strong></span>
-                                <span>证据数 <strong>{matchedKnowledgeState?.evidence_count ?? "暂无"}</strong></span>
+                                <span>引用资料 <strong>{activeDiagnosis.sourceUsed ? `${activeDiagnosis.citations?.length ?? 0} 条` : "未引用"}</strong></span>
                               </div>
 
                               <DiagnosisList title="判断依据" items={activeDiagnosis.evidence} />
@@ -1767,10 +1803,13 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
                               <DiagnosisList title="常见误区" items={activeDiagnosis.misconceptions} />
                               <DiagnosisList title="前驱补齐" items={activeDiagnosis.prerequisites} />
                               <DiagnosisList title="下一步动作" items={activeDiagnosis.nextActions} />
+                              {activeDiagnosis.citations?.length ? (
+                                <DiagnosisList title="引用来源" items={activeDiagnosis.citations.map((citation) => citation.title)} />
+                              ) : null}
 
                               <section className="student-graph-diagnosis-practice">
                                 <strong>推荐练习</strong>
-                                <p>{activeDiagnosis.recommendedPractice}</p>
+                                <p>{activeDiagnosis.recommendedPractice || "建议先围绕该节点生成一组诊断题，补齐可验证的学习证据。"}</p>
                                 <button type="button" onClick={() => openAiTutorWithNodeResource("PRACTICE_SET")}>
                                   <Target size={15} />
                                   去生成练习
@@ -1842,11 +1881,12 @@ function RelationGroup({
 }
 
 function DiagnosisList({ title, items }: { title: string; items: string[] }) {
+  const displayItems = items.length ? items : ["AI 本次未返回该类独立条目，请以诊断摘要为准。"];
   return (
     <section className="student-graph-diagnosis-list">
       <strong>{title}</strong>
       <ul>
-        {items.map((item) => (
+        {displayItems.map((item) => (
           <li key={item}>{item}</li>
         ))}
       </ul>

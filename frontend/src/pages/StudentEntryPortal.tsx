@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { api, apiCache, type LearningContext, type StudentTaskCard } from "../api";
 import type { AuthUser } from "../authSession";
 import { StudentInlineNotice, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
+import { resolveVisibleTaskStatus } from "../studentTaskSchedule";
 
 export type StudentEntryTheme = "starmap" | "cloud";
 
@@ -296,7 +297,11 @@ function ProjectPracticeIllustration() {
 }
 
 function latestTaskLabel(tasks: StudentTaskCard[]) {
-  const task = tasks.find((item) => item.status !== "COMPLETED") ?? tasks[0];
+  const task =
+    tasks.find((item) => resolveVisibleTaskStatus(item.status, item.start_at) === "READY_TO_START") ??
+    tasks.find((item) => item.status !== "COMPLETED" && resolveVisibleTaskStatus(item.status, item.start_at) !== "PENDING_START") ??
+    tasks.find((item) => item.status !== "COMPLETED") ??
+    tasks[0];
   return task?.title ?? "等待教师下发课程任务";
 }
 

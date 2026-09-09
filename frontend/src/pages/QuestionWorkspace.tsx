@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   ArrowLeft,
+  Bookmark,
   Bot,
   Check,
   CheckCircle2,
@@ -21,9 +22,12 @@ import {
 import { api, QuestionItem, QuestionWorkspace as QuestionWorkspaceData, SubmitQuestionResult } from "../api";
 import StudentRouteBreadcrumb from "../components/StudentRouteBreadcrumb";
 import { StudentState, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
+import { favoriteRecordId, readStudentFavorites, removeStudentFavorite, subscribeStudentFavorites, upsertStudentFavorite } from "../studentFavorites";
+import { formatStudentDateTime, getScheduleInfo, resolveVisibleTaskStatus, visibleTaskStatusLabel } from "../studentTaskSchedule";
 
 type PageProps = {
   assignmentId: string;
+  focusQuestionId?: string;
   onBack: () => void;
 };
 
@@ -36,6 +40,16 @@ type VoiceActionLog = {
 };
 type VoiceSubmitOptions = {
   answerOverride?: AnswerMap;
+};
+type SubmitConfirmState = {
+  answers: AnswerMap;
+  answeredCount: number;
+  unanswered: number;
+};
+type CachedQuestionAnswers = {
+  assignmentId: string;
+  questionIds: string[];
+  answers: AnswerMap;
 };
 type SpeechRecognitionResultLike = {
   isFinal: boolean;
@@ -77,15 +91,8 @@ declare global {
   }
 }
 
-function statusText(status: string) {
-  const map: Record<string, string> = {
-    NOT_STARTED: "未开始",
-    DRAFT: "作答中",
-    IN_PROGRESS: "作答中",
-    SUBMITTED: "已提交",
-    COMPLETED: "已完成"
-  };
-  return map[status] ?? status;
+function statusText(status: string, startAt: string | null) {
+  return visibleTaskStatusLabel(resolveVisibleTaskStatus(status, startAt)).replace("进行中", "作答中");
 }
 
 function typeText(type: string) {
@@ -95,24 +102,56 @@ function typeText(type: string) {
   return "单选题";
 }
 
-function deadlineText(value: string | null) {
-  if (!value) return "未设置截止时间";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false
-  }).format(date);
-}
-
 function buildInitialAnswers(questions: QuestionItem[]): AnswerMap {
   return questions.reduce((map, question) => {
     map[question.question_id] = question.selected_option_ids ?? [];
     return map;
   }, {} as AnswerMap);
+}
+
+function questionAnswerCacheKey(assignmentId: string) {
+  return `codetrack.questionWorkspace.answers.${assignmentId}.v1`;
+}
+
+function sanitizeAnswersForQuestions(questions: QuestionItem[], source: AnswerMap | undefined) {
+  return questions.reduce((map, question) => {
+    const value = source?.[question.question_id];
+    map[question.question_id] = Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+    return map;
+  }, {} as AnswerMap);
+}
+
+function readCachedAnswers(assignmentId: string, questions: QuestionItem[]) {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(questionAnswerCacheKey(assignmentId));
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as Partial<CachedQuestionAnswers>;
+    const questionIds = questions.map((question) => question.question_id);
+    const samePaper = cached.assignmentId === assignmentId
+      && Array.isArray(cached.questionIds)
+      && cached.questionIds.length === questionIds.length
+      && questionIds.every((questionId) => cached.questionIds?.includes(questionId));
+    if (!samePaper || !cached.answers) return null;
+    return sanitizeAnswersForQuestions(questions, cached.answers);
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedAnswers(assignmentId: string, questions: QuestionItem[], answers: AnswerMap) {
+  if (typeof window === "undefined" || !questions.length) return;
+  const payload: CachedQuestionAnswers = {
+    assignmentId,
+    questionIds: questions.map((question) => question.question_id),
+    answers: sanitizeAnswersForQuestions(questions, answers)
+  };
+  window.sessionStorage.setItem(questionAnswerCacheKey(assignmentId), JSON.stringify(payload));
+}
+
+function clearCachedAnswers(assignmentId: string) {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.removeItem(questionAnswerCacheKey(assignmentId));
 }
 
 function toAnswerPayload(answers: AnswerMap) {
@@ -124,8 +163,12 @@ function toAnswerPayload(answers: AnswerMap) {
 
 function isAnswerPresent(question: QuestionItem, answers: AnswerMap) {
   const selected = answers[question.question_id] ?? [];
-  if (!question.options.length) return Boolean(selected[0]?.trim());
+  if (isFillQuestion(question)) return Boolean(selected[0]?.trim());
   return selected.length > 0;
+}
+
+function isFillQuestion(question: QuestionItem) {
+  return ["FILL_BLANK", "FILL_IN_BLANK", "SHORT_ANSWER"].includes(question.question_type) || !question.options.length;
 }
 
 const CHINESE_NUMBER_MAP: Record<string, number> = {
@@ -158,6 +201,24 @@ function parseSpokenNumber(value: string | undefined) {
   return CHINESE_NUMBER_MAP[normalized] ?? null;
 }
 
+function findMentionedQuestionIndex(text: string, questionCount: number) {
+  const match = text.match(/(?:第\s*)?([一二三四五六七八九十两\d]+)\s*(?:题|道题)/);
+  const questionNumber = parseSpokenNumber(match?.[1]);
+  if (!questionNumber) return null;
+  const index = questionNumber - 1;
+  return index >= 0 && index < questionCount ? index : null;
+}
+
+function cleanVoiceFillValue(value: string) {
+  const cleaned = value
+    .replace(/^[\s：:，,。；;]+/, "")
+    .replace(/[\s，,。；;？?！!]+$/, "")
+    .trim();
+  if (!cleaned) return null;
+  if (/^(吗|么|嘛|呢|呀|啊|吧|一下|可以吗|行吗|不会吗|不会填写吗)$/.test(cleaned)) return null;
+  return cleaned;
+}
+
 function normalizeOptionLabel(value: string) {
   const fullWidth = "ＡＢＣＤＥＦＧＨａｂｃｄｅｆｇｈ";
   const halfWidth = "ABCDEFGHabcdefgh";
@@ -173,10 +234,11 @@ function splitOptionLabels(value: string) {
     .filter((label) => /^[A-H]$/.test(label));
 }
 
-export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
+export default function QuestionWorkspace({ assignmentId, focusQuestionId, onBack }: PageProps) {
   const [workspace, setWorkspace] = useState<QuestionWorkspaceData | null>(null);
   const [result, setResult] = useState<SubmitQuestionResult | null>(null);
   const [answers, setAnswers] = useState<AnswerMap>({});
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(() => new Set(readStudentFavorites().map((item) => item.id)));
   const [activeIndex, setActiveIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -189,9 +251,13 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
   const [voiceTranscript, setVoiceTranscript] = useState("");
   const [voiceStatus, setVoiceStatus] = useState("语音控制待开启");
   const [voiceLogs, setVoiceLogs] = useState<VoiceActionLog[]>([]);
+  const [submitConfirm, setSubmitConfirm] = useState<SubmitConfirmState | null>(null);
   const questionRefs = useRef<Array<HTMLElement | null>>([]);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const voiceHandlerRef = useRef<(text: string) => void>(() => undefined);
+  const focusedQuestionIndexRef = useRef(0);
+  const submitConfirmRef = useRef<SubmitConfirmState | null>(null);
+  const voiceClosedAfterSubmitRef = useRef(false);
 
   useEffect(() => {
     let alive = true;
@@ -203,8 +269,10 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
       .then((data) => {
         if (!alive) return;
         setWorkspace(data);
-        setAnswers(buildInitialAnswers(data.questions));
+        const initialAnswers = buildInitialAnswers(data.questions);
         if (data.attempt.status === "SUBMITTED") {
+          clearCachedAnswers(assignmentId);
+          setAnswers(initialAnswers);
           setResult({
             attempt_id: data.attempt.attempt_id ?? "",
             status: data.attempt.status,
@@ -215,6 +283,7 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
             total_count: data.attempt.total_count,
             submitted_at: data.attempt.submitted_at,
             questions: data.questions,
+            ai_feedback: data.ai_feedback,
             profile_signal: {
               overall_progress: 0,
               logic_error_rate: 0,
@@ -223,6 +292,9 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
               recommendation: "可在学习画像页查看最新掌握度。"
             }
           });
+        } else {
+          setResult(null);
+          setAnswers(readCachedAnswers(assignmentId, data.questions) ?? initialAnswers);
         }
       })
       .catch((err) => {
@@ -245,6 +317,43 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
   }, [answers, questions]);
   const progress = questions.length ? Math.round((answeredCount / questions.length) * 100) : 0;
   const submitted = Boolean(result);
+  const favoriteCount = questions.filter((question) => favoriteIds.has(favoriteRecordId("QUESTION", assignmentId, question.question_id))).length;
+  const scheduleInfo = getScheduleInfo(workspace?.assignment.start_at);
+  const assignmentOpen = scheduleInfo.isOpen;
+
+  useEffect(() => {
+    if (!workspace || submitted) return;
+    writeCachedAnswers(assignmentId, questions, answers);
+  }, [answers, assignmentId, questions, submitted, workspace]);
+
+  useEffect(() => {
+    submitConfirmRef.current = submitConfirm;
+  }, [submitConfirm]);
+
+  useEffect(() => {
+    if (submitted) stopVoiceAfterSubmit();
+  }, [submitted]);
+
+  useEffect(() => {
+    return subscribeStudentFavorites(() => {
+      setFavoriteIds(new Set(readStudentFavorites().map((item) => item.id)));
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!focusQuestionId || !questions.length) return;
+    const targetIndex = questions.findIndex((question) => question.question_id === focusQuestionId);
+    if (targetIndex < 0) return;
+    if (activeIndex !== targetIndex) setCurrentQuestion(targetIndex);
+    window.setTimeout(() => {
+      questionRefs.current[targetIndex]?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+  }, [activeIndex, focusQuestionId, questions]);
+
+  function setCurrentQuestion(index: number) {
+    focusedQuestionIndexRef.current = index;
+    setActiveIndex(index);
+  }
 
   function addVoiceLog(text: string, tone: VoiceLogTone = "info") {
     setVoiceLogs((current) => [
@@ -254,7 +363,7 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
   }
 
   function chooseOption(question: QuestionItem, optionId: string) {
-    if (submitted) return;
+    if (submitted || !assignmentOpen) return;
     setAnswers((current) => {
       const selected = current[question.question_id] ?? [];
       const isMulti = question.question_type === "MULTIPLE_CHOICE";
@@ -269,7 +378,7 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
   }
 
   function fillAnswer(question: QuestionItem, value: string) {
-    if (submitted) return;
+    if (submitted || !assignmentOpen) return;
     setAnswers((current) => ({
       ...current,
       [question.question_id]: value.trim() ? [value] : []
@@ -278,12 +387,12 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
   }
 
   function jumpToQuestion(index: number) {
-    setActiveIndex(index);
+    setCurrentQuestion(index);
     questionRefs.current[index]?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   async function saveDraft(answerOverride?: AnswerMap) {
-    if (!workspace || submitted) return;
+    if (!workspace || submitted || !assignmentOpen) return;
     setSaving(true);
     setSaveMessage(null);
     try {
@@ -297,20 +406,36 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
     }
   }
 
-  async function submitAnswers(options?: VoiceSubmitOptions) {
-    if (!workspace || submitted) return;
+  function submitAnswers(options?: VoiceSubmitOptions) {
+    if (!workspace || submitted || !assignmentOpen) return;
     const payloadAnswers = options?.answerOverride ?? answers;
     const payloadAnsweredCount = questions.filter((question) => isAnswerPresent(question, payloadAnswers)).length;
     const unanswered = questions.length - payloadAnsweredCount;
-    const confirmed = unanswered > 0
-      ? window.confirm(`还有 ${unanswered} 道题未作答，确认交卷吗？`)
-      : window.confirm("确认提交本次作答吗？提交后会生成批改结果并更新学习画像。");
-    if (!confirmed) return;
+    const nextConfirm = { answers: payloadAnswers, answeredCount: payloadAnsweredCount, unanswered };
+    submitConfirmRef.current = nextConfirm;
+    setSubmitConfirm(nextConfirm);
+    if (voiceListening) {
+      setVoiceStatus("等待提交确认，请说“确认提交”或“取消交卷”");
+    }
+  }
+
+  function cancelSubmitConfirm() {
+    submitConfirmRef.current = null;
+    setSubmitConfirm(null);
+    if (voiceListening) setVoiceStatus("正在听你说话");
+  }
+
+  async function confirmSubmitAnswers() {
+    const pending = submitConfirmRef.current;
+    if (!pending || !workspace || submitted || submitting || !assignmentOpen) return;
     setSubmitting(true);
     setSaveMessage(null);
     try {
-      const submittedResult = await api.submitQuestionAnswers(workspace.assignment.assignment_id, toAnswerPayload(payloadAnswers));
+      const submittedResult = await api.submitQuestionAnswers(workspace.assignment.assignment_id, toAnswerPayload(pending.answers));
       setResult(submittedResult);
+      submitConfirmRef.current = null;
+      setSubmitConfirm(null);
+      clearCachedAnswers(assignmentId);
       setWorkspace((current) => current ? {
         ...current,
         progress: {
@@ -323,9 +448,12 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
         questions: submittedResult.questions
       } : current);
       setSaveMessage("已交卷，学习画像已更新");
+      addVoiceLog("批改完成，AI 学习反馈已生成。", "success");
+      stopVoiceAfterSubmit();
     } catch (err) {
       setSaveMessage("提交失败，请稍后重试");
       setErrorDetail(studentErrorDetail(err));
+      addVoiceLog("提交失败，请稍后重试。", "warning");
     } finally {
       setSubmitting(false);
     }
@@ -336,10 +464,55 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
     return isAnswerPresent(question, answers) ? "answered" : "empty";
   }
 
+  function toggleQuestionFavorite(question: QuestionItem, index: number) {
+    if (!workspace) return;
+    const id = favoriteRecordId("QUESTION", workspace.assignment.assignment_id, question.question_id);
+    if (favoriteIds.has(id)) {
+      removeStudentFavorite(id);
+      setFavoriteIds((current) => {
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      });
+      setSaveMessage(`已取消收藏第 ${index + 1} 题`);
+      return;
+    }
+
+    upsertStudentFavorite({
+      id,
+      kind: "QUESTION",
+      title: `${workspace.task.title} · 第 ${index + 1} 题`,
+      description: question.stem,
+      courseId: workspace.task.course_id,
+      courseName: workspace.task.course_name,
+      className: "课程任务",
+      teacherName: workspace.task.teacher_name,
+      taskId: workspace.task.task_id,
+      assignmentId: workspace.assignment.assignment_id,
+      workspaceType: "QUESTION_SET",
+      taskType: workspace.assignment.assignment_mode === "EXAM" ? "EXAM" : "QUIZ",
+      difficulty: question.difficulty,
+      knowledgePoints: question.knowledge_points,
+      publishedAt: workspace.assignment.published_at,
+      progressPercent: submitted ? (question.is_correct ? 100 : 0) : 0,
+      countLabel: submitted ? `${question.earned_score ?? 0}/${question.score} 分` : `${question.score} 分`,
+      questionId: question.question_id,
+      questionIndex: index + 1,
+      questionType: question.question_type,
+      score: question.score,
+      isWrong: submitted ? question.is_correct === false : false,
+      reason: submitted && question.is_correct === false ? "错题收藏" : "手动收藏",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    setFavoriteIds((current) => new Set(current).add(id));
+    setSaveMessage(submitted && question.is_correct === false ? `已收藏第 ${index + 1} 题到错题复盘` : `已收藏第 ${index + 1} 题`);
+  }
+
   function applyVoiceChoice(nextAnswers: AnswerMap, questionIndex: number, optionLabels: string[]) {
     const question = questions[questionIndex];
     if (!question) return { answers: nextAnswers, message: `没有找到第 ${questionIndex + 1} 题`, tone: "warning" as const };
-    if (!question.options.length) return { answers: nextAnswers, message: `第 ${questionIndex + 1} 题是填空题，当前只支持“第几题填...”`, tone: "warning" as const };
+    if (isFillQuestion(question)) return { answers: nextAnswers, message: `第 ${questionIndex + 1} 题是填空题，请说“第几题填...”`, tone: "warning" as const };
 
     const optionIds = optionLabels
       .map((label) => question.options.find((option) => option.label.toUpperCase() === label)?.option_id)
@@ -359,7 +532,7 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
   function applyVoiceFill(nextAnswers: AnswerMap, questionIndex: number, value: string) {
     const question = questions[questionIndex];
     if (!question) return { answers: nextAnswers, message: `没有找到第 ${questionIndex + 1} 题`, tone: "warning" as const };
-    if (question.options.length) return { answers: nextAnswers, message: `第 ${questionIndex + 1} 题是选择题，请说“第几题选A”`, tone: "warning" as const };
+    if (!isFillQuestion(question)) return { answers: nextAnswers, message: `第 ${questionIndex + 1} 题是选择题，请说“第几题选A”`, tone: "warning" as const };
     return {
       answers: { ...nextAnswers, [question.question_id]: value.trim() ? [value.trim()] : [] },
       message: `已填写第 ${questionIndex + 1} 题`,
@@ -374,16 +547,35 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
       addVoiceLog("本次作答已交卷，语音命令已暂停执行。", "warning");
       return;
     }
+    if (submitConfirmRef.current) {
+      if (submitting) {
+        addVoiceLog("正在提交批改，请稍等。", "info");
+        return;
+      }
+      if (/取消|不提交|先不交|返回|关闭|算了/.test(spokenText)) {
+        cancelSubmitConfirm();
+        addVoiceLog("已取消本次交卷确认。", "info");
+        return;
+      }
+      if (/确认|确定|是的|可以|提交|交卷|确认提交|确定提交|确认交卷|帮我提交|开始批改|提交批改/.test(spokenText)) {
+        void confirmSubmitAnswers();
+        addVoiceLog("已确认交卷，正在提交批改。", "success");
+        return;
+      }
+      addVoiceLog("提交确认中，请说“确认提交”或“取消交卷”。", "info");
+      return;
+    }
 
     let nextAnswers = answers;
     let changedAnswers = false;
     const actionMessages: VoiceActionLog[] = [];
+    const mentionedQuestionIndex = findMentionedQuestionIndex(spokenText, questions.length);
     const optionPattern = /(?:第\s*([一二三四五六七八九十两\d]+)\s*(?:题|道题)?\s*)?(?:选|选择|答案(?:是|为)?|定为|设为)\s*([A-HＡ-Ｈa-hａ-ｈ](?:\s*(?:和|及|、|，|,)?\s*[A-HＡ-Ｈa-hａ-ｈ])*)/g;
-    const fillPattern = /(?:第\s*([一二三四五六七八九十两\d]+)\s*(?:题|道题)?\s*)?(?:填|填写|填入)\s*([^，。；;]+)/g;
+    const fillPattern = /(?:第\s*([一二三四五六七八九十两\d]+)\s*(?:题|道题)?(?:[^，。；;,.]{0,10}?))?(?:填写|填入|填|答案(?:是|为)?|写(?:成|为)?)\s*(.+?)(?=\s*(?:，|。|；|;|保存|存草稿|提交|交卷|确认提交|下一题|下一个|上一题|上一个|$))/g;
 
     for (const match of spokenText.matchAll(optionPattern)) {
       const questionNumber = parseSpokenNumber(match[1]);
-      const targetIndex = questionNumber ? questionNumber - 1 : activeIndex;
+      const targetIndex = questionNumber ? questionNumber - 1 : focusedQuestionIndexRef.current;
       const optionLabels = splitOptionLabels(match[2]);
       const result = applyVoiceChoice(nextAnswers, targetIndex, optionLabels);
       nextAnswers = result.answers;
@@ -394,8 +586,12 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
 
     for (const match of spokenText.matchAll(fillPattern)) {
       const questionNumber = parseSpokenNumber(match[1]);
-      const targetIndex = questionNumber ? questionNumber - 1 : activeIndex;
-      const result = applyVoiceFill(nextAnswers, targetIndex, match[2]);
+      const targetIndex = questionNumber ? questionNumber - 1 : focusedQuestionIndexRef.current;
+      const fillValue = cleanVoiceFillValue(match[2]);
+      if (!fillValue) continue;
+      const targetQuestion = questions[targetIndex];
+      if (targetQuestion && !isFillQuestion(targetQuestion) && splitOptionLabels(fillValue).length > 0) continue;
+      const result = applyVoiceFill(nextAnswers, targetIndex, fillValue);
       nextAnswers = result.answers;
       changedAnswers = result.tone === "success" || changedAnswers;
       actionMessages.push({ id: `voice-fill-${Date.now()}-${actionMessages.length}`, text: result.message, tone: result.tone });
@@ -419,6 +615,18 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
       actionMessages.push({ id: `voice-prev-${Date.now()}`, text: "已切换到上一题", tone: "success" });
     }
 
+    if (!actionMessages.length && mentionedQuestionIndex !== null) {
+      const mentionedQuestion = questions[mentionedQuestionIndex];
+      jumpToQuestion(mentionedQuestionIndex);
+      actionMessages.push({
+        id: `voice-mention-${Date.now()}`,
+        text: isFillQuestion(mentionedQuestion)
+          ? `已定位到第 ${mentionedQuestionIndex + 1} 题。填空题请说“第 ${mentionedQuestionIndex + 1} 题填 答案内容”。`
+          : `已定位到第 ${mentionedQuestionIndex + 1} 题。选择题请说“第 ${mentionedQuestionIndex + 1} 题选 A”。`,
+        tone: "info"
+      });
+    }
+
     if (changedAnswers) {
       setAnswers(nextAnswers);
       setSaveMessage(null);
@@ -429,7 +637,7 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
     }
     if (/提交|交卷|确认提交/.test(spokenText)) {
       void submitAnswers({ answerOverride: nextAnswers });
-      actionMessages.push({ id: `voice-submit-${Date.now()}`, text: "已收到语音交卷指令，请确认后提交", tone: "info" });
+      actionMessages.push({ id: `voice-submit-${Date.now()}`, text: "已打开交卷确认，请说“确认提交”或“取消交卷”。", tone: "info" });
     }
 
     if (!actionMessages.length) {
@@ -460,9 +668,14 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
     };
     recognition.onend = () => {
       setVoiceListening(false);
+      if (voiceClosedAfterSubmitRef.current) {
+        setVoiceStatus("已交卷，语音控制已关闭");
+        return;
+      }
       setVoiceStatus("语音控制已暂停");
     };
     recognition.onerror = (event) => {
+      if (voiceClosedAfterSubmitRef.current) return;
       setVoiceListening(false);
       setVoiceStatus(event.error === "not-allowed" ? "麦克风权限未开启" : "语音识别暂时不可用");
       addVoiceLog(event.error === "not-allowed" ? "请允许浏览器使用麦克风后再开启语音控制。" : "识别中断，可再次点击开启。", "warning");
@@ -490,8 +703,25 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
     };
   }, []);
 
+  function stopVoiceAfterSubmit() {
+    voiceClosedAfterSubmitRef.current = true;
+    setVoiceListening(false);
+    setVoiceStatus("已交卷，语音控制已关闭");
+    const recognition = recognitionRef.current;
+    if (!recognition) return;
+    try {
+      recognition.stop();
+    } catch {
+      try {
+        recognition.abort();
+      } catch {
+        // Browser speech implementations can throw when already stopped.
+      }
+    }
+  }
+
   function toggleVoiceListening() {
-    if (!voiceSupported || submitted) return;
+    if (!voiceSupported || submitted || !assignmentOpen) return;
     const recognition = recognitionRef.current;
     if (!recognition) return;
     try {
@@ -544,13 +774,13 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
               <button className="program-back" type="button" onClick={onBack}><ArrowLeft size={16} /> 返回班级任务</button>
               <div className="question-title-line">
                 <h1>{workspace.task.title}</h1>
-                <span>{workspace.assignment.assignment_mode === "EXAM" ? "考核任务" : "练习任务"} · {statusText(workspace.progress.status)}</span>
+                <span>{workspace.assignment.assignment_mode === "EXAM" ? "考核任务" : "练习任务"} · {statusText(workspace.progress.status, workspace.assignment.start_at)}</span>
               </div>
-              <p>{workspace.task.course_name} · 发布老师：{workspace.task.teacher_name} · 截止：{deadlineText(workspace.assignment.deadline)}</p>
+              <p>{workspace.task.course_name} · 发布老师：{workspace.task.teacher_name} · 开始：{formatStudentDateTime(workspace.assignment.start_at, "未设置")} · 截止：{formatStudentDateTime(workspace.assignment.deadline, "未设置")}</p>
             </div>
             <div className="question-head-actions">
-              <button type="button" disabled={saving || submitted} onClick={() => saveDraft()}><Save size={16} /> {saving ? "保存中" : "保存草稿"}</button>
-              <button className="primary" type="button" disabled={submitting || submitted} onClick={() => submitAnswers()}><Send size={16} /> {submitted ? "已交卷" : submitting ? "提交中" : "交卷"}</button>
+              <button type="button" disabled={saving || submitted || !assignmentOpen} onClick={() => saveDraft()}><Save size={16} /> {saving ? "保存中" : "保存草稿"}</button>
+              <button className="primary" type="button" disabled={submitting || submitted || !assignmentOpen} onClick={() => submitAnswers()}><Send size={16} /> {submitted ? "已交卷" : submitting ? "提交中" : assignmentOpen ? "交卷" : "未开放"}</button>
             </div>
           </section>
 
@@ -571,15 +801,17 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
               <section className="question-notice">
                 <AlertCircle size={17} />
                 <div>
-                  <strong>作答说明</strong>
-                  <p>请按题目要求完成选择或填空。答案会自动保留在当前页面，交卷前可继续修改。</p>
+                  <strong>{assignmentOpen ? "作答说明" : "开始信息"}</strong>
+                  <p>{assignmentOpen ? "请按题目要求完成选择或填空。答案会自动保留在当前页面，交卷前可继续修改。" : `本任务将于 ${scheduleInfo.absoluteLabel} 开放，开始前可查看题目安排，暂不能保存草稿或交卷。`}</p>
                 </div>
               </section>
 
               <div className="question-list">
                 {questions.map((question, index) => {
                   const selectedAnswers = answers[question.question_id] ?? [];
-                  const isFillQuestion = !question.options.length;
+                  const fillQuestion = isFillQuestion(question);
+                  const favoriteId = favoriteRecordId("QUESTION", assignmentId, question.question_id);
+                  const isFavorite = favoriteIds.has(favoriteId);
                   return (
                     <section
                       className={`question-item ${activeIndex === index ? "active" : ""}`}
@@ -587,6 +819,7 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
                       ref={(node) => {
                         questionRefs.current[index] = node;
                       }}
+                      onFocus={() => setCurrentQuestion(index)}
                     >
                       <header className="question-main-header">
                         <div>
@@ -594,21 +827,34 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
                           <span className="question-type">{typeText(question.question_type)}</span>
                           <span className="question-score">{question.score} 分</span>
                         </div>
-                        <div className="question-knowledge">
-                          {question.knowledge_points.map((point) => <span key={point}>{point}</span>)}
+                        <div className="question-main-tools">
+                          <div className="question-knowledge">
+                            {question.knowledge_points.map((point) => <span key={point}>{point}</span>)}
+                          </div>
+                          <button
+                            className={`question-favorite-btn ${isFavorite ? "active" : ""}`}
+                            type="button"
+                            onClick={() => toggleQuestionFavorite(question, index)}
+                            aria-pressed={isFavorite}
+                            aria-label={`${isFavorite ? "取消收藏" : "收藏"}第 ${index + 1} 题`}
+                          >
+                            <Bookmark size={15} fill={isFavorite ? "currentColor" : "none"} />
+                            {isFavorite ? "已收藏" : submitted && question.is_correct === false ? "收藏错题" : "收藏本题"}
+                          </button>
                         </div>
                       </header>
 
                       <h3>{question.stem}</h3>
 
-                      {isFillQuestion ? (
+                      {fillQuestion ? (
                         <label className="question-fill">
                           <span>我的答案</span>
                           <textarea
                             value={selectedAnswers[0] ?? ""}
-                            disabled={submitted}
+                            disabled={submitted || !assignmentOpen}
                             rows={3}
                             onChange={(event) => fillAnswer(question, event.target.value)}
+                            onFocus={() => setCurrentQuestion(index)}
                             placeholder="在这里填写答案"
                           />
                         </label>
@@ -622,9 +868,10 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
                               <button
                                 className={`${selected ? "selected" : ""} ${correct ? "correct" : ""} ${wrongPick ? "wrong" : ""}`}
                                 type="button"
+                                disabled={!assignmentOpen}
                                 key={option.option_id}
                                 onClick={() => {
-                                  setActiveIndex(index);
+                                  setCurrentQuestion(index);
                                   chooseOption(question, option.option_id);
                                 }}
                                 aria-pressed={selected}
@@ -693,7 +940,7 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
                 <div className="question-number-grid">
                   {questions.map((question, index) => (
                     <button
-                      className={`${activeIndex === index ? "active" : ""} ${questionState(question)}`}
+                      className={`${activeIndex === index ? "active" : ""} ${questionState(question)} ${favoriteIds.has(favoriteRecordId("QUESTION", assignmentId, question.question_id)) ? "favorited" : ""}`}
                       type="button"
                       key={question.question_id}
                       onClick={() => jumpToQuestion(index)}
@@ -706,6 +953,7 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
                 <div className="question-legend">
                   <span><i className="answered" /> 已答</span>
                   <span><i className="empty" /> 未答</span>
+                  <span><i className="favorited" /> 已收藏 {favoriteCount}</span>
                   {submitted ? <><span><i className="correct" /> 正确</span><span><i className="wrong" /> 错误</span></> : null}
                 </div>
               </section>
@@ -716,7 +964,7 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
                     <h2><Mic size={20} /> 语音作答控制</h2>
                     <p>{voiceStatus}</p>
                   </div>
-                  <button type="button" disabled={!voiceSupported || submitted} onClick={toggleVoiceListening} aria-pressed={voiceListening}>
+                  <button type="button" disabled={!voiceSupported || submitted || !assignmentOpen} onClick={toggleVoiceListening} aria-pressed={voiceListening}>
                     {voiceListening ? <MicOff size={16} /> : <Mic size={16} />}
                     {voiceListening ? "暂停" : "开启"}
                   </button>
@@ -747,7 +995,32 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
                 <h2><Bot size={20} /> AI 学习反馈</h2>
                 {result ? (
                   <>
-                    <p>{result.profile_signal.summary}</p>
+                    <div className="question-ai-feedback-meta">
+                      <span>{result.ai_feedback?.source === "RULE_FALLBACK" ? "规则兜底" : "AI 生成"}</span>
+                      <span>置信度 {Math.round((result.ai_feedback?.confidence ?? 0.7) * 100)}%</span>
+                      {result.ai_feedback?.needs_teacher_review ? <span>建议教师复核</span> : null}
+                    </div>
+                    <p>{result.ai_feedback?.summary ?? result.profile_signal.summary}</p>
+                    {result.ai_feedback?.wrong_question_explanations.length ? (
+                      <div className="question-ai-wrong-list">
+                        {result.ai_feedback.wrong_question_explanations.slice(0, 3).map((item) => (
+                          <article key={item.question_id}>
+                            <strong>第 {item.question_index} 题 · {item.error_label}</strong>
+                            <p>{item.explanation}</p>
+                            <small>{item.next_step}</small>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <p>本次没有错题解释，建议进入下一组迁移练习。</p>
+                    )}
+                    {result.ai_feedback?.recommended_actions.length ? (
+                      <div className="question-ai-actions">
+                        {result.ai_feedback.recommended_actions.slice(0, 2).map((item) => (
+                          <span key={item.action}>{item.label}</span>
+                        ))}
+                      </div>
+                    ) : null}
                     <div className="question-profile-signal">
                       <span>画像进度</span>
                       <strong>{Math.round(result.profile_signal.overall_progress)}%</strong>
@@ -762,6 +1035,50 @@ export default function QuestionWorkspace({ assignmentId, onBack }: PageProps) {
           </section>
         </main>
       )}
+      {submitConfirm ? (
+        <div className="question-submit-confirm-backdrop" role="presentation">
+          <section
+            className={`question-submit-confirm ${submitting ? "submitting" : ""}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="question-submit-confirm-title"
+            aria-describedby="question-submit-confirm-desc"
+          >
+            <div className="question-submit-confirm-icon">
+              {submitting ? <Clock3 size={24} /> : <Send size={24} />}
+            </div>
+            <div>
+              <span className="question-submit-confirm-eyebrow">交卷确认</span>
+              <h2 id="question-submit-confirm-title">{submitting ? "正在提交批改" : "确认提交本次作答吗？"}</h2>
+              <p id="question-submit-confirm-desc">
+                {submitConfirm.unanswered > 0
+                  ? `当前已完成 ${submitConfirm.answeredCount}/${questions.length} 题，还有 ${submitConfirm.unanswered} 题未作答。提交后会生成批改结果并更新学习画像。`
+                  : "当前所有题目已作答。提交后会生成批改结果并更新学习画像。"}
+              </p>
+            </div>
+            <div className="question-submit-confirm-stats">
+              <span><strong>{submitConfirm.answeredCount}</strong> 已作答</span>
+              <span><strong>{submitConfirm.unanswered}</strong> 未作答</span>
+              <span><strong>{questions.length}</strong> 总题数</span>
+            </div>
+            {voiceSupported ? (
+              <p className="question-submit-confirm-voice">
+                语音确认：说“确认提交”继续批改，说“取消交卷”返回修改。
+              </p>
+            ) : null}
+            <footer>
+              <button type="button" disabled={submitting} onClick={cancelSubmitConfirm}>
+                <XCircle size={16} />
+                取消
+              </button>
+              <button className="primary" type="button" disabled={submitting} onClick={confirmSubmitAnswers}>
+                {submitting ? <Clock3 size={16} /> : <CheckCircle2 size={16} />}
+                {submitting ? "批改中" : "确认提交"}
+              </button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

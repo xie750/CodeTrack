@@ -248,10 +248,11 @@ function TaskWorkspaceWrapper({ onBack }: { onBack: () => void }) {
 
 function QuestionWorkspaceWrapper({ onBack }: { onBack: () => void }) {
   const { assignmentId } = useParams();
+  const [searchParams] = useSearchParams();
   if (!assignmentId) {
     return <Navigate to="/tasks" replace />;
   }
-  return <QuestionWorkspace assignmentId={assignmentId} onBack={onBack} />;
+  return <QuestionWorkspace assignmentId={assignmentId} focusQuestionId={searchParams.get("question_id") ?? undefined} onBack={onBack} />;
 }
 
 export default function App() {

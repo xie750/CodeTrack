@@ -991,8 +991,12 @@ export default function AiTutor() {
                             />
                             <span>{turn.profileUsed ? "已结合学习画像" : "未使用学习画像"}</span>
                             <span>{turn.sourceUsed ? "已引用资料" : "未引用资料"}</span>
-                            {turn.modelLabel ? <span>{turn.modelLabel}</span> : null}
-                            {turn.modelName ? <span>模型 {turn.modelName}</span> : null}
+                            {turn.modelLabel || turn.modelName ? (
+                              <span>
+                                {turn.modelLabel || "模型"}
+                                {turn.modelName && turn.modelName !== turn.modelLabel ? ` · ${turn.modelName}` : ""}
+                              </span>
+                            ) : null}
                           </div>
                         </section>
                       ) : null}

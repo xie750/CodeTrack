@@ -14,14 +14,16 @@ import {
   Search,
   Target
 } from "lucide-react";
-import { api, LearningContext, StudentProfile, StudentTaskCard } from "../api";
+import { api, LearningContext, StudentProfile } from "../api";
+import { readStudentFavorites, removeStudentFavorite, subscribeStudentFavorites, upsertStudentFavorite, type StudentFavoriteRecord } from "../studentFavorites";
 
 type FavoriteType = "编程题" | "练习题" | "考核题";
 
 type FavoriteItem = {
   id: string;
   taskId: string;
-  assignmentId: string;
+  assignmentId?: string;
+  questionId?: string;
   workspaceType: string;
   taskType: string;
   title: string;
@@ -37,9 +39,12 @@ type FavoriteItem = {
   difficulty: string;
   progress: number;
   count: string;
+  reason: string;
+  updatedAt: string;
+  record: StudentFavoriteRecord;
 };
 
-const tabs = ["全部收藏", "编程题", "练习题", "考核题", "最近收藏"];
+const tabs = ["全部收藏", "错题复盘", "编程题", "练习题", "考核题", "最近收藏"];
 
 function formatDateTime(value: string | null) {
   if (!value) return "未设置";
@@ -66,28 +71,30 @@ function favoriteType(taskType: string): Pick<FavoriteItem, "type" | "badgeClass
   return { type: "编程题", badgeClass: "green" };
 }
 
-function taskToFavorite(task: StudentTaskCard): FavoriteItem {
-  const typeInfo = favoriteType(task.task_type);
-  const total = Math.max(task.total_required_count, 1);
-  const progress = Math.round((task.passed_count / total) * 100);
+function favoriteRecordToItem(record: StudentFavoriteRecord): FavoriteItem {
+  const typeInfo = favoriteType(record.taskType);
   return {
-    id: task.assignment_id,
-    taskId: task.task_id,
-    assignmentId: task.assignment_id,
-    workspaceType: task.workspace_type,
-    taskType: task.task_type,
-    title: task.title,
+    id: record.id,
+    taskId: record.taskId,
+    assignmentId: record.assignmentId,
+    questionId: record.questionId,
+    workspaceType: record.workspaceType,
+    taskType: record.taskType,
+    title: record.title,
     ...typeInfo,
-    tags: ["教师下发", ...task.knowledge_points].slice(0, 4),
-    description: task.description || task.latest_summary,
-    courseId: task.course_id,
-    course: task.course_name,
-    className: task.class_name,
-    teacherName: task.teacher_name,
-    publishedAt: formatDateTime(task.published_at),
-    difficulty: difficultyText(task.difficulty),
-    progress,
-    count: `${task.passed_count}/${task.total_required_count}`
+    tags: [record.reason, ...record.knowledgePoints].slice(0, 4),
+    description: record.description || "已收藏的教师下发题目，可回到工作区继续复盘。",
+    courseId: record.courseId,
+    course: record.courseName,
+    className: record.className,
+    teacherName: record.teacherName,
+    publishedAt: formatDateTime(record.publishedAt),
+    difficulty: difficultyText(record.difficulty),
+    progress: record.progressPercent,
+    count: record.countLabel,
+    reason: record.reason,
+    updatedAt: record.updatedAt,
+    record
   };
 }
 
@@ -103,8 +110,8 @@ export default function LearningLibrary({ initialCourseId = "", scope = "global"
   const [context, setContext] = useState<LearningContext | null>(null);
   const [selectedCourseId, setSelectedCourseId] = useState(initialCourseId);
   const [profile, setProfile] = useState<StudentProfile | null>(null);
-  const [tasks, setTasks] = useState<StudentTaskCard[]>([]);
-  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+  const [favoriteRecords, setFavoriteRecords] = useState<StudentFavoriteRecord[]>(() => readStudentFavorites());
+  const [recentlyRemovedRecords, setRecentlyRemovedRecords] = useState<StudentFavoriteRecord[]>([]);
   const [recentlyChangedIds, setRecentlyChangedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -131,9 +138,7 @@ export default function LearningLibrary({ initialCourseId = "", scope = "global"
         ]);
         if (!alive) return;
 
-        const loadedTasks = taskResult.status === "fulfilled" ? taskResult.value : [];
-        setTasks(loadedTasks);
-        setFavoriteIds(new Set());
+        setFavoriteRecords(readStudentFavorites());
         setRecentlyChangedIds(new Set());
         setProfile(profileResult.status === "fulfilled" ? profileResult.value : null);
         if (taskResult.status === "rejected") {
@@ -142,8 +147,7 @@ export default function LearningLibrary({ initialCourseId = "", scope = "global"
       } catch {
         if (!alive) return;
         setContext(null);
-        setTasks([]);
-        setFavoriteIds(new Set());
+        setFavoriteRecords(readStudentFavorites());
         setProfile(null);
         setError("收藏页数据加载失败，请稍后刷新。");
       } finally {
@@ -156,6 +160,12 @@ export default function LearningLibrary({ initialCourseId = "", scope = "global"
       alive = false;
     };
   }, [initialCourseId]);
+
+  useEffect(() => {
+    return subscribeStudentFavorites(() => {
+      setFavoriteRecords(readStudentFavorites());
+    });
+  }, []);
 
   useEffect(() => {
     if (!selectedCourseId) return;
@@ -173,7 +183,11 @@ export default function LearningLibrary({ initialCourseId = "", scope = "global"
     };
   }, [selectedCourseId]);
 
-  const allItems = useMemo(() => tasks.map(taskToFavorite), [tasks]);
+  const favoriteIds = useMemo(() => new Set(favoriteRecords.map((item) => item.id)), [favoriteRecords]);
+  const allItems = useMemo(() => {
+    const removedOnly = recentlyRemovedRecords.filter((item) => !favoriteIds.has(item.id));
+    return [...favoriteRecords, ...removedOnly].map(favoriteRecordToItem);
+  }, [favoriteIds, favoriteRecords, recentlyRemovedRecords]);
   const courseItems = useMemo(
     () => (selectedCourseId ? allItems.filter((item) => item.courseId === selectedCourseId) : allItems),
     [allItems, selectedCourseId]
@@ -185,7 +199,11 @@ export default function LearningLibrary({ initialCourseId = "", scope = "global"
       const wasRecentlyChanged = recentlyChangedIds.has(item.id);
       if (!isFavorite && !wasRecentlyChanged) return false;
 
-      const typeMatch = activeTab === "全部收藏" || activeTab === "最近收藏" || item.type === activeTab;
+      const typeMatch =
+        activeTab === "全部收藏" ||
+        activeTab === "最近收藏" ||
+        (activeTab === "错题复盘" && item.reason === "错题收藏") ||
+        item.type === activeTab;
       const queryMatch =
         !normalizedQuery ||
         item.title.toLowerCase().includes(normalizedQuery) ||
@@ -209,15 +227,15 @@ export default function LearningLibrary({ initialCourseId = "", scope = "global"
   const weakPoint = profile?.knowledge_states.find((item) => item.state === "WEAK")?.knowledge_point ?? null;
 
   function toggleFavorite(item: FavoriteItem) {
-    setFavoriteIds((current) => {
-      const next = new Set(current);
-      if (next.has(item.id)) {
-        next.delete(item.id);
-      } else {
-        next.add(item.id);
-      }
-      return next;
-    });
+    if (favoriteIds.has(item.id)) {
+      removeStudentFavorite(item.id);
+      setFavoriteRecords(readStudentFavorites());
+      setRecentlyRemovedRecords((current) => [item.record, ...current.filter((record) => record.id !== item.id)].slice(0, 12));
+    } else {
+      upsertStudentFavorite(item.record);
+      setFavoriteRecords(readStudentFavorites());
+      setRecentlyRemovedRecords((current) => current.filter((record) => record.id !== item.id));
+    }
     setRecentlyChangedIds((current) => new Set(current).add(item.id));
   }
 
@@ -225,11 +243,13 @@ export default function LearningLibrary({ initialCourseId = "", scope = "global"
     const state = scope === "course" && selectedCourseId
       ? { fromCourseId: selectedCourseId, fromPath: `/courses/${selectedCourseId}/favorites` }
       : undefined;
-    if (item.workspaceType === "QUESTION_SET" || item.taskType === "QUIZ" || item.taskType === "EXAM") {
-      navigate(`/question-workspace/${item.assignmentId}`, state ? { state } : undefined);
+    if ((item.workspaceType === "QUESTION_SET" || item.taskType === "QUIZ" || item.taskType === "EXAM") && item.assignmentId) {
+      const questionQuery = item.questionId ? `?question_id=${encodeURIComponent(item.questionId)}` : "";
+      navigate(`/question-workspace/${item.assignmentId}${questionQuery}`, state ? { state } : undefined);
       return;
     }
-    navigate(`/workspace/${item.taskId}`, state ? { state } : undefined);
+    const assignmentQuery = item.assignmentId ? `?assignment_id=${encodeURIComponent(item.assignmentId)}` : "";
+    navigate(`/workspace/${item.taskId}${assignmentQuery}`, state ? { state } : undefined);
   }
 
   return (
@@ -345,7 +365,7 @@ export default function LearningLibrary({ initialCourseId = "", scope = "global"
             <article className="favorite-empty">
               <Bookmark size={28} />
               <h2>当前没有收藏题目</h2>
-              <p>收藏页只展示已经存在于教师下发任务里的题目。你可以在演示中点击“重新收藏”恢复刚取消的题目，或回到班级任务查看全部下发内容。</p>
+              <p>在教师下发的题目工作区或编码任务页点击“收藏本题 / 收藏任务”后，这里会汇总错题和高价值题目，便于复盘。</p>
               <button type="button" onClick={() => navigate(scope === "course" && selectedCourseId ? `/courses/${selectedCourseId}/tasks` : "/tasks")}>查看班级任务</button>
             </article>
           )}
@@ -382,7 +402,7 @@ export default function LearningLibrary({ initialCourseId = "", scope = "global"
           <div className="library-side-summary">
             <span>来源：教师下发</span>
             <span>
-              已取消：<b>{allItems.filter((item) => recentlyChangedIds.has(item.id) && !favoriteIds.has(item.id)).length} 道</b>
+              已取消：<b>{recentlyRemovedRecords.length} 道</b>
             </span>
           </div>
         </section>
@@ -411,9 +431,9 @@ export default function LearningLibrary({ initialCourseId = "", scope = "global"
           <header>
             <h2>学习建议</h2>
           </header>
-          <AdviceItem tone="blue" icon={<BarChart3 size={22} />} title="先复盘收藏任务" text="收藏夹里的题目都来自当前班级任务，可以直接回到任务工作区继续练习。" />
+          <AdviceItem tone="blue" icon={<BarChart3 size={22} />} title="先复盘收藏题目" text="收藏夹里的题目都来自当前班级任务，可以直接回到题目工作区继续练习。" />
           <AdviceItem tone="green" icon={<Target size={22} />} title="强化薄弱知识点" text={weakPoint ? `${weakPoint} 需要结合任务诊断和收藏题目复盘。` : "学习画像加载后会给出更具体的薄弱点建议。"} />
-          <AdviceItem tone="orange" icon={<Clock3 size={22} />} title="定期清理收藏" text="取消收藏会即时更新统计，便于演示收藏状态联动。" />
+          <AdviceItem tone="orange" icon={<Clock3 size={22} />} title="定期清理收藏" text="取消收藏会即时更新统计，也可以在本页快速恢复刚取消的题目。" />
           <button type="button" className="plan-button" onClick={() => navigate("/self-study/ai")}>
             生成个性化学习计划
           </button>
