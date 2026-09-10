@@ -44,6 +44,10 @@ export default defineConfig({
       "/health": backendTarget,
       "/ready": backendTarget
     }
+  },
+  build: {
+    outDir: "../dist",
+    emptyOutDir: true
   }
 });
 

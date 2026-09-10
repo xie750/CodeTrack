@@ -1743,6 +1743,21 @@ def mark_notification(notification_id: str, payload: NotificationRead, teacher: 
 FRONTEND_DIST = Path(__file__).resolve().parents[2] / "dist"
 if FRONTEND_DIST.exists():
     from fastapi.staticfiles import StaticFiles
-    app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+
+    class SPAStaticFiles(StaticFiles):
+        async def get_response(self, path: str, scope: dict[str, Any]):
+            try:
+                return await super().get_response(path, scope)
+            except StarletteHTTPException as exc:
+                if (
+                    exc.status_code == 404
+                    and scope.get("method") in {"GET", "HEAD"}
+                    and not path.startswith(("api/", "docs", "redoc", "openapi.json"))
+                ):
+                    return await super().get_response("index.html", scope)
+                raise
+
+    app.mount("/", SPAStaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")
 
 

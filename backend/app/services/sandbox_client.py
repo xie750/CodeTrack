@@ -90,18 +90,8 @@ def run_sandbox_execution(
             resource_usage=result.resource_usage,
         )
 
-    if spec.runner_profile != "legacy_linked_list_delete_v1":
-        return SandboxClientResult(
-            status="INFRASTRUCTURE_ERROR",
-            compile_exit_code=None,
-            compiler_stdout="",
-            compiler_stderr="",
-            tests=[],
-            failure_reason="PISTON_BASE_URL_NOT_CONFIGURED",
-            resource_usage={"profile": spec.runner_profile, "required_service": "piston"},
-        )
-
-    if settings.sandbox_service_url:
+    legacy_sandbox_service = spec.runner_profile == "legacy_linked_list_delete_v1" or task is None
+    if settings.sandbox_service_url and legacy_sandbox_service:
         try:
             response = httpx.post(
                 f"{settings.sandbox_service_url.rstrip('/')}/api/v1/runs",

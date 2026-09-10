@@ -1293,12 +1293,13 @@ html.workspace-resizing-y * {
 
 .program-ai footer {
   display: grid;
-  grid-template-columns: 1fr 1.35fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   padding: 0 0 2px;
 }
 
 .program-ai footer button {
+  width: 100%;
   height: 42px;
   padding: 0 8px;
 }
