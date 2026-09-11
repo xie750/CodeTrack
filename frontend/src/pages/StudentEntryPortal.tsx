@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
-import { ArrowRight, BookOpenCheck, BriefcaseBusiness, CalendarClock, CheckCircle2, Code2, Compass, FlaskConical, Loader2, LockKeyhole, Microscope, Sparkles, Target, X } from "lucide-react";
+import { ArrowRight, BookOpenCheck, BriefcaseBusiness, CalendarClock, CheckCircle2, Code2, Compass, FlaskConical, Loader2, LockKeyhole, Microscope, PlusCircle, Sparkles, Target, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { api, apiCache, type LearningContext, type StudentTaskCard } from "../api";
+import { api, apiCache, type LearningContext, type StudentCourseOffering, type StudentTaskCard } from "../api";
 import type { AuthUser } from "../authSession";
 import { StudentInlineNotice, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
 import { resolveVisibleTaskStatus } from "../studentTaskSchedule";
@@ -311,9 +311,12 @@ function CourseDrawer({ open, onClose }: { open: boolean; onClose: () => void })
   const cachedTasks = apiCache.peekStudentTasks();
   const [context, setContext] = useState<LearningContext | null>(cachedContext);
   const [tasks, setTasks] = useState<StudentTaskCard[]>(cachedTasks ?? []);
+  const [offerings, setOfferings] = useState<StudentCourseOffering[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [messageDetail, setMessageDetail] = useState<string | null>(null);
+  const [joinMessage, setJoinMessage] = useState<string | null>(null);
+  const [joiningId, setJoiningId] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -325,11 +328,15 @@ function CourseDrawer({ open, onClose }: { open: boolean; onClose: () => void })
       setMessage(null);
       setMessageDetail(null);
       try {
-        const data = await api.getLearningContext();
-        const taskData = await api.listStudentTasks();
+        const [data, taskData, offeringData] = await Promise.all([
+          api.getLearningContext(),
+          api.listStudentTasks(),
+          api.listStudentCourseOfferings().catch(() => ({ items: [] }))
+        ]);
         if (!alive) return;
         setContext(data);
         setTasks(taskData);
+        setOfferings(offeringData.items);
       } catch (err) {
         if (!alive) return;
         setMessage(studentErrorMessage(err, "课程数据加载失败，请稍后重试。"));
@@ -364,6 +371,24 @@ function CourseDrawer({ open, onClose }: { open: boolean; onClose: () => void })
     navigate(`/courses/${courseId}`);
   }
 
+  async function joinOffering(offering: StudentCourseOffering) {
+    if (joiningId) return;
+    setJoiningId(offering.teaching_assignment_id);
+    setJoinMessage(null);
+    try {
+      const result = await api.joinStudentCourseOffering(offering.teaching_assignment_id);
+      const taskData = await api.listStudentTasks();
+      setContext(result.learning_context);
+      setTasks(taskData);
+      setOfferings((current) => current.filter((item) => item.teaching_assignment_id !== offering.teaching_assignment_id));
+      setJoinMessage(`已加入 ${offering.course_name}`);
+    } catch (err) {
+      setJoinMessage(studentErrorMessage(err, "加入课程失败，请稍后重试。"));
+    } finally {
+      setJoiningId(null);
+    }
+  }
+
   return (
     <div className={`student-course-drawer-layer${open ? " open" : ""}`} aria-hidden={!open}>
       <button className="student-course-drawer-scrim" type="button" tabIndex={open ? 0 : -1} aria-label="关闭课程选择" onClick={onClose} />
@@ -389,6 +414,35 @@ function CourseDrawer({ open, onClose }: { open: boolean; onClose: () => void })
           />
         ) : null}
 
+        <section className="student-course-join-panel" aria-label="加入课程">
+          <div className="student-course-join-heading">
+            <div>
+              <strong>加入课程</strong>
+              <p>选择老师已开放的课程通道，加入后会同步课程任务与课程工作台。</p>
+            </div>
+            <span><PlusCircle size={18} /></span>
+          </div>
+          {joinMessage ? <p className="student-course-join-message">{joinMessage}</p> : null}
+          {offerings.length ? (
+            <div className="student-course-offering-list">
+              {offerings.slice(0, 4).map((offering) => (
+                <article className="student-course-offering-card" key={offering.teaching_assignment_id}>
+                  <div>
+                    <strong>{offering.course_name}</strong>
+                    <small>{offering.teacher_name} · {offering.class_name} · {offering.task_count} 项任务</small>
+                  </div>
+                  <button type="button" disabled={Boolean(joiningId)} onClick={() => joinOffering(offering)}>
+                    {joiningId === offering.teaching_assignment_id ? <Loader2 className="student-course-offering-spinner" size={14} /> : <PlusCircle size={14} />}
+                    {joiningId === offering.teaching_assignment_id ? "加入中" : "加入"}
+                  </button>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="student-course-join-empty">暂无新的可加入课程。</p>
+          )}
+        </section>
+
         <section className="student-course-drawer-list">
           {loading ? (
             Array.from({ length: 3 }).map((_, index) => <article className="student-course-drawer-card skeleton-block" key={index} />)
@@ -399,7 +453,7 @@ function CourseDrawer({ open, onClose }: { open: boolean; onClose: () => void })
                   <span className="teacher-soft-icon blue"><BookOpenCheck size={22} /></span>
                   <div>
                     <strong>{course.course_name}</strong>
-                    <small>授课教师：{course.teacher_name} · 所在班级：{context?.student.class_name ?? "当前班级"}</small>
+                    <small>授课教师：{course.teacher_name} · 所在班级：{course.class_name ?? context?.student.class_name ?? "当前班级"}</small>
                   </div>
                 </div>
                 <div className="student-course-drawer-meta">

@@ -189,6 +189,100 @@ def test_student_can_refresh_frontier_tracking_and_record_profile_event():
     assert event is not None
 
 
+def test_student_can_search_live_literature_with_public_source_contract(monkeypatch):
+    from backend.app.services import practice_projects
+
+    def fake_live_literature_search(query: str, limit: int = 6):
+        return (
+            [
+                {
+                    "id": "openalex:test-paper",
+                    "title": "Efficient Image Classification with Lightweight Convolutional Networks",
+                    "authors": ["A. Researcher", "B. Student"],
+                    "year": 2025,
+                    "venue": "Open Research",
+                    "abstract": "A study about lightweight image classification and evaluation trade-offs.",
+                    "citation_count": 42,
+                    "doi": "https://doi.org/10.1000/example",
+                    "url": "https://doi.org/10.1000/example",
+                    "source": "OpenAlex",
+                    "open_access_url": "https://example.org/paper.pdf",
+                }
+            ],
+            "live",
+            None,
+        )
+
+    monkeypatch.setattr(practice_projects, "live_literature_search", fake_live_literature_search)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/student/practice-projects/sales-cleaning/literature/search",
+            headers=STUDENT_HEADERS,
+            json={"query": "轻量模型", "limit": 3},
+        )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["source_mode"] == "live"
+    assert "lightweight image classification" in data["query"].lower()
+    assert data["papers"][0]["source"] == "OpenAlex"
+    assert data["papers"][0]["url"].startswith("https://")
+    assert data["workflow"][0] == "检索相关论文并形成可筛选的证据表"
+    assert data["activity"]["type"] == "literature_search"
+
+
+def test_student_can_generate_writing_assist_and_save_material():
+    selected_paper = {
+        "id": "openalex:test-paper",
+        "title": "Efficient Image Classification with Lightweight Convolutional Networks",
+        "authors": ["A. Researcher", "B. Student"],
+        "year": 2025,
+        "venue": "Open Research",
+        "abstract": "A study about lightweight image classification and evaluation trade-offs.",
+        "citation_count": 42,
+        "doi": "https://doi.org/10.1000/example",
+        "url": "https://doi.org/10.1000/example",
+        "source": "OpenAlex",
+        "open_access_url": "https://example.org/paper.pdf",
+    }
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/student/practice-projects/sales-cleaning/writing-assist",
+            headers=STUDENT_HEADERS,
+            json={
+                "topic": "轻量图像分类模型",
+                "section": "相关工作",
+                "writing_task": "生成综述框架并检查引用",
+                "draft": "轻量模型能够降低部署成本，但需要比较准确率和参数量。",
+                "selected_papers": [selected_paper],
+                "save_as_material": True,
+            },
+        )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["result"]["section"] == "相关工作"
+    assert data["result"]["selected_papers"][0]["title"] == selected_paper["title"]
+    assert data["result"]["citations"][0]["source_url"].startswith("https://")
+    assert data["result"]["writing_checks"][0]["label"] == "文献来源覆盖"
+    assert data["material"]["material_type"] == "WRITING_DRAFT"
+    assert data["detail"]["materials"][0]["id"] == data["material"]["id"]
+    assert data["activity"]["type"] == "writing_assist"
+
+    with SessionLocal() as db:
+        event = db.scalar(
+            select(LearnerEvent)
+            .where(
+                LearnerEvent.student_id == "user_student_001",
+                LearnerEvent.event_type == "RESEARCH_WRITING_ASSISTED",
+            )
+            .order_by(LearnerEvent.created_at.desc())
+        )
+    assert event is not None
+
+
 def test_student_material_upload_submit_and_resource_deposit_flow():
     with TestClient(app) as client:
         material_response = client.post(

@@ -202,8 +202,10 @@ export type LearningContext = {
   student: {
     id: string;
     name: string;
-    class_id: string;
+    class_id: string | null;
     class_name: string;
+    has_class?: boolean;
+    state?: "NO_CLASS" | "CLASS_BOUND";
   };
   courses: Array<{
     course_id: string;
@@ -211,9 +213,31 @@ export type LearningContext = {
     teacher_id: string;
     teacher_name: string;
     teaching_assignment_id: string;
+    class_id?: string;
+    class_name?: string;
+    term?: string;
     task_count: number;
     unfinished_count: number;
   }>;
+};
+
+export type StudentCourseOffering = {
+  teaching_assignment_id: string;
+  course_id: string;
+  course_name: string;
+  teacher_id: string;
+  teacher_name: string;
+  class_id: string;
+  class_name: string;
+  term: string;
+  task_count: number;
+  joined: boolean;
+};
+
+export type StudentCourseJoinResult = {
+  joined: boolean;
+  offering: StudentCourseOffering;
+  learning_context: LearningContext;
 };
 
 export type StudentTaskCard = {
@@ -546,6 +570,46 @@ export type PracticeResearchBrief = {
   generated_at: string | null;
   confidence: number;
   next_actions: string[];
+};
+
+export type PracticeLiteraturePaper = {
+  id: string;
+  title: string;
+  authors: string[];
+  year: number | null;
+  venue: string;
+  abstract: string;
+  citation_count: number;
+  doi: string;
+  url: string;
+  source: string;
+  open_access_url: string;
+};
+
+export type PracticeLiteratureSearchResponse = {
+  query: string;
+  source_mode: "live" | "fallback" | string;
+  source_error?: string | null;
+  papers: PracticeLiteraturePaper[];
+  workflow: string[];
+  activity: PracticeProjectActivity;
+  detail: PracticeProjectDetail;
+};
+
+export type PracticeWritingAssistResult = {
+  project_id: string;
+  topic: string;
+  section: string;
+  writing_task: string;
+  workflow: string[];
+  selected_papers: PracticeLiteraturePaper[];
+  writing_blocks: Array<{ title: string; content: string; status: string }>;
+  writing_checks: Array<{ label: string; result: string }>;
+  citations: PracticeProjectResource[];
+  content: string;
+  confidence: number;
+  risk_flags: string[];
+  generated_at: string | null;
 };
 
 export type PracticeProjectSubmission = {
@@ -1434,6 +1498,7 @@ function apiRecovery(kind: ApiErrorKind) {
 
 function userFacingApiMessage(status: number, code?: string, message?: string) {
   if (code === "AUTH_LOGIN_REQUIRED" || code === "AUTH_LOGIN_FAILED") return message || "账号或密码不正确。";
+  if (code?.startsWith("AUTH_REGISTER_")) return message || "注册信息需要确认。";
   if (code === "AUTH_TOKEN_EXPIRED") return message || "登录状态已过期，请重新登录。";
   if (code?.startsWith("AUTH_") || status === 401) return message || "登录状态需要确认，请重新登录。";
   if (code?.endsWith("_NOT_INSTALLED")) return message || "运行依赖尚未安装，请检查后端环境。";
@@ -1603,8 +1668,21 @@ export const api = {
   }>("/api/v1/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      skipAuth: true,
       body: JSON.stringify({ username, password })
   }),
+  register: (payload: { username: string; password: string; display_name: string; role: "STUDENT" | "TEACHER" }) =>
+    request<{
+      access_token: string;
+      token_type: string;
+      expires_in: number;
+      user: AuthUser;
+    }>("/api/v1/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      skipAuth: true,
+      body: JSON.stringify(payload)
+    }),
   me: () => request<AuthUser>("/api/v1/auth/me"),
   logout: () => request<{ logged_out: boolean }>("/api/v1/auth/logout", { method: "POST" }),
   getAdminAiUsage: (params: Record<string, string | undefined>) => {
@@ -1684,6 +1762,17 @@ export const api = {
   getQuestionWorkspace: (assignmentId: string) =>
     request<QuestionWorkspace>(`/api/v1/student/assignments/${assignmentId}/workspace`),
   getLearningContext: () => cachedGet<LearningContext>("/api/v1/student/learning-context"),
+  listStudentCourseOfferings: () =>
+    request<{ items: StudentCourseOffering[] }>("/api/v1/student/course-offerings"),
+  joinStudentCourseOffering: async (teachingAssignmentId: string) => {
+    const result = await request<StudentCourseJoinResult>("/api/v1/student/course-offerings/join", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ teaching_assignment_id: teachingAssignmentId })
+    });
+    clearApiCache((url) => url.startsWith("/api/v1/student/"));
+    return result;
+  },
   listStudentTasks: (courseId?: string) =>
     cachedGet<StudentTaskCard[]>(studentTasksUrl(courseId), 0),
   listStudentDailyTasks: (taskDate?: string) =>
@@ -1904,6 +1993,47 @@ export const api = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ focus })
+      }
+    );
+    clearApiCache((url) => url.startsWith("/api/v1/student/practice-projects"));
+    clearApiCache((url) => url.startsWith("/api/v1/student/profile"));
+    return result;
+  },
+  searchPracticeProjectLiterature: async (projectId: string, query = "", limit = 6) => {
+    const result = await request<PracticeLiteratureSearchResponse>(
+      `/api/v1/student/practice-projects/${encodeURIComponent(projectId)}/literature/search`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query, limit })
+      }
+    );
+    clearApiCache((url) => url.startsWith("/api/v1/student/practice-projects"));
+    clearApiCache((url) => url.startsWith("/api/v1/student/profile"));
+    return result;
+  },
+  createPracticeProjectWritingAssist: async (
+    projectId: string,
+    payload: {
+      topic?: string;
+      section?: string;
+      writing_task?: string;
+      draft?: string;
+      selected_papers?: PracticeLiteraturePaper[];
+      save_as_material?: boolean;
+    }
+  ) => {
+    const result = await request<{
+      result: PracticeWritingAssistResult;
+      material: PracticeProjectMaterial | null;
+      activity: PracticeProjectActivity;
+      detail: PracticeProjectDetail;
+    }>(
+      `/api/v1/student/practice-projects/${encodeURIComponent(projectId)}/writing-assist`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
       }
     );
     clearApiCache((url) => url.startsWith("/api/v1/student/practice-projects"));

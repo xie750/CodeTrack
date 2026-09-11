@@ -30,6 +30,7 @@ import {
 import { api, LearningContext, StudentAiChatResponse, StudentProfile } from "../api";
 import heroArt from "../assets/ui-home/hero-art.png";
 import { StudentState, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
+import { scopedStorageKey } from "../scopedStorage";
 
 const knowledgeIcons = [<Medal size={19} />, <FunctionSquare size={19} />, <Triangle size={19} />, <RefreshCw size={19} />, <NotebookTabs size={19} />, <Sparkles size={19} />];
 const knowledgeColors = ["blue", "green", "blue", "purple", "green", "orange"];
@@ -292,7 +293,7 @@ const AI_ADVICE_RUN_STORAGE_PREFIX = "codetrack.profile.aiAdviceRun.v1:";
 const AI_ADVICE_RUNNING_TTL_MS = 5 * 60 * 1000;
 
 function aiAdviceRunStorageKey(courseId: string, profileScope: "course" | "global") {
-  return `${AI_ADVICE_RUN_STORAGE_PREFIX}${profileScope}:${courseId || "default"}`;
+  return scopedStorageKey(AI_ADVICE_RUN_STORAGE_PREFIX, profileScope, courseId || "default");
 }
 
 function readAiAdviceRun(courseId: string, profileScope: "course" | "global"): PersistedAiAdviceRun | null {

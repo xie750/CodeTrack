@@ -20,6 +20,7 @@ import {
   readStudentAiModelKey,
   saveStudentAiModelKey
 } from "../studentAiModels";
+import { scopedStorageKey } from "../scopedStorage";
 import AIContentDisclosure from "./AIContentDisclosure";
 
 type CompanionMode = "floating" | "expanded" | "chat";
@@ -53,13 +54,21 @@ type CompanionFrame = Position & {
   height: number;
 };
 
-const COMPANION_FRAME_STORAGE_KEY = "codetrack.aiCompanion.frame.v2";
-const CHAT_SIZE_STORAGE_KEY = "codetrack.aiCompanion.chatSize.v2";
+const COMPANION_FRAME_STORAGE_BASE_KEY = "codetrack.aiCompanion.frame.v2";
+const CHAT_SIZE_STORAGE_BASE_KEY = "codetrack.aiCompanion.chatSize.v2";
 const LAUNCHER_SIZE = { width: 88, height: 78 };
 const DEFAULT_CHAT_SIZE = { width: 492, height: 720 };
 const MIN_CHAT_SIZE = { width: 420, height: 560 };
 const TRANSITION_MS = 190;
 const CLICK_DRAG_TOLERANCE = 6;
+
+function companionFrameStorageKey() {
+  return scopedStorageKey(COMPANION_FRAME_STORAGE_BASE_KEY);
+}
+
+function chatSizeStorageKey() {
+  return scopedStorageKey(CHAT_SIZE_STORAGE_BASE_KEY);
+}
 
 const suggestionSets = [
   ["时间复杂度是什么？如何计算？", "递归和迭代的区别是什么？", "如何选择合适的排序算法？"],
@@ -143,7 +152,7 @@ function frameFromCenter(frame: CompanionFrame, size: { width: number; height: n
 }
 
 function readInitialFrame() {
-  return normalizeFrame(readJson(COMPANION_FRAME_STORAGE_KEY, defaultFloatingFrame()));
+  return normalizeFrame(readJson(companionFrameStorageKey(), defaultFloatingFrame()));
 }
 
 function readInitialChatSize() {
@@ -153,7 +162,7 @@ function readInitialChatSize() {
     width: Math.min(DEFAULT_CHAT_SIZE.width, Math.max(minSize.width, viewport.width - 32)),
     height: Math.min(DEFAULT_CHAT_SIZE.height, Math.max(minSize.height, viewport.height - 96))
   };
-  const saved = readJson(CHAT_SIZE_STORAGE_KEY, fallback);
+  const saved = readJson(chatSizeStorageKey(), fallback);
   return normalizeChatSize(saved);
 }
 
@@ -323,7 +332,7 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
       setChatSize((currentSize) => {
         const nextSize = normalizeChatSize(currentSize);
         if (nextSize.width !== currentSize.width || nextSize.height !== currentSize.height) {
-          saveJson(CHAT_SIZE_STORAGE_KEY, nextSize);
+          saveJson(chatSizeStorageKey(), nextSize);
         }
         return nextSize;
       });
@@ -335,7 +344,7 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
           normalized.width !== currentFrame.width ||
           normalized.height !== currentFrame.height
         ) {
-          saveJson(COMPANION_FRAME_STORAGE_KEY, normalized);
+          saveJson(companionFrameStorageKey(), normalized);
         }
         return normalized;
       });
@@ -363,7 +372,7 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
   function persistFrame(nextFrame: CompanionFrame) {
     const normalized = normalizeFrame(nextFrame);
     setFrame(normalized);
-    saveJson(COMPANION_FRAME_STORAGE_KEY, normalized);
+    saveJson(companionFrameStorageKey(), normalized);
   }
 
   function startMorph(nextMode: CompanionMode, size: { width: number; height: number }) {
@@ -548,7 +557,7 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
       height: elementRef.offsetHeight
     });
     setChatSize(nextSize);
-    saveJson(CHAT_SIZE_STORAGE_KEY, nextSize);
+    saveJson(chatSizeStorageKey(), nextSize);
     persistFrame({ ...position, ...nextSize });
   }
 

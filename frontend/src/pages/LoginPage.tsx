@@ -17,7 +17,7 @@ type LoginIssue = {
   detail?: string;
 };
 
-function loginIssueFromError(error: unknown): LoginIssue {
+function loginIssueFromError(error: unknown, actionLabel = "登录"): LoginIssue {
   if (error instanceof ApiRequestError) {
     if (error.kind === "network" || error.kind === "server" || error.kind === "bad_response") {
       return {
@@ -31,7 +31,9 @@ function loginIssueFromError(error: unknown): LoginIssue {
       return {
         title: "账号信息需要确认",
         description: error.message,
-        checklist: ["检查账号和密码是否输入正确", "也可以点击下方演示账号快速填入账号", "连续失败时请重新刷新页面再试"],
+        checklist: actionLabel === "注册"
+          ? ["检查账号是否为 3-32 位英文字母、数字或下划线", "密码需为 8-32 位并至少包含字母和数字", "如果账号已存在，请切换到登录"]
+          : ["检查账号和密码是否输入正确", "也可以点击下方演示账号快速填入账号", "连续失败时请重新刷新页面再试"],
         detail: error.code ? `${error.code}${error.requestId ? ` / ${error.requestId}` : ""}` : error.rawMessage
       };
     }
@@ -44,7 +46,7 @@ function loginIssueFromError(error: unknown): LoginIssue {
       };
     }
     return {
-      title: "登录没有完成",
+      title: `${actionLabel}没有完成`,
       description: error.message,
       checklist: [error.recovery ?? "请检查当前输入后重试。"],
       detail: error.rawMessage
@@ -52,14 +54,14 @@ function loginIssueFromError(error: unknown): LoginIssue {
   }
 
   return {
-    title: "登录没有完成",
-    description: "系统暂时没有完成登录，请稍后重试。",
-    checklist: ["确认网络和后端服务状态", "重新点击登录按钮"],
+    title: `${actionLabel}没有完成`,
+    description: `系统暂时没有完成${actionLabel}，请稍后重试。`,
+    checklist: ["确认网络和后端服务状态", `重新点击${actionLabel}按钮`],
     detail: error instanceof Error ? error.message : undefined
   };
 }
 
-function LoginIssueToast({ issue, loading, onDismiss }: { issue: LoginIssue; loading: boolean; onDismiss: () => void }) {
+function LoginIssueToast({ issue, loading, formId, actionLabel, onDismiss }: { issue: LoginIssue; loading: boolean; formId: string; actionLabel: string; onDismiss: () => void }) {
   const primaryTip = issue.checklist[0];
 
   return (
@@ -70,14 +72,14 @@ function LoginIssueToast({ issue, loading, onDismiss }: { issue: LoginIssue; loa
       <div className="login-issue-toast-body">
         <div className="login-issue-toast-heading">
           <strong>{issue.title}</strong>
-          <span>登录未完成</span>
+          <span>{actionLabel}未完成</span>
         </div>
         <p>{issue.description}</p>
         {primaryTip ? <span className="login-issue-toast-tip">{primaryTip}</span> : null}
         <div className="login-issue-toast-actions">
-          <button className="login-toast-retry" type="submit" form="login-form" disabled={loading}>
+          <button className="login-toast-retry" type="submit" form={formId} disabled={loading}>
             <RefreshCw size={14} />
-            {loading ? "正在重试" : "重试登录"}
+            {loading ? "正在重试" : `重试${actionLabel}`}
           </button>
           {issue.detail ? (
             <details className="login-toast-detail">
@@ -107,9 +109,22 @@ function LoginThemeToggle({ theme, onThemeChange }: { theme: StudentEntryTheme; 
   );
 }
 
+function registerPasswordIssue(password: string, username: string): string | null {
+  if (password.length < 8 || password.length > 32) return "密码需为 8-32 位。";
+  if (/\s/.test(password)) return "密码不能包含空格或换行。";
+  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) return "密码需至少包含字母和数字。";
+  if (username.trim() && password.toLowerCase().includes(username.trim().toLowerCase())) return "密码不能包含账号。";
+  return null;
+}
+
 export default function LoginPage({ onLogin }: LoginPageProps) {
   const [username, setUsername] = useState("wang");
   const [password, setPassword] = useState("codetrack123");
+  const [registerDisplayName, setRegisterDisplayName] = useState("");
+  const [registerUsername, setRegisterUsername] = useState("");
+  const [registerPassword, setRegisterPassword] = useState("");
+  const [registerPasswordConfirm, setRegisterPasswordConfirm] = useState("");
+  const [registerRole, setRegisterRole] = useState<"STUDENT" | "TEACHER">("STUDENT");
   const [loading, setLoading] = useState(false);
   const [loginIssue, setLoginIssue] = useState<LoginIssue | null>(null);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
@@ -126,7 +141,46 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       markStudentOnboardingPending(result.user);
       onLogin(result.user);
     } catch (err) {
-      setLoginIssue(loginIssueFromError(err));
+      setLoginIssue(loginIssueFromError(err, "登录"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleRegisterSubmit(event: FormEvent) {
+    event.preventDefault();
+    const passwordIssue = registerPasswordIssue(registerPassword, registerUsername);
+    if (passwordIssue) {
+      setLoginIssue({
+        title: "密码规范需要确认",
+        description: passwordIssue,
+        checklist: ["使用 8-32 位密码", "至少同时包含字母和数字", "不要包含账号、空格或换行"]
+      });
+      return;
+    }
+    if (registerPassword !== registerPasswordConfirm) {
+      setLoginIssue({
+        title: "密码需要确认",
+        description: "两次输入的密码不一致。",
+        checklist: ["重新输入密码和确认密码", "确认密码需符合 8-32 位且包含字母和数字", "再点击立即注册"]
+      });
+      return;
+    }
+    setLoading(true);
+    setLoginIssue(null);
+    try {
+      const result = await api.register({
+        username: registerUsername,
+        password: registerPassword,
+        display_name: registerDisplayName,
+        role: registerRole
+      });
+      apiCache.clear();
+      setAccessToken(result.access_token);
+      markStudentOnboardingPending(result.user);
+      onLogin(result.user);
+    } catch (err) {
+      setLoginIssue(loginIssueFromError(err, "注册"));
     } finally {
       setLoading(false);
     }
@@ -169,7 +223,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         <span className="student-entry-stream stream-b" />
       </div>
       <LoginThemeToggle theme={entryTheme} onThemeChange={changeEntryTheme} />
-      {loginIssue ? <LoginIssueToast issue={loginIssue} loading={loading} onDismiss={() => setLoginIssue(null)} /> : null}
+      {loginIssue ? <LoginIssueToast issue={loginIssue} loading={loading} formId={authMode === "register" ? "register-form" : "login-form"} actionLabel={authMode === "register" ? "注册" : "登录"} onDismiss={() => setLoginIssue(null)} /> : null}
 
       <section className={`login-stage login-shell-stack ${authMode === "register" ? "show-register" : ""}`} aria-label="CodeTrack 账号入口">
         <article className="login-shell-card login-shell-login" aria-label="登录账号">
@@ -183,7 +237,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             <div className="login-copy">
               <span className="login-kicker">
                 <Sparkles size={15} />
-                AI 专业助学空间
+                  AI 专业助学空间
               </span>
               <h1>欢迎进入 CodeTrack</h1>
               <p>连接课程任务、自主学习、AI 助学和个人学习资料沉淀。</p>
@@ -273,10 +327,10 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             <div className="login-copy">
               <span className="login-kicker">
                 <UserPlus size={15} />
-                账号空间预留
+                AI 专业账号开通
               </span>
-              <h1>注册入口已预留</h1>
-              <p>后续接入正式注册流程后，可在这里创建学生或教师账号。</p>
+              <h1>创建 CodeTrack 账号</h1>
+              <p>注册后按角色进入学生助学空间或教师工作台，未加入班级也可先使用自学与科研实践能力。</p>
             </div>
             <div className="login-wave-visual register" aria-hidden="true">
               <span className="login-wave-line wave-a" />
@@ -309,26 +363,67 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               </div>
             </div>
 
-            <div className="register-preview">
-              <span className="register-preview-icon">
-                <UserPlus size={24} />
-              </span>
-              <strong>注册通道待开放</strong>
-              <p>当前版本先保留注册入口，正式账号仍由后台种子数据提供。</p>
-            </div>
-            <div className="register-field-preview">
+            <form id="register-form" className="login-form register-form" onSubmit={handleRegisterSubmit}>
               <label>
                 <span>姓名</span>
-                <Input size="large" prefix={<UserRound size={18} />} placeholder="注册后填写真实姓名" disabled />
+                <Input
+                  size="large"
+                  value={registerDisplayName}
+                  onChange={(event) => setRegisterDisplayName(event.target.value)}
+                  prefix={<UserRound size={18} />}
+                  autoComplete="name"
+                  placeholder="请输入真实姓名"
+                />
               </label>
               <label>
                 <span>账号</span>
-                <Input size="large" prefix={<ShieldCheck size={18} />} placeholder="注册后绑定学号或工号" disabled />
+                <Input
+                  size="large"
+                  value={registerUsername}
+                  onChange={(event) => setRegisterUsername(event.target.value)}
+                  prefix={<ShieldCheck size={18} />}
+                  autoComplete="username"
+                  placeholder="3-32 位字母、数字或下划线"
+                />
               </label>
-            </div>
-            <Button type="primary" size="large" icon={<ArrowRight size={18} />} onClick={() => changeAuthMode("login")}>
-              返回登录
-            </Button>
+              <div className="register-role-field">
+                <span>账号角色</span>
+                <div className="register-role-switch" aria-label="账号角色">
+                  <button type="button" className={registerRole === "STUDENT" ? "active" : ""} aria-pressed={registerRole === "STUDENT"} onClick={() => setRegisterRole("STUDENT")}>
+                    学生
+                  </button>
+                  <button type="button" className={registerRole === "TEACHER" ? "active" : ""} aria-pressed={registerRole === "TEACHER"} onClick={() => setRegisterRole("TEACHER")}>
+                    教师
+                  </button>
+                </div>
+                <small>{registerRole === "STUDENT" ? "注册后进入个人初始状态；加入班级后再开放班级课程任务。" : "注册后进入教师工作台，课程教学范围可继续配置。"}</small>
+              </div>
+              <label>
+                <span>密码</span>
+                <Input.Password
+                  size="large"
+                  value={registerPassword}
+                  onChange={(event) => setRegisterPassword(event.target.value)}
+                  prefix={<LockKeyhole size={18} />}
+                  autoComplete="new-password"
+                  placeholder="8-32 位，至少包含字母和数字"
+                />
+              </label>
+              <label>
+                <span>确认密码</span>
+                <Input.Password
+                  size="large"
+                  value={registerPasswordConfirm}
+                  onChange={(event) => setRegisterPasswordConfirm(event.target.value)}
+                  prefix={<LockKeyhole size={18} />}
+                  autoComplete="new-password"
+                  placeholder="再次输入密码"
+                />
+              </label>
+              <Button type="primary" htmlType="submit" size="large" loading={loading} icon={<ArrowRight size={18} />}>
+                立即注册
+              </Button>
+            </form>
           </div>
           <button className="login-card-peek-action" type="button" tabIndex={authMode === "register" ? -1 : 0} onClick={() => changeAuthMode("register")}>
             切换到注册

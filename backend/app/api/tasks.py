@@ -2,7 +2,7 @@ import json
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, Query, status
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from backend.app.core.api_response import ApiError, ok, request_id
@@ -77,17 +77,24 @@ def _student_assignment(
     assignment = db.scalar(
         select(TaskAssignment)
         .join(TeachingAssignment, TaskAssignment.teaching_assignment_id == TeachingAssignment.id)
-        .join(
+        .outerjoin(
             StudentClassMembership,
-            StudentClassMembership.class_id == TeachingAssignment.class_id,
+            (StudentClassMembership.class_id == TeachingAssignment.class_id)
+            & (StudentClassMembership.student_id == student_id)
+            & (StudentClassMembership.status == "ACTIVE"),
+        )
+        .outerjoin(
+            Enrollment,
+            (Enrollment.teaching_assignment_id == TeachingAssignment.id)
+            & (Enrollment.user_id == student_id)
+            & (Enrollment.role == "STUDENT"),
         )
         .where(
             TaskAssignment.id == assignment_id,
             TaskAssignment.task_id == task_id,
             TaskAssignment.publish_status == "PUBLISHED",
             TeachingAssignment.status == "ACTIVE",
-            StudentClassMembership.student_id == student_id,
-            StudentClassMembership.status == "ACTIVE",
+            or_(StudentClassMembership.id.is_not(None), Enrollment.id.is_not(None)),
         )
     )
     if assignment is None:

@@ -941,6 +941,118 @@
   cursor: pointer;
 }
 
+.student-course-join-panel {
+  flex: 0 0 auto;
+  margin-top: 14px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  border: 1px solid #dbe8f7;
+  border-radius: 8px;
+  background: #f7fbff;
+}
+
+.student-course-join-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  gap: 10px;
+  align-items: start;
+}
+
+.student-course-join-heading strong,
+.student-course-offering-card strong {
+  display: block;
+  overflow: hidden;
+  color: #172033;
+  font-size: 14px;
+  line-height: 1.35;
+  font-weight: 950;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.student-course-join-heading p,
+.student-course-join-empty,
+.student-course-join-message,
+.student-course-offering-card small {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.55;
+  font-weight: 800;
+}
+
+.student-course-join-heading > span {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: #176cf5;
+  background: #edf6ff;
+}
+
+.student-course-offering-list {
+  display: grid;
+  gap: 8px;
+}
+
+.student-course-offering-card {
+  min-width: 0;
+  padding: 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #e2eaf4;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.student-course-offering-card small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.student-course-offering-card button {
+  min-height: 34px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid #176cf5;
+  border-radius: 8px;
+  color: #176cf5;
+  background: #eef6ff;
+  font-size: 12px;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.student-course-offering-card button svg {
+  flex: 0 0 auto;
+}
+
+.student-course-offering-spinner {
+  animation: student-state-spin 1s linear infinite;
+}
+
+.student-course-join-message {
+  min-height: 28px;
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 7px;
+  color: #126456;
+  background: #ecfbf6;
+}
+
+.student-course-join-empty {
+  margin: 0;
+}
+
 .student-course-drawer-list {
   flex: 1 1 auto;
   min-height: 0;

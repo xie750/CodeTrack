@@ -1438,7 +1438,8 @@
 
 .login-shell-stack {
   width: min(100%, 1080px);
-  min-height: 620px;
+  min-height: min(620px, calc(100dvh - 72px));
+  height: min(620px, calc(100dvh - 72px));
   display: block;
   border: 0;
   background: transparent;
@@ -1452,6 +1453,7 @@
   display: grid;
   grid-template-columns: minmax(380px, 1fr) minmax(420px, 0.92fr);
   overflow: hidden;
+  min-height: 0;
   border: 1px solid var(--student-entry-border);
   border-radius: 8px;
   background: color-mix(in srgb, var(--student-entry-panel-strong) 88%, transparent);
@@ -1678,8 +1680,14 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
+  min-height: 0;
+  overflow-y: auto;
   color: #172033;
   background: rgba(255, 255, 255, 0.96);
+}
+
+.login-shell-stack.show-register .login-shell-register .login-shell-form {
+  justify-content: flex-start;
 }
 
 .login-auth-head {
@@ -1890,6 +1898,67 @@
 .register-field-preview .ant-input-affix-wrapper-lg {
   min-height: 46px;
   border-radius: 8px;
+}
+
+.register-form {
+  margin-top: 18px;
+  gap: 10px;
+  padding-bottom: 10px;
+}
+
+.register-form label {
+  gap: 6px;
+}
+
+.register-form .ant-input-affix-wrapper-lg,
+.register-form .ant-btn-lg {
+  min-height: 42px;
+}
+
+.register-role-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.register-role-field > span {
+  color: #24324b;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.register-role-field small {
+  color: #687895;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.register-role-switch {
+  min-height: 42px;
+  padding: 4px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  border: 1px solid #d7e3f4;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.register-role-switch button {
+  min-width: 0;
+  border: 0;
+  border-radius: 7px;
+  color: #52627a;
+  background: transparent;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.register-role-switch button.active {
+  color: #ffffff;
+  background: linear-gradient(135deg, #176cf5, #16b6a0);
+  box-shadow: 0 10px 20px rgba(23, 108, 245, 0.2);
 }
 
 .login-issue-toast {
@@ -2157,6 +2226,7 @@
 
   .login-shell-stack {
     width: min(100%, 620px);
+    height: auto;
     min-height: 960px;
   }
 

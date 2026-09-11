@@ -62,7 +62,7 @@ export default function ExactApp({ authUser, loggedIn, onLogin, onLogout }: { au
   const matchedRoute = useMemo(() => matchTeacherRoute(location.pathname), [location.pathname])
   const [entered, setEntered] = useState(() => loggedIn && location.pathname.startsWith('/teacher/'))
   const [bootstrap, setBootstrap] = useState<BootstrapData | null>(null)
-  const [courseId, setCourseId] = useState(() => matchedRoute.courseId || 'course-ds')
+  const [courseId, setCourseId] = useState(() => matchedRoute.courseId || '')
   const courseIdRef = useRef(courseId)
   const [classId, setClassId] = useState('class-se1')
   const [loading, setLoading] = useState(false)
@@ -135,13 +135,14 @@ export default function ExactApp({ authUser, loggedIn, onLogin, onLogout }: { au
     const first = bootstrap?.classes.find((item) => item.course_id === id)
     if (first) setClassId(first.id)
   }
-  const courseCreated = (course: ApiCourse, createdClassId: string) => {
-    messageApi.success('课程已写入数据库')
+  const courseCreated = async (course: ApiCourse, createdClassId: string) => {
     courseIdRef.current = course.id
     setCourseId(course.id)
     setClassId(createdClassId)
+    const data = await load(course.id, createdClassId)
+    if (!data) return
+    messageApi.success('课程已写入数据库')
     routerNavigate(teacherPath('invite', course.id, true))
-    void load(course.id, createdClassId)
   }
   const readNotice = async (id: string) => {
     try {

@@ -1,6 +1,7 @@
 import type { StudentAiModelOption } from "./api";
+import { scopedStorageKey } from "./scopedStorage";
 
-export const STUDENT_AI_MODEL_STORAGE_KEY = "codetrack.aiTutor.modelKey.v1";
+export const STUDENT_AI_MODEL_STORAGE_BASE_KEY = "codetrack.aiTutor.modelKey.v1";
 
 export const fallbackStudentAiModelOptions: StudentAiModelOption[] = [
   {
@@ -23,7 +24,7 @@ export const fallbackStudentAiModelOptions: StudentAiModelOption[] = [
 
 export function readStudentAiModelKey() {
   try {
-    const stored = window.localStorage.getItem(STUDENT_AI_MODEL_STORAGE_KEY);
+    const stored = window.localStorage.getItem(scopedStorageKey(STUDENT_AI_MODEL_STORAGE_BASE_KEY));
     return stored === "fine_tuned" ? "fine_tuned" : "default";
   } catch {
     return "default";
@@ -32,7 +33,7 @@ export function readStudentAiModelKey() {
 
 export function saveStudentAiModelKey(key: string) {
   try {
-    window.localStorage.setItem(STUDENT_AI_MODEL_STORAGE_KEY, key);
+    window.localStorage.setItem(scopedStorageKey(STUDENT_AI_MODEL_STORAGE_BASE_KEY), key);
   } catch {
     // 浏览器隐私模式下可能禁用 localStorage，当前页面状态仍可继续使用。
   }

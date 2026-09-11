@@ -376,6 +376,13 @@ def ensure_auth_columns(db: Session) -> None:
     db.commit()
 
 
+def ensure_enrollment_columns(db: Session) -> None:
+    columns = {column["name"] for column in inspect(db.bind).get_columns("enrollments")}
+    if "teaching_assignment_id" not in columns:
+        db.execute(text("ALTER TABLE enrollments ADD COLUMN teaching_assignment_id VARCHAR(64)"))
+    db.commit()
+
+
 def ensure_task_workspace_columns(db: Session) -> None:
     columns = {column["name"] for column in inspect(db.bind).get_columns("tasks")}
     if "workspace_type" not in columns:
@@ -487,6 +494,7 @@ def ensure_authoritative_knowledge_tables(db: Session) -> None:
 
 def seed_demo_data(db: Session) -> None:
     ensure_auth_columns(db)
+    ensure_enrollment_columns(db)
     ensure_task_workspace_columns(db)
     ensure_task_assignment_schedule_columns(db)
     ensure_knowledge_source_columns(db)

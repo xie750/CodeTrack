@@ -1,3 +1,5 @@
+import { scopedStorageKey } from "./scopedStorage";
+
 export type StudentFavoriteKind = "CODING_TASK" | "QUESTION";
 
 export type StudentFavoriteRecord = {
@@ -28,8 +30,12 @@ export type StudentFavoriteRecord = {
   updatedAt: string;
 };
 
-const FAVORITES_STORAGE_KEY = "codetrack.studentFavorites.v1";
+const FAVORITES_STORAGE_BASE_KEY = "codetrack.studentFavorites.v1";
 export const STUDENT_FAVORITES_CHANGED_EVENT = "codetrack:studentFavoritesChanged";
+
+function favoritesStorageKey() {
+  return scopedStorageKey(FAVORITES_STORAGE_BASE_KEY);
+}
 
 function normalizeFavoriteRecord(value: Partial<StudentFavoriteRecord>): StudentFavoriteRecord | null {
   if (!value.id || !value.title || !value.taskId) return null;
@@ -70,14 +76,14 @@ function emitFavoritesChanged() {
 
 function writeStudentFavorites(records: StudentFavoriteRecord[]) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(records));
+  window.localStorage.setItem(favoritesStorageKey(), JSON.stringify(records));
   emitFavoritesChanged();
 }
 
 export function readStudentFavorites() {
   if (typeof window === "undefined") return [];
   try {
-    const raw = window.localStorage.getItem(FAVORITES_STORAGE_KEY);
+    const raw = window.localStorage.getItem(favoritesStorageKey());
     if (!raw) return [];
     const parsed = JSON.parse(raw) as Partial<StudentFavoriteRecord>[];
     if (!Array.isArray(parsed)) return [];
@@ -117,7 +123,7 @@ export function removeStudentFavorite(id: string) {
 export function subscribeStudentFavorites(listener: () => void) {
   if (typeof window === "undefined") return () => undefined;
   const onLocalChange = (event: StorageEvent) => {
-    if (event.key === FAVORITES_STORAGE_KEY) listener();
+    if (event.key === favoritesStorageKey()) listener();
   };
   window.addEventListener(STUDENT_FAVORITES_CHANGED_EVENT, listener);
   window.addEventListener("storage", onLocalChange);

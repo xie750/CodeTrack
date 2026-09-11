@@ -3,6 +3,7 @@ import re
 from pathlib import Path
 from urllib.parse import quote_plus
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -39,6 +40,20 @@ PAPER_SEARCH_BASES = {
     "papers_with_code": "https://paperswithcode.com/search?q={query}",
     "huggingface_papers": "https://huggingface.co/papers?q={query}",
 }
+
+LIVE_LITERATURE_QUERIES = {
+    "sales-cleaning": "CIFAR-10 lightweight image classification EfficientNet ResNet data augmentation",
+    "log-topk": "log anomaly detection top-k streaming algorithm frequent pattern mining",
+    "retention-dashboard": "learning analytics retention behavior sequence modeling education data visualization",
+}
+
+MARKET_RESEARCH_WORKFLOW = [
+    "检索相关论文并形成可筛选的证据表",
+    "围绕研究问题归纳主题、方法、数据集和不足",
+    "生成论文框架或段落草稿，但保留引用和人工核查入口",
+    "检查引用覆盖、结构完整性、学术诚信和格式一致性",
+    "把写作产物保存为阶段材料，再进入成果提交",
+]
 
 RESEARCH_BRIEF_LIBRARY = {
     "sales-cleaning": {
@@ -259,6 +274,221 @@ def safe_file_name(name: str | None) -> str:
     base = Path(name or "upload").name
     cleaned = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", base)
     return cleaned[:255] or "upload"
+
+
+def compact_text(value: object, limit: int = 320) -> str:
+    text = " ".join(str(value or "").split())
+    if len(text) <= limit:
+        return text
+    return f"{text[:limit].rstrip()}..."
+
+
+def default_literature_query(project: PracticeProject, focus: str = "") -> str:
+    focus_text = compact_text(focus, 120)
+    base = LIVE_LITERATURE_QUERIES.get(project.id) or project.direction or project.title
+    return f"{base} {focus_text}".strip()
+
+
+def _openalex_abstract(inverted_index: dict | None) -> str:
+    if not isinstance(inverted_index, dict):
+        return ""
+    positions: list[tuple[int, str]] = []
+    for word, indexes in inverted_index.items():
+        if not isinstance(indexes, list):
+            continue
+        for index in indexes:
+            if isinstance(index, int):
+                positions.append((index, str(word)))
+    return " ".join(word for _, word in sorted(positions))[:1600]
+
+
+def _paper_year(value: object) -> int | None:
+    try:
+        year = int(value)
+    except (TypeError, ValueError):
+        return None
+    return year if 1900 <= year <= 2100 else None
+
+
+def _normalize_paper_url(value: object, fallback: str = "") -> str:
+    text = str(value or "").strip()
+    if text.startswith("http://") or text.startswith("https://"):
+        return text
+    return fallback
+
+
+def _openalex_paper(item: dict) -> dict | None:
+    title = compact_text(item.get("title"), 220)
+    if not title:
+        return None
+    authorships = item.get("authorships") if isinstance(item.get("authorships"), list) else []
+    authors = [
+        compact_text(author.get("author", {}).get("display_name"), 80)
+        for author in authorships
+        if isinstance(author, dict) and isinstance(author.get("author"), dict)
+    ]
+    primary_location = item.get("primary_location") if isinstance(item.get("primary_location"), dict) else {}
+    source = primary_location.get("source") if isinstance(primary_location.get("source"), dict) else {}
+    doi = item.get("doi")
+    paper_url = _normalize_paper_url(item.get("id"))
+    return {
+        "id": f"openalex:{compact_text(item.get('id') or title, 180)}",
+        "title": title,
+        "authors": [author for author in authors if author][:6],
+        "year": _paper_year(item.get("publication_year")),
+        "venue": compact_text(source.get("display_name"), 120),
+        "abstract": compact_text(_openalex_abstract(item.get("abstract_inverted_index")), 820),
+        "citation_count": int(item.get("cited_by_count") or 0),
+        "doi": compact_text(doi, 160) if doi else "",
+        "url": _normalize_paper_url(doi, paper_url) or paper_url,
+        "source": "OpenAlex",
+        "open_access_url": _normalize_paper_url(
+            primary_location.get("landing_page_url") or primary_location.get("pdf_url"),
+            paper_url,
+        ),
+    }
+
+
+def _semantic_scholar_paper(item: dict) -> dict | None:
+    title = compact_text(item.get("title"), 220)
+    if not title:
+        return None
+    external_ids = item.get("externalIds") if isinstance(item.get("externalIds"), dict) else {}
+    doi = external_ids.get("DOI") or ""
+    open_pdf = item.get("openAccessPdf") if isinstance(item.get("openAccessPdf"), dict) else {}
+    authors = item.get("authors") if isinstance(item.get("authors"), list) else []
+    return {
+        "id": f"semantic:{compact_text(item.get('paperId') or title, 180)}",
+        "title": title,
+        "authors": [compact_text(author.get("name"), 80) for author in authors if isinstance(author, dict)][:6],
+        "year": _paper_year(item.get("year")),
+        "venue": compact_text(item.get("venue"), 120),
+        "abstract": compact_text(item.get("abstract"), 820),
+        "citation_count": int(item.get("citationCount") or 0),
+        "doi": compact_text(doi, 160),
+        "url": _normalize_paper_url(item.get("url")),
+        "source": "Semantic Scholar",
+        "open_access_url": _normalize_paper_url(open_pdf.get("url")),
+    }
+
+
+def _crossref_paper(item: dict) -> dict | None:
+    titles = item.get("title") if isinstance(item.get("title"), list) else []
+    title = compact_text(titles[0] if titles else "", 220)
+    if not title:
+        return None
+    authors = item.get("author") if isinstance(item.get("author"), list) else []
+    year_parts = []
+    for key in ("published-print", "published-online", "published", "created"):
+        date_parts = item.get(key, {}).get("date-parts") if isinstance(item.get(key), dict) else None
+        if isinstance(date_parts, list) and date_parts and isinstance(date_parts[0], list):
+            year_parts = date_parts[0]
+            break
+    author_names = []
+    for author in authors[:6]:
+        if not isinstance(author, dict):
+            continue
+        name = " ".join(part for part in [author.get("given"), author.get("family")] if part)
+        if name:
+            author_names.append(compact_text(name, 80))
+    doi = compact_text(item.get("DOI"), 160)
+    url = _normalize_paper_url(item.get("URL") or (f"https://doi.org/{doi}" if doi else ""))
+    container = item.get("container-title") if isinstance(item.get("container-title"), list) else []
+    abstract = re.sub(r"<[^>]+>", "", str(item.get("abstract") or ""))
+    return {
+        "id": f"crossref:{doi or compact_text(item.get('URL') or title, 180)}",
+        "title": title,
+        "authors": author_names,
+        "year": _paper_year(year_parts[0] if year_parts else None),
+        "venue": compact_text(container[0] if container else item.get("publisher"), 120),
+        "abstract": compact_text(abstract, 820),
+        "citation_count": int(item.get("is-referenced-by-count") or 0),
+        "doi": f"https://doi.org/{doi}" if doi and not doi.startswith("http") else doi,
+        "url": url,
+        "source": "Crossref",
+        "open_access_url": url,
+    }
+
+
+def _dedupe_literature_papers(papers: list[dict], limit: int) -> list[dict]:
+    seen: set[str] = set()
+    unique = []
+    for paper in papers:
+        key = re.sub(r"\W+", "", paper.get("title", "").lower())
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        unique.append(paper)
+        if len(unique) >= limit:
+            break
+    return unique
+
+
+def live_literature_search(query: str, limit: int = 6) -> tuple[list[dict], str, str | None]:
+    papers: list[dict] = []
+    source_mode = "live"
+    error_message = None
+    headers = {"User-Agent": "CodeTrack student research practice; mailto:demo@example.com"}
+    with httpx.Client(timeout=7.0, headers=headers, follow_redirects=True) as client:
+        try:
+            openalex = client.get(
+                "https://api.openalex.org/works",
+                params={
+                    "search": query,
+                    "per-page": min(max(limit, 3), 12),
+                    "sort": "cited_by_count:desc",
+                    "mailto": "demo@example.com",
+                },
+            )
+            openalex.raise_for_status()
+            for item in openalex.json().get("results", []):
+                if isinstance(item, dict):
+                    paper = _openalex_paper(item)
+                    if paper:
+                        papers.append(paper)
+        except (httpx.HTTPError, ValueError) as exc:
+            error_message = str(exc)
+
+        if len(papers) < min(3, limit):
+            try:
+                semantic = client.get(
+                    "https://api.semanticscholar.org/graph/v1/paper/search",
+                    params={
+                        "query": query,
+                        "limit": min(max(limit, 3), 10),
+                        "fields": "title,year,abstract,citationCount,url,authors,venue,externalIds,openAccessPdf",
+                    },
+                )
+                semantic.raise_for_status()
+                for item in semantic.json().get("data", []):
+                    if isinstance(item, dict):
+                        paper = _semantic_scholar_paper(item)
+                        if paper:
+                            papers.append(paper)
+            except (httpx.HTTPError, ValueError) as exc:
+                error_message = f"{error_message}; {exc}" if error_message else str(exc)
+        if len(papers) < min(3, limit):
+            try:
+                crossref = client.get(
+                    "https://api.crossref.org/works",
+                    params={
+                        "query": query,
+                        "rows": min(max(limit, 3), 10),
+                        "select": "DOI,title,author,published-print,published-online,published,created,container-title,publisher,abstract,is-referenced-by-count,URL",
+                    },
+                )
+                crossref.raise_for_status()
+                message = crossref.json().get("message", {})
+                for item in message.get("items", []):
+                    if isinstance(item, dict):
+                        paper = _crossref_paper(item)
+                        if paper:
+                            papers.append(paper)
+            except (httpx.HTTPError, ValueError) as exc:
+                error_message = f"{error_message}; {exc}" if error_message else str(exc)
+    if not papers:
+        source_mode = "fallback"
+    return _dedupe_literature_papers(papers, limit), source_mode, error_message
 
 
 def external_source_links(project: PracticeProject, focus: str = "") -> list[dict]:
@@ -976,6 +1206,351 @@ def refresh_frontier_tracking(
     db.flush()
     return {
         "brief": brief,
+        "activity": serialize_activity(activity),
+        "detail": get_practice_project_detail(db, project.id, student.id, class_id),
+    }
+
+
+def search_project_literature(
+    db: Session,
+    project_id: str,
+    student: User,
+    class_id: str,
+    query: str,
+    limit: int = 6,
+) -> dict:
+    row = db.execute(
+        project_scope_query(student.id, class_id).where(PracticeProject.id == project_id)
+    ).first()
+    if row is None:
+        raise ApiError(404, "PRACTICE_PROJECT_NOT_FOUND", "科研项目实践不存在或当前学生无权访问。")
+    project, enrollment, _ = row
+    search_query = default_literature_query(project, query)
+    papers, source_mode, error_message = live_literature_search(search_query, limit)
+    if not papers:
+        brief = research_brief_for_project(project)
+        papers = [
+            {
+                "id": f"fallback:{index}:{topic.get('title', '')}",
+                "title": topic.get("title", "项目相关论文线索"),
+                "authors": [],
+                "year": None,
+                "venue": topic.get("source", "项目资料"),
+                "abstract": topic.get("summary", ""),
+                "citation_count": int(topic.get("heat") or 0),
+                "doi": "",
+                "url": topic.get("source_url", ""),
+                "source": "CodeTrack fallback",
+                "open_access_url": topic.get("source_url", ""),
+            }
+            for index, topic in enumerate(brief.get("frontier_topics", []))
+            if isinstance(topic, dict)
+        ]
+        source_mode = "fallback"
+
+    now = utc_now()
+    activity = PracticeProjectActivity(
+        id=prefixed_id("practice_activity"),
+        project_id=project.id,
+        student_id=student.id,
+        activity_type="literature_search",
+        text=f"检索了「{compact_text(search_query, 48)}」相关文献",
+        time_label="刚刚",
+        created_at=now,
+    )
+    db.add(activity)
+    _update_enrollment_for_activity(
+        enrollment,
+        progress_delta=1,
+        experiment_delta=1,
+        summary="完成一次公开文献检索并生成写作证据表",
+    )
+    _add_learner_event(
+        db,
+        project=project,
+        student_id=student.id,
+        class_id=class_id,
+        event_type="RESEARCH_LITERATURE_SEARCHED",
+        payload={
+            "project_id": project.id,
+            "query": search_query,
+            "paper_count": len(papers),
+            "source_mode": source_mode,
+        },
+    )
+    db.flush()
+    return {
+        "query": search_query,
+        "source_mode": source_mode,
+        "source_error": error_message,
+        "papers": papers,
+        "workflow": MARKET_RESEARCH_WORKFLOW,
+        "activity": serialize_activity(activity),
+        "detail": get_practice_project_detail(db, project.id, student.id, class_id),
+    }
+
+
+def _paper_citation_line(paper: dict, index: int) -> str:
+    authors = paper.get("authors") if isinstance(paper.get("authors"), list) else []
+    author_text = ", ".join(str(author) for author in authors[:3] if author) or "作者信息待核查"
+    year = paper.get("year") or "年份待核查"
+    venue = paper.get("venue") or paper.get("source") or "来源待核查"
+    return f"[{index}] {paper.get('title', '未命名论文')}，{author_text}，{year}，{venue}"
+
+
+def _sanitize_selected_papers(selected_papers: list[dict]) -> list[dict]:
+    sanitized = []
+    for paper in selected_papers[:8]:
+        if not isinstance(paper, dict):
+            continue
+        title = compact_text(paper.get("title"), 220)
+        if not title:
+            continue
+        authors = paper.get("authors") if isinstance(paper.get("authors"), list) else []
+        sanitized.append(
+            {
+                "id": compact_text(paper.get("id") or title, 220),
+                "title": title,
+                "authors": [compact_text(author, 80) for author in authors[:6]],
+                "year": _paper_year(paper.get("year")),
+                "venue": compact_text(paper.get("venue"), 120),
+                "abstract": compact_text(paper.get("abstract"), 900),
+                "citation_count": int(paper.get("citation_count") or 0),
+                "doi": compact_text(paper.get("doi"), 160),
+                "url": _normalize_paper_url(paper.get("url") or paper.get("open_access_url")),
+                "source": compact_text(paper.get("source"), 80) or "用户选择文献",
+                "open_access_url": _normalize_paper_url(paper.get("open_access_url") or paper.get("url")),
+            }
+        )
+    return sanitized
+
+
+def _writing_blocks_from_papers(
+    *,
+    project: PracticeProject,
+    topic: str,
+    section: str,
+    writing_task: str,
+    draft: str,
+    papers: list[dict],
+) -> list[dict]:
+    paper_titles = [paper["title"] for paper in papers[:4]]
+    evidence_text = "；".join(paper_titles) if paper_titles else "当前还没有选择论文，需先补充检索证据"
+    topic_text = topic or project.direction or project.title
+    section_text = section or "相关工作"
+    draft_hint = "已有草稿可进入润色和引用补齐。" if draft else "尚未输入草稿，先生成可改写的起步段落。"
+    return [
+        {
+            "title": "研究问题定位",
+            "content": f"围绕「{topic_text}」聚焦 {project.current_stage or '当前阶段'}，把写作任务限定在「{writing_task or section_text}」，避免直接生成完整论文。",
+            "status": "可编辑",
+        },
+        {
+            "title": "文献证据表",
+            "content": f"已选文献线索：{evidence_text}。写作时每个关键判断都需要绑定至少一条可核查来源。",
+            "status": "需核查",
+        },
+        {
+            "title": section_text,
+            "content": f"建议先按“研究背景 -> 方法路线 -> 数据/实验设置 -> 局限与空白”组织段落。{draft_hint}",
+            "status": "已生成",
+        },
+        {
+            "title": "下一步写作动作",
+            "content": "补齐 DOI 或原文链接，核查摘要是否支持你的表述，再把本结果保存为过程材料并随阶段成果提交。",
+            "status": "待处理",
+        },
+    ]
+
+
+def _writing_checks_from_papers(papers: list[dict], draft: str) -> list[dict]:
+    with_url = sum(1 for paper in papers if paper.get("url") or paper.get("open_access_url") or paper.get("doi"))
+    with_abstract = sum(1 for paper in papers if paper.get("abstract"))
+    return [
+        {
+            "label": "文献来源覆盖",
+            "result": f"已选择 {len(papers)} 篇文献，其中 {with_url} 篇带可核查链接或 DOI。",
+        },
+        {
+            "label": "摘要证据可用性",
+            "result": f"{with_abstract} 篇带摘要，可用于主题归纳；缺摘要文献需要人工打开原文核查。",
+        },
+        {
+            "label": "学术诚信边界",
+            "result": "本结果只作为写作草稿和检查清单，不替代学生阅读原文、核验事实或完成原创表达。",
+        },
+        {
+            "label": "段落规范",
+            "result": "已有草稿可检查引用位置和术语一致性。" if draft else "建议输入自己的草稿后再执行润色和格式检查。",
+        },
+    ]
+
+
+def _writing_assist_content(
+    *,
+    project: PracticeProject,
+    topic: str,
+    section: str,
+    writing_task: str,
+    draft: str,
+    papers: list[dict],
+    blocks: list[dict],
+    checks: list[dict],
+) -> str:
+    paper_lines = [_paper_citation_line(paper, index + 1) for index, paper in enumerate(papers)]
+    lines = [
+        f"# {project.title} · 文献写作辅助",
+        "",
+        f"- 写作主题：{topic or project.direction or project.title}",
+        f"- 目标章节：{section or '相关工作'}",
+        f"- 写作任务：{writing_task or '生成论文框架与引用检查'}",
+        "",
+        "## 市面常见业务流程",
+        *[f"{index + 1}. {item}" for index, item in enumerate(MARKET_RESEARCH_WORKFLOW)],
+        "",
+        "## 已选文献",
+        *(paper_lines or ["- 暂无已选文献。"]),
+        "",
+        "## 写作建议",
+        *[f"### {block['title']}\n{block['content']}" for block in blocks],
+        "",
+        "## 规范检查",
+        *[f"- {item['label']}：{item['result']}" for item in checks],
+    ]
+    if draft:
+        lines.extend(["", "## 学生原草稿", draft])
+    return "\n".join(lines)
+
+
+def generate_project_writing_assist(
+    db: Session,
+    project_id: str,
+    student: User,
+    class_id: str,
+    *,
+    topic: str,
+    section: str,
+    writing_task: str,
+    draft: str,
+    selected_papers: list[dict],
+    save_as_material: bool,
+) -> dict:
+    row = db.execute(
+        project_scope_query(student.id, class_id).where(PracticeProject.id == project_id)
+    ).first()
+    if row is None:
+        raise ApiError(404, "PRACTICE_PROJECT_NOT_FOUND", "科研项目实践不存在或当前学生无权访问。")
+    project, enrollment, _ = row
+    papers = _sanitize_selected_papers(selected_papers)
+    normalized_topic = compact_text(topic, 160)
+    normalized_section = compact_text(section, 80) or "相关工作"
+    normalized_task = compact_text(writing_task, 180) or "生成论文框架与引用检查"
+    normalized_draft = compact_text(draft, 3000)
+    if not (papers or normalized_topic or normalized_draft):
+        raise ApiError(422, "WRITING_ASSIST_INPUT_EMPTY", "请先输入写作主题、草稿或选择至少一篇文献。")
+
+    blocks = _writing_blocks_from_papers(
+        project=project,
+        topic=normalized_topic,
+        section=normalized_section,
+        writing_task=normalized_task,
+        draft=normalized_draft,
+        papers=papers,
+    )
+    checks = _writing_checks_from_papers(papers, normalized_draft)
+    citations = [
+        {
+            "title": paper["title"],
+            "meta": f"{paper.get('source') or '公开文献'} · {paper.get('year') or '年份待核查'} · 引用 {paper.get('citation_count') or 0}",
+            "source_url": paper.get("url") or paper.get("open_access_url") or "",
+        }
+        for paper in papers
+    ]
+    content = _writing_assist_content(
+        project=project,
+        topic=normalized_topic,
+        section=normalized_section,
+        writing_task=normalized_task,
+        draft=normalized_draft,
+        papers=papers,
+        blocks=blocks,
+        checks=checks,
+    )
+    now = utc_now()
+    material = None
+    if save_as_material:
+        material = PracticeProjectMaterial(
+            id=prefixed_id("practice_material"),
+            project_id=project.id,
+            student_id=student.id,
+            material_type="WRITING_DRAFT",
+            title=f"{normalized_section} · 文献写作辅助",
+            description=f"基于 {len(papers)} 篇公开文献生成的阶段写作草稿和规范检查。",
+            content=content,
+            file_name=f"{normalized_section}-writing-assist.md",
+            file_size=len(content.encode("utf-8")),
+            mime_type="text/markdown",
+            storage_path=None,
+            external_url="",
+            source="writing_assistant",
+            status="READY",
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(material)
+
+    activity = PracticeProjectActivity(
+        id=prefixed_id("practice_activity"),
+        project_id=project.id,
+        student_id=student.id,
+        activity_type="writing_assist",
+        text=f"生成了「{normalized_section}」文献写作辅助",
+        time_label="刚刚",
+        created_at=now,
+    )
+    db.add(activity)
+    _update_enrollment_for_activity(
+        enrollment,
+        progress_delta=2,
+        experiment_delta=1,
+        summary=f"生成了「{normalized_section}」文献写作辅助",
+    )
+    _add_learner_event(
+        db,
+        project=project,
+        student_id=student.id,
+        class_id=class_id,
+        event_type="RESEARCH_WRITING_ASSISTED",
+        payload={
+            "project_id": project.id,
+            "topic": normalized_topic,
+            "section": normalized_section,
+            "paper_count": len(papers),
+            "saved_as_material": material is not None,
+            "material_id": material.id if material else None,
+        },
+    )
+    db.flush()
+    return {
+        "result": {
+            "project_id": project.id,
+            "topic": normalized_topic,
+            "section": normalized_section,
+            "writing_task": normalized_task,
+            "workflow": MARKET_RESEARCH_WORKFLOW,
+            "selected_papers": papers,
+            "writing_blocks": blocks,
+            "writing_checks": checks,
+            "citations": citations,
+            "content": content,
+            "confidence": 0.78 if papers else 0.62,
+            "risk_flags": [
+                "生成内容需要学生核验原文与 DOI，不能直接作为最终论文提交。",
+                "未联网获取全文时，摘要不足的文献只可作为待核查线索。",
+            ],
+            "generated_at": iso(now),
+        },
+        "material": serialize_material(material) if material else None,
         "activity": serialize_activity(activity),
         "detail": get_practice_project_detail(db, project.id, student.id, class_id),
     }

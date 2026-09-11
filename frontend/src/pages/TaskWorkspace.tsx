@@ -43,6 +43,7 @@ import { api, LearningContext, TaskDetail, VersionResult, Diagnosis, Hint, Agent
 import AIContentDisclosure from "../components/AIContentDisclosure";
 import StudentRouteBreadcrumb from "../components/StudentRouteBreadcrumb";
 import { StudentState, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
+import { scopedStorageKey } from "../scopedStorage";
 import { favoriteRecordId, readStudentFavorites, removeStudentFavorite, subscribeStudentFavorites, upsertStudentFavorite } from "../studentFavorites";
 import { formatStudentDateTime, getScheduleInfo, resolveVisibleTaskStatus, visibleTaskStatusLabel } from "../studentTaskSchedule";
 
@@ -205,7 +206,7 @@ function statusClass(status: string) {
 }
 
 function taskExecutionStorageKey(taskId: string, assignmentId?: string) {
-  return `${TASK_EXECUTION_STORAGE_PREFIX}${assignmentId || taskId}`;
+  return scopedStorageKey(TASK_EXECUTION_STORAGE_PREFIX, assignmentId || taskId);
 }
 
 function readTaskExecutionRun(taskId: string, assignmentId?: string): PersistedTaskExecution | null {
@@ -340,7 +341,7 @@ function summarizeAgentValue(value: unknown): string {
 }
 
 function taskSceneStorageKey(taskId: string) {
-  return `${ALGORITHM_SCENE_STORAGE_PREFIX}${taskId}`;
+  return scopedStorageKey(ALGORITHM_SCENE_STORAGE_PREFIX, taskId);
 }
 
 function algorithmTaskSignature(task: TaskDetail) {

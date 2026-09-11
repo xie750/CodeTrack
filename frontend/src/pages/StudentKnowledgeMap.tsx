@@ -40,6 +40,7 @@ import {
   type StudentKnowledgeNodeDiagnosisResponse,
   type StudentProfile
 } from "../api";
+import { scopedStorageKey } from "../scopedStorage";
 import { readStudentAiModelKey } from "../studentAiModels";
 
 type KnowledgeMapProps = {
@@ -92,7 +93,7 @@ type PendingRelation = {
 type KnowledgeGraphAiAction = "practice" | "document" | "question";
 type NodeAttachment = NonNullable<StudentKnowledgeGraphNode["attachments"]>[number];
 
-const selfStudyGraphStorageKey = "codetrack.selfStudyKnowledgeGraph.v1";
+const selfStudyGraphStorageBaseKey = "codetrack.selfStudyKnowledgeGraph.v1";
 
 const defaultNodeDraft: NodeDraft = {
   label: "",
@@ -309,7 +310,7 @@ function nodeDiagnosisError(error: unknown): { summary: string; code?: string } 
 
 function readSelfStudyGraph(): StudentKnowledgeGraph {
   if (typeof window === "undefined") return createEmptySelfStudyGraph();
-  const saved = window.localStorage.getItem(selfStudyGraphStorageKey);
+  const saved = window.localStorage.getItem(scopedStorageKey(selfStudyGraphStorageBaseKey));
   if (!saved) return createEmptySelfStudyGraph();
   try {
     const parsed = JSON.parse(saved) as StudentKnowledgeGraph;
@@ -774,7 +775,7 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
 
   useEffect(() => {
     if (!isSelfStudy || !graph || typeof window === "undefined") return;
-    window.localStorage.setItem(selfStudyGraphStorageKey, JSON.stringify(withGraphCounts(graph)));
+    window.localStorage.setItem(scopedStorageKey(selfStudyGraphStorageBaseKey), JSON.stringify(withGraphCounts(graph)));
   }, [graph, isSelfStudy]);
 
   useEffect(() => {

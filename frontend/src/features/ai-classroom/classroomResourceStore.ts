@@ -1,4 +1,5 @@
 import type { OpenMaicClassroom } from "./openmaicCompat";
+import { scopedStorageKey } from "../../scopedStorage";
 
 export type AIClassroomResource = {
   id: string;
@@ -12,7 +13,7 @@ export type AIClassroomResource = {
   savedAt: string;
 };
 
-const storageKey = "codetrack.selfStudy.aiClassroom.resources.v1";
+const storageBaseKey = "codetrack.selfStudy.aiClassroom.resources.v1";
 
 function createId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
@@ -44,7 +45,7 @@ function normalizeResource(value: unknown): AIClassroomResource | null {
 export function readAIClassroomResources() {
   if (typeof window === "undefined") return [];
   try {
-    const raw = window.localStorage.getItem(storageKey);
+    const raw = window.localStorage.getItem(scopedStorageKey(storageBaseKey));
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -56,7 +57,7 @@ export function readAIClassroomResources() {
 
 export function writeAIClassroomResources(resources: AIClassroomResource[]) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(storageKey, JSON.stringify(resources));
+  window.localStorage.setItem(scopedStorageKey(storageBaseKey), JSON.stringify(resources));
 }
 
 export function saveAIClassroomResource({

@@ -34,9 +34,12 @@ import {
   type PracticeProjectAutoAnalysis,
   type PracticeProjectDetail,
   type PracticeExternalSource,
+  type PracticeLiteraturePaper,
+  type PracticeLiteratureSearchResponse,
   type PracticeProjectHome,
   type PracticeProjectMaterial,
   type PracticeProjectProofItem,
+  type PracticeWritingAssistResult,
   type PracticeProjectSummary,
   type PracticeProjectTaskSection,
   type PracticeResearchBrief
@@ -743,6 +746,15 @@ function ProjectPracticeDetail({
     content: "",
     fileName: ""
   });
+  const [literatureQuery, setLiteratureQuery] = useState("");
+  const [literatureLoading, setLiteratureLoading] = useState(false);
+  const [literatureResult, setLiteratureResult] = useState<PracticeLiteratureSearchResponse | null>(null);
+  const [selectedPaperIds, setSelectedPaperIds] = useState<string[]>([]);
+  const [writingSection, setWritingSection] = useState("相关工作");
+  const [writingTask, setWritingTask] = useState("生成论文框架与引用检查");
+  const [writingDraft, setWritingDraft] = useState("");
+  const [writingGenerating, setWritingGenerating] = useState(false);
+  const [writingResult, setWritingResult] = useState<PracticeWritingAssistResult | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -772,6 +784,10 @@ function ProjectPracticeDetail({
     () => (pageData.activities.length > 0 ? pageData.activities : fallbackActivities.filter((activity) => activity.project_id === project.id)),
     [pageData.activities, project.id]
   );
+  const selectedPapers = useMemo(
+    () => (literatureResult?.papers ?? []).filter((paper) => selectedPaperIds.includes(paper.id)),
+    [literatureResult?.papers, selectedPaperIds]
+  );
 
   function toggleMaterial(item: string) {
     setSelectedMaterials((current) => {
@@ -789,6 +805,14 @@ function ProjectPracticeDetail({
     setSubmitMessage(null);
   }
 
+  function togglePaper(paperId: string) {
+    setSelectedPaperIds((current) => {
+      if (current.includes(paperId)) return current.filter((value) => value !== paperId);
+      return [...current, paperId];
+    });
+    setSubmitMessage(null);
+  }
+
   async function refreshFrontierTracking() {
     setFrontierRefreshing(true);
     setSubmitMessage(null);
@@ -800,6 +824,58 @@ function ProjectPracticeDetail({
       setSubmitMessage(apiErrorMessage(err));
     } finally {
       setFrontierRefreshing(false);
+    }
+  }
+
+  async function searchLiterature() {
+    setLiteratureLoading(true);
+    setSubmitMessage(null);
+    try {
+      const result = await api.searchPracticeProjectLiterature(
+        project.id,
+        literatureQuery || project.direction || project.title,
+        6
+      );
+      setLiteratureResult(result);
+      setDetail(result.detail);
+      setSelectedPaperIds(result.papers.slice(0, 3).map((paper) => paper.id));
+      setSubmitMessage(result.source_mode === "live" ? "已从公开学术源检索文献，并写入过程记录。" : "公开学术源暂不可用，已使用项目内置线索生成待核查文献表。");
+    } catch (err) {
+      setSubmitMessage(apiErrorMessage(err));
+    } finally {
+      setLiteratureLoading(false);
+    }
+  }
+
+  async function createWritingAssist() {
+    const papersForWriting: PracticeLiteraturePaper[] = selectedPapers.length
+      ? selectedPapers
+      : (literatureResult?.papers ?? []).slice(0, 3);
+    if (!writingDraft.trim() && !literatureQuery.trim() && papersForWriting.length === 0) {
+      setSubmitMessage("请先输入写作主题、草稿，或检索并选择文献。");
+      return;
+    }
+    setWritingGenerating(true);
+    setSubmitMessage(null);
+    try {
+      const result = await api.createPracticeProjectWritingAssist(project.id, {
+        topic: literatureQuery || project.direction || project.title,
+        section: writingSection,
+        writing_task: writingTask,
+        draft: writingDraft,
+        selected_papers: papersForWriting,
+        save_as_material: true
+      });
+      setWritingResult(result.result);
+      setDetail(result.detail);
+      if (result.material) {
+        setSelectedMaterialIds((current) => Array.from(new Set([result.material!.id, ...current])));
+      }
+      setSubmitMessage(result.material ? "文献写作辅助已生成，并保存为过程材料加入成果包。" : "文献写作辅助已生成。");
+    } catch (err) {
+      setSubmitMessage(apiErrorMessage(err));
+    } finally {
+      setWritingGenerating(false);
     }
   }
 
@@ -988,13 +1064,99 @@ function ProjectPracticeDetail({
         <div className="project-tab-summary">
           <div>
             <strong>学术写作辅助</strong>
-            <p>围绕文献综述、论文框架、语言润色和格式规范检查，生成可提交的阶段写作产物。</p>
+            <p>按真实科研写作流程检索文献、勾选证据、生成框架与规范检查，并保存为可提交的阶段材料。</p>
           </div>
-          <span>{brief.writingBlocks.length} 个段落</span>
+          <span>{writingResult ? `${writingResult.writing_blocks.length} 个生成块` : `${brief.writingBlocks.length} 个默认块`}</span>
+        </div>
+        <div className="research-writing-workflow">
+          {(writingResult?.workflow?.length ? writingResult.workflow : [
+            "检索相关论文并形成证据表",
+            "归纳主题、方法、数据集和不足",
+            "生成论文框架或段落草稿",
+            "检查引用覆盖、结构完整性和格式一致性",
+            "保存为阶段材料并进入成果提交"
+          ]).map((step, index) => (
+            <span key={`${step}-${index}`}><b>{index + 1}</b>{step}</span>
+          ))}
+        </div>
+        <div className="research-writing-controls">
+          <label>
+            <span>检索主题</span>
+            <input
+              value={literatureQuery}
+              onChange={(event) => setLiteratureQuery(event.target.value)}
+              placeholder={project.direction || project.title}
+            />
+          </label>
+          <label>
+            <span>目标章节</span>
+            <select value={writingSection} onChange={(event) => setWritingSection(event.target.value)}>
+              <option>研究背景</option>
+              <option>相关工作</option>
+              <option>研究方法</option>
+              <option>实验设计</option>
+              <option>结果讨论</option>
+              <option>结论与展望</option>
+            </select>
+          </label>
+          <label>
+            <span>写作任务</span>
+            <input
+              value={writingTask}
+              onChange={(event) => setWritingTask(event.target.value)}
+              placeholder="如：生成综述框架、检查引用、润色草稿"
+            />
+          </label>
+          <button type="button" disabled={literatureLoading} onClick={searchLiterature}>
+            {literatureLoading ? <Loader2 className="practice-spin-icon" size={16} /> : <Search size={16} />}
+            {literatureLoading ? "检索中" : "检索文献"}
+          </button>
+        </div>
+        {literatureResult ? (
+          <div className="research-literature-panel">
+            <div className="research-literature-head">
+              <strong>文献证据表</strong>
+              <span>{literatureResult.source_mode === "live" ? "公开源实时结果" : "待核查回退结果"}</span>
+            </div>
+            <div className="research-literature-list">
+              {literatureResult.papers.map((paper) => (
+                <article key={paper.id} className={selectedPaperIds.includes(paper.id) ? "selected" : ""}>
+                  <button type="button" onClick={() => togglePaper(paper.id)} aria-pressed={selectedPaperIds.includes(paper.id)}>
+                    <CheckCircle2 size={16} />
+                  </button>
+                  <div>
+                    <strong>{paper.title}</strong>
+                    <small>{[paper.authors.slice(0, 3).join(", "), paper.year, paper.venue || paper.source].filter(Boolean).join(" · ")}</small>
+                    <p>{paper.abstract || "该条结果暂未返回摘要，建议打开来源核查原文后再引用。"}</p>
+                    <span>{paper.source} · 引用 {paper.citation_count}</span>
+                  </div>
+                  {(paper.url || paper.open_access_url) ? (
+                    <a href={paper.open_access_url || paper.url} target="_blank" rel="noreferrer" aria-label={`打开 ${paper.title}`}>
+                      <ExternalLink size={15} />
+                    </a>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        <div className="research-draft-box">
+          <label>
+            <span>学生草稿</span>
+            <textarea
+              value={writingDraft}
+              onChange={(event) => setWritingDraft(event.target.value)}
+              placeholder="可粘贴你的相关工作、研究背景或方法段落，系统会按已选文献检查引用和结构。"
+            />
+          </label>
+          <button type="button" disabled={writingGenerating} onClick={createWritingAssist}>
+            {writingGenerating ? <Loader2 className="practice-spin-icon" size={16} /> : <PenLine size={16} />}
+            {writingGenerating ? "生成中" : "生成并保存写作辅助"}
+          </button>
         </div>
         <div className="research-writing-layout">
           <div className="research-outline-list">
-            {brief.writingBlocks.map((block) => (
+            {(writingResult?.writing_blocks ?? brief.writingBlocks).map((block) => (
               <article key={block.title}>
                 <span>{block.status}</span>
                 <strong>{block.title}</strong>
@@ -1004,10 +1166,16 @@ function ProjectPracticeDetail({
           </div>
           <aside className="research-check-panel">
             <h3>规范检查</h3>
-            {brief.writingChecks.map((item) => (
+            {(writingResult?.writing_checks ?? brief.writingChecks).map((item) => (
               <div key={item.label}>
                 <CheckCircle2 size={15} />
                 <span><strong>{item.label}</strong><small>{item.result}</small></span>
+              </div>
+            ))}
+            {writingResult?.risk_flags.map((flag) => (
+              <div key={flag} className="warning">
+                <AlertCircle size={15} />
+                <span><strong>风险提示</strong><small>{flag}</small></span>
               </div>
             ))}
           </aside>

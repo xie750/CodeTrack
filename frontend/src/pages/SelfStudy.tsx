@@ -117,7 +117,7 @@ export default function SelfStudy() {
       .then((context) => {
         const courseId = context.courses[0]?.course_id;
         return Promise.all([
-          courseId ? api.getStudentProfile(courseId) : Promise.resolve(null),
+          api.getStudentProfile(courseId),
           api.listStudentDailyTasks(todayKey)
         ]);
       })
@@ -139,15 +139,15 @@ export default function SelfStudy() {
   }, [reloadKey, todayKey]);
 
   const weakPoint = profile?.knowledge_states.find((item) => item.state === "WEAK") ?? profile?.knowledge_states[0];
-  const progress = clamp(profile?.overview.overall_progress ?? 68);
+  const progress = clamp(profile?.overview.overall_progress ?? 0);
   const dailyTaskItems = dailyTasks?.items ?? [];
   const dailyCompleted = dailyTasks?.summary.completed ?? dailyTaskItems.filter((task) => task.completed).length;
   const dailyTotal = dailyTasks?.summary.total ?? dailyTaskItems.length;
-  const adviceTopic = weakPoint?.knowledge_point ?? "链表（数据结构）";
+  const adviceTopic = weakPoint?.knowledge_point ?? "自主学习起点";
   const adviceReason = useMemo(() => {
     if (weakPoint?.last_evidence) return weakPoint.last_evidence;
-    return "分析：节点链接与操作、上正逆单链表；插入和边界处理是你在本节操作中常见题型。";
-  }, [weakPoint]);
+    return profile?.overview.recommendation ?? "当前账号还没有足够学习证据，建议先生成一份学习资料、创建自学图谱节点或完成一次科研实践记录。";
+  }, [profile, weakPoint]);
 
   function updateDailyState(items: StudentDailyTask[], taskDate = todayKey) {
     const completed = items.filter((item) => item.completed).length;

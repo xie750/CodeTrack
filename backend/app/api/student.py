@@ -17,6 +17,7 @@ from backend.app.services.cache import invalidate_prefix, remember_json, stable_
 from backend.app.models import (
     AdministrativeClass,
     Course,
+    Enrollment,
     LearnerEvent,
     StudentClassMembership,
     StudentDailyTask,
@@ -56,10 +57,12 @@ from backend.app.services.practice_projects import (
     create_practice_material,
     create_practice_material_file,
     create_practice_submission,
+    generate_project_writing_assist,
     get_practice_material_file,
     get_practice_project_detail,
     list_practice_projects,
     refresh_frontier_tracking,
+    search_project_literature,
     start_first_practice_project,
 )
 from backend.app.services.student_resources import (
@@ -83,6 +86,8 @@ from backend.app.services.student_resources import (
 router = APIRouter(prefix="/api/v1/student", tags=["student"])
 
 STUDENT_RESOURCE_CACHE_TTL_SECONDS = 30
+PERSONAL_LEARNING_CLASS_ID = "class_se_001"
+PERSONAL_LEARNING_COURSE_ID = "course_ds_001"
 
 
 def _student_resource_cache_prefix(student_id: str) -> str:
@@ -179,6 +184,20 @@ class PracticeProjectMaterialRequest(BaseModel):
     external_url: str = Field(default="", max_length=500)
 
 
+class PracticeProjectLiteratureSearchRequest(BaseModel):
+    query: str = Field(default="", max_length=240)
+    limit: int = Field(default=6, ge=3, le=12)
+
+
+class PracticeProjectWritingAssistRequest(BaseModel):
+    topic: str = Field(default="", max_length=240)
+    section: str = Field(default="相关工作", max_length=80)
+    writing_task: str = Field(default="生成论文框架与引用检查", max_length=240)
+    draft: str = Field(default="", max_length=4000)
+    selected_papers: list[dict[str, Any]] = Field(default_factory=list, max_length=8)
+    save_as_material: bool = True
+
+
 class InterventionReplyRequest(BaseModel):
     content: str = Field(min_length=1, max_length=1200)
 
@@ -191,6 +210,10 @@ class StudentDailyTaskCreateRequest(BaseModel):
 class StudentDailyTaskUpdateRequest(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=160)
     completed: bool | None = None
+
+
+class JoinCourseOfferingRequest(BaseModel):
+    teaching_assignment_id: str = Field(min_length=1, max_length=64)
 
 
 def today_date_key() -> str:
@@ -266,7 +289,7 @@ def latest_task_summary(task: Task, progress: StudentTaskProgress | None) -> str
     return "最近一次提交未通过头节点删除用例。"
 
 
-def require_active_class(db: Session, user: User) -> tuple[AdministrativeClass, StudentClassMembership]:
+def active_class_or_none(db: Session, user: User) -> tuple[AdministrativeClass | None, StudentClassMembership | None]:
     membership = db.scalar(
         select(StudentClassMembership).where(
             StudentClassMembership.student_id == user.id,
@@ -274,11 +297,101 @@ def require_active_class(db: Session, user: User) -> tuple[AdministrativeClass, 
         )
     )
     if membership is None:
-        raise ApiError(404, "STUDENT_CLASS_NOT_FOUND", "当前学生尚未绑定行政班")
+        return None, None
     administrative_class = db.get(AdministrativeClass, membership.class_id)
     if administrative_class is None:
         raise ApiError(404, "CLASS_NOT_FOUND", "行政班不存在")
     return administrative_class, membership
+
+
+def require_active_class(db: Session, user: User) -> tuple[AdministrativeClass, StudentClassMembership]:
+    administrative_class, membership = active_class_or_none(db, user)
+    if administrative_class is None or membership is None:
+        raise ApiError(404, "STUDENT_CLASS_NOT_FOUND", "当前学生尚未绑定行政班")
+    return administrative_class, membership
+
+
+def student_business_class_id(db: Session, user: User) -> str:
+    administrative_class, _ = active_class_or_none(db, user)
+    return administrative_class.id if administrative_class else PERSONAL_LEARNING_CLASS_ID
+
+
+def student_class_teaching_assignments(db: Session, user: User) -> list[TeachingAssignment]:
+    administrative_class, _ = active_class_or_none(db, user)
+    if administrative_class is None:
+        return []
+    return list(
+        db.scalars(
+            select(TeachingAssignment)
+            .where(
+                TeachingAssignment.class_id == administrative_class.id,
+                TeachingAssignment.status == "ACTIVE",
+            )
+            .order_by(TeachingAssignment.course_id.asc())
+        ).all()
+    )
+
+
+def student_joined_teaching_assignments(db: Session, user: User) -> list[TeachingAssignment]:
+    rows = (
+        db.execute(
+            select(Enrollment, TeachingAssignment)
+            .join(TeachingAssignment, Enrollment.teaching_assignment_id == TeachingAssignment.id)
+            .where(
+                Enrollment.user_id == user.id,
+                Enrollment.role == "STUDENT",
+                Enrollment.teaching_assignment_id.is_not(None),
+                TeachingAssignment.status == "ACTIVE",
+            )
+            .order_by(TeachingAssignment.created_at.asc(), TeachingAssignment.id.asc())
+        )
+        .all()
+    )
+    return [teaching for _, teaching in rows]
+
+
+def student_accessible_teaching_assignments(db: Session, user: User) -> list[TeachingAssignment]:
+    assignments: list[TeachingAssignment] = []
+    seen: set[str] = set()
+    for teaching in [*student_class_teaching_assignments(db, user), *student_joined_teaching_assignments(db, user)]:
+        if teaching.id in seen:
+            continue
+        seen.add(teaching.id)
+        assignments.append(teaching)
+    return assignments
+
+
+def student_accessible_teaching_assignment_ids(db: Session, user: User) -> list[str]:
+    return [item.id for item in student_accessible_teaching_assignments(db, user)]
+
+
+def serialize_course_offering(
+    db: Session,
+    teaching: TeachingAssignment,
+    *,
+    joined: bool,
+) -> dict:
+    course = db.get(Course, teaching.course_id)
+    teacher = db.get(User, teaching.teacher_id)
+    administrative_class = db.get(AdministrativeClass, teaching.class_id)
+    task_count = db.scalar(
+        select(func.count(TaskAssignment.id)).where(
+            TaskAssignment.teaching_assignment_id == teaching.id,
+            TaskAssignment.publish_status == "PUBLISHED",
+        )
+    )
+    return {
+        "teaching_assignment_id": teaching.id,
+        "course_id": teaching.course_id,
+        "course_name": course.name if course else "",
+        "teacher_id": teaching.teacher_id,
+        "teacher_name": teacher.display_name if teacher else "",
+        "class_id": teaching.class_id,
+        "class_name": administrative_class.name if administrative_class else "",
+        "term": teaching.term,
+        "task_count": task_count or 0,
+        "joined": joined,
+    }
 
 
 def resolve_student_course(
@@ -299,6 +412,43 @@ def resolve_student_course(
     if course is None:
         raise ApiError(404, "COURSE_NOT_FOUND", "课程不存在")
     return course
+
+
+def resolve_student_learning_context(
+    db: Session,
+    user: User,
+    course_id: str | None,
+) -> tuple[str, Course, AdministrativeClass | None]:
+    administrative_class, _ = active_class_or_none(db, user)
+    if course_id:
+        for teaching in student_accessible_teaching_assignments(db, user):
+            if teaching.course_id == course_id:
+                course = db.get(Course, teaching.course_id)
+                if course is None:
+                    raise ApiError(404, "COURSE_NOT_FOUND", "课程不存在")
+                return teaching.class_id, course, administrative_class
+        raise ApiError(404, "COURSE_NOT_IN_STUDENT_CLASS", "当前学生未加入这门课程")
+
+    if administrative_class is not None:
+        course = resolve_student_course(db, administrative_class, None)
+        return administrative_class.id, course, administrative_class
+
+    joined = student_joined_teaching_assignments(db, user)
+    if joined:
+        course = db.get(Course, joined[0].course_id)
+        if course is None:
+            raise ApiError(404, "COURSE_NOT_FOUND", "课程不存在")
+        return joined[0].class_id, course, None
+
+    query = select(Course).where(Course.status == "ACTIVE")
+    preferred = db.get(Course, PERSONAL_LEARNING_COURSE_ID)
+    if preferred is not None and preferred.status == "ACTIVE":
+        return PERSONAL_LEARNING_CLASS_ID, preferred, None
+
+    course = db.scalar(query.order_by(Course.id.asc()))
+    if course is None:
+        raise ApiError(404, "COURSE_NOT_FOUND", "暂无可用于自主学习的课程")
+    return PERSONAL_LEARNING_CLASS_ID, course, None
 
 
 def sse_event(event: str, data: dict) -> bytes:
@@ -640,23 +790,71 @@ def generated_resource_safety_note(resource: dict) -> str:
     return "AI 生成资源已基于课程资料进行引用校验，建议结合课堂讲义复核关键概念。"
 
 
+def initial_learner_profile_payload(
+    db: Session,
+    *,
+    user: User,
+    class_id: str | None,
+    course_id: str | None,
+) -> dict:
+    course = db.get(Course, course_id) if course_id else None
+    administrative_class = db.get(AdministrativeClass, class_id) if class_id else None
+    return {
+        "student": {
+            "id": user.id,
+            "name": user.display_name,
+            "class_id": class_id,
+            "class_name": administrative_class.name if administrative_class else "未加入班级",
+        },
+        "course": {
+            "id": course.id if course else (course_id or ""),
+            "name": course.name if course else "",
+            "teacher_name": "",
+        },
+        "overview": {
+            "overall_progress": 0,
+            "hint_dependency_level": "LOW",
+            "compile_error_rate": 0,
+            "logic_error_rate": 0,
+            "recent_task_completion": 0,
+            "summary": "当前为学习画像初始状态，系统会根据自主学习、科研实践和后续课程任务逐步更新证据。",
+            "recommendation": "建议先完成一次自主学习资料生成或科研实践记录，建立第一条画像证据。",
+            "updated_at": iso(now_utc()),
+        },
+        "knowledge_states": [],
+        "frequent_errors": [],
+        "recommendations": [
+            {
+                "id": f"initial_{user.id}_{course_id or 'general'}",
+                "type": "SELF_STUDY",
+                "title": "从自主学习开始建立画像",
+                "reason": "当前暂无足够学习证据，先保存一份学习产物或完成一次科研实践可帮助系统形成初始判断。",
+                "priority": 5,
+                "related_task_id": None,
+                "related_knowledge_points": [],
+                "suggested_action": "OPEN_SELF_STUDY",
+                "status": "ACTIVE",
+            }
+        ],
+        "behavior_events": [],
+    }
+
+
 @router.get("/learning-context")
 def learning_context(db: Session = Depends(get_db), user: User = Depends(current_user)):
     require_role(user, "STUDENT")
-    administrative_class, _ = require_active_class(db, user)
-    assignments = db.scalars(
-        select(TeachingAssignment)
-        .where(
-            TeachingAssignment.class_id == administrative_class.id,
-            TeachingAssignment.status == "ACTIVE",
-        )
-        .order_by(TeachingAssignment.course_id.asc())
-    ).all()
+    administrative_class, _ = active_class_or_none(db, user)
+    assignments = student_accessible_teaching_assignments(db, user)
 
     courses = []
+    seen_course_ids: set[str] = set()
     for teaching in assignments:
+        if teaching.course_id in seen_course_ids:
+            continue
+        seen_course_ids.add(teaching.course_id)
         course = db.get(Course, teaching.course_id)
         teacher = db.get(User, teaching.teacher_id)
+        teaching_class = db.get(AdministrativeClass, teaching.class_id)
         task_count = db.scalar(
             select(func.count(TaskAssignment.id)).where(
                 TaskAssignment.teaching_assignment_id == teaching.id,
@@ -669,9 +867,10 @@ def learning_context(db: Session = Depends(get_db), user: User = Depends(current
             .where(
                 TaskAssignment.teaching_assignment_id == teaching.id,
                 StudentTaskProgress.student_id == user.id,
-                StudentTaskProgress.status.in_(["NOT_STARTED", "IN_PROGRESS", "SUBMITTED", "NEEDS_REVISION"]),
+                StudentTaskProgress.status == "COMPLETED",
             )
         )
+        unfinished_count = max(int(task_count or 0) - int(unfinished_count or 0), 0)
         courses.append(
             {
                 "course_id": teaching.course_id,
@@ -679,8 +878,11 @@ def learning_context(db: Session = Depends(get_db), user: User = Depends(current
                 "teacher_id": teaching.teacher_id,
                 "teacher_name": teacher.display_name if teacher else "",
                 "teaching_assignment_id": teaching.id,
+                "class_id": teaching.class_id,
+                "class_name": teaching_class.name if teaching_class else "",
+                "term": teaching.term,
                 "task_count": task_count or 0,
-                "unfinished_count": unfinished_count or 0,
+                "unfinished_count": unfinished_count,
             }
         )
 
@@ -689,10 +891,88 @@ def learning_context(db: Session = Depends(get_db), user: User = Depends(current
             "student": {
                 "id": user.id,
                 "name": user.display_name,
-                "class_id": administrative_class.id,
-                "class_name": administrative_class.name,
+                "class_id": administrative_class.id if administrative_class else None,
+                "class_name": administrative_class.name if administrative_class else "未加入班级",
+                "has_class": administrative_class is not None,
+                "state": "CLASS_BOUND" if administrative_class else "NO_CLASS",
             },
             "courses": courses,
+        }
+    )
+
+
+@router.get("/course-offerings")
+def list_course_offerings(
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    accessible_ids = set(student_accessible_teaching_assignment_ids(db, user))
+    accessible_course_ids = {
+        item.course_id for item in student_accessible_teaching_assignments(db, user)
+    }
+    offerings = list(
+        db.scalars(
+            select(TeachingAssignment)
+            .where(TeachingAssignment.status == "ACTIVE")
+            .order_by(TeachingAssignment.term.desc(), TeachingAssignment.course_id.asc(), TeachingAssignment.class_id.asc())
+        ).all()
+    )
+    items = [
+        serialize_course_offering(db, teaching, joined=teaching.id in accessible_ids)
+        for teaching in offerings
+        if teaching.id not in accessible_ids and teaching.course_id not in accessible_course_ids
+    ]
+    return ok({"items": items})
+
+
+@router.post("/course-offerings/join", status_code=status.HTTP_201_CREATED)
+def join_course_offering(
+    payload: JoinCourseOfferingRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    teaching = db.get(TeachingAssignment, payload.teaching_assignment_id)
+    if teaching is None or teaching.status != "ACTIVE":
+        raise ApiError(404, "COURSE_OFFERING_NOT_FOUND", "课程加入通道不存在或已关闭")
+
+    accessible = student_accessible_teaching_assignments(db, user)
+    if any(item.id == teaching.id for item in accessible):
+        return ok(
+            {
+                "joined": True,
+                "offering": serialize_course_offering(db, teaching, joined=True),
+                "learning_context": learning_context(db, user)["data"],
+            }
+        )
+    if any(item.course_id == teaching.course_id for item in accessible):
+        raise ApiError(409, "COURSE_ALREADY_JOINED", "当前账号已加入这门课程")
+
+    enrollment = db.scalar(
+        select(Enrollment).where(
+            Enrollment.course_id == teaching.course_id,
+            Enrollment.user_id == user.id,
+        )
+    )
+    if enrollment is None:
+        db.add(
+            Enrollment(
+                course_id=teaching.course_id,
+                user_id=user.id,
+                role="STUDENT",
+                teaching_assignment_id=teaching.id,
+            )
+        )
+    else:
+        enrollment.role = "STUDENT"
+        enrollment.teaching_assignment_id = teaching.id
+    db.commit()
+    return ok(
+        {
+            "joined": True,
+            "offering": serialize_course_offering(db, teaching, joined=True),
+            "learning_context": learning_context(db, user)["data"],
         }
     )
 
@@ -888,7 +1168,6 @@ def list_student_daily_tasks(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    require_active_class(db, user)
     day_key = task_date or today_date_key()
     tasks = list(
         db.scalars(
@@ -921,7 +1200,6 @@ def create_student_daily_task(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    require_active_class(db, user)
     title = payload.title.strip()
     if not title:
         raise ApiError(422, "DAILY_TASK_TITLE_EMPTY", "今日任务名称不能为空")
@@ -954,7 +1232,6 @@ def update_student_daily_task(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    require_active_class(db, user)
     task = db.get(StudentDailyTask, daily_task_id)
     if task is None or task.student_id != user.id:
         raise ApiError(404, "DAILY_TASK_NOT_FOUND", "今日任务不存在")
@@ -979,7 +1256,6 @@ def delete_student_daily_task(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    require_active_class(db, user)
     task = db.get(StudentDailyTask, daily_task_id)
     if task is None or task.student_id != user.id:
         raise ApiError(404, "DAILY_TASK_NOT_FOUND", "今日任务不存在")
@@ -991,15 +1267,15 @@ def delete_student_daily_task(
 @router.get("/practice-projects")
 def student_practice_projects(db: Session = Depends(get_db), user: User = Depends(current_user)):
     require_role(user, "STUDENT")
-    administrative_class, _ = require_active_class(db, user)
-    return ok(list_practice_projects(db, student_id=user.id, class_id=administrative_class.id))
+    class_id = student_business_class_id(db, user)
+    return ok(list_practice_projects(db, student_id=user.id, class_id=class_id))
 
 
 @router.post("/practice-projects/auto-analysis")
 def student_analyze_practice_project_fit(db: Session = Depends(get_db), user: User = Depends(current_user)):
     require_role(user, "STUDENT")
-    administrative_class, _ = require_active_class(db, user)
-    result = analyze_practice_project_fit(db, student=user, class_id=administrative_class.id)
+    class_id = student_business_class_id(db, user)
+    result = analyze_practice_project_fit(db, student=user, class_id=class_id)
     db.commit()
     return ok(result)
 
@@ -1011,8 +1287,8 @@ def student_practice_project_detail(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    administrative_class, _ = require_active_class(db, user)
-    return ok(get_practice_project_detail(db, project_id=project_id, student_id=user.id, class_id=administrative_class.id))
+    class_id = student_business_class_id(db, user)
+    return ok(get_practice_project_detail(db, project_id=project_id, student_id=user.id, class_id=class_id))
 
 
 @router.post("/practice-projects/start-first", status_code=status.HTTP_201_CREATED)
@@ -1021,8 +1297,8 @@ def student_start_first_practice_project(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    administrative_class, _ = require_active_class(db, user)
-    result = start_first_practice_project(db, student=user, class_id=administrative_class.id)
+    class_id = student_business_class_id(db, user)
+    result = start_first_practice_project(db, student=user, class_id=class_id)
     db.commit()
     return ok(result)
 
@@ -1035,13 +1311,59 @@ def student_refresh_practice_frontier(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    administrative_class, _ = require_active_class(db, user)
+    class_id = student_business_class_id(db, user)
     result = refresh_frontier_tracking(
         db,
         project_id=project_id,
         student=user,
-        class_id=administrative_class.id,
+        class_id=class_id,
         focus=payload.focus,
+    )
+    db.commit()
+    return ok(result)
+
+
+@router.post("/practice-projects/{project_id}/literature/search")
+def student_search_practice_literature(
+    project_id: str,
+    payload: PracticeProjectLiteratureSearchRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    class_id = student_business_class_id(db, user)
+    result = search_project_literature(
+        db,
+        project_id=project_id,
+        student=user,
+        class_id=class_id,
+        query=payload.query,
+        limit=payload.limit,
+    )
+    db.commit()
+    return ok(result)
+
+
+@router.post("/practice-projects/{project_id}/writing-assist")
+def student_create_practice_writing_assist(
+    project_id: str,
+    payload: PracticeProjectWritingAssistRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    class_id = student_business_class_id(db, user)
+    result = generate_project_writing_assist(
+        db,
+        project_id=project_id,
+        student=user,
+        class_id=class_id,
+        topic=payload.topic,
+        section=payload.section,
+        writing_task=payload.writing_task,
+        draft=payload.draft,
+        selected_papers=payload.selected_papers,
+        save_as_material=payload.save_as_material,
     )
     db.commit()
     return ok(result)
@@ -1055,12 +1377,12 @@ def student_create_practice_project_material(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    administrative_class, _ = require_active_class(db, user)
+    class_id = student_business_class_id(db, user)
     result = create_practice_material(
         db,
         project_id=project_id,
         student=user,
-        class_id=administrative_class.id,
+        class_id=class_id,
         material_type=payload.material_type,
         title=payload.title,
         description=payload.description,
@@ -1085,13 +1407,13 @@ def student_upload_practice_project_material(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    administrative_class, _ = require_active_class(db, user)
+    class_id = student_business_class_id(db, user)
     payload = file.file.read()
     result = create_practice_material_file(
         db,
         project_id=project_id,
         student=user,
-        class_id=administrative_class.id,
+        class_id=class_id,
         material_type=material_type,
         title=title,
         description=description,
@@ -1111,7 +1433,6 @@ def student_download_practice_project_material(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    require_active_class(db, user)
     material = get_practice_material_file(db, project_id=project_id, student_id=user.id, material_id=material_id)
     return FileResponse(
         material.storage_path,
@@ -1128,12 +1449,12 @@ def student_create_practice_project_submission(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    administrative_class, _ = require_active_class(db, user)
+    class_id = student_business_class_id(db, user)
     result = create_practice_submission(
         db,
         project_id=project_id,
         student=user,
-        class_id=administrative_class.id,
+        class_id=class_id,
         title=payload.title,
         description=payload.description,
         materials=payload.materials,
@@ -1151,8 +1472,7 @@ async def student_ai_chat(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    administrative_class, _ = require_active_class(db, user)
-    course = resolve_student_course(db, administrative_class, payload.course_id)
+    class_id, course, _ = resolve_student_learning_context(db, user, payload.course_id)
     session = ensure_ai_tutor_session(
         db,
         student_id=user.id,
@@ -1173,7 +1493,7 @@ async def student_ai_chat(
     result = await generate_student_ai_reply(
         db,
         user=user,
-        class_id=administrative_class.id,
+        class_id=class_id,
         course=course,
         message=payload.message.strip(),
         model_key=payload.model_key,
@@ -1232,9 +1552,8 @@ async def student_knowledge_graph_node_diagnosis(
     model_options = list_ai_tutor_model_options()
     selected_model = next((item for item in model_options if item["key"] == model_key), None)
 
-    administrative_class, _ = require_active_class(db, user)
-    course = resolve_student_course(db, administrative_class, payload.course_id)
-    profile = serialize_learner_profile(db, student_id=user.id, course_id=course.id, class_id=administrative_class.id)
+    class_id, course, _ = resolve_student_learning_context(db, user, payload.course_id)
+    profile = serialize_learner_profile(db, student_id=user.id, course_id=course.id, class_id=class_id)
     knowledge_state = _knowledge_state_for_node(profile, node_label)
     mastery_score = _bounded_percent(knowledge_state.get("mastery_score") if knowledge_state else None)
     if not selected_model or not selected_model.get("configured"):
@@ -1256,7 +1575,7 @@ async def student_knowledge_graph_node_diagnosis(
         result = await generate_student_ai_reply(
             db,
             user=user,
-            class_id=administrative_class.id,
+            class_id=class_id,
             course=course,
             message=prompt,
             model_key=model_key,
@@ -1342,8 +1661,7 @@ def student_ai_chat_create_session(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    administrative_class, _ = require_active_class(db, user)
-    course = resolve_student_course(db, administrative_class, payload.course_id)
+    _, course, _ = resolve_student_learning_context(db, user, payload.course_id)
     session = ensure_ai_tutor_session(
         db,
         student_id=user.id,
@@ -1391,8 +1709,7 @@ async def student_generate_ppt_resource(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    administrative_class, _ = require_active_class(db, user)
-    course = resolve_student_course(db, administrative_class, payload.course_id)
+    class_id, course, _ = resolve_student_learning_context(db, user, payload.course_id)
     session = ensure_ai_tutor_session(
         db,
         student_id=user.id,
@@ -1412,7 +1729,7 @@ async def student_generate_ppt_resource(
     resource = await generate_ppt_resource(
         db,
         user=user,
-        class_id=administrative_class.id,
+        class_id=class_id,
         course=course,
         message=payload.message.strip(),
         session_id=session.id,
@@ -1457,8 +1774,7 @@ async def student_generate_resource(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    administrative_class, _ = require_active_class(db, user)
-    course = resolve_student_course(db, administrative_class, payload.course_id)
+    class_id, course, _ = resolve_student_learning_context(db, user, payload.course_id)
     resource_type = payload.resource_type.strip().upper()
     session = ensure_ai_tutor_session(
         db,
@@ -1479,7 +1795,7 @@ async def student_generate_resource(
     resource = await generate_learning_resource(
         db,
         user=user,
-        class_id=administrative_class.id,
+        class_id=class_id,
         course=course,
         message=payload.message.strip(),
         resource_type=resource_type,
@@ -1487,7 +1803,7 @@ async def student_generate_resource(
     )
     if resource_type in {"PRACTICE_SET", "PODCAST_SCRIPT"}:
         db.flush()
-        resource = save_generated_resource(db, user=user, class_id=administrative_class.id, resource_id=resource["id"])
+        resource = save_generated_resource(db, user=user, class_id=class_id, resource_id=resource["id"])
     suggested_actions = ["加入资源中心", "打开预览"]
     if resource_type == "PRACTICE_SET":
         suggested_actions = ["前往资源中心做题", "打开预览"]
@@ -1539,7 +1855,6 @@ def student_resource_folders(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    require_active_class(db, user)
     key = stable_cache_key(f"student-resources:{user.id}", "folders")
     items = remember_json(
         key,
@@ -1556,7 +1871,6 @@ def student_create_resource_folder(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    require_active_class(db, user)
     folder = create_student_resource_folder(db, student_id=user.id, name=payload.name)
     db.commit()
     _invalidate_student_resource_cache(user.id)
@@ -1570,8 +1884,8 @@ def student_save_generated_resource(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    administrative_class, _ = require_active_class(db, user)
-    resource = save_generated_resource(db, user=user, class_id=administrative_class.id, resource_id=resource_id)
+    class_id = student_business_class_id(db, user)
+    resource = save_generated_resource(db, user=user, class_id=class_id, resource_id=resource_id)
     db.commit()
     _invalidate_student_resource_cache(user.id)
     return ok(resource)
@@ -1636,9 +1950,9 @@ def student_submit_generated_practice(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    administrative_class, _ = require_active_class(db, user)
+    class_id = student_business_class_id(db, user)
     answers = [answer.model_dump() for answer in payload.answers]
-    result = submit_generated_practice(db, user=user, class_id=administrative_class.id, resource_id=resource_id, answers=answers)
+    result = submit_generated_practice(db, user=user, class_id=class_id, resource_id=resource_id, answers=answers)
     _invalidate_student_resource_cache(user.id)
     return ok(result)
 
@@ -1651,11 +1965,11 @@ def student_mark_generated_podcast_listened(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    administrative_class, _ = require_active_class(db, user)
+    class_id = student_business_class_id(db, user)
     result = record_generated_podcast_listened(
         db,
         user=user,
-        class_id=administrative_class.id,
+        class_id=class_id,
         resource_id=resource_id,
         completed_segment_count=payload.completed_segment_count,
     )
@@ -1710,8 +2024,7 @@ async def student_ai_chat_stream(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    administrative_class, _ = require_active_class(db, user)
-    course = resolve_student_course(db, administrative_class, payload.course_id)
+    class_id, course, _ = resolve_student_learning_context(db, user, payload.course_id)
     session = ensure_ai_tutor_session(
         db,
         student_id=user.id,
@@ -1732,7 +2045,6 @@ async def student_ai_chat_stream(
     session_payload = serialize_ai_tutor_session(session)
     user_message_payload = serialize_ai_tutor_message(user_message)
     student_id = user.id
-    class_id = administrative_class.id
     course_id = course.id
     session_id = session.id
     message_text = payload.message.strip()
@@ -1830,7 +2142,9 @@ def list_student_tasks(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    administrative_class, _ = require_active_class(db, user)
+    teaching_ids = student_accessible_teaching_assignment_ids(db, user)
+    if not teaching_ids:
+        return ok([])
     query = (
         select(TaskAssignment, Task, TeachingAssignment, Course, User, StudentTaskProgress)
         .join(Task, TaskAssignment.task_id == Task.id)
@@ -1843,7 +2157,7 @@ def list_student_tasks(
             & (StudentTaskProgress.student_id == user.id),
         )
         .where(
-            TeachingAssignment.class_id == administrative_class.id,
+            TeachingAssignment.id.in_(teaching_ids),
             TeachingAssignment.status == "ACTIVE",
             TaskAssignment.publish_status == "PUBLISHED",
         )
@@ -1863,8 +2177,8 @@ def list_student_tasks(
                 "task_id": task.id,
                 "course_id": course.id,
                 "course_name": course.name,
-                "class_id": administrative_class.id,
-                "class_name": administrative_class.name,
+                "class_id": teaching.class_id,
+                "class_name": teaching.administrative_class.name if teaching.administrative_class else "",
                 "teacher_id": teacher.id,
                 "teacher_name": teacher.display_name,
                 "title": task.title,
@@ -1895,14 +2209,7 @@ def get_course_knowledge_graph(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    administrative_class, _ = require_active_class(db, user)
-    teaching = db.scalar(
-        select(TeachingAssignment).where(
-            TeachingAssignment.class_id == administrative_class.id,
-            TeachingAssignment.course_id == course_id,
-            TeachingAssignment.status == "ACTIVE",
-        )
-    )
+    teaching = next((item for item in student_accessible_teaching_assignments(db, user) if item.course_id == course_id), None)
     if teaching is None:
         raise ApiError(404, "COURSE_NOT_IN_STUDENT_CLASS", "当前学生未加入这门课程")
 
@@ -1910,7 +2217,7 @@ def get_course_knowledge_graph(
         select(StudentKnowledgeGraph)
         .where(
             StudentKnowledgeGraph.teaching_assignment_id == teaching.id,
-            StudentKnowledgeGraph.class_id == administrative_class.id,
+            StudentKnowledgeGraph.class_id == teaching.class_id,
             StudentKnowledgeGraph.course_id == course_id,
             StudentKnowledgeGraph.status == "published",
         )
@@ -1966,15 +2273,26 @@ def learner_profile(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    administrative_class, _ = require_active_class(db, user)
+    administrative_class, _ = active_class_or_none(db, user)
+    if administrative_class is not None:
+        class_id = administrative_class.id
+        profile_course_id = course_id
+    else:
+        class_id, course, _ = resolve_student_learning_context(db, user, course_id)
+        profile_course_id = course.id
     # 序列化逻辑放在 services/learner_profile.py，教师端个体诊断读同一个函数，
     # 保证两端口径一致（开发方案 §10.2）。
     payload = serialize_learner_profile(
         db,
         student_id=user.id,
-        course_id=course_id,
-        class_id=administrative_class.id,
+        course_id=profile_course_id,
+        class_id=class_id,
     )
     if payload is None:
-        raise ApiError(404, "LEARNER_PROFILE_NOT_FOUND", "当前课程暂无足够画像数据")
+        payload = initial_learner_profile_payload(
+            db,
+            user=user,
+            class_id=class_id if administrative_class is not None else None,
+            course_id=profile_course_id,
+        )
     return ok(payload)

@@ -53,6 +53,7 @@ async function request<T>(
     headers: {
       'Content-Type': 'application/json',
       'X-User-Id': userId ?? _currentUserId,
+      'X-User-Name': encodeURIComponent(_currentUserName),
       ...options.headers,
     },
   })

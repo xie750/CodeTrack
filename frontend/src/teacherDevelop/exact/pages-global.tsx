@@ -151,7 +151,7 @@ export function ExactPortal({
       <div className="teacher-entry-orbit" aria-hidden="true"><Sparkles size={54} strokeWidth={1.6} /></div>
 
       <>
-        <Title>你好，{teacherName}</Title>
+        <Title>你好，{authUser.display_name || teacherName}</Title>
         <Text type="secondary">欢迎进入 CodeTrack 教师端，智能助力教学管理与科研协作。</Text>
         {entryError ? <Alert className="teacher-entry-alert" type="warning" showIcon message={entryError} /> : null}
         <div className="teacher-entry-cards">
@@ -220,16 +220,55 @@ function ExactDashboardSkeleton({ courses }: { courses: ApiCourse[] }) {
   </div>
 }
 
+function ExactEmptyDashboard({ onNavigate }: { onNavigate: (view: ExactView) => void }) {
+  return <div className="exact-page exact-dashboard exact-empty-dashboard">
+    <div className="exact-page-title">
+      <div>
+        <Title level={2}>先创建您的第一门课程</Title>
+        <Text type="secondary">课程创建完成后，您可以继续绑定班级、发布任务并查看学情分析。</Text>
+      </div>
+      <img className="exact-dashboard-hero" src="/ui-assets/portal-teaching.png" alt="" />
+    </div>
+    <section className="exact-initial-state" aria-label="教师端初始状态">
+      <div className="exact-initial-state-copy">
+        <span className="exact-initial-state-icon"><BookOpen size={27} /></span>
+        <div>
+          <Tag color="blue">初始状态</Tag>
+          <Title level={3}>当前还没有课程</Title>
+          <p>这是正常的教师首次进入状态。先完成课程基础信息和教学设置，系统会自动生成课程工作空间。</p>
+          <Space wrap>
+            <Button type="primary" icon={<Plus size={16} />} onClick={() => onNavigate('create-course')}>创建第一门课程</Button>
+            <Button onClick={() => onNavigate('courses')}>查看我的课程</Button>
+          </Space>
+        </div>
+      </div>
+      <div className="exact-initial-state-steps">
+        <div><b>1</b><span><strong>创建课程</strong><small>填写课程名称、学期和教学目标</small></span></div>
+        <div><b>2</b><span><strong>绑定班级</strong><small>创建完成后生成班级加入通道</small></span></div>
+        <div><b>3</b><span><strong>开始教学</strong><small>上传资料并发布第一项课程任务</small></span></div>
+      </div>
+    </section>
+  </div>
+}
+
 export function ExactDashboard({ courseId, classId, courses, onCourse, onNavigate, onReload }: DashboardProps) {
-  const [data, setData] = useState<any>(null)
+  const [data, setData] = useState<any>(() => courses.length ? null : {
+    summary: { active_tasks: 0, risk_students: 0 },
+    todos: [],
+  })
   const [handled, setHandled] = useState<string[]>([])
   const [error, setError] = useState('')
   const [messageApi, contextHolder] = message.useMessage()
   const load = () => {
+    if (!courseId || !courses.length) {
+      setData({ summary: { active_tasks: 0, risk_students: 0 }, todos: [] })
+      return
+    }
     setError('')
     api.dashboard(courseId, classId).then(setData).catch((reason) => setError(reason.message))
   }
-  useEffect(load, [courseId, classId])
+  useEffect(() => { void load() }, [courseId, classId, courses.length])
+  if (!courses.length) return <ExactEmptyDashboard onNavigate={onNavigate} />
   if (!data && !error) return <ExactDashboardSkeleton courses={courses} />
   if (error) return <Alert type="error" showIcon message={error} action={<Button onClick={load}>重试</Button>} />
   const summary = data.summary

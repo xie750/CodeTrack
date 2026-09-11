@@ -8,6 +8,7 @@ import secrets
 import string
 import uuid
 from typing import Any
+from urllib.parse import unquote
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -186,9 +187,20 @@ app.include_router(frontend_persistence_router)
 
 def current_teacher(
     x_user_id: str = Header(default="teacher-01"),
+    x_user_name: str = Header(default=""),
     db: Session = Depends(get_db),
 ) -> User:
     user = db.get(User, x_user_id)
+    if user is None and x_user_name.strip():
+        user = User(
+            id=x_user_id,
+            name=unquote(x_user_name.strip())[:80],
+            role="teacher",
+            department="人工智能学院",
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
     if not user or user.role != "teacher":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="需要教师权限")
     return user
@@ -372,9 +384,7 @@ def teacher_bootstrap(
 ):
     courses = db.scalars(select(Course).where(Course.teacher_id == teacher.id).order_by(Course.created_at)).all()
     selected_course = next((item for item in courses if item.id == course_id), None) or (courses[0] if courses else None)
-    if selected_course is None:
-        raise HTTPException(status_code=404, detail="当前教师还没有课程")
-    course_id = selected_course.id
+    course_id = selected_course.id if selected_course else ""
     class_groups = db.scalars(
         select(ClassGroup).join(Course).where(Course.teacher_id == teacher.id).order_by(ClassGroup.name)
     ).all()
@@ -427,6 +437,20 @@ def dashboard(
     teacher: User = Depends(current_teacher),
     db: Session = Depends(get_db),
 ):
+    if not course_id:
+        return envelope({
+            "summary": {
+                "students": 0,
+                "active_tasks": 0,
+                "completion_rate": 0,
+                "overdue_students": 0,
+                "pending_reviews": 0,
+                "risk_students": 0,
+            },
+            "recent_tasks": [],
+            "todos": [],
+            "trend": [],
+        })
     owned_course(db, teacher, course_id)
     students_count = db.scalar(select(func.count()).select_from(Enrollment).where(Enrollment.class_id == class_id)) or 0
     tasks = db.scalars(

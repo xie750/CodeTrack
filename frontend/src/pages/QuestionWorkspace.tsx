@@ -22,6 +22,7 @@ import {
 import { api, QuestionItem, QuestionWorkspace as QuestionWorkspaceData, SubmitQuestionResult } from "../api";
 import StudentRouteBreadcrumb from "../components/StudentRouteBreadcrumb";
 import { StudentState, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
+import { scopedStorageKey } from "../scopedStorage";
 import { favoriteRecordId, readStudentFavorites, removeStudentFavorite, subscribeStudentFavorites, upsertStudentFavorite } from "../studentFavorites";
 import { formatStudentDateTime, getScheduleInfo, resolveVisibleTaskStatus, visibleTaskStatusLabel } from "../studentTaskSchedule";
 
@@ -110,7 +111,7 @@ function buildInitialAnswers(questions: QuestionItem[]): AnswerMap {
 }
 
 function questionAnswerCacheKey(assignmentId: string) {
-  return `codetrack.questionWorkspace.answers.${assignmentId}.v1`;
+  return scopedStorageKey("codetrack.questionWorkspace.answers.v1", assignmentId);
 }
 
 function sanitizeAnswersForQuestions(questions: QuestionItem[], source: AnswerMap | undefined) {

@@ -3084,6 +3084,18 @@ button { cursor: pointer; }
 .exact-empty-courses { grid-column: 1 / -1; min-height: 150px; display: grid; place-content: center; justify-items: center; gap: 6px; color: #7a877d; }
 .exact-empty-courses svg { color: #43b81a; }
 .exact-empty-courses small { font-size: 9px; }
+.exact-empty-dashboard .exact-page-title { min-height: 86px; position: relative; overflow: visible; }
+.exact-initial-state { display: grid; gap: 24px; padding: 34px 38px; border: 1px solid #dfe9f4; border-radius: 10px; background: linear-gradient(135deg, #ffffff 0%, #f5f9ff 100%); box-shadow: 0 14px 32px rgba(34, 73, 116, .06); }
+.exact-initial-state-copy { display: flex; align-items: flex-start; gap: 20px; max-width: 700px; }
+.exact-initial-state-icon { flex: 0 0 auto; width: 58px; height: 58px; display: grid; place-items: center; border-radius: 14px; color: #176cf5; background: #e8f1ff; }
+.exact-initial-state-copy h3 { margin: 10px 0 8px !important; color: #17263d; }
+.exact-initial-state-copy p { max-width: 620px; margin: 0 0 22px; color: #65758b; line-height: 1.75; }
+.exact-initial-state-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; padding-top: 22px; border-top: 1px solid #e6edf6; }
+.exact-initial-state-steps > div { display: flex; align-items: flex-start; gap: 11px; min-width: 0; }
+.exact-initial-state-steps b { flex: 0 0 auto; width: 25px; height: 25px; display: grid; place-items: center; border-radius: 50%; color: #176cf5; background: #e8f1ff; font-size: 12px; }
+.exact-initial-state-steps span { display: grid; gap: 4px; min-width: 0; }
+.exact-initial-state-steps strong { color: #2b3b52; font-size: 13px; }
+.exact-initial-state-steps small { color: #8190a3; line-height: 1.45; }
 
 /* Shared course breadcrumb navigation */
 .course-breadcrumb {

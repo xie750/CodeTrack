@@ -51,6 +51,7 @@ import {
   readStudentAiModelKey,
   saveStudentAiModelKey
 } from "../studentAiModels";
+import { scopedStorageKey } from "../scopedStorage";
 import { saveAIClassroomResource, type AIClassroomResource } from "../features/ai-classroom/classroomResourceStore";
 import { generateClassroomFromFile, generateClassroomFromPrompt, type OpenMaicClassroom } from "../features/ai-classroom/openmaicCompat";
 
@@ -107,7 +108,7 @@ const selfStudyScopeLabel = "综合技能维度";
 const selfStudyKnowledgeScopeLabel = "跨课程知识库";
 const selfStudySkillSummary = "覆盖编程基础、算法结构与 AI 专业能力";
 const previewLimit = 76;
-const aiTutorLocalTurnsKey = "codetrack.selfStudy.aiTutor.turns.v1";
+const aiTutorLocalTurnsBaseKey = "codetrack.selfStudy.aiTutor.turns.v1";
 
 function nowLabel() {
   return new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
@@ -116,7 +117,7 @@ function nowLabel() {
 function readPersistedAiTutorTurns(): AiChatTurn[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = window.localStorage.getItem(aiTutorLocalTurnsKey);
+    const raw = window.localStorage.getItem(scopedStorageKey(aiTutorLocalTurnsBaseKey));
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -137,7 +138,7 @@ function writePersistedAiTutorTurns(turns: AiChatTurn[]) {
   const stableTurns = turns
     .filter((turn) => !turn.loading)
     .map((turn) => ({ ...turn, resourceSaving: false }));
-  window.localStorage.setItem(aiTutorLocalTurnsKey, JSON.stringify(stableTurns));
+  window.localStorage.setItem(scopedStorageKey(aiTutorLocalTurnsBaseKey), JSON.stringify(stableTurns));
 }
 
 function timeLabel(value?: string | null) {
@@ -640,10 +641,6 @@ export default function AiTutor() {
       const nextCourseId = requestedCourseId && data.courses.some((course) => course.course_id === requestedCourseId)
         ? requestedCourseId
         : data.courses[0]?.course_id;
-      if (!nextCourseId) {
-        setLoadingContext(false);
-        return;
-      }
       api.getStudentProfile(nextCourseId).then((profileData) => {
         if (alive) setProfile(profileData);
       }).catch((err) => {
