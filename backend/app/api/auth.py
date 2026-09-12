@@ -21,6 +21,7 @@ from backend.app.models import (
     Recommendation,
     StudentDailyTask,
     StudentResourceFolder,
+    TeachingAssignment,
     User,
 )
 
@@ -88,7 +89,27 @@ def _validate_register_password(password: str, username: str) -> str:
     return password
 
 
-def _ensure_enrollment(db: Session, *, course_id: str, user_id: str, role: str) -> None:
+def _default_teaching_assignment_id(db: Session, *, course_id: str) -> str | None:
+    teaching = db.scalar(
+        select(TeachingAssignment)
+        .where(
+            TeachingAssignment.course_id == course_id,
+            TeachingAssignment.class_id == DEFAULT_PERSONAL_CLASS_ID,
+            TeachingAssignment.status == "ACTIVE",
+        )
+        .order_by(TeachingAssignment.id.asc())
+    )
+    return teaching.id if teaching else None
+
+
+def _ensure_enrollment(
+    db: Session,
+    *,
+    course_id: str,
+    user_id: str,
+    role: str,
+    teaching_assignment_id: str | None = None,
+) -> None:
     enrollment = db.scalar(
         select(Enrollment).where(
             Enrollment.course_id == course_id,
@@ -96,9 +117,18 @@ def _ensure_enrollment(db: Session, *, course_id: str, user_id: str, role: str) 
         )
     )
     if enrollment is None:
-        db.add(Enrollment(course_id=course_id, user_id=user_id, role=role))
+        db.add(
+            Enrollment(
+                course_id=course_id,
+                user_id=user_id,
+                role=role,
+                teaching_assignment_id=teaching_assignment_id,
+            )
+        )
         return
     enrollment.role = role
+    if teaching_assignment_id:
+        enrollment.teaching_assignment_id = teaching_assignment_id
 
 
 def _ensure_student_profile(db: Session, *, student_id: str, class_id: str, course: Course, first_task_id: str | None) -> None:
@@ -242,9 +272,21 @@ def _initialize_student_business_flow(db: Session, user: User) -> dict:
     )
     personal_courses: list[dict] = []
     for course in courses:
-        _ensure_enrollment(db, course_id=course.id, user_id=user.id, role="STUDENT")
-        _ensure_student_profile(db, student_id=user.id, class_id=DEFAULT_PERSONAL_CLASS_ID, course=course, first_task_id=None)
-        personal_courses.append({"course_id": course.id, "course_name": course.name})
+        teaching_assignment_id = _default_teaching_assignment_id(db, course_id=course.id)
+        _ensure_enrollment(
+            db,
+            course_id=course.id,
+            user_id=user.id,
+            role="STUDENT",
+            teaching_assignment_id=teaching_assignment_id,
+        )
+        personal_courses.append(
+            {
+                "course_id": course.id,
+                "course_name": course.name,
+                "teaching_assignment_id": teaching_assignment_id,
+            }
+        )
 
     _ensure_student_resource_folders(db, student_id=user.id)
     _ensure_student_daily_task(db, student_id=user.id)
@@ -331,7 +373,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         else _initialize_teacher_business_flow(db, user)
     )
     db.commit()
-    return ok(_auth_success_payload(user), meta={"business_context": business_context})
+    return ok({**_auth_success_payload(user), "business_context": business_context})
 
 
 @router.get("/me")

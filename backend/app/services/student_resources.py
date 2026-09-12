@@ -3,6 +3,7 @@ import os
 import re
 import shutil
 import subprocess
+import html
 from pathlib import Path
 from typing import Any, TypedDict
 from urllib.parse import urljoin
@@ -55,9 +56,11 @@ except Exception:  # pragma: no cover - optional dependency fallback
 WORKFLOW_TYPE = "student_ppt_resource_generation"
 GENERIC_WORKFLOW_TYPE = "student_resource_generation"
 MIND_MAP_WORKFLOW_TYPE = "student_mind_map_resource_generation"
+AI_CLASSROOM_WORKFLOW_TYPE = "student_ai_classroom_generation"
 PROMPT_VERSION = "student_ppt_resource_v0.1"
 GENERIC_PROMPT_VERSION = "student_resource_v0.2"
 MIND_MAP_PROMPT_VERSION = "student_mind_map_resource_v0.1"
+AI_CLASSROOM_PROMPT_VERSION = "student_ai_classroom_v0.1"
 MAX_SOURCE_COUNT = 5
 MAX_SOURCE_CHARS = 900
 
@@ -68,6 +71,7 @@ SUPPORTED_RESOURCE_TYPES = {
     "PRACTICE_SET",
     "KNOWLEDGE_CARD",
     "PODCAST_SCRIPT",
+    "AI_CLASSROOM",
 }
 
 RESOURCE_TYPE_LABELS = {
@@ -77,6 +81,7 @@ RESOURCE_TYPE_LABELS = {
     "PRACTICE_SET": "练习题",
     "KNOWLEDGE_CARD": "知识卡片",
     "PODCAST_SCRIPT": "播客稿",
+    "AI_CLASSROOM": "AI讲解课堂",
 }
 
 DEFAULT_RESOURCE_FOLDER_NAMES = {
@@ -131,6 +136,30 @@ class GenericResourceState(TypedDict, total=False):
     file_path: str
     file_format: str
     item_count: int
+    resource: StudentGeneratedResource
+    run: AgentRun
+
+
+class AIClassroomResourceState(TypedDict, total=False):
+    run_id: str
+    student_id: str
+    class_id: str
+    course_id: str
+    session_id: str | None
+    message: str
+    resource_type: str
+    knowledge_point: str
+    profile: dict[str, Any] | None
+    profile_focus: dict[str, list[str]]
+    sources: list[KnowledgeSource]
+    citations: list[dict[str, Any]]
+    title: str
+    summary: str
+    confidence: float
+    render_payload: dict[str, Any]
+    item_count: int
+    model_used: bool
+    model_content_fallback_error: str
     resource: StudentGeneratedResource
     run: AgentRun
 
@@ -223,9 +252,9 @@ def _relevance(query: str, source: KnowledgeSource) -> float:
 
 def _cleanup_topic(raw: str) -> str:
     topic = re.sub(r"\s+", " ", raw).strip(" ：:，,。.；;、")
-    topic = re.sub(r"^(帮我|请|生成|整理|制作|做一个|做一份|输出|围绕|关于)+", "", topic, flags=re.IGNORECASE)
+    topic = re.sub(r"^(帮我|请|生成|整理|制作|做一个|做一份|做一节|一节|一个|一份|输出|围绕|关于)+", "", topic, flags=re.IGNORECASE)
     topic = topic.strip(" ：:，,。.；;、")
-    suffix_pattern = r"(相关|有关)?的?(PPTX?|pptx?|幻灯片|演示文稿|思维导图|导图|学习地图|学习文档|讲解文档|复习文档|文档|教学讲解|学习资源|复习资料|讲解|资料|资源)$"
+    suffix_pattern = r"(相关|有关)?的?(PPTX?|pptx?|幻灯片|演示文稿|思维导图|导图|学习地图|学习文档|讲解文档|复习文档|文档|AI讲解课堂|讲解课堂|教学课堂|课堂|教学讲解|学习资源|复习资料|讲解|资料|资源)$"
     while True:
         cleaned = re.sub(suffix_pattern, "", topic, flags=re.IGNORECASE).strip(" ：:，,。.；;、")
         cleaned = re.sub(r"(相关|有关)的?$", "", cleaned, flags=re.IGNORECASE).strip(" ：:，,。.；;、")
@@ -1767,6 +1796,595 @@ def _fallback_podcast_script(
     }, len(segments)
 
 
+def _classroom_text_block(kind: str, *, label: str, text: str, x: int, y: int, width: int, height: int) -> dict[str, Any]:
+    content = f'<p style="font-size: 18px; line-height: 1.35;"><strong>{html.escape(label)}</strong></p><p style="font-size: 16px; line-height: 1.45;">{html.escape(_trim(text, 320))}</p>'
+    return {
+        "id": kind,
+        "type": "text",
+        "label": label,
+        "text": _trim(text, 520),
+        "left": x,
+        "top": y,
+        "width": width,
+        "height": height,
+        "rotate": 0,
+        "content": content,
+        "defaultFontName": "Microsoft YaHei",
+        "defaultColor": "#172033",
+    }
+
+
+def _classroom_source_excerpt(sources: list[KnowledgeSource], knowledge_point: str, message: str) -> tuple[str, str]:
+    if sources:
+        source = sources[0]
+        title = source.title or knowledge_point
+        body = source.summary or source.content or message
+        return title, _trim(body, 260)
+    return "学生本次学习目标", _trim(message or f"围绕 {knowledge_point} 进行 AI 专业课程讲解。", 260)
+
+
+def _classroom_action(
+    action_id: str,
+    action_type: str,
+    *,
+    title: str,
+    text: str,
+    target: str | None = None,
+    state: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    action: dict[str, Any] = {
+        "id": action_id,
+        "type": action_type,
+        "title": title,
+        "text": _trim(text, 420),
+    }
+    if target:
+        action["target"] = target
+    if state:
+        action["state"] = state
+    return action
+
+
+def _classroom_interactive_html(knowledge_point: str, source_title: str, source_excerpt: str, weak_point: str) -> str:
+    safe_topic = html.escape(knowledge_point)
+    safe_source = html.escape(source_title)
+    safe_excerpt = html.escape(source_excerpt)
+    safe_weak = html.escape(weak_point)
+    return f"""<!doctype html>
+<html lang=\"zh-CN\">
+<head>
+  <meta charset=\"utf-8\" />
+  <style>
+    body {{ margin:0; font-family: Inter, \"Microsoft YaHei\", sans-serif; background:#0f172a; color:#e5eefc; }}
+    main {{ min-height:100vh; display:grid; grid-template-columns:1fr 1fr; gap:18px; padding:28px; box-sizing:border-box; }}
+    section {{ border:1px solid rgba(148,163,184,.28); border-radius:16px; padding:18px; background:rgba(15,23,42,.72); }}
+    h1 {{ grid-column:1 / -1; margin:0; font-size:28px; }}
+    h2 {{ margin:0 0 12px; font-size:16px; color:#93c5fd; }}
+    p {{ line-height:1.7; margin:0; }}
+    button {{ margin-top:14px; border:0; border-radius:10px; padding:10px 14px; background:#38bdf8; color:#082f49; font-weight:700; cursor:pointer; }}
+    .active {{ outline:3px solid #facc15; }}
+    #state {{ white-space:pre-line; color:#bbf7d0; }}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>{safe_topic} 互动推演</h1>
+    <section id=\"concept\"><h2>概念锚点</h2><p>{safe_excerpt}</p><button onclick=\"reveal('concept')\">定位概念</button></section>
+    <section id=\"weak\"><h2>学习画像提醒</h2><p>{safe_weak}</p><button onclick=\"reveal('weak')\">查看风险点</button></section>
+    <section id=\"source\"><h2>引用来源</h2><p>{safe_source}</p><button onclick=\"reveal('source')\">回到资料</button></section>
+    <section id=\"state\"><h2>课堂状态</h2><p>等待 Action 脚本驱动。</p></section>
+  </main>
+  <script>
+    function reveal(id) {{
+      document.querySelectorAll('section').forEach(function (node) {{ node.classList.remove('active'); }});
+      var target = document.getElementById(id);
+      if (target) target.classList.add('active');
+      document.getElementById('state').querySelector('p').textContent = '当前聚焦：' + id + '\\n课堂会围绕该节点继续追问和反馈。';
+    }}
+    window.addEventListener('message', function (event) {{
+      var data = event.data || {{}};
+      if (data.target) reveal(data.target);
+      if (data.focus) reveal(data.focus);
+    }});
+  </script>
+</body>
+</html>"""
+
+
+def _num(value: Any, fallback: float, *, minimum: float | None = None, maximum: float | None = None) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        number = fallback
+    if minimum is not None:
+        number = max(minimum, number)
+    if maximum is not None:
+        number = min(maximum, number)
+    return number
+
+
+def _classroom_theme() -> dict[str, Any]:
+    return {
+        "backgroundColor": "#f8fafc",
+        "themeColors": ["#2563eb", "#0f766e", "#f59e0b"],
+        "fontColor": "#172033",
+        "fontName": "Microsoft YaHei",
+    }
+
+
+def _plain_text_html(text: str, *, size: int = 22, weight: int = 700, color: str = "#172033") -> str:
+    safe = html.escape(_trim(text, 420)).replace("\n", "<br/>")
+    return f'<p style="font-size:{size}px;line-height:1.38;font-weight:{weight};color:{color};">{safe}</p>'
+
+
+def _normalize_slide_element(raw: Any, fallback_id: str, index: int) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    kind = str(raw.get("type") or "text").strip()
+    if kind not in {"text", "shape"}:
+        kind = "text"
+    element_id = str(raw.get("id") or fallback_id or f"el_{index}").strip().replace("#", "").replace(".", "")
+    base = {
+        "id": element_id or f"el_{index}",
+        "type": kind,
+        "left": _num(raw.get("left"), 72 + (index % 2) * 430, minimum=0, maximum=940),
+        "top": _num(raw.get("top"), 86 + (index // 2) * 165, minimum=0, maximum=520),
+        "width": _num(raw.get("width"), 360, minimum=80, maximum=920),
+        "height": _num(raw.get("height"), 120, minimum=40, maximum=520),
+        "rotate": _num(raw.get("rotate"), 0),
+    }
+    if kind == "shape":
+        return {
+            **base,
+            "viewBox": raw.get("viewBox") if isinstance(raw.get("viewBox"), list) and len(raw.get("viewBox")) == 2 else [100, 100],
+            "path": str(raw.get("path") or "M 0 0 L 100 0 L 100 100 L 0 100 Z"),
+            "fixedRatio": bool(raw.get("fixedRatio", False)),
+            "fill": str(raw.get("fill") or "#e0f2fe"),
+            "opacity": _num(raw.get("opacity"), 1, minimum=0, maximum=1),
+        }
+    text = str(raw.get("content") or raw.get("text") or raw.get("label") or "").strip()
+    if not text:
+        return None
+    content = text if "<" in text and ">" in text else _plain_text_html(text, size=18 if len(text) > 60 else 24)
+    return {
+        **base,
+        "content": content,
+        "label": raw.get("label"),
+        "text": str(raw.get("text") or re.sub(r"<[^>]+>", "", content)),
+        "defaultFontName": str(raw.get("defaultFontName") or "Microsoft YaHei"),
+        "defaultColor": str(raw.get("defaultColor") or "#172033"),
+    }
+
+
+def _normalize_slide_canvas(raw: Any, scene_id: str, title: str) -> dict[str, Any]:
+    canvas = raw if isinstance(raw, dict) else {}
+    raw_elements = canvas.get("elements") if isinstance(canvas.get("elements"), list) else []
+    elements = [
+        element
+        for index, item in enumerate(raw_elements[:10])
+        if (element := _normalize_slide_element(item, f"{scene_id}_el_{index + 1}", index)) is not None
+    ]
+    if not elements:
+        elements = [
+            _classroom_text_block("title", label="课堂主题", text=title, x=80, y=90, width=760, height=120),
+            _classroom_text_block("summary", label="讲解要点", text="请围绕当前主题建立概念、例子和自测三段式理解。", x=120, y=280, width=700, height=130),
+        ]
+    return {
+        "id": str(canvas.get("id") or scene_id),
+        "viewportSize": 1000,
+        "viewportRatio": 0.5625,
+        "theme": canvas.get("theme") if isinstance(canvas.get("theme"), dict) else _classroom_theme(),
+        "background": canvas.get("background") if isinstance(canvas.get("background"), dict) else {"type": "solid", "color": "#f8fafc"},
+        "elements": elements,
+    }
+
+
+def _normalize_classroom_action(raw: Any, scene_id: str, index: int, fallback_target: str = "summary") -> dict[str, Any]:
+    action = raw if isinstance(raw, dict) else {}
+    action_type = str(action.get("type") or "speech").strip()
+    if action_type not in {
+        "speech",
+        "spotlight",
+        "laser",
+        "highlight",
+        "wb_draw_text",
+        "widget_highlight",
+        "widget_annotation",
+        "widget_reveal",
+        "widget_setState",
+        "discussion",
+    }:
+        action_type = "speech"
+    target = str(action.get("elementId") or action.get("target") or fallback_target).strip().replace("#", "").replace(".", "")
+    normalized = {
+        "id": str(action.get("id") or f"{scene_id}_action_{index + 1}"),
+        "type": action_type,
+        "title": _trim(str(action.get("title") or action_type), 80),
+        "text": _trim(str(action.get("text") or action.get("narration") or "继续推进课堂讲解。"), 420),
+        "target": target,
+    }
+    if target:
+        normalized["elementId"] = target
+    if isinstance(action.get("state"), dict):
+        normalized["state"] = action["state"]
+    return normalized
+
+
+def _normalize_model_scene(raw: Any, index: int, knowledge_point: str) -> dict[str, Any]:
+    item = raw if isinstance(raw, dict) else {}
+    scene_id = str(item.get("id") or _new_id("scene"))
+    raw_content = item.get("content") if isinstance(item.get("content"), dict) else {}
+    scene_type = str(item.get("type") or raw_content.get("type") or "slide")
+    if scene_type not in {"slide", "interactive", "quiz"}:
+        scene_type = "slide"
+    title = _trim(str(item.get("title") or f"{knowledge_point} 讲解 {index + 1}"), 90)
+    content = raw_content
+    if scene_type == "interactive":
+        html_doc = str(content.get("html") or "").strip()
+        if "<html" not in html_doc.lower():
+            html_doc = _classroom_interactive_html(
+                knowledge_point,
+                "模型生成互动组件",
+                str(content.get("summary") or title),
+                "根据 Action 脚本逐步聚焦关键节点",
+            )
+        normalized_content = {
+            "type": "interactive",
+            "title": str(content.get("title") or title),
+            "summary": _trim(str(content.get("summary") or "可响应课堂 Action 的互动推演组件。"), 220),
+            "widgetType": str(content.get("widgetType") or "concept-flow"),
+            "html": html_doc,
+        }
+        fallback_target = "concept"
+    elif scene_type == "quiz":
+        options = content.get("options") if isinstance(content.get("options"), list) else []
+        normalized_options = []
+        for option_index, option in enumerate(options[:4]):
+            if not isinstance(option, dict):
+                continue
+            normalized_options.append(
+                {
+                    "id": str(option.get("id") or f"opt_{option_index + 1}"),
+                    "label": _trim(str(option.get("label") or option.get("text") or ""), 160),
+                    "correct": bool(option.get("correct", False)),
+                }
+            )
+        if not any(option["correct"] for option in normalized_options):
+            normalized_options = [
+                {"id": "opt_a", "label": "先确认输入、机制、输出和评价标准，再进入练习。", "correct": True},
+                {"id": "opt_b", "label": "只记忆术语定义，不需要验证应用边界。", "correct": False},
+                {"id": "opt_c", "label": "直接复制答案，跳过错因复盘。", "correct": False},
+            ]
+        normalized_content = {
+            "type": "quiz",
+            "summary": _trim(str(content.get("summary") or "用课堂自测检查理解是否完整。"), 220),
+            "question": _trim(str(content.get("question") or f"学习 {knowledge_point} 时最先要确认什么？"), 220),
+            "options": normalized_options,
+            "answer": str(content.get("answer") or next((option["id"] for option in normalized_options if option["correct"]), "opt_a")),
+            "explanation": _trim(str(content.get("explanation") or "关键是把概念迁移到真实任务，而不是停留在术语。"), 280),
+        }
+        fallback_target = "summary"
+    else:
+        normalized_content = {
+            "type": "slide",
+            "summary": _trim(str(content.get("summary") or item.get("summary") or title), 220),
+            "canvas": _normalize_slide_canvas(content.get("canvas"), scene_id, title),
+        }
+        fallback_target = "summary"
+    raw_actions = item.get("actions") if isinstance(item.get("actions"), list) else []
+    actions = [_normalize_classroom_action(action, scene_id, action_index, fallback_target) for action_index, action in enumerate(raw_actions[:6])]
+    if not actions:
+        actions = [
+            _classroom_action(f"{scene_id}_speech", "speech", title="讲解本页", text=f"这一页围绕 {title} 展开。", target=fallback_target),
+            _classroom_action(f"{scene_id}_focus", "spotlight", title="聚焦重点", text="请把注意力放到当前页面的核心节点。", target=fallback_target),
+        ]
+    return {"id": scene_id, "type": scene_type, "title": title, "content": normalized_content, "actions": actions}
+
+
+def _validate_model_ai_classroom_payload(raw: dict[str, Any], *, course: Course, knowledge_point: str, sources: list[KnowledgeSource], profile: dict[str, Any] | None) -> tuple[str, str, dict[str, Any], int]:
+    title = _trim(str(raw.get("title") or f"{knowledge_point} AI讲解课堂"), 120)
+    summary = _trim(str(raw.get("summary") or f"围绕 {course.name} 的 {knowledge_point} 生成实时讲解课堂。"), 260)
+    raw_scenes = raw.get("scenes") if isinstance(raw.get("scenes"), list) else []
+    scenes = [_normalize_model_scene(scene, index, knowledge_point) for index, scene in enumerate(raw_scenes[:7])]
+    if len(scenes) < 3:
+        raise ValueError("model classroom payload has fewer than 3 scenes")
+    source_title, source_excerpt = _classroom_source_excerpt(sources, knowledge_point, summary)
+    stage = raw.get("stage") if isinstance(raw.get("stage"), dict) else {}
+    payload = {
+        "stage": {
+            "id": str(stage.get("id") or _new_id("stage")),
+            "name": title,
+            "description": summary,
+            "version": "openmaic-model-0.1",
+            "estimatedDurationSeconds": _num(stage.get("estimatedDurationSeconds"), 660, minimum=240, maximum=1500),
+            "audience": "人工智能专业学生",
+        },
+        "scenes": scenes,
+        "material": {
+            "source": "course_knowledge_and_learner_profile",
+            "course_id": course.id,
+            "course_title": course.name,
+            "fileName": source_title,
+            "textPreview": source_excerpt,
+            "parsedBy": "openmaic_model_pipeline",
+        },
+        "metadata": {
+            "renderer": "openmaic_dsl",
+            "runtime": "codetrack_ai_classroom",
+            "dsl_version": "openmaic-model-0.1",
+            "generation_pipeline": "outline_to_scene_action",
+            "profile_focus": _profile_focus(profile),
+            "resource_center_entry_required": True,
+            "model_content_fallback": False,
+        },
+    }
+    return title, summary, payload, len(scenes)
+
+
+async def _generate_model_ai_classroom_payload(
+    *,
+    course: Course,
+    message: str,
+    knowledge_point: str,
+    profile: dict[str, Any] | None,
+    sources: list[KnowledgeSource],
+) -> tuple[str, str, dict[str, Any], int] | None:
+    settings = get_settings()
+    if not settings.model_api_key or not settings.model_name:
+        return None
+    source_payloads = [_source_payload(source) for source in sources]
+    common = {
+        "course": {"id": course.id, "name": course.name},
+        "student_request": message,
+        "knowledge_point": knowledge_point,
+        "learner_profile_focus": _profile_focus(profile),
+        "knowledge_sources": source_payloads,
+        "hard_constraints": [
+            "交互入口不能改变：生成资源后保存到资源中心，用户从资源中心点击进入 AI讲解课堂工作区。",
+            "产物必须是可运行课堂数据，不要演示占位；每个 scene 都要有 actions。",
+            "slide scene 的 content.canvas 必须是 OpenMAIC/PPTist 风格 JSON：viewportSize=1000, viewportRatio=0.5625, theme, background, elements。",
+            "slide elements 只使用 text 或 shape。text 必须包含 id,type,left,top,width,height,rotate,content,defaultFontName,defaultColor。",
+            "interactive scene 必须包含完整自包含 HTML/CSS/JS，并响应 postMessage 中的 target 或 focus 字段。",
+            "quiz scene 必须包含 question/options/answer/explanation。",
+            "内容必须贴合人工智能专业学习场景，结合学习画像调整讲解顺序。",
+            "只能引用输入 knowledge_sources 中存在的资料，不要虚构教材、链接或文件。",
+        ],
+    }
+    result = await chat_json(
+        [
+            {"role": "system", "content": "你是 OpenMAIC 实时课堂生成器。只输出 JSON，不要 Markdown。"},
+            {
+                "role": "user",
+                "content": _json_dumps(
+                    {
+                        **common,
+                        "task": "一次性生成完整可运行的 AI 讲解课堂 JSON。先规划 outlines，再生成对应 scenes 和 actions。",
+                        "output_schema": {
+                            "title": "课堂标题",
+                            "summary": "课堂摘要",
+                            "languageDirective": "中文讲解风格要求",
+                            "outlines": [
+                                {
+                                    "id": "scene id",
+                                    "type": "slide|interactive|quiz",
+                                    "title": "scene 标题",
+                                    "goal": "该页教学目标",
+                                    "key_points": ["要点"],
+                                }
+                            ],
+                            "scenes": [
+                                {
+                                    "id": "scene id",
+                                    "type": "slide|interactive|quiz",
+                                    "title": "scene 标题",
+                                    "content": {
+                                        "type": "slide 时为 slide，interactive 时为 interactive，quiz 时为 quiz",
+                                        "summary": "场景摘要",
+                                        "canvas": "slide 场景必须提供 OpenMAIC/PPTist 风格 canvas",
+                                        "html": "interactive 场景必须提供完整 HTML",
+                                        "question": "quiz 场景问题",
+                                        "options": "quiz 场景选项",
+                                        "answer": "quiz 正确答案 id",
+                                        "explanation": "quiz 解析",
+                                    },
+                                    "actions": [
+                                        {
+                                            "id": "action id",
+                                            "type": "speech|spotlight|laser|highlight|wb_draw_text|widget_highlight|widget_annotation|widget_setState|discussion",
+                                            "title": "动作名",
+                                            "text": "讲解文本",
+                                            "target": "目标元素 id",
+                                            "elementId": "slide 元素 id，可选",
+                                            "state": {"focus": "互动组件目标 id，可选"},
+                                        }
+                                    ],
+                                }
+                            ],
+                        },
+                    }
+                ),
+            },
+        ],
+        model=settings.model_name,
+        api_key=settings.model_api_key,
+        base_url=settings.model_api_base_url,
+        timeout=25,
+        retries=0,
+        temperature=0.35,
+    )
+    outlines = result.data.get("outlines") if isinstance(result.data.get("outlines"), list) else []
+    if not outlines:
+        raise ValueError("model did not return classroom outlines")
+    scene_payloads = result.data.get("scenes") if isinstance(result.data.get("scenes"), list) else []
+    return _validate_model_ai_classroom_payload(
+        {
+            "title": result.data.get("title"),
+            "summary": result.data.get("summary"),
+            "stage": {"estimatedDurationSeconds": 120 * len(scene_payloads)},
+            "scenes": scene_payloads,
+        },
+        course=course,
+        knowledge_point=knowledge_point,
+        sources=sources,
+        profile=profile,
+    )
+
+
+def _build_ai_classroom_payload(
+    *,
+    message: str,
+    course: Course,
+    knowledge_point: str,
+    sources: list[KnowledgeSource],
+    profile: dict[str, Any] | None,
+) -> tuple[str, str, dict[str, Any], int]:
+    focus = _profile_focus(profile)
+    weak_point = (focus.get("weak_points") or [knowledge_point])[0]
+    frequent_error = (focus.get("frequent_errors") or ["概念边界与应用场景容易混淆"])[0]
+    recommendation = (focus.get("recommendations") or ["先建立概念结构，再完成一个小型验证任务"])[0]
+    source_title, source_excerpt = _classroom_source_excerpt(sources, knowledge_point, message)
+    title = f"{knowledge_point} AI讲解课堂"
+    course_name = course.name
+    summary = f"围绕{course_name}中的{knowledge_point}生成可播放课堂，包含资料导入、概念讲解、互动推演、课堂自测和下一步学习建议。"
+    stage = {
+        "id": _new_id("stage"),
+        "name": title,
+        "description": summary,
+        "version": "codetrack-openmaic-0.1",
+        "estimatedDurationSeconds": 540,
+        "audience": "人工智能专业学生",
+    }
+    scenes = [
+        {
+            "id": _new_id("scene"),
+            "type": "slide",
+            "title": "资料导入与学习目标",
+            "content": {
+                "type": "slide",
+                "summary": f"从真实课程资料和学生输入中提炼 {knowledge_point} 的学习目标。",
+                "canvas": {
+                    "viewportSize": 1000,
+                    "viewportRatio": 0.5625,
+                    "elements": [
+                        _classroom_text_block("source", label="资料片段", text=f"{source_title}：{source_excerpt}", x=48, y=72, width=420, height=180),
+                        _classroom_text_block("concept", label="本节目标", text=f"理解 {knowledge_point} 的核心定义、适用条件和与 AI 专业任务的关系。", x=525, y=88, width=400, height=150),
+                        _classroom_text_block("summary", label="学习画像", text=f"重点照顾：{weak_point}；常见问题：{frequent_error}", x=132, y=330, width=720, height=120),
+                    ],
+                },
+            },
+            "actions": [
+                _classroom_action("a_intro_1", "speech", title="说明课堂来源", text=f"这节课基于课程 {course_name}、本次请求和学习画像生成，主题是 {knowledge_point}。", target="source"),
+                _classroom_action("a_intro_2", "spotlight", title="聚焦学习目标", text=f"先把 {knowledge_point} 的定义、边界和应用任务对齐。", target="concept"),
+                _classroom_action("a_intro_3", "wb_draw_text", title="写下画像提醒", text=f"这位学生需要特别注意：{frequent_error}。", target="summary"),
+            ],
+        },
+        {
+            "id": _new_id("scene"),
+            "type": "slide",
+            "title": "概念拆解",
+            "content": {
+                "type": "slide",
+                "summary": f"把 {knowledge_point} 拆成可验证的理解单元。",
+                "canvas": {
+                    "viewportSize": 1000,
+                    "viewportRatio": 0.5625,
+                    "elements": [
+                        _classroom_text_block("concept", label="核心概念", text=f"{knowledge_point} 不只是一句定义，需要同时看输入、过程、输出和评价标准。", x=80, y=82, width=420, height=150),
+                        _classroom_text_block("formula", label="判断规则", text="输入条件 -> 处理机制 -> 输出结果 -> 误差/复杂度/适用性评估", x=560, y=90, width=330, height=150),
+                        _classroom_text_block("code", label="任务化表达", text=f"def explain(topic='{knowledge_point}'):\n    return concept + example + check", x=156, y=310, width=620, height=130),
+                    ],
+                },
+            },
+            "actions": [
+                _classroom_action("a_concept_1", "speech", title="拆概念", text=f"理解 {knowledge_point} 时，先问它解决什么问题，再看它如何工作。", target="concept"),
+                _classroom_action("a_concept_2", "wb_draw_text", title="写判断规则", text="把输入、处理机制、输出和评价标准连成一条链。", target="formula"),
+                _classroom_action("a_concept_3", "spotlight", title="落到任务", text="最后用一个小函数或小实验验证自己是否真的能复述和应用。", target="code"),
+            ],
+        },
+        {
+            "id": _new_id("scene"),
+            "type": "interactive",
+            "title": "互动推演",
+            "content": {
+                "type": "interactive",
+                "title": f"{knowledge_point} 互动推演",
+                "summary": "iframe 互动组件会响应 Action 脚本，逐步聚焦概念、画像风险和引用来源。",
+                "widgetType": "concept-flow",
+                "html": _classroom_interactive_html(knowledge_point, source_title, source_excerpt, f"{weak_point}：{recommendation}"),
+            },
+            "actions": [
+                _classroom_action("a_widget_1", "widget_highlight", title="聚焦概念节点", text=f"先在互动组件中定位 {knowledge_point} 的概念锚点。", target="concept", state={"focus": "concept"}),
+                _classroom_action("a_widget_2", "widget_annotation", title="标注画像风险", text=f"这里结合学习画像提醒：{weak_point}。", target="weak", state={"focus": "weak"}),
+                _classroom_action("a_widget_3", "widget_setState", title="回看引用", text=f"最后回到来源：{source_title}。", target="source", state={"focus": "source"}),
+            ],
+        },
+        {
+            "id": _new_id("scene"),
+            "type": "quiz",
+            "title": "课堂自测",
+            "content": {
+                "type": "quiz",
+                "summary": "用一道题检查是否能把概念和应用任务连接起来。",
+                "question": f"学习 {knowledge_point} 时，最应该优先确认哪一组信息？",
+                "options": [
+                    {"id": "opt_a", "label": "只背诵定义，暂时不看输入输出", "correct": False},
+                    {"id": "opt_b", "label": "同时确认输入条件、处理机制、输出结果和评价标准", "correct": True},
+                    {"id": "opt_c", "label": "只看最终代码，不需要解释适用场景", "correct": False},
+                ],
+                "answer": "opt_b",
+                "explanation": "先建立结构化理解，再进入代码或练习，能减少概念迁移错误。",
+            },
+            "actions": [
+                _classroom_action("a_quiz_1", "discussion", title="发起自测", text="先做一道自测题，检查概念链路是否完整。", target="summary"),
+                _classroom_action("a_quiz_2", "speech", title="解释答案", text="正确答案强调输入、机制、输出和评价标准的完整链路。", target="summary"),
+            ],
+        },
+        {
+            "id": _new_id("scene"),
+            "type": "slide",
+            "title": "学习总结与下一步",
+            "content": {
+                "type": "slide",
+                "summary": "把课堂结论转成下一步可执行任务。",
+                "canvas": {
+                    "viewportSize": 1000,
+                    "viewportRatio": 0.5625,
+                    "elements": [
+                        _classroom_text_block("summary", label="课堂结论", text=f"{knowledge_point} 的学习重点是建立概念链路，并用小实验或练习验证。", x=90, y=96, width=420, height=150),
+                        _classroom_text_block("concept", label="下一步", text=recommendation, x=556, y=96, width=340, height=150),
+                        _classroom_text_block("source", label="复习依据", text=f"回看：{source_title}", x=174, y=332, width=650, height=98),
+                    ],
+                },
+            },
+            "actions": [
+                _classroom_action("a_summary_1", "speech", title="总结本课", text=f"本课完成了 {knowledge_point} 的资料导入、概念拆解、互动推演和自测。", target="summary"),
+                _classroom_action("a_summary_2", "wb_draw_text", title="给出下一步", text=recommendation, target="concept"),
+            ],
+        },
+    ]
+    payload = {
+        "stage": stage,
+        "scenes": scenes,
+        "material": {
+            "source": "course_knowledge_and_learner_profile",
+            "course_id": course.id,
+            "course_title": course_name,
+            "fileName": source_title,
+            "textPreview": source_excerpt,
+            "parsedBy": "backend_resource_workflow",
+        },
+        "metadata": {
+            "renderer": "openmaic_dsl",
+            "runtime": "codetrack_ai_classroom",
+            "dsl_version": "codetrack-openmaic-0.1",
+            "profile_focus": focus,
+            "resource_center_entry_required": True,
+            "model_content_fallback": False,
+        },
+    }
+    return title, summary, payload, len(scenes)
+
+
 def _fallback_resource_payload(
     *,
     resource_type: str,
@@ -2050,8 +2668,9 @@ def _serialize_resource(resource: StudentGeneratedResource) -> dict[str, Any]:
     questions = render_payload.get("questions", [])
     cards = render_payload.get("cards", [])
     segments = render_payload.get("segments", [])
+    scenes = render_payload.get("scenes", [])
     item_count = 0
-    for collection in (slides, sections, nodes, questions, cards, segments):
+    for collection in (slides, sections, nodes, questions, cards, segments, scenes):
         if isinstance(collection, list) and collection:
             item_count = len(collection)
             break
@@ -2083,6 +2702,46 @@ def _serialize_resource(resource: StudentGeneratedResource) -> dict[str, Any]:
 
 def serialize_generated_resource(resource: StudentGeneratedResource) -> dict[str, Any]:
     return _serialize_resource(resource)
+
+
+def openmaic_classroom_export(resource: StudentGeneratedResource) -> dict[str, Any]:
+    if resource.resource_type != "AI_CLASSROOM":
+        raise ApiError(409, "RESOURCE_NOT_AI_CLASSROOM", "该资源不是 AI讲解课堂。")
+    if not resource.saved_to_resource_center:
+        raise ApiError(409, "RESOURCE_NOT_SAVED", "请先将资源加入资源中心，再打开。")
+    payload = _json_loads(resource.render_payload_json, {})
+    stage = payload.get("stage") if isinstance(payload.get("stage"), dict) else {}
+    scenes = payload.get("scenes") if isinstance(payload.get("scenes"), list) else []
+    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+    material = payload.get("material") if isinstance(payload.get("material"), dict) else {}
+    return {
+        "schema": "codetrack.openmaic.classroom.export.v1",
+        "runtime": "openmaic",
+        "resource": {
+            "id": resource.id,
+            "title": resource.title,
+            "summary": resource.summary,
+            "course_id": resource.course_id,
+            "knowledge_point": resource.knowledge_point,
+            "created_at": iso(resource.created_at),
+            "updated_at": iso(resource.updated_at),
+        },
+        "stage": stage,
+        "scenes": scenes,
+        "material": material,
+        "citations": _json_loads(resource.citations_json, []),
+        "learnerContext": {
+            "student_id": resource.student_id,
+            "class_id": resource.class_id,
+            "course_id": resource.course_id,
+            "session_id": resource.session_id,
+        },
+        "metadata": {
+            **metadata,
+            "source": "codetrack_resource_center",
+            "resource_center_entry_required": True,
+        },
+    }
 
 
 def serialize_student_resource_folder(folder: StudentResourceFolder) -> dict[str, Any]:
@@ -2763,6 +3422,198 @@ def _mind_map_persist_node(db: Session, state: MindMapResourceState) -> MindMapR
     return state
 
 
+def _create_ai_classroom_run_node(db: Session, state: AIClassroomResourceState) -> AIClassroomResourceState:
+    context = AgentRunContext(
+        run_id=state["run_id"],
+        workflow_type=AI_CLASSROOM_WORKFLOW_TYPE,
+        student_id=state["student_id"],
+        course_id=state["course_id"],
+    )
+    run = start_run(
+        db,
+        context,
+        input_payload={
+            "resource_type": state["resource_type"],
+            "message": _trim(state["message"], 300),
+            "session_id": state.get("session_id"),
+        },
+        model_provider="OPENAI_COMPATIBLE" if get_settings().model_api_key else "RULE_FALLBACK",
+        model_name=get_settings().model_name or "openmaic-structured-template",
+        prompt_version=AI_CLASSROOM_PROMPT_VERSION,
+    )
+    state["run"] = run
+    record_step(db, run, step_name="create_run", step_order=1, output_summary={"run_id": run.id})
+    return state
+
+
+def _ai_classroom_context_node(
+    db: Session,
+    user: User,
+    course: Course,
+    state: AIClassroomResourceState,
+) -> AIClassroomResourceState:
+    profile = serialize_learner_profile(
+        db,
+        student_id=user.id,
+        course_id=course.id,
+        class_id=state["class_id"],
+    )
+    sources = _load_sources(db, course.id, state["message"])
+    knowledge_point = _guess_knowledge_point(state["message"], sources)
+    state["profile"] = profile
+    state["profile_focus"] = _profile_focus(profile)
+    state["sources"] = sources
+    state["knowledge_point"] = knowledge_point
+    record_step(
+        db,
+        state["run"],
+        step_name="build_context",
+        step_order=2,
+        output_summary={
+            "profile_available": profile is not None,
+            "source_ids": [source.id for source in sources],
+            "knowledge_point": knowledge_point,
+        },
+    )
+    return state
+
+
+async def _ai_classroom_content_node(db: Session, course: Course, state: AIClassroomResourceState) -> AIClassroomResourceState:
+    sources = state.get("sources", [])
+    try:
+        model_result = await _generate_model_ai_classroom_payload(
+            course=course,
+            message=state["message"],
+            knowledge_point=state["knowledge_point"],
+            profile=state.get("profile"),
+            sources=sources,
+        )
+    except LLMError as exc:
+        model_result = None
+        reason = exc.detail or str(exc)
+        state["model_content_fallback_error"] = reason
+        record_step(
+            db,
+            state["run"],
+            step_name="model_classroom_generation",
+            step_order=3,
+            status="FAILED",
+            output_summary={"fallback": True, "reason": reason[:240], "llm_error_code": exc.code},
+        )
+    except Exception as exc:
+        model_result = None
+        state["model_content_fallback_error"] = str(exc)
+        record_step(
+            db,
+            state["run"],
+            step_name="model_classroom_generation",
+            step_order=3,
+            status="FAILED",
+            output_summary={"fallback": True, "reason": str(exc)[:240]},
+        )
+    else:
+        state["model_used"] = model_result is not None
+        record_step(
+            db,
+            state["run"],
+            step_name="model_classroom_generation",
+            step_order=3,
+            output_summary={"used_model": model_result is not None, "pipeline": "outline_to_scene_action"},
+        )
+
+    if model_result is None:
+        title, summary, render_payload, item_count = _build_ai_classroom_payload(
+            message=state["message"],
+            course=course,
+            knowledge_point=state["knowledge_point"],
+            sources=sources,
+            profile=state.get("profile"),
+        )
+        render_payload.setdefault("metadata", {})["model_content_fallback"] = True
+        if state.get("model_content_fallback_error"):
+            render_payload["metadata"]["model_content_fallback_error"] = state["model_content_fallback_error"]
+        state["model_used"] = False
+    else:
+        title, summary, render_payload, item_count = model_result
+    citations = [_citation(source) for source in sources]
+    state["title"] = title
+    state["summary"] = summary
+    state["render_payload"] = render_payload
+    state["citations"] = citations
+    state["item_count"] = item_count
+    state["confidence"] = 0.84 if citations else 0.62
+    record_step(
+        db,
+        state["run"],
+        step_name="generate_classroom_dsl",
+        step_order=4,
+        output_summary={
+            "scene_count": item_count,
+            "citation_count": len(citations),
+            "renderer": "openmaic_dsl",
+            "model_used": state.get("model_used", False),
+        },
+    )
+    return state
+
+
+def _ai_classroom_persist_node(db: Session, state: AIClassroomResourceState) -> AIClassroomResourceState:
+    now = utc_now()
+    resource_id = _new_id("res")
+    resource = StudentGeneratedResource(
+        id=resource_id,
+        student_id=state["student_id"],
+        course_id=state["course_id"],
+        class_id=state["class_id"],
+        run_id=state["run_id"],
+        session_id=state.get("session_id"),
+        resource_type="AI_CLASSROOM",
+        title=state["title"],
+        prompt=state["message"],
+        knowledge_point=state["knowledge_point"],
+        summary=state["summary"],
+        status="READY",
+        render_payload_json=_json_dumps(state["render_payload"]),
+        citations_json=_json_dumps(state["citations"]),
+        file_path=None,
+        file_format="MAIC_JSON",
+        confidence=state["confidence"],
+        saved_to_resource_center=True,
+        saved_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(resource)
+    db.add(
+        LearnerEvent(
+            id=_new_id("event"),
+            student_id=state["student_id"],
+            course_id=state["course_id"],
+            class_id=state["class_id"],
+            event_type="artifact_saved",
+            knowledge_points=_json_dumps([state["knowledge_point"]] if state["knowledge_point"] else []),
+            payload=_json_dumps(
+                {
+                    "resource_id": resource.id,
+                    "resource_type": resource.resource_type,
+                    "source": "ai_classroom_generation",
+                    "auto_saved": True,
+                }
+            ),
+            created_at=now,
+        )
+    )
+    state["resource"] = resource
+    record_step(
+        db,
+        state["run"],
+        step_name="persist_classroom_resource",
+        step_order=5,
+        output_summary={"resource_id": resource.id, "file_format": resource.file_format, "saved": True},
+    )
+    return state
+
+
 async def generate_ppt_resource(
     db: Session,
     *,
@@ -2886,6 +3737,64 @@ async def generate_mind_map_resource(
     return _serialize_resource(resource)
 
 
+async def generate_ai_classroom_resource(
+    db: Session,
+    *,
+    user: User,
+    class_id: str,
+    course: Course,
+    message: str,
+    session_id: str | None = None,
+) -> dict[str, Any]:
+    state: AIClassroomResourceState = {
+        "run_id": new_run_id(),
+        "student_id": user.id,
+        "class_id": class_id,
+        "course_id": course.id,
+        "session_id": session_id,
+        "message": message.strip(),
+        "resource_type": "AI_CLASSROOM",
+    }
+
+    if StateGraph is not None:
+        async def generate_content_node(graph_state: AIClassroomResourceState) -> AIClassroomResourceState:
+            return await _ai_classroom_content_node(db, course, graph_state)
+
+        graph = StateGraph(AIClassroomResourceState)
+        graph.add_node("create_run", lambda graph_state: _create_ai_classroom_run_node(db, graph_state))
+        graph.add_node("build_context", lambda graph_state: _ai_classroom_context_node(db, user, course, graph_state))
+        graph.add_node("generate_content", generate_content_node)
+        graph.add_node("persist_resource", lambda graph_state: _ai_classroom_persist_node(db, graph_state))
+        graph.set_entry_point("create_run")
+        graph.add_edge("create_run", "build_context")
+        graph.add_edge("build_context", "generate_content")
+        graph.add_edge("generate_content", "persist_resource")
+        graph.add_edge("persist_resource", END)
+        state = await graph.compile().ainvoke(state)
+    else:
+        state = _create_ai_classroom_run_node(db, state)
+        state = _ai_classroom_context_node(db, user, course, state)
+        state = await _ai_classroom_content_node(db, course, state)
+        state = _ai_classroom_persist_node(db, state)
+
+    resource = state["resource"]
+    finish_run(
+        db,
+        state["run"],
+        output={
+            "resource_id": resource.id,
+            "title": resource.title,
+            "resource_type": resource.resource_type,
+            "scene_count": state["item_count"],
+            "model_content_fallback_error": state.get("model_content_fallback_error"),
+        },
+        model_provider="OPENAI_COMPATIBLE" if state.get("model_used") else "RULE_FALLBACK",
+        model_name=get_settings().model_name if state.get("model_used") else "openmaic-structured-template",
+        prompt_version=AI_CLASSROOM_PROMPT_VERSION,
+    )
+    return _serialize_resource(resource)
+
+
 async def generate_learning_resource(
     db: Session,
     *,
@@ -2908,6 +3817,15 @@ async def generate_learning_resource(
         )
     if normalized_type == "MIND_MAP":
         return await generate_mind_map_resource(
+            db,
+            user=user,
+            class_id=class_id,
+            course=course,
+            message=message,
+            session_id=session_id,
+        )
+    if normalized_type == "AI_CLASSROOM":
+        return await generate_ai_classroom_resource(
             db,
             user=user,
             class_id=class_id,

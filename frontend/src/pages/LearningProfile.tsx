@@ -235,6 +235,7 @@ function recommendationActionLabel(action?: string) {
   const map: Record<string, string> = {
     OPEN_SELF_STUDY: "去自学",
     OPEN_TASK: "去任务",
+    START_PROFILE_BOOTSTRAP: "开始摸底",
     GENERATE_EXERCISE: "生成练习",
     REVIEW_GENERATED_PRACTICE: "练习复盘",
     REVIEW_WRONG_QUESTIONS: "复盘错题",
@@ -1007,6 +1008,34 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
           description={error ?? "当前账号还没有可展示的课程画像数据。完成课程任务或保存学习资料后，画像会逐步生成。"}
           detail={errorDetail}
           actions={error ? [{ label: "重新加载", variant: "primary", onClick: () => setReloadKey((value) => value + 1) }] : []}
+          className="profile-card profile-pad"
+        />
+      </div>
+    );
+  }
+
+  if (profile.profile_status === "EMPTY") {
+    const bootstrap = profile.bootstrap_assessment;
+    const bootstrapDescription = bootstrap
+      ? `建议先完成「${bootstrap.title}」，约 ${bootstrap.estimated_minutes} 分钟，共 ${bootstrap.question_count} 题，覆盖 ${bootstrap.knowledge_points.slice(0, 3).join("、")}。提交后会生成低置信初始画像。`
+      : "当前课程暂未配置画像摸底题，可以先进入自主学习保存一份学习产物，系统会据此逐步生成画像。";
+    return (
+      <div className="profile-page">
+        <StudentState
+          kind="empty"
+          title="学习画像尚未构建"
+          description="当前账号还没有真实学习证据，系统不会用默认分数冒充画像。"
+          detail={`${profile.profile_evidence_note ?? ""} ${bootstrapDescription}`.trim()}
+          actions={[
+            ...(bootstrap
+              ? [{
+                  label: bootstrap.action_label || "开始画像摸底",
+                  variant: "primary" as const,
+                  onClick: () => navigate(`/question-workspace/${bootstrap.assignment_id}`),
+                }]
+              : []),
+            { label: "先去自主学习", onClick: () => navigate("/self-study") },
+          ]}
           className="profile-card profile-pad"
         />
       </div>

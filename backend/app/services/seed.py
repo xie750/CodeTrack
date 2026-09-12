@@ -173,6 +173,14 @@ def reset_initial_demo_accounts(db: Session) -> None:
         db.query(QuestionAnswer).filter(QuestionAnswer.attempt_id.in_(initial_attempt_ids)).delete(synchronize_session=False)
     db.query(QuestionAttempt).filter(QuestionAttempt.student_id == INITIAL_STUDENT_ID).delete(synchronize_session=False)
 
+    if initial_submission_ids:
+        db.query(IdempotencyRecord).filter(IdempotencyRecord.user_id == INITIAL_STUDENT_ID).delete(synchronize_session=False)
+        db.query(StudentTaskProgress).filter(StudentTaskProgress.student_id == INITIAL_STUDENT_ID).update(
+            {"latest_submission_id": None, "latest_version_id": None},
+            synchronize_session=False,
+        )
+        db.query(CapabilityEvidence).filter(CapabilityEvidence.student_id == INITIAL_STUDENT_ID).delete(synchronize_session=False)
+
     if initial_diagnosis_ids:
         db.query(HintRecord).filter(HintRecord.diagnosis_id.in_(initial_diagnosis_ids)).delete(synchronize_session=False)
         db.query(DiagnosisReview).filter(DiagnosisReview.diagnosis_id.in_(initial_diagnosis_ids)).delete(synchronize_session=False)
@@ -184,12 +192,6 @@ def reset_initial_demo_accounts(db: Session) -> None:
     if initial_submission_ids:
         db.query(Grade).filter(Grade.submission_id.in_(initial_submission_ids)).delete(synchronize_session=False)
         db.query(TeacherFeedback).filter(TeacherFeedback.submission_id.in_(initial_submission_ids)).delete(synchronize_session=False)
-        db.query(StudentTaskProgress).filter(StudentTaskProgress.student_id == INITIAL_STUDENT_ID).update(
-            {"latest_submission_id": None, "latest_version_id": None},
-            synchronize_session=False,
-        )
-        db.query(IdempotencyRecord).filter(IdempotencyRecord.user_id == INITIAL_STUDENT_ID).delete(synchronize_session=False)
-        db.query(CapabilityEvidence).filter(CapabilityEvidence.student_id == INITIAL_STUDENT_ID).delete(synchronize_session=False)
         db.query(SubmissionVersion).filter(SubmissionVersion.submission_id.in_(initial_submission_ids)).delete(
             synchronize_session=False
         )
@@ -318,30 +320,6 @@ def reset_initial_demo_accounts(db: Session) -> None:
     )
     db.query(LearnerErrorStat).filter(LearnerErrorStat.student_id == INITIAL_STUDENT_ID).delete(synchronize_session=False)
     db.query(Recommendation).filter(Recommendation.student_id == INITIAL_STUDENT_ID).delete(synchronize_session=False)
-    db.query(Enrollment).filter(Enrollment.user_id == INITIAL_TEACHER_ID).delete(
-        synchronize_session=False
-    )
-
-    db.query(KnowledgeSource).filter(KnowledgeSource.created_by == INITIAL_TEACHER_ID).update(
-        {"created_by": DEMO_TEACHER_ID},
-        synchronize_session=False,
-    )
-    db.query(StudentKnowledgeGraph).filter(StudentKnowledgeGraph.teacher_id == INITIAL_TEACHER_ID).update(
-        {"teacher_id": DEMO_TEACHER_ID},
-        synchronize_session=False,
-    )
-    db.query(TaskAssignment).filter(TaskAssignment.published_by == INITIAL_TEACHER_ID).update(
-        {"published_by": DEMO_TEACHER_ID},
-        synchronize_session=False,
-    )
-    db.query(TeachingAssignment).filter(TeachingAssignment.teacher_id == INITIAL_TEACHER_ID).update(
-        {"teacher_id": DEMO_TEACHER_ID},
-        synchronize_session=False,
-    )
-    db.query(Course).filter(Course.owner_teacher_id == INITIAL_TEACHER_ID).update(
-        {"owner_teacher_id": DEMO_TEACHER_ID},
-        synchronize_session=False,
-    )
     db.query(AuditLog).filter(AuditLog.user_id.in_([INITIAL_STUDENT_ID, INITIAL_TEACHER_ID])).delete(
         synchronize_session=False
     )
@@ -566,7 +544,7 @@ def seed_demo_data(db: Session) -> None:
             "description": "人工智能专业基础支撑课程，面向 Python 语法、数据处理和实验编程。",
             "term": "2026-demo",
             "status": "ACTIVE",
-            "owner_teacher_id": "user_teacher_001",
+            "owner_teacher_id": "user_teacher_002",
         },
     )
     upsert(
@@ -587,7 +565,7 @@ def seed_demo_data(db: Session) -> None:
         ("course_ds_001", "user_teacher_001", "TEACHER"),
         ("course_ds_001", "user_student_001", "STUDENT"),
         ("course_ds_001", "user_student_002", "STUDENT"),
-        ("course_network_001", "user_teacher_001", "TEACHER"),
+        ("course_network_001", "user_teacher_002", "TEACHER"),
         ("course_network_001", "user_student_001", "STUDENT"),
         ("course_arch_001", "user_teacher_001", "TEACHER"),
         ("course_arch_001", "user_student_001", "STUDENT"),
@@ -644,7 +622,7 @@ def seed_demo_data(db: Session) -> None:
         "ta_se1_network_001": {
             "class_id": "class_se_001",
             "course_id": "course_network_001",
-            "teacher_id": "user_teacher_001",
+            "teacher_id": "user_teacher_002",
             "term": "2026-demo",
             "status": "ACTIVE",
         },
@@ -797,6 +775,54 @@ def seed_demo_data(db: Session) -> None:
     upsert(
         db,
         Task,
+        "task_profile_bootstrap_ds_001",
+        {
+            "course_id": "course_ds_001",
+            "title": "数据结构画像摸底",
+            "description": "用 3 道短题快速确认链表、栈队列和递归边界的初始掌握情况，生成低置信学习画像。",
+            "workspace_type": "QUESTION_SET",
+            "language": "CPP",
+            "interface_spec": "Cold start diagnostic: data structures",
+            "learning_objectives": json.dumps(["链表边界处理", "栈与队列", "递归出口"], ensure_ascii=False),
+            "capability_ids": json.dumps(["cap_linked_list_boundary"], ensure_ascii=False),
+            "status": "OPEN",
+        },
+    )
+    upsert(
+        db,
+        Task,
+        "task_profile_bootstrap_python_001",
+        {
+            "course_id": "course_network_001",
+            "title": "Python 程序设计画像摸底",
+            "description": "用函数、列表遍历和字典查找题确认 Python 编程基础，作为个性化推荐的第一批证据。",
+            "workspace_type": "QUESTION_SET",
+            "language": "PYTHON",
+            "interface_spec": "Cold start diagnostic: Python programming",
+            "learning_objectives": json.dumps(["Python 函数", "列表遍历", "字典查找"], ensure_ascii=False),
+            "capability_ids": json.dumps(["cap_array_hash_lookup"], ensure_ascii=False),
+            "status": "OPEN",
+        },
+    )
+    upsert(
+        db,
+        Task,
+        "task_profile_bootstrap_ml_001",
+        {
+            "course_id": "course_arch_001",
+            "title": "机器学习画像摸底",
+            "description": "用数据集划分、过拟合和模型评估题确认机器学习基础概念掌握情况。",
+            "workspace_type": "QUESTION_SET",
+            "language": "PYTHON",
+            "interface_spec": "Cold start diagnostic: machine learning basics",
+            "learning_objectives": json.dumps(["数据集划分", "过拟合与正则化", "模型评估"], ensure_ascii=False),
+            "capability_ids": json.dumps(["cap_ml_model_evaluation"], ensure_ascii=False),
+            "status": "OPEN",
+        },
+    )
+    upsert(
+        db,
+        Task,
         "task_linked_list_boundary_review_001",
         {
             "course_id": "course_ds_001",
@@ -843,6 +869,54 @@ def seed_demo_data(db: Session) -> None:
         },
     )
     db.flush()
+    upsert(
+        db,
+        TaskAssignment,
+        "assign_bootstrap_ds_profile_001",
+        {
+            "task_id": "task_profile_bootstrap_ds_001",
+            "teaching_assignment_id": "ta_se1_ds_001",
+            "published_by": "user_teacher_001",
+            "publish_status": "PUBLISHED",
+            "assignment_mode": "PROFILE_BOOTSTRAP",
+            "allow_hint_level_3": False,
+            "published_at": datetime(2026, 7, 18, 8, 0, tzinfo=timezone.utc),
+            "start_at": datetime(2026, 7, 18, 8, 0, tzinfo=timezone.utc),
+            "deadline": datetime(2026, 12, 31, 23, 59, tzinfo=timezone.utc),
+        },
+    )
+    upsert(
+        db,
+        TaskAssignment,
+        "assign_bootstrap_python_profile_001",
+        {
+            "task_id": "task_profile_bootstrap_python_001",
+            "teaching_assignment_id": "ta_se1_network_001",
+            "published_by": "user_teacher_002",
+            "publish_status": "PUBLISHED",
+            "assignment_mode": "PROFILE_BOOTSTRAP",
+            "allow_hint_level_3": False,
+            "published_at": datetime(2026, 7, 18, 8, 10, tzinfo=timezone.utc),
+            "start_at": datetime(2026, 7, 18, 8, 10, tzinfo=timezone.utc),
+            "deadline": datetime(2026, 12, 31, 23, 59, tzinfo=timezone.utc),
+        },
+    )
+    upsert(
+        db,
+        TaskAssignment,
+        "assign_bootstrap_ml_profile_001",
+        {
+            "task_id": "task_profile_bootstrap_ml_001",
+            "teaching_assignment_id": "ta_se1_ml_001",
+            "published_by": "user_teacher_001",
+            "publish_status": "PUBLISHED",
+            "assignment_mode": "PROFILE_BOOTSTRAP",
+            "allow_hint_level_3": False,
+            "published_at": datetime(2026, 7, 18, 8, 20, tzinfo=timezone.utc),
+            "start_at": datetime(2026, 7, 18, 8, 20, tzinfo=timezone.utc),
+            "deadline": datetime(2026, 12, 31, 23, 59, tzinfo=timezone.utc),
+        },
+    )
     upsert(
         db,
         TaskAssignment,
@@ -1195,6 +1269,154 @@ def seed_demo_data(db: Session) -> None:
             )
 
     question_sets = {
+        "task_profile_bootstrap_ds_001": [
+            {
+                "id": "q_bootstrap_ds_001",
+                "question_type": "SINGLE_CHOICE",
+                "stem": "删除单链表头节点时，函数最应该返回什么？",
+                "analysis": "头节点被删除后，链表的新起点应是原头节点的 next，因此函数要返回新的 head。",
+                "knowledge_points": ["链表边界处理", "头节点删除"],
+                "difficulty": "BASIC",
+                "score": 10,
+                "error_type": "HEAD_NODE_RETURN_MISSING",
+                "options": [
+                    ("A", "原 head", False),
+                    ("B", "原 head->next", True),
+                    ("C", "尾节点", False),
+                    ("D", "nullptr", False),
+                ],
+            },
+            {
+                "id": "q_bootstrap_ds_002",
+                "question_type": "SINGLE_CHOICE",
+                "stem": "栈和队列最核心的访问差异是什么？",
+                "analysis": "栈是后进先出，队列是先进先出，这是判断两类结构使用场景的基础。",
+                "knowledge_points": ["栈与队列", "LIFO/FIFO"],
+                "difficulty": "BASIC",
+                "score": 10,
+                "error_type": "STACK_QUEUE_RULE_CONFUSION",
+                "options": [
+                    ("A", "栈先进先出，队列后进先出", False),
+                    ("B", "栈后进先出，队列先进先出", True),
+                    ("C", "二者都只能随机访问", False),
+                    ("D", "二者都按数值大小访问", False),
+                ],
+            },
+            {
+                "id": "q_bootstrap_ds_003",
+                "question_type": "MULTIPLE_CHOICE",
+                "stem": "递归遍历二叉树时，哪些情况通常应作为出口或保护条件？",
+                "analysis": "空节点和到达叶子后的子节点递归都需要出口保护，否则会继续访问不存在的节点。",
+                "knowledge_points": ["二叉树递归出口", "边界保护"],
+                "difficulty": "MEDIUM",
+                "score": 15,
+                "error_type": "RECURSION_BASE_CASE_MISSING",
+                "options": [
+                    ("A", "当前节点为空", True),
+                    ("B", "递归到不存在的左右子节点", True),
+                    ("C", "节点值等于 0 就必须停止", False),
+                    ("D", "只要树高度超过 1 就停止", False),
+                ],
+            },
+        ],
+        "task_profile_bootstrap_python_001": [
+            {
+                "id": "q_bootstrap_python_001",
+                "question_type": "SINGLE_CHOICE",
+                "stem": "Python 函数需要把计算结果交给调用方时，应优先使用哪种语句？",
+                "analysis": "return 会把结果返回给调用方；print 只负责输出，不适合作为函数结果。",
+                "knowledge_points": ["Python 函数", "返回值"],
+                "difficulty": "BASIC",
+                "score": 10,
+                "error_type": "PYTHON_RETURN_PRINT_CONFUSION",
+                "options": [
+                    ("A", "print", False),
+                    ("B", "return", True),
+                    ("C", "input", False),
+                    ("D", "import", False),
+                ],
+            },
+            {
+                "id": "q_bootstrap_python_002",
+                "question_type": "SINGLE_CHOICE",
+                "stem": "遍历列表 nums 时，既需要下标又需要元素值，最合适的写法是哪一个？",
+                "analysis": "enumerate(nums) 会同时给出下标和值，适合需要索引和元素的场景。",
+                "knowledge_points": ["列表遍历", "下标和值"],
+                "difficulty": "BASIC",
+                "score": 10,
+                "error_type": "PYTHON_INDEX_VALUE_CONFUSION",
+                "options": [
+                    ("A", "for i, value in enumerate(nums)", True),
+                    ("B", "for value in range(nums)", False),
+                    ("C", "for nums in value", False),
+                    ("D", "while nums", False),
+                ],
+            },
+            {
+                "id": "q_bootstrap_python_003",
+                "question_type": "TRUE_FALSE",
+                "stem": "做两数之和时，字典可以用来记录已经访问过的元素及其下标。",
+                "analysis": "字典查找能把补数搜索从重复遍历优化为近似常数时间，是两数之和的核心思路。",
+                "knowledge_points": ["字典查找", "两数之和"],
+                "difficulty": "MEDIUM",
+                "score": 10,
+                "error_type": "PYTHON_REUSE_GUARD_MISSING",
+                "options": [
+                    ("A", "正确", True),
+                    ("B", "错误", False),
+                ],
+            },
+        ],
+        "task_profile_bootstrap_ml_001": [
+            {
+                "id": "q_bootstrap_ml_001",
+                "question_type": "SINGLE_CHOICE",
+                "stem": "验证集最主要的作用是什么？",
+                "analysis": "验证集用于模型选择和调参，测试集应保留到最终评估阶段使用。",
+                "knowledge_points": ["数据集划分", "验证集"],
+                "difficulty": "BASIC",
+                "score": 10,
+                "error_type": "TRAIN_VALID_TEST_CONFUSION",
+                "options": [
+                    ("A", "训练模型参数", False),
+                    ("B", "辅助调参与模型选择", True),
+                    ("C", "替代所有测试数据", False),
+                    ("D", "保存模型文件", False),
+                ],
+            },
+            {
+                "id": "q_bootstrap_ml_002",
+                "question_type": "SINGLE_CHOICE",
+                "stem": "如果模型训练集表现很好、验证集表现明显变差，最可能是什么问题？",
+                "analysis": "训练集好但验证集差通常说明模型过度拟合训练数据，泛化能力不足。",
+                "knowledge_points": ["过拟合与正则化", "泛化能力"],
+                "difficulty": "BASIC",
+                "score": 10,
+                "error_type": "OVERFITTING_SYMPTOM_CONFUSION",
+                "options": [
+                    ("A", "过拟合", True),
+                    ("B", "欠拟合且完全不能学习", False),
+                    ("C", "数据已经完美", False),
+                    ("D", "不需要验证集", False),
+                ],
+            },
+            {
+                "id": "q_bootstrap_ml_003",
+                "question_type": "MULTIPLE_CHOICE",
+                "stem": "评估分类模型时，哪些指标或观察可以帮助判断模型效果？",
+                "analysis": "准确率、混淆矩阵和验证集表现都能提供评估依据；只看训练耗时不能说明分类质量。",
+                "knowledge_points": ["模型评估", "分类指标"],
+                "difficulty": "MEDIUM",
+                "score": 15,
+                "error_type": "MODEL_METRIC_CONFUSION",
+                "options": [
+                    ("A", "验证集准确率", True),
+                    ("B", "混淆矩阵", True),
+                    ("C", "只看训练耗时", False),
+                    ("D", "不同类别上的错误分布", True),
+                ],
+            },
+        ],
         "task_linked_list_stage_quiz_001": [
             {
                 "id": "q_linked_quiz_001",

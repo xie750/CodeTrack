@@ -13,7 +13,6 @@ import {
   MessageSquarePlus,
   MonitorPlay,
   MoreHorizontal,
-  Paperclip,
   PenLine,
   Podcast,
   Presentation,
@@ -52,10 +51,8 @@ import {
   saveStudentAiModelKey
 } from "../studentAiModels";
 import { scopedStorageKey } from "../scopedStorage";
-import { saveAIClassroomResource, type AIClassroomResource } from "../features/ai-classroom/classroomResourceStore";
-import { generateClassroomFromFile, generateClassroomFromPrompt, type OpenMaicClassroom } from "../features/ai-classroom/openmaicCompat";
 
-type AiTutorResourceType = GeneratedResourceType | "AI_CLASSROOM";
+type AiTutorResourceType = GeneratedResourceType;
 
 type HistoryGroup = "今天" | "昨天" | "更早";
 
@@ -76,8 +73,6 @@ type AiChatTurn = {
   modelKey?: string;
   modelLabel?: string;
   resource?: GeneratedResource;
-  classroom?: OpenMaicClassroom;
-  classroomResource?: AIClassroomResource;
   resourceSaving?: boolean;
 };
 
@@ -322,7 +317,9 @@ function resourceToTurn(id: string, resource: GeneratedResource): AiChatTurn {
       ? ["去资源中心播放", "生成配套练习"]
       : resource.resource_type === "PRACTICE_SET"
         ? ["去资源中心做题", "打开预览"]
-        : ["加入资源中心", "打开预览"],
+        : resource.resource_type === "AI_CLASSROOM"
+          ? ["去资源中心进入课堂", "继续追问"]
+          : ["加入资源中心", "打开预览"],
     profileUsed: true,
     sourceUsed: Boolean(resource.citations.length),
     safetyNote: notes.length
@@ -341,6 +338,7 @@ function generatedResourceModelName(resource: GeneratedResource) {
   if (renderer === "ppt_master") return "LangGraph + PPT Master";
   if (renderer === "local_pptx") return "LangGraph + python-pptx";
   if (resource.resource_type === "PPT") return "LangGraph + PPT renderer";
+  if (resource.resource_type === "AI_CLASSROOM") return "CodeTrack + OpenMAIC DSL";
   const label = resource.resource_type_label ?? resourceTypeLabels[resource.resource_type] ?? resource.resource_type;
   return `LangGraph + ${label}渲染器`;
 }
@@ -352,6 +350,13 @@ function resourceMetric(resource: GeneratedResource) {
   if (resource.resource_type === "MIND_MAP") return `${resource.item_count} 个节点`;
   if (resource.resource_type === "PRACTICE_SET") return `${resource.item_count} 道练习`;
   if (resource.resource_type === "PODCAST_SCRIPT") return `${resource.item_count} 段播客`;
+  if (resource.resource_type === "AI_CLASSROOM") {
+    const scenes = resource.render_payload.scenes;
+    const actionCount = Array.isArray(scenes)
+      ? scenes.reduce((total, scene) => total + (Array.isArray((scene as { actions?: unknown }).actions) ? ((scene as { actions?: unknown[] }).actions ?? []).length : 0), 0)
+      : 0;
+    return `${resource.item_count || (Array.isArray(scenes) ? scenes.length : 0)} 个场景 · ${actionCount} 个动作`;
+  }
   if (resource.resource_type === "KNOWLEDGE_CARD") return `${resource.item_count} 张卡片`;
   return `${resource.item_count || 1} 个${label}`;
 }
@@ -366,6 +371,7 @@ function resourcePreviewTitle(resource: GeneratedResource) {
     payload.questions?.[0]?.stem ||
     payload.cards?.[0]?.front ||
     payload.segments?.[0]?.label ||
+    (Array.isArray(payload.scenes) ? (payload.scenes[0] as { title?: string } | undefined)?.title : undefined) ||
     resource.title
   );
 }
@@ -521,57 +527,9 @@ function GeneratedResourceCard({
   );
 }
 
-function ClassroomResourceCard({
-  resource,
-  onOpenLibrary
-}: {
-  resource: AIClassroomResource;
-  onOpenLibrary: () => void;
-}) {
-  const classroom = resource.classroom;
-  const actionCount = classroom.scenes.reduce((total, scene) => total + (scene.actions?.length ?? 0), 0);
-  return (
-    <div className="ai-resource-card-shell">
-      <button type="button" className="ai-resource-card-main ai-classroom-resource-card" onClick={onOpenLibrary}>
-        <span className="ai-resource-thumb-preview classroom">
-          <i />
-          <MonitorPlay size={26} />
-          <strong>{classroom.stage.name}</strong>
-          <small>{classroom.scenes.length} 个场景 · {actionCount} 个动作</small>
-        </span>
-        <span className="ai-resource-card-copy">
-          <span className="ai-resource-card-title-line">
-            <b>{classroom.stage.name}</b>
-            <AIContentDisclosure
-              compact
-              interactive={false}
-              confidence={0.86}
-              modelLabel="OpenMAIC-compatible DSL"
-              sourceLabel="上传资料、输入内容与学习画像"
-              citationsCount={classroom.citations.length}
-            />
-          </span>
-          <small>已保存到资源中心 · {classroom.material.fileName}</small>
-          <em>课堂资源已入库。请从资源中心点击该资源，进入独立 AI 讲解课堂工作区。</em>
-        </span>
-      </button>
-      <button
-        type="button"
-        className="ai-resource-bookmark saved"
-        aria-label="去资源中心查看"
-        title="去资源中心查看"
-        onClick={onOpenLibrary}
-      >
-        <Bookmark size={19} fill="currentColor" />
-      </button>
-    </div>
-  );
-}
-
 export default function AiTutor() {
   const location = useLocation();
   const navigate = useNavigate();
-  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const [context, setContext] = useState<LearningContext | null>(null);
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [loadingContext, setLoadingContext] = useState(true);
@@ -590,7 +548,6 @@ export default function AiTutor() {
   const [modelOptions, setModelOptions] = useState<StudentAiModelOption[]>(fallbackStudentAiModelOptions);
   const [selectedModelKey, setSelectedModelKey] = useState(readStudentAiModelKey);
   const [activeResourceType, setActiveResourceType] = useState<AiTutorResourceType | null>(null);
-  const [classroomAttachment, setClassroomAttachment] = useState<File | null>(null);
   const [previewResource, setPreviewResource] = useState<GeneratedResource | null>(null);
   const hydratedRef = useRef(false);
   const restoredLocalTurnsRef = useRef(turns.length > 0);
@@ -611,7 +568,7 @@ export default function AiTutor() {
   const contextUnavailable = Boolean(error && !loadingContext && !context && !profile && !turns.length);
   const selectedModel = modelOptions.find((item) => item.key === selectedModelKey) ?? modelOptions[0];
   const selectedModelUnavailable = Boolean(selectedModel && !selectedModel.configured);
-  const hasComposerInput = Boolean(draft.trim() || (activeResourceType === "AI_CLASSROOM" && classroomAttachment));
+  const hasComposerInput = Boolean(draft.trim());
 
   const filteredSessions = useMemo(() => {
     const keyword = historyQuery.trim().toLowerCase();
@@ -867,7 +824,7 @@ export default function AiTutor() {
   }
 
   async function generateResource(resourceType: AiTutorResourceType, messageOverride?: string) {
-    const message = (messageOverride ?? draft).trim() || (resourceType === "AI_CLASSROOM" && classroomAttachment ? `基于上传资料 ${classroomAttachment.name} 生成 AI讲解课堂` : "");
+    const message = (messageOverride ?? draft).trim();
     if (!message || sending) return;
     const label = resourceTypeLabels[resourceType] ?? "资源";
     const userTurn: AiChatTurn = {
@@ -890,59 +847,6 @@ export default function AiTutor() {
     setError(null);
     setErrorDetail(null);
     setTurns((current) => [...current, userTurn, pendingTurn]);
-    if (resourceType === "AI_CLASSROOM") {
-      try {
-        const classroom = classroomAttachment
-          ? await generateClassroomFromFile(classroomAttachment)
-          : generateClassroomFromPrompt(message);
-        const classroomResource = saveAIClassroomResource({ classroom, courseId, prompt: message });
-        setTurns((current) => current.map((turn) => (
-          turn.id === pendingId
-            ? {
-                id: pendingId,
-                role: "assistant",
-                content: `已生成 AI讲解课堂并保存到资源中心：${classroom.stage.name}`,
-                time: nowLabel(),
-                confidence: 0.86,
-                citations: classroom.citations.map((source, index) => ({
-                  source_id: `ai_classroom_source_${index + 1}`,
-                  title: source,
-                  summary: classroom.material.textPreview,
-                  source_type: "AI_CLASSROOM",
-                  version: "openmaic-compatible-local",
-                  authority_level: "COURSE_CONTEXT"
-                })),
-                suggestedActions: ["去资源中心查看", "继续追问"],
-                profileUsed: true,
-                sourceUsed: Boolean(classroom.citations.length),
-                safetyNote: "AI讲解课堂已作为资源保存。正式学习时请从资源中心进入独立工作区，课堂会按 Stage / Scene / Action 动作脚本播放。",
-                modelName: "OpenMAIC-compatible classroom renderer",
-                classroom,
-                classroomResource
-              }
-            : turn
-        )));
-      } catch (err) {
-        setErrorDetail(studentErrorDetail(err));
-        setTurns((current) => current.map((turn) => (
-          turn.id === pendingId
-            ? {
-                id: pendingId,
-                role: "assistant",
-                content: "AI讲解课堂生成失败，请换一个文本资料或稍后重试。",
-                time: nowLabel(),
-                error: true,
-                suggestedActions: ["重新上传资料", "改用文本输入"]
-              }
-            : turn
-        )));
-      } finally {
-        setSending(false);
-        setActiveResourceType(null);
-        setClassroomAttachment(null);
-      }
-      return;
-    }
     try {
       const result = await api.generateResource(resourceType, message, courseId, currentSessionId);
       setCurrentSessionId(result.session.id);
@@ -1114,18 +1018,14 @@ export default function AiTutor() {
                           <GeneratedResourceCard
                             resource={turn.resource}
                             saving={turn.resourceSaving}
-                            onPreview={() => setPreviewResource(turn.resource ?? null)}
+                            onPreview={() => {
+                              if (turn.resource?.resource_type === "AI_CLASSROOM") {
+                                navigate(`/self-study/library?resource=${encodeURIComponent(turn.resource.id)}`);
+                                return;
+                              }
+                              setPreviewResource(turn.resource ?? null);
+                            }}
                             onSave={() => saveResource(turn.resource as GeneratedResource)}
-                          />
-                        </section>
-                      ) : null}
-
-                      {turn.classroomResource && !turn.loading ? (
-                        <section>
-                          <h2>生成资源</h2>
-                          <ClassroomResourceCard
-                            resource={turn.classroomResource}
-                            onOpenLibrary={() => navigate(`/self-study/library?resource=${encodeURIComponent(turn.classroomResource?.id ?? "")}`)}
                           />
                         </section>
                       ) : null}
@@ -1179,8 +1079,8 @@ export default function AiTutor() {
                               type="button"
                               key={action}
                               onClick={() => {
-                                if (turn.classroomResource && action.includes("资源中心")) {
-                                  navigate(`/self-study/library?resource=${encodeURIComponent(turn.classroomResource.id)}`);
+                                if (turn.resource?.resource_type === "AI_CLASSROOM" && action.includes("资源中心")) {
+                                  navigate(`/self-study/library?resource=${encodeURIComponent(turn.resource.id)}`);
                                   return;
                                 }
                                 setDraft(action);
@@ -1201,13 +1101,6 @@ export default function AiTutor() {
         </div>
 
         <footer className="ai-sticky-composer" aria-label="AI 输入区">
-          <input
-            ref={attachmentInputRef}
-            hidden
-            type="file"
-            accept=".pdf,.ppt,.pptx,.md,.markdown,.txt,.py,.ts,.tsx,.js,.cpp,.java"
-            onChange={(event) => setClassroomAttachment(event.target.files?.[0] ?? null)}
-          />
           <div className="ai-prompt-row" data-onboarding-id="tour-ai-resource-actions">
             {resourceOutputActions.map((action) => (
               <button
@@ -1227,17 +1120,7 @@ export default function AiTutor() {
           </div>
           {activeResourceType === "AI_CLASSROOM" ? (
             <div className="ai-classroom-attach-strip">
-              <span>{classroomAttachment ? `已选择：${classroomAttachment.name}` : "可先输入学习问题，也可以添加 PDF / PPT / 文本 / 代码资料生成课堂"}</span>
-              <button type="button" disabled={sending} onClick={() => attachmentInputRef.current?.click()}>
-                <Paperclip size={15} />
-                选择资料
-              </button>
-              {classroomAttachment ? (
-                <button type="button" disabled={sending} onClick={() => setClassroomAttachment(null)}>
-                  <X size={15} />
-                  移除
-                </button>
-              ) : null}
+              <span>基于你的生成要求、课程知识库与学习画像生成课堂资源；生成后请到资源中心进入课堂工作区。</span>
             </div>
           ) : null}
           <div className="ai-composer-surface">
@@ -1255,7 +1138,6 @@ export default function AiTutor() {
               disabled={sending || loadingSession}
             />
             <div className="ai-composer-actions">
-              <button type="button" aria-label="添加附件" disabled={sending || activeResourceType !== "AI_CLASSROOM"} title={activeResourceType === "AI_CLASSROOM" ? "添加课堂资料" : "请先选择 AI讲解课堂"} onClick={() => attachmentInputRef.current?.click()}><Paperclip size={18} /></button>
               <button type="button" aria-label="更多能力" disabled={sending}><MoreHorizontal size={18} /></button>
               <button type="button" className="ai-send" disabled={!hasComposerInput || sending || loadingContext || loadingSession || (!activeResourceType && selectedModelUnavailable)} aria-label="发送" onClick={() => sendMessage()}>
                 <SendHorizontal size={19} />

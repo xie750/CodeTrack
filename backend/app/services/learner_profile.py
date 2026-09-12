@@ -22,6 +22,7 @@ from backend.app.models import (
     LearnerKnowledgeState,
     LearnerProfileSnapshot,
     Recommendation,
+    TaskAssignment,
     TeachingAssignment,
     User,
 )
@@ -173,6 +174,33 @@ def find_profile_snapshot(
     return db.scalar(query.order_by(LearnerProfileSnapshot.updated_at.desc()))
 
 
+def profile_status_for_snapshot(db: Session, *, student_id: str, course_id: str) -> str:
+    """画像成熟度：摸底只形成低置信初始画像，后续真实学习行为才进入稳定画像。"""
+    non_bootstrap_event = db.scalar(
+        select(LearnerEvent.id)
+        .outerjoin(TaskAssignment, LearnerEvent.assignment_id == TaskAssignment.id)
+        .where(
+            LearnerEvent.student_id == student_id,
+            LearnerEvent.course_id == course_id,
+            (TaskAssignment.assignment_mode.is_(None)) | (TaskAssignment.assignment_mode != "PROFILE_BOOTSTRAP"),
+        )
+        .limit(1)
+    )
+    if non_bootstrap_event:
+        return "READY"
+    bootstrap_event = db.scalar(
+        select(LearnerEvent.id)
+        .join(TaskAssignment, LearnerEvent.assignment_id == TaskAssignment.id)
+        .where(
+            LearnerEvent.student_id == student_id,
+            LearnerEvent.course_id == course_id,
+            TaskAssignment.assignment_mode == "PROFILE_BOOTSTRAP",
+        )
+        .limit(1)
+    )
+    return "INITIAL" if bootstrap_event else "READY"
+
+
 def serialize_learner_profile(
     db: Session,
     student_id: str,
@@ -226,7 +254,17 @@ def serialize_learner_profile(
         .order_by(Recommendation.priority.desc())
     ).all()
 
+    profile_status = profile_status_for_snapshot(db, student_id=student_id, course_id=profile.course_id)
+
     return {
+        "profile_status": profile_status,
+        "profile_confidence": "LOW" if profile_status == "INITIAL" else "HIGH",
+        "profile_evidence_note": (
+            "当前画像主要来自画像摸底题，适合做低置信推荐；继续完成课程任务后会升级。"
+            if profile_status == "INITIAL"
+            else "当前画像来自课程任务、练习、错因和学习行为等多类证据。"
+        ),
+        "bootstrap_assessment": None,
         "student": {
             "id": student_id,
             "name": student.display_name if student else "",

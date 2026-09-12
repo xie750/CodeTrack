@@ -103,6 +103,22 @@ def ensure_class_filter_columns() -> None:
             connection.execute(text("ALTER TABLE class_groups ADD COLUMN major VARCHAR(120) NOT NULL DEFAULT '人工智能'"))
 
 
+def ensure_teacher_user_columns() -> None:
+    if engine.dialect.name != "sqlite" or "users" not in inspect(engine).get_table_names():
+        return
+    columns = {item["name"] for item in inspect(engine).get_columns("users")}
+    definitions = {
+        "name": "VARCHAR(80)",
+        "number": "VARCHAR(40)",
+        "email": "VARCHAR(160)",
+        "department": "VARCHAR(160)",
+    }
+    with engine.begin() as connection:
+        for column, definition in definitions.items():
+            if column not in columns:
+                connection.execute(text(f"ALTER TABLE users ADD COLUMN {column} {definition}"))
+
+
 def ensure_grade_dimension_column() -> None:
     if engine.dialect.name != "sqlite":
         return
@@ -145,6 +161,7 @@ def ensure_teacher_graph_attachment_file_columns() -> None:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     Base.metadata.create_all(engine)
+    ensure_teacher_user_columns()
     ensure_class_filter_columns()
     ensure_grade_dimension_column()
     ensure_chapter_content_columns()

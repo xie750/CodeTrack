@@ -140,6 +140,28 @@ LINKED_LIST_DELETE_SPEC = ProgrammingSpec(
 )
 
 
+LEGACY_LINKED_LIST_DELETE_CPP_SPEC = ProgrammingSpec(
+    runner_profile="legacy_linked_list_delete_v1",
+    supported_languages=["CPP"],
+    default_language="CPP",
+    function_signature="ListNode* deleteAt(ListNode* head, int position);",
+    editable_region="SOLUTION_ONLY",
+    language_templates={
+        "CPP": """ListNode* deleteAt(ListNode* head, int position) {
+    // Return the new head after deleting the node at position.
+    return head;
+}
+""",
+    },
+    rules=[
+        "Return nullptr for an empty list.",
+        "Return the original head for an invalid position.",
+        "When deleting the head node, return the new head pointer.",
+        "Do not print from the function; only return the updated list head.",
+    ],
+)
+
+
 STDIO_CPP_SPEC = ProgrammingSpec(
     runner_profile="stdio_cpp_v1",
     supported_languages=["CPP"],
@@ -168,6 +190,8 @@ def get_programming_spec(task: Task) -> ProgrammingSpec:
     signature = task.interface_spec or ""
     if task.id == "task_two_sum_001" or "twoSum" in signature:
         return TWO_SUM_SPEC
+    if "ListNode*" in signature or (normalize_language(task.language) == "CPP" and "deleteAt" in signature):
+        return LEGACY_LINKED_LIST_DELETE_CPP_SPEC
     if "deleteAt" in signature:
         return LINKED_LIST_DELETE_SPEC
     return STDIO_CPP_SPEC

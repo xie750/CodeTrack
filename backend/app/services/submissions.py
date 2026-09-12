@@ -437,6 +437,11 @@ def create_negative_capability_evidence(
     repeated_tags = sorted({error_tag for error_tag, _ in repeated})
     tag_summary = "、".join(repeated_tags)
     explanation = f"同类错误在多个提交版本中重复出现（{tag_summary}），形成需要支持的负向能力证据。"
+    evidence_type = (
+        "REPEATED_BOUNDARY_FAILURE"
+        if any("BOUNDARY" in tag or "HEAD" in tag or "POSITION" in tag for tag in repeated_tags)
+        else "REPEATED_TEST_FAILURE"
+    )
     db.add(
         CapabilityEvidence(
             id=prefixed_id("evi"),
@@ -444,7 +449,7 @@ def create_negative_capability_evidence(
             capability_id=capability_id,
             task_id=submission.task_id,
             submission_version_id=version.id,
-            evidence_type="REPEATED_TEST_FAILURE",
+            evidence_type=evidence_type,
             strength="NEGATIVE",
             explanation=explanation,
         )

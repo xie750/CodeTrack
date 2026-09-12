@@ -1,4 +1,5 @@
 from datetime import timedelta
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
@@ -117,3 +118,103 @@ def test_question_workspace_blocks_save_and_submit_before_start_time():
                 db.commit()
             finally:
                 db.close()
+
+
+def test_registered_student_without_class_can_use_joined_question_workspace():
+    username = f"quiz_{uuid4().hex[:8]}"
+    answer_payload = [
+        {"question_id": "q_linked_quiz_001", "selected_option_ids": ["q_linked_quiz_001_a"]},
+        {"question_id": "q_linked_quiz_002", "selected_option_ids": ["q_linked_quiz_002_a"]},
+        {"question_id": "q_linked_quiz_003", "selected_option_ids": ["q_linked_quiz_003_a"]},
+    ]
+    with TestClient(app) as c:
+        registered = c.post(
+            "/api/v1/auth/register",
+            json={
+                "username": username,
+                "password": "codetrack123",
+                "display_name": "无班级测验学生",
+                "role": "STUDENT",
+            },
+        )
+        assert registered.status_code == 201, registered.text
+        headers = {"Authorization": f"Bearer {registered.json()['data']['access_token']}"}
+
+        context = c.get("/api/v1/student/learning-context", headers=headers)
+        assert context.status_code == 200
+        assert context.json()["data"]["student"]["state"] == "NO_CLASS"
+
+        tasks = c.get("/api/v1/student/tasks", headers=headers)
+        assert tasks.status_code == 200
+        quiz = next(item for item in tasks.json()["data"] if item["assignment_id"] == "assign_se1_ds_stage_quiz_001")
+        assert quiz["workspace_type"] == "QUESTION_SET"
+
+        workspace = c.get(f"/api/v1/student/assignments/{quiz['assignment_id']}/workspace", headers=headers)
+        assert workspace.status_code == 200, workspace.text
+        assert workspace.json()["data"]["task"]["workspace_type"] == "QUESTION_SET"
+
+        draft = c.post(
+            f"/api/v1/student/assignments/{quiz['assignment_id']}/answers",
+            headers=headers,
+            json={"answers": answer_payload},
+        )
+        assert draft.status_code == 200, draft.text
+
+        submitted = c.post(
+            f"/api/v1/student/assignments/{quiz['assignment_id']}/submit-answers",
+            headers=headers,
+            json={"answers": answer_payload},
+        )
+        assert submitted.status_code == 201, submitted.text
+        assert submitted.json()["data"]["status"] == "SUBMITTED"
+
+
+def test_registered_student_builds_initial_profile_from_bootstrap_assessment():
+    username = f"bootstrap_{uuid4().hex[:8]}"
+    answer_payload = [
+        {"question_id": "q_bootstrap_ds_001", "selected_option_ids": ["q_bootstrap_ds_001_b"]},
+        {"question_id": "q_bootstrap_ds_002", "selected_option_ids": ["q_bootstrap_ds_002_b"]},
+        {"question_id": "q_bootstrap_ds_003", "selected_option_ids": ["q_bootstrap_ds_003_a", "q_bootstrap_ds_003_b"]},
+    ]
+    with TestClient(app) as c:
+        registered = c.post(
+            "/api/v1/auth/register",
+            json={
+                "username": username,
+                "password": "codetrack123",
+                "display_name": "画像摸底学生",
+                "role": "STUDENT",
+            },
+        )
+        assert registered.status_code == 201, registered.text
+        headers = {"Authorization": f"Bearer {registered.json()['data']['access_token']}"}
+
+        empty_profile = c.get("/api/v1/student/profile", params={"course_id": "course_ds_001"}, headers=headers)
+        assert empty_profile.status_code == 200
+        assert empty_profile.json()["data"]["profile_status"] == "EMPTY"
+
+        assignment_id = empty_profile.json()["data"]["bootstrap_assessment"]["assignment_id"]
+        assert assignment_id == "assign_bootstrap_ds_profile_001"
+        workspace = c.get(f"/api/v1/student/assignments/{assignment_id}/workspace", headers=headers)
+        assert workspace.status_code == 200, workspace.text
+        assert workspace.json()["data"]["assignment"]["assignment_mode"] == "PROFILE_BOOTSTRAP"
+
+        submitted = c.post(
+            f"/api/v1/student/assignments/{assignment_id}/submit-answers",
+            headers=headers,
+            json={"answers": answer_payload},
+        )
+        assert submitted.status_code == 201, submitted.text
+        assert submitted.json()["data"]["profile_signal"]["profile_status"] == "INITIAL"
+
+        profile = c.get("/api/v1/student/profile", params={"course_id": "course_ds_001"}, headers=headers)
+        assert profile.status_code == 200
+        profile_data = profile.json()["data"]
+        assert profile_data["profile_status"] == "INITIAL"
+        assert profile_data["profile_confidence"] == "LOW"
+        assert profile_data["bootstrap_assessment"] is None
+        assert {item["knowledge_point"] for item in profile_data["knowledge_states"]} >= {
+            "链表边界处理",
+            "栈与队列",
+            "二叉树递归出口",
+        }

@@ -243,16 +243,21 @@ def test_no_profile_branch_returns_none_from_shared_serializer():
         assert (
             serialize_learner_profile(db, "user_student_002", "course_network_001") is None
         )
-        # 对照组：有画像时六个键齐全
+        # 对照组：有画像时共享学生字段齐全
         payload = serialize_learner_profile(db, OWN_STUDENT, COURSE)
         assert payload is not None
         assert set(payload) == {
+            "profile_status",
+            "profile_confidence",
+            "profile_evidence_note",
+            "bootstrap_assessment",
             "student",
             "course",
             "overview",
             "knowledge_states",
             "frequent_errors",
             "recommendations",
+            "behavior_events",
         }
     finally:
         db.close()

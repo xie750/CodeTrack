@@ -457,7 +457,7 @@ def test_usage_does_not_match_substrings(client):
     任何短名字都会被误判成「已被引用」而永远删不掉。
     """
     chapter = _create_chapter(client)
-    point = _create_point(client, chapter["chapter_id"], "链表")
+    point = _create_point(client, chapter["chapter_id"], "链表边界")
 
     usage = client.get(
         f"/api/v1/teacher/knowledge-points/{point['knowledge_point_id']}/usage", headers=TEACHER

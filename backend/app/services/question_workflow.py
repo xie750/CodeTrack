@@ -38,6 +38,13 @@ ERROR_LABELS = {
     "INVALID_POSITION_GUARD_MISSING": "非法位置保护不足",
     "STACK_QUEUE_RULE_CONFUSION": "栈队列规则混淆",
     "EMPTY_GUARD_MISSING": "判空保护不足",
+    "RECURSION_BASE_CASE_MISSING": "递归出口遗漏",
+    "PYTHON_RETURN_PRINT_CONFUSION": "返回值与输出混淆",
+    "PYTHON_INDEX_VALUE_CONFUSION": "下标和值混淆",
+    "PYTHON_REUSE_GUARD_MISSING": "复用同一元素判断不足",
+    "TRAIN_VALID_TEST_CONFUSION": "训练集、验证集、测试集混淆",
+    "OVERFITTING_SYMPTOM_CONFUSION": "过拟合现象判断不清",
+    "MODEL_METRIC_CONFUSION": "模型评估指标混淆",
 }
 
 FILL_QUESTION_TYPES = {"FILL_BLANK", "FILL_IN_BLANK"}
@@ -449,6 +456,7 @@ def update_learner_profile(
     correct_count: int,
 ) -> dict:
     now = utc_now()
+    is_bootstrap = assignment.assignment_mode == "PROFILE_BOOTSTRAP"
     all_points: list[str] = []
     performance_by_point: dict[str, list[float]] = {}
     wrong_questions = []
@@ -471,7 +479,11 @@ def update_learner_profile(
                 LearnerKnowledgeState.knowledge_point == point,
             )
         )
-        evidence_text = f"{task.title} 作答正确率 {round((correct_count / max(len(questions), 1)) * 100)}%"
+        evidence_text = (
+            f"画像摸底「{task.title}」作答正确率 {round((correct_count / max(len(questions), 1)) * 100)}%"
+            if is_bootstrap
+            else f"{task.title} 作答正确率 {round((correct_count / max(len(questions), 1)) * 100)}%"
+        )
         if state is None:
             state = LearnerKnowledgeState(
                 student_id=user.id,
@@ -530,7 +542,7 @@ def update_learner_profile(
             teaching_assignment_id=teaching.id,
             assignment_id=assignment.id,
             task_id=task.id,
-            event_type="QUESTION_SET_SUBMITTED",
+            event_type="PROFILE_BOOTSTRAP_SUBMITTED" if is_bootstrap else "QUESTION_SET_SUBMITTED",
             knowledge_points=json.dumps(sorted(set(all_points)), ensure_ascii=False),
             error_type=wrong_questions[0].error_type if wrong_questions and wrong_questions[0].error_type else None,
             payload=json.dumps(
@@ -539,7 +551,12 @@ def update_learner_profile(
                     "max_score": total_score,
                     "accuracy": correct_count / max(len(questions), 1),
                     "wrong_question_ids": [question.id for question in wrong_questions],
-                    "basis": "mastery_score = 70% history + 30% current topic performance",
+                    "basis": (
+                        "cold_start_profile = first diagnostic question set"
+                        if is_bootstrap
+                        else "mastery_score = 70% history + 30% current topic performance"
+                    ),
+                    "profile_confidence": "LOW" if is_bootstrap else "MEDIUM",
                 },
                 ensure_ascii=False,
             ),
@@ -586,21 +603,39 @@ def update_learner_profile(
             student_id=user.id,
             course_id=task.course_id,
             class_id=class_id,
-            summary_text="已开始基于做题记录生成学习画像。",
+            summary_text="已根据画像摸底题生成低置信初始画像。" if is_bootstrap else "已开始基于做题记录生成学习画像。",
+            overall_progress=0,
+            hint_dependency_level="LOW",
+            compile_error_rate=0,
+            logic_error_rate=0,
+            recent_task_completion=0,
+            recommendation_text="",
         )
         db.add(profile)
     profile.overall_progress = overall
     profile.logic_error_rate = round((profile.logic_error_rate * 0.75) + (wrong_rate * 0.25), 2)
     profile.recent_task_completion = round(completed_count / max(total_assignments, 1), 2)
-    profile.summary_text = (
-        f"{task.title} 得分 {round((earned_score / max(total_score, 1)) * 100)}%，"
-        f"{'需要继续巩固' + weak.knowledge_point if weak and weak.mastery_score < 70 else '当前知识掌握趋于稳定'}。"
-    )
-    profile.recommendation_text = (
-        f"优先复盘 {weak.knowledge_point}，再做同类巩固题。"
-        if weak and weak.mastery_score < 70
-        else "建议进入下一组任务，观察能否迁移到新场景。"
-    )
+    score_percent = round((earned_score / max(total_score, 1)) * 100)
+    if is_bootstrap:
+        profile.summary_text = (
+            f"已完成画像摸底「{task.title}」，初始得分 {score_percent}%。"
+            f"{' 当前最需要确认 ' + weak.knowledge_point if weak and weak.mastery_score < 70 else ' 当前基础表现较稳定'}。"
+        )
+        profile.recommendation_text = (
+            f"先围绕 {weak.knowledge_point} 完成一组入门巩固，再用课程任务验证画像判断。"
+            if weak and weak.mastery_score < 70
+            else "建议进入课程任务，用真实作业继续验证这份初始画像。"
+        )
+    else:
+        profile.summary_text = (
+            f"{task.title} 得分 {score_percent}%，"
+            f"{'需要继续巩固' + weak.knowledge_point if weak and weak.mastery_score < 70 else '当前知识掌握趋于稳定'}。"
+        )
+        profile.recommendation_text = (
+            f"优先复盘 {weak.knowledge_point}，再做同类巩固题。"
+            if weak and weak.mastery_score < 70
+            else "建议进入下一组任务，观察能否迁移到新场景。"
+        )
     profile.updated_at = now
 
     if weak:
@@ -610,21 +645,23 @@ def update_learner_profile(
                 id=f"rec_{user.id}_{task.course_id}_question_review",
                 student_id=user.id,
                 course_id=task.course_id,
-                recommendation_type="REVIEW",
-                title=f"复盘 {weak.knowledge_point}",
+                recommendation_type="PROFILE_BOOTSTRAP" if is_bootstrap else "REVIEW",
+                title=f"完成 {weak.knowledge_point} 入门巩固" if is_bootstrap else f"复盘 {weak.knowledge_point}",
                 reason=profile.recommendation_text,
                 priority=1,
                 related_task_id=task.id,
                 related_knowledge_points=json.dumps([weak.knowledge_point], ensure_ascii=False),
-                suggested_action="REVIEW_WRONG_QUESTIONS",
+                suggested_action="OPEN_TASK" if is_bootstrap else "REVIEW_WRONG_QUESTIONS",
                 status="ACTIVE",
             )
             db.add(recommendation)
         else:
-            recommendation.title = f"复盘 {weak.knowledge_point}"
+            recommendation.recommendation_type = "PROFILE_BOOTSTRAP" if is_bootstrap else "REVIEW"
+            recommendation.title = f"完成 {weak.knowledge_point} 入门巩固" if is_bootstrap else f"复盘 {weak.knowledge_point}"
             recommendation.reason = profile.recommendation_text
             recommendation.related_task_id = task.id
             recommendation.related_knowledge_points = json.dumps([weak.knowledge_point], ensure_ascii=False)
+            recommendation.suggested_action = "OPEN_TASK" if is_bootstrap else "REVIEW_WRONG_QUESTIONS"
             recommendation.status = "ACTIVE"
             recommendation.created_at = now
 
@@ -636,6 +673,8 @@ def update_learner_profile(
     )
 
     return {
+        "profile_status": "INITIAL" if is_bootstrap else "READY",
+        "profile_confidence": "LOW" if is_bootstrap else "MEDIUM",
         "overall_progress": profile.overall_progress,
         "logic_error_rate": profile.logic_error_rate,
         "recent_task_completion": profile.recent_task_completion,

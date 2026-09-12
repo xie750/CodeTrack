@@ -71,6 +71,7 @@ from backend.app.services.student_resources import (
     generate_learning_resource,
     generate_ppt_resource,
     get_generated_resource,
+    openmaic_classroom_export,
     practice_workspace_payload,
     list_student_resource_folders,
     list_saved_generated_resources,
@@ -266,16 +267,19 @@ def task_difficulty(task: Task) -> str:
 
 def task_type_from_assignment(assignment: TaskAssignment) -> str:
     if assignment.task and assignment.task.workspace_type == "QUESTION_SET":
-        return assignment.assignment_mode if assignment.assignment_mode in {"QUIZ", "EXAM"} else "QUIZ"
+        return assignment.assignment_mode if assignment.assignment_mode in {"QUIZ", "EXAM", "PROFILE_BOOTSTRAP"} else "QUIZ"
     mode_map = {
         "PRACTICE": "CODING",
         "QUIZ": "QUIZ",
         "EXAM": "EXAM",
+        "PROFILE_BOOTSTRAP": "QUIZ",
     }
     return mode_map.get(assignment.assignment_mode, "CODING")
 
 
 def latest_task_summary(task: Task, progress: StudentTaskProgress | None) -> str:
+    if "画像摸底" in task.title and (progress is None or progress.status == "NOT_STARTED"):
+        return "尚未完成画像摸底，完成后会生成低置信初始画像。"
     if progress is None or progress.status == "NOT_STARTED":
         return "尚未提交，建议先运行公开样例。"
     if progress.status == "COMPLETED":
@@ -363,6 +367,19 @@ def student_accessible_teaching_assignments(db: Session, user: User) -> list[Tea
 
 def student_accessible_teaching_assignment_ids(db: Session, user: User) -> list[str]:
     return [item.id for item in student_accessible_teaching_assignments(db, user)]
+
+
+def student_assignment_class_id(db: Session, user: User, assignment_id: str) -> str:
+    assignment = db.get(TaskAssignment, assignment_id)
+    if assignment is None or assignment.publish_status != "PUBLISHED":
+        raise ApiError(404, "ASSIGNMENT_NOT_FOUND", "任务不存在或当前学生无权限")
+    teaching = db.get(TeachingAssignment, assignment.teaching_assignment_id)
+    if teaching is None or teaching.status != "ACTIVE":
+        raise ApiError(404, "ASSIGNMENT_NOT_FOUND", "任务不存在或当前学生无权限")
+    accessible_ids = set(student_accessible_teaching_assignment_ids(db, user))
+    if teaching.id not in accessible_ids:
+        raise ApiError(404, "ASSIGNMENT_NOT_FOUND", "任务不存在或当前学生无权限")
+    return teaching.class_id
 
 
 def serialize_course_offering(
@@ -790,6 +807,52 @@ def generated_resource_safety_note(resource: dict) -> str:
     return "AI 生成资源已基于课程资料进行引用校验，建议结合课堂讲义复核关键概念。"
 
 
+def bootstrap_assessment_payload(db: Session, *, user: User, course_id: str | None) -> dict | None:
+    if not course_id:
+        return None
+    teaching_ids = student_accessible_teaching_assignment_ids(db, user)
+    if not teaching_ids:
+        return None
+    row = db.execute(
+        select(TaskAssignment, Task, TeachingAssignment, Course, StudentTaskProgress)
+        .join(Task, TaskAssignment.task_id == Task.id)
+        .join(TeachingAssignment, TaskAssignment.teaching_assignment_id == TeachingAssignment.id)
+        .join(Course, TeachingAssignment.course_id == Course.id)
+        .outerjoin(
+            StudentTaskProgress,
+            (StudentTaskProgress.assignment_id == TaskAssignment.id)
+            & (StudentTaskProgress.student_id == user.id),
+        )
+        .where(
+            TeachingAssignment.id.in_(teaching_ids),
+            TeachingAssignment.course_id == course_id,
+            TeachingAssignment.status == "ACTIVE",
+            TaskAssignment.publish_status == "PUBLISHED",
+            TaskAssignment.assignment_mode == "PROFILE_BOOTSTRAP",
+        )
+        .order_by(TaskAssignment.published_at.asc(), TaskAssignment.id.asc())
+    ).first()
+    if row is None:
+        return None
+    assignment, task, teaching, course, progress = row
+    questions = list(task.questions)
+    return {
+        "assignment_id": assignment.id,
+        "task_id": task.id,
+        "course_id": course.id,
+        "course_name": course.name,
+        "class_id": teaching.class_id,
+        "title": task.title,
+        "description": task.description,
+        "estimated_minutes": max(3, min(8, len(questions) * 2)),
+        "question_count": len(questions),
+        "knowledge_points": task_knowledge_points(task),
+        "status": progress.status if progress else "NOT_STARTED",
+        "action_label": "开始画像摸底",
+        "confidence_after_submit": "LOW",
+    }
+
+
 def initial_learner_profile_payload(
     db: Session,
     *,
@@ -799,7 +862,12 @@ def initial_learner_profile_payload(
 ) -> dict:
     course = db.get(Course, course_id) if course_id else None
     administrative_class = db.get(AdministrativeClass, class_id) if class_id else None
+    bootstrap = bootstrap_assessment_payload(db, user=user, course_id=course_id)
     return {
+        "profile_status": "EMPTY",
+        "profile_confidence": "NONE",
+        "profile_evidence_note": "当前账号还没有真实学习证据，系统不会用默认 0 分冒充画像。",
+        "bootstrap_assessment": bootstrap,
         "student": {
             "id": user.id,
             "name": user.display_name,
@@ -817,8 +885,8 @@ def initial_learner_profile_payload(
             "compile_error_rate": 0,
             "logic_error_rate": 0,
             "recent_task_completion": 0,
-            "summary": "当前为学习画像初始状态，系统会根据自主学习、科研实践和后续课程任务逐步更新证据。",
-            "recommendation": "建议先完成一次自主学习资料生成或科研实践记录，建立第一条画像证据。",
+            "summary": "当前还没有可验证学习证据，学习画像尚未生成。",
+            "recommendation": "建议先完成 3 分钟画像摸底题，系统会基于题目表现生成低置信初始画像。",
             "updated_at": iso(now_utc()),
         },
         "knowledge_states": [],
@@ -826,13 +894,13 @@ def initial_learner_profile_payload(
         "recommendations": [
             {
                 "id": f"initial_{user.id}_{course_id or 'general'}",
-                "type": "SELF_STUDY",
-                "title": "从自主学习开始建立画像",
-                "reason": "当前暂无足够学习证据，先保存一份学习产物或完成一次科研实践可帮助系统形成初始判断。",
+                "type": "PROFILE_BOOTSTRAP",
+                "title": "完成画像摸底，建立第一批证据",
+                "reason": "当前没有画像证据，摸底题会覆盖基础、迁移和辨析题型，用于生成低置信初始画像。",
                 "priority": 5,
-                "related_task_id": None,
+                "related_task_id": bootstrap["task_id"] if bootstrap else None,
                 "related_knowledge_points": [],
-                "suggested_action": "OPEN_SELF_STUDY",
+                "suggested_action": "START_PROFILE_BOOTSTRAP",
                 "status": "ACTIVE",
             }
         ],
@@ -1809,6 +1877,8 @@ async def student_generate_resource(
         suggested_actions = ["前往资源中心做题", "打开预览"]
     elif resource_type == "PODCAST_SCRIPT":
         suggested_actions = ["前往资源中心播放", "生成配套练习"]
+    elif resource_type == "AI_CLASSROOM":
+        suggested_actions = ["前往资源中心进入课堂", "继续追问"]
     assistant_message = append_ai_tutor_message(
         db,
         session=session,
@@ -1924,6 +1994,17 @@ def student_generated_resource_detail(
         lambda: serialize_generated_resource(resource),
     )
     return ok(data)
+
+
+@router.get("/resources/{resource_id}/openmaic-export")
+def student_generated_resource_openmaic_export(
+    resource_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    resource = get_generated_resource(db, student_id=user.id, resource_id=resource_id)
+    return ok(openmaic_classroom_export(resource))
 
 
 @router.get("/resources/{resource_id}/practice")
@@ -2236,8 +2317,8 @@ def get_assignment_workspace(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    administrative_class, _ = require_active_class(db, user)
-    return ok(question_workspace_payload(db, assignment_id, administrative_class.id, user))
+    class_id = student_assignment_class_id(db, user, assignment_id)
+    return ok(question_workspace_payload(db, assignment_id, class_id, user))
 
 
 @router.post("/assignments/{assignment_id}/answers")
@@ -2248,9 +2329,9 @@ def save_assignment_answers(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    administrative_class, _ = require_active_class(db, user)
+    class_id = student_assignment_class_id(db, user, assignment_id)
     answers = [answer.model_dump() for answer in payload.answers]
-    return ok(save_question_draft(db, assignment_id, administrative_class.id, user, answers))
+    return ok(save_question_draft(db, assignment_id, class_id, user, answers))
 
 
 @router.post("/assignments/{assignment_id}/submit-answers", status_code=status.HTTP_201_CREATED)
@@ -2261,9 +2342,9 @@ def submit_assignment_answers(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    administrative_class, _ = require_active_class(db, user)
+    class_id = student_assignment_class_id(db, user, assignment_id)
     answers = [answer.model_dump() for answer in payload.answers]
-    return ok(submit_question_answers(db, assignment_id, administrative_class.id, user, answers))
+    return ok(submit_question_answers(db, assignment_id, class_id, user, answers))
 
 
 @router.get("/profile")

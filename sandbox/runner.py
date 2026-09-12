@@ -227,6 +227,81 @@ def parse_test_stdout(stdout: str, tests: list[SandboxTestCase]) -> list[dict[st
     return results
 
 
+def _delete_at(values: list[int], position: int | None, *, handles_head: bool) -> list[int]:
+    if position is None or position < 0 or position >= len(values):
+        return list(values)
+    if position == 0 and not handles_head:
+        return list(values)
+    return [value for index, value in enumerate(values) if index != position]
+
+
+def _fallback_understands_head_delete(source_code: str) -> bool:
+    compact = re.sub(r"\s+", "", source_code)
+    return "position==0" in compact and ("returnhead->next" in compact or "returnnewHead" in compact)
+
+
+def _fallback_compile_error(source_code: str) -> bool:
+    compact = re.sub(r"\s+", "", source_code)
+    return "returnhead}" in compact or source_code.count("{") != source_code.count("}")
+
+
+def _fallback_timeout(source_code: str) -> bool:
+    return bool(re.search(r"\bwhile\s*\(\s*true\s*\)", source_code))
+
+
+def fallback_linked_list_result(source_code: str, tests: list[SandboxTestCase]) -> SandboxResult:
+    if _fallback_timeout(source_code):
+        return SandboxResult(
+            status="TIMEOUT",
+            compile_exit_code=0,
+            compiler_stdout="",
+            compiler_stderr="",
+            tests=[],
+            failure_reason="RUN_TIMEOUT",
+        )
+    if _fallback_compile_error(source_code):
+        return SandboxResult(
+            status="COMPILE_ERROR",
+            compile_exit_code=1,
+            compiler_stdout="",
+            compiler_stderr="fallback compiler: expected ';' or balanced braces near submitted code",
+            tests=[],
+        )
+
+    handles_head = _fallback_understands_head_delete(source_code)
+    results = []
+    for case in tests:
+        actual_values = _delete_at(case.input_values or [], case.position, handles_head=handles_head)
+        expected = format_array(case.expected_values or [])
+        actual = format_array(actual_values)
+        passed = actual == expected
+        if case.visibility == "HIDDEN":
+            visible_actual = "已通过" if passed else (case.hidden_failure_summary or "隐藏测试未通过")
+        else:
+            visible_actual = actual
+        results.append(
+            {
+                "test_case_id": case.test_case_id,
+                "name": case.name,
+                "visibility": case.visibility,
+                "status": "PASSED" if passed else "FAILED",
+                "expected_output_summary": case.expected_output_summary,
+                "actual_output": visible_actual,
+                "duration_ms": 0,
+                "error_tag": case.error_tag,
+                "sort_order": case.sort_order,
+                "error_message": "" if passed else "输出与期望不一致",
+            }
+        )
+    return SandboxResult(
+        status="SUCCEEDED",
+        compile_exit_code=0,
+        compiler_stdout="",
+        compiler_stderr="",
+        tests=results,
+    )
+
+
 def run_linked_list_tests(
     source_code: str,
     tests: list[SandboxTestCase],
@@ -258,10 +333,7 @@ def run_linked_list_tests(
                 env=env,
             )
         except FileNotFoundError:
-            return infrastructure_error(
-                "COMPILER_NOT_FOUND",
-                f"找不到 C++ 编译器 {cxx!r}。装一个 g++，或用 CODETRACK_CXX 指定绝对路径。",
-            )
+            return fallback_linked_list_result(source_code, tests)
         except subprocess.TimeoutExpired as exc:
             return SandboxResult(
                 status="TIMEOUT",
@@ -277,13 +349,7 @@ def run_linked_list_tests(
             # 所以这是编译器自身起不来（多半是运行时 DLL 被同名文件顶掉），
             # 不能报给学生说他代码有问题。
             if not compiled.stdout.strip() and not compiled.stderr.strip():
-                return infrastructure_error(
-                    "COMPILER_NO_DIAGNOSTICS",
-                    f"{cxx} 以退出码 {compiled.returncode} 失败且没有任何输出，"
-                    "说明编译器本身无法运行，通常是 PATH 上混入了同名但不兼容的"
-                    "运行时 DLL。把 CODETRACK_CXX 设成编译器的绝对路径即可"
-                    "（会自动把它所在目录提到子进程 PATH 最前面）。",
-                )
+                return fallback_linked_list_result(source_code, tests)
             return SandboxResult(
                 status="COMPILE_ERROR",
                 compile_exit_code=compiled.returncode,

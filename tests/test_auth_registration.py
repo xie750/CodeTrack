@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from backend.app.core.database import SessionLocal
-from backend.app.models import StudentClassMembership, User
+from backend.app.models import LearnerKnowledgeState, LearnerProfileSnapshot, StudentClassMembership, User
 from backend.app.main import app
 
 
@@ -30,6 +30,10 @@ def test_student_registration_initializes_learning_business_flow():
         assert data["token_type"] == "bearer"
         assert data["user"]["username"] == username
         assert data["user"]["role"] == "STUDENT"
+        assert data["business_context"]["state"] == "NO_CLASS"
+        assert {
+            item["course_name"] for item in data["business_context"]["personal_courses"]
+        } >= {"机器学习", "Python 程序设计", "数据结构"}
 
         headers = {"Authorization": f"Bearer {data['access_token']}"}
         context = client.get("/api/v1/student/learning-context", headers=headers)
@@ -39,11 +43,24 @@ def test_student_registration_initializes_learning_business_flow():
         assert context_data["student"]["class_id"] is None
         assert context_data["student"]["class_name"] == "未加入班级"
         assert context_data["student"]["state"] == "NO_CLASS"
-        assert context_data["courses"] == []
+        course_names = {course["course_name"] for course in context_data["courses"]}
+        assert course_names >= {"机器学习", "Python 程序设计", "数据结构"}
+        assert all(course["teaching_assignment_id"] for course in context_data["courses"])
 
         tasks = client.get("/api/v1/student/tasks", headers=headers)
         assert tasks.status_code == 200
-        assert tasks.json()["data"] == []
+        assert tasks.json()["data"]
+        bootstrap_tasks = [
+            item for item in tasks.json()["data"] if item["assignment_mode"] == "PROFILE_BOOTSTRAP"
+        ]
+        assert {item["course_name"] for item in bootstrap_tasks} >= {"机器学习", "Python 程序设计", "数据结构"}
+
+        profile = client.get("/api/v1/student/profile", params={"course_id": "course_ds_001"}, headers=headers)
+        assert profile.status_code == 200
+        profile_data = profile.json()["data"]
+        assert profile_data["profile_status"] == "EMPTY"
+        assert profile_data["knowledge_states"] == []
+        assert profile_data["bootstrap_assessment"]["assignment_id"] == "assign_bootstrap_ds_profile_001"
 
         daily_tasks = client.get("/api/v1/student/daily-tasks", headers=headers)
         assert daily_tasks.status_code == 200
@@ -69,6 +86,12 @@ def test_student_registration_initializes_learning_business_flow():
             )
         )
         assert membership is None
+        assert db.scalar(
+            select(LearnerProfileSnapshot).where(LearnerProfileSnapshot.student_id == user.id)
+        ) is None
+        assert db.scalar(
+            select(LearnerKnowledgeState).where(LearnerKnowledgeState.student_id == user.id)
+        ) is None
     finally:
         db.close()
 

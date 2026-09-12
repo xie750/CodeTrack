@@ -5,6 +5,23 @@ export type ApiResponse<T> = { data: T; meta: ApiMeta };
 export type ApiErrorBody = { error: { code: string; message: string; details: Record<string, unknown> }; meta: ApiMeta };
 export type ApiErrorKind = "network" | "server" | "auth" | "forbidden" | "bad_response" | "request";
 
+export type AuthBusinessContext = {
+  state?: "NO_CLASS" | "CLASS_BOUND" | string;
+  class_id?: string | null;
+  personal_class_context_id?: string;
+  personal_courses?: Array<{
+    course_id: string;
+    course_name: string;
+    teaching_assignment_id?: string | null;
+  }>;
+  practice_project_count?: number;
+  term?: string;
+  courses?: Array<{
+    course_id: string;
+    course_name: string;
+  }>;
+};
+
 export type AdminAiUsagePayload = {
   filters: {
     range: string;
@@ -322,10 +339,28 @@ export type StudentInterventionCenter = {
 };
 
 export type StudentProfile = {
+  profile_status?: "EMPTY" | "INITIAL" | "READY" | string;
+  profile_confidence?: "NONE" | "LOW" | "MEDIUM" | "HIGH" | string;
+  profile_evidence_note?: string;
+  bootstrap_assessment?: {
+    assignment_id: string;
+    task_id: string;
+    course_id: string;
+    course_name: string;
+    class_id: string;
+    title: string;
+    description: string;
+    estimated_minutes: number;
+    question_count: number;
+    knowledge_points: string[];
+    status: string;
+    action_label: string;
+    confidence_after_submit: string;
+  } | null;
   student: {
     id: string;
     name: string;
-    class_id: string;
+    class_id: string | null;
     class_name: string;
   };
   course: {
@@ -986,7 +1021,8 @@ export type GeneratedResourceType =
   | "MIND_MAP"
   | "PRACTICE_SET"
   | "KNOWLEDGE_CARD"
-  | "PODCAST_SCRIPT";
+  | "PODCAST_SCRIPT"
+  | "AI_CLASSROOM";
 
 export type GeneratedResource = {
   id: string;
@@ -1046,6 +1082,26 @@ export type GeneratedResource = {
   created_at: string | null;
   updated_at: string | null;
   saved_at: string | null;
+};
+
+export type OpenMaicClassroomExport = {
+  schema: "codetrack.openmaic.classroom.export.v1" | string;
+  runtime: "openmaic" | string;
+  resource: {
+    id: string;
+    title: string;
+    summary: string;
+    course_id: string;
+    knowledge_point: string;
+    created_at?: string | null;
+    updated_at?: string | null;
+  };
+  stage: Record<string, unknown>;
+  scenes: Array<Record<string, unknown>>;
+  material: Record<string, unknown>;
+  citations: GeneratedResourceCitation[];
+  learnerContext: Record<string, unknown>;
+  metadata: Record<string, unknown>;
 };
 
 export type StudentResourceFolder = {
@@ -1677,6 +1733,7 @@ export const api = {
       token_type: string;
       expires_in: number;
       user: AuthUser;
+      business_context?: AuthBusinessContext;
     }>("/api/v1/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1949,6 +2006,10 @@ export const api = {
     const suffix = params.toString() ? `?${params.toString()}` : "";
     return cachedGet<{ items: GeneratedResource[] }>(`/api/v1/student/resources/generated${suffix}`, 15_000);
   },
+  getGeneratedResource: (resourceId: string) =>
+    cachedGet<GeneratedResource>(`/api/v1/student/resources/${encodeURIComponent(resourceId)}`, 10_000),
+  getOpenMaicClassroomExport: (resourceId: string) =>
+    request<OpenMaicClassroomExport>(`/api/v1/student/resources/${encodeURIComponent(resourceId)}/openmaic-export`),
   listStudentResourceFolders: () =>
     cachedGet<{ items: StudentResourceFolder[] }>("/api/v1/student/resources/folders", 30_000),
   createStudentResourceFolder: async (name: string) => {

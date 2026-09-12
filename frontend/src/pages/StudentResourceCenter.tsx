@@ -32,7 +32,6 @@ import { authHeaders } from "../authSession";
 import AIContentDisclosure from "../components/AIContentDisclosure";
 import GeneratedResourcePreviewModal from "../components/GeneratedResourcePreviewModal";
 import { StudentInlineNotice, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
-import { readAIClassroomResources, type AIClassroomResource } from "../features/ai-classroom/classroomResourceStore";
 
 type ResourceType = "AI 生成" | "AI 讲解";
 type ResourceFolder = string;
@@ -66,7 +65,7 @@ type AIClassroomResourceItem = {
   summary: string;
   collectedAt: string;
   tags: string[];
-  resource: AIClassroomResource;
+  resource: GeneratedResource;
 };
 
 type ResourceListItem = GeneratedResourceItem | AIClassroomResourceItem;
@@ -79,6 +78,7 @@ const sortOrderOptions: SortOrder[] = ["降序", "升序"];
 const pageSizeOptions = [6, 12, 24];
 
 function generatedResourceIcon(resource: GeneratedResource) {
+  if (resource.resource_type === "AI_CLASSROOM") return <MonitorPlay size={24} />;
   if (resource.resource_type === "PPT") return <Presentation size={24} />;
   if (resource.resource_type === "MIND_MAP") return <Waypoints size={24} />;
   if (resource.resource_type === "PRACTICE_SET") return <FileQuestion size={24} />;
@@ -96,14 +96,18 @@ function generatedResourceMetric(resource: GeneratedResource) {
   return { value: resource.item_count || 1, label: "节内容" };
 }
 
-function classroomResourceMetric(resource: AIClassroomResource) {
+function classroomResourceMetric(resource: GeneratedResource) {
+  const scenes = Array.isArray(resource.render_payload.scenes) ? resource.render_payload.scenes : [];
   return {
-    value: resource.classroom.scenes.reduce((total, scene) => total + scene.actions.length, 0),
+    value: scenes.reduce((total, scene) => total + (Array.isArray((scene as { actions?: unknown[] }).actions) ? ((scene as { actions?: unknown[] }).actions ?? []).length : 0), 0),
     label: "个动作"
   };
 }
 
-function generatedToResource(resource: GeneratedResource): GeneratedResourceItem {
+function generatedToResource(resource: GeneratedResource): GeneratedResourceItem | AIClassroomResourceItem {
+  if (resource.resource_type === "AI_CLASSROOM") {
+    return classroomToResource(resource);
+  }
   return {
     kind: "generated",
     id: resource.id,
@@ -186,7 +190,6 @@ export default function StudentResourceCenter() {
   const [jumpPage, setJumpPage] = useState("1");
   const [folderOverrides, setFolderOverrides] = useState<Record<string, ResourceFolder>>({});
   const [generatedResources, setGeneratedResources] = useState<GeneratedResource[]>([]);
-  const [classroomResources, setClassroomResources] = useState<AIClassroomResource[]>(() => readAIClassroomResources());
   const [resourcesLoading, setResourcesLoading] = useState(true);
   const [generatedError, setGeneratedError] = useState<string | null>(null);
   const [generatedErrorDetail, setGeneratedErrorDetail] = useState<string | null>(null);
@@ -200,7 +203,6 @@ export default function StudentResourceCenter() {
     let alive = true;
     setResourcesLoading(true);
     setGeneratedResources([]);
-    setClassroomResources(readAIClassroomResources());
     setGeneratedError(null);
     setGeneratedErrorDetail(null);
     api.listGeneratedResources()
@@ -224,12 +226,12 @@ export default function StudentResourceCenter() {
   useEffect(() => {
     const focusedResourceId = new URLSearchParams(location.search).get("resource");
     if (!focusedResourceId) return;
-    if (readAIClassroomResources().some((item) => item.id === focusedResourceId)) {
+    if (generatedResources.some((item) => item.id === focusedResourceId && item.resource_type === "AI_CLASSROOM")) {
       setActiveFolder("AI讲解课堂");
       setCurrentPage(1);
       setActionNotice("已定位到刚保存的 AI讲解课堂资源。");
     }
-  }, [location.search]);
+  }, [generatedResources, location.search]);
 
   useEffect(() => {
     let alive = true;
@@ -247,7 +249,6 @@ export default function StudentResourceCenter() {
   }, []);
 
   const generatedItems = useMemo(() => generatedResources.map(generatedToResource), [generatedResources]);
-  const classroomItems = useMemo(() => classroomResources.map(classroomToResource), [classroomResources]);
 
   const folderOptions = useMemo<ResourceFolder[]>(() => {
     const folders = [...defaultFolderOptions];
@@ -260,11 +261,11 @@ export default function StudentResourceCenter() {
   }, [customFolders]);
 
   const allItems = useMemo<ResourceListItem[]>(() => {
-    return [...classroomItems, ...generatedItems].map((item) => ({
+    return generatedItems.map((item) => ({
       ...item,
       folder: folderOverrides[item.id] ?? item.folder
     }));
-  }, [classroomItems, folderOverrides, generatedItems]);
+  }, [folderOverrides, generatedItems]);
 
   const allTags = useMemo(() => {
     return ["全部", ...Array.from(new Set(allItems.flatMap((item) => item.tags))).slice(0, 10)];
@@ -394,7 +395,7 @@ export default function StudentResourceCenter() {
     navigate(`/self-study/library/practice/${encodeURIComponent(resource.id)}`);
   }
 
-  function openAIClassroom(resource: AIClassroomResource) {
+  function openAIClassroom(resource: GeneratedResource) {
     navigate(`/self-study/library/classroom/${encodeURIComponent(resource.id)}`);
   }
 
@@ -569,9 +570,9 @@ export default function StudentResourceCenter() {
                         <AIContentDisclosure
                           compact
                           interactive={false}
-                          confidence={item.kind === "ai_classroom" ? item.resource.confidence : item.resource.confidence}
+                          confidence={item.resource.confidence}
                           sourceLabel={item.kind === "ai_classroom" ? "上传资料、输入内容与学习画像" : (item.resource.citations ?? []).length ? "课程知识库与引用资料" : "AI 生成资源"}
-                          citationsCount={item.kind === "ai_classroom" ? item.resource.classroom.citations.length : (item.resource.citations ?? []).length}
+                          citationsCount={(item.resource.citations ?? []).length}
                         />
                       </div>
                       <p>{item.summary}</p>
@@ -709,8 +710,9 @@ function FilterSelect({
   );
 }
 
-function classroomToResource(resource: AIClassroomResource): AIClassroomResourceItem {
-  const actionCount = resource.classroom.scenes.reduce((total, scene) => total + scene.actions.length, 0);
+function classroomToResource(resource: GeneratedResource): AIClassroomResourceItem {
+  const scenes = Array.isArray(resource.render_payload.scenes) ? resource.render_payload.scenes : [];
+  const actionCount = scenes.reduce((total, scene) => total + (Array.isArray((scene as { actions?: unknown[] }).actions) ? ((scene as { actions?: unknown[] }).actions ?? []).length : 0), 0);
   return {
     kind: "ai_classroom",
     id: resource.id,
@@ -720,11 +722,11 @@ function classroomToResource(resource: AIClassroomResource): AIClassroomResource
     source: "AI 讲解",
     domain: "AI 助学",
     summary: resource.summary,
-    collectedAt: resource.savedAt,
+    collectedAt: resource.saved_at || resource.created_at || "",
     tags: [
       "AI讲解课堂",
-      resource.knowledgePoint || "自主学习",
-      `${resource.classroom.scenes.length} 个场景`,
+      resource.knowledge_point || "自主学习",
+      `${scenes.length} 个场景`,
       `${actionCount} 个动作`
     ],
     resource

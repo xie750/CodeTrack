@@ -547,6 +547,41 @@ def test_student_can_generate_save_and_download_generic_resources(monkeypatch, r
         assert len(downloaded.content) > min_size
 
 
+def test_student_ai_classroom_exports_openmaic_contract(monkeypatch):
+    monkeypatch.setenv("CODETRACK_MODEL_API_KEY", "")
+    monkeypatch.setenv("CODETRACK_MODEL_NAME", "")
+    monkeypatch.setenv("CODETRACK_MODEL_GATEWAY_URL", "")
+    get_settings.cache_clear()
+
+    with TestClient(app) as client:
+        generated = client.post(
+            "/api/v1/student/resources/generate",
+            headers=STUDENT,
+            json={
+                "course_id": "course_arch_001",
+                "resource_type": "AI_CLASSROOM",
+                "message": "帮我生成一节机器学习中过拟合与正则化的AI讲解课堂",
+            },
+        )
+        assert generated.status_code == 200
+        resource = generated.json()["data"]["resource"]
+        assert resource["resource_type"] == "AI_CLASSROOM"
+        assert resource["saved_to_resource_center"] is True
+
+        exported = client.get(f"/api/v1/student/resources/{resource['id']}/openmaic-export", headers=STUDENT)
+        assert exported.status_code == 200
+        payload = exported.json()["data"]
+        assert payload["schema"] == "codetrack.openmaic.classroom.export.v1"
+        assert payload["runtime"] == "openmaic"
+        assert payload["resource"]["id"] == resource["id"]
+        assert payload["resource"]["title"] == resource["title"]
+        assert payload["stage"]["id"]
+        assert payload["scenes"]
+        assert payload["learnerContext"]["student_id"] == "user_student_001"
+        assert payload["metadata"]["source"] == "codetrack_resource_center"
+        assert payload["metadata"]["resource_center_entry_required"] is True
+
+
 def test_generated_practice_resource_auto_saves_and_submits_to_profile(monkeypatch):
     monkeypatch.setenv("CODETRACK_MODEL_API_KEY", "")
     monkeypatch.setenv("CODETRACK_MODEL_NAME", "")

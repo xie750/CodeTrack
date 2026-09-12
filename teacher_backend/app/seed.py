@@ -76,7 +76,7 @@ def reset_initial_teacher_account(db: Session) -> None:
 
 
 def seed_database(db: Session) -> None:
-    if db.scalar(select(User.id).limit(1)):
+    if db.scalar(select(User.id).where(User.role == "teacher").limit(1)):
         reset_initial_teacher_account(db)
         db.commit()
         return

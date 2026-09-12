@@ -8,7 +8,11 @@ from backend.app.core.database import SessionLocal
 from backend.app.main import app
 from backend.app.models import (
     ExecutionRun,
+    CapabilityEvidence,
+    Diagnosis,
+    DiagnosisReview,
     Grade,
+    HintRecord,
     IdempotencyRecord,
     Submission,
     SubmissionVersion,
@@ -17,6 +21,7 @@ from backend.app.models import (
     TaskAssignment,
     TeacherFeedback,
     TestCase as DbTestCase,
+    TestResult,
 )
 import backend.app.api.tasks as tasks_api
 from backend.app.services.submissions import sync_published_task_progress
@@ -38,11 +43,31 @@ def _cleanup_task(task_id: str) -> None:
         execution_ids = list(
             db.scalars(select(ExecutionRun.id).where(ExecutionRun.submission_version_id.in_(version_ids))).all()
         ) if version_ids else []
+        diagnosis_ids = list(
+            db.scalars(select(Diagnosis.id).where(Diagnosis.submission_version_id.in_(version_ids))).all()
+        ) if version_ids else []
         if submission_ids:
             db.execute(delete(Grade).where(Grade.submission_id.in_(submission_ids)))
             db.execute(delete(TeacherFeedback).where(TeacherFeedback.submission_id.in_(submission_ids)))
             db.execute(delete(IdempotencyRecord).where(IdempotencyRecord.submission_id.in_(submission_ids)))
+            db.query(StudentTaskProgress).filter(StudentTaskProgress.latest_submission_id.in_(submission_ids)).update(
+                {"latest_submission_id": None},
+                synchronize_session=False,
+            )
+        if version_ids:
+            db.execute(delete(IdempotencyRecord).where(IdempotencyRecord.version_id.in_(version_ids)))
+            db.query(StudentTaskProgress).filter(StudentTaskProgress.latest_version_id.in_(version_ids)).update(
+                {"latest_version_id": None},
+                synchronize_session=False,
+            )
+        if diagnosis_ids:
+            db.execute(delete(HintRecord).where(HintRecord.diagnosis_id.in_(diagnosis_ids)))
+            db.execute(delete(DiagnosisReview).where(DiagnosisReview.diagnosis_id.in_(diagnosis_ids)))
+            db.execute(delete(Diagnosis).where(Diagnosis.id.in_(diagnosis_ids)))
+        if version_ids:
+            db.execute(delete(CapabilityEvidence).where(CapabilityEvidence.submission_version_id.in_(version_ids)))
         if execution_ids:
+            db.execute(delete(TestResult).where(TestResult.execution_run_id.in_(execution_ids)))
             db.execute(delete(ExecutionRun).where(ExecutionRun.id.in_(execution_ids)))
         if version_ids:
             db.execute(delete(SubmissionVersion).where(SubmissionVersion.id.in_(version_ids)))

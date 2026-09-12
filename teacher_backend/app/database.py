@@ -7,7 +7,10 @@ from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 TEACHER_BACKEND_DIR = Path(__file__).resolve().parents[1]
 DATABASE_PATH = TEACHER_BACKEND_DIR / "codetrack.db"
-DATABASE_URL = os.getenv("CODETRACK_DATABASE_URL", f"sqlite:///{DATABASE_PATH.as_posix()}")
+DATABASE_URL = os.getenv(
+    "CODETRACK_TEACHER_DATABASE_URL",
+    os.getenv("CODETRACK_DATABASE_URL", f"sqlite:///{DATABASE_PATH.as_posix()}"),
+)
 
 
 class Base(DeclarativeBase):
