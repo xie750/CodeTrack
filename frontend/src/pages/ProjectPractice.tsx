@@ -184,6 +184,31 @@ const fallbackHome: PracticeProjectHome = {
   proof_items: fallbackProofItems
 };
 
+const emptyPracticeHome: PracticeProjectHome = {
+  projects: [],
+  recommended_project_id: null,
+  research_recommendation: null,
+  stats: {
+    project_count: 0,
+    in_progress_count: 0,
+    completed_count: 0,
+    weekly_hours: 0,
+    project_delta: 0,
+    completed_delta: 0,
+    weekly_hours_delta: 0
+  },
+  activities: [],
+  path_steps: fallbackPathSteps,
+  readiness: {
+    status: "PREPARING",
+    title: "科研项目实践尚未开启",
+    description: "当课程任务、自主学习和资料沉淀产生足够画像信号后，系统会自动生成最适合的科研课题。",
+    primary_action_label: "生成科研课题",
+    secondary_action_label: "先完成课程任务"
+  },
+  proof_items: fallbackProofItems
+};
+
 const researchBriefs: Record<string, ResearchBrief> = {
   "sales-cleaning": {
     profileFit: "画像显示你在机器学习模型评估、实验记录和图表解释上已有连续证据，适合进入计算机视觉方向科研训练。",
@@ -481,13 +506,13 @@ export default function ProjectPractice() {
     };
   }, [projectId]);
 
-  const pageData = homeData ?? fallbackHome;
+  const pageData = homeData ?? emptyPracticeHome;
   const hasProjects = pageData.projects.length > 0;
   const recommendedProjectId = pageData.recommended_project_id ?? pageData.projects[0]?.id ?? null;
   const recommendedProject = pageData.projects.find((project) => project.id === recommendedProjectId) ?? pageData.projects[0];
   const recommendedBrief = recommendedProject ? researchBriefFor(recommendedProject) : fallbackBrief;
   const researchRecommendation = pageData.research_recommendation;
-  const researchSignals = researchRecommendation?.signals?.length ? researchRecommendation.signals : fallbackHome.research_recommendation?.signals ?? [];
+  const researchSignals = researchRecommendation?.signals?.length ? researchRecommendation.signals : [];
   const rankedProjects = sortedRecommendedProjects(pageData.projects, recommendedProjectId);
 
   async function startFirstProject() {
@@ -526,8 +551,7 @@ export default function ProjectPractice() {
   }
 
   if (projectId) {
-    const fallbackProject = fallbackProjects.find((project) => project.id === projectId) ?? fallbackProjects[0];
-    return <ProjectPracticeDetail fallbackProject={fallbackProject} projectId={projectId} />;
+    return <ProjectPracticeDetail projectId={projectId} />;
   }
 
   return (
@@ -719,10 +743,8 @@ export default function ProjectPractice() {
 }
 
 function ProjectPracticeDetail({
-  fallbackProject,
   projectId
 }: {
-  fallbackProject: PracticeProjectSummary;
   projectId: string;
 }) {
   const navigate = useNavigate();
@@ -775,19 +797,46 @@ function ProjectPracticeDetail({
     };
   }, [projectId]);
 
-  const pageData = detail ?? fallbackDetail(fallbackProject);
-  const project = pageData.project;
-  const brief = researchBriefFor(project, pageData.research_brief);
-  const latestSubmits = pageData.submissions.length > 0 ? pageData.submissions : fallbackDetail(project).submissions;
-  const uploadedMaterials: PracticeProjectMaterial[] = pageData.materials ?? [];
-  const activityRows = useMemo(
-    () => (pageData.activities.length > 0 ? pageData.activities : fallbackActivities.filter((activity) => activity.project_id === project.id)),
-    [pageData.activities, project.id]
-  );
   const selectedPapers = useMemo(
     () => (literatureResult?.papers ?? []).filter((paper) => selectedPaperIds.includes(paper.id)),
     [literatureResult?.papers, selectedPaperIds]
   );
+
+  if (!detail) {
+    return (
+      <main className="project-detail-page">
+        <div className={`practice-data-banner ${error ? "error" : ""}`}>
+          {loading ? <Loader2 className="practice-spin-icon" size={15} /> : <AlertCircle size={15} />}
+          <span>{loading ? "正在读取科研项目详情..." : error ?? "科研项目实践不存在或当前账号无权访问。"}</span>
+        </div>
+        <section className="practice-initial-shell" aria-label="科研项目实践详情空态">
+          <div className="practice-initial-panel">
+            <span className="practice-initial-icon"><Target size={24} /></span>
+            <span className="practice-initial-kicker">账号隔离已开启</span>
+            <h2>当前账号暂无该科研项目记录</h2>
+            <p>新注册账号需要先从项目实践首页生成自己的科研课题，旧演示账号的项目、材料和提交记录不会在这里展示。</p>
+            <div className="practice-initial-actions">
+              <button type="button" onClick={() => navigate("/project-practice")}>
+                <ArrowRight size={18} />
+                返回项目实践
+              </button>
+              <button type="button" className="secondary" onClick={() => navigate("/courses")}>
+                <CirclePlay size={18} />
+                先完成课程任务
+              </button>
+            </div>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  const pageData = detail;
+  const project = pageData.project;
+  const brief = researchBriefFor(project, pageData.research_brief);
+  const latestSubmits = pageData.submissions;
+  const uploadedMaterials: PracticeProjectMaterial[] = pageData.materials ?? [];
+  const activityRows = pageData.activities;
 
   function toggleMaterial(item: string) {
     setSelectedMaterials((current) => {

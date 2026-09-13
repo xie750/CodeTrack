@@ -13,6 +13,7 @@ import { Stage as ClassroomStage } from '@/components/stage';
 import { MediaStageProvider } from '@/lib/contexts/media-stage-context';
 import { ThemeProvider } from '@/lib/hooks/use-theme';
 import { useStageStore } from '@/lib/store';
+import { useSettingsStore } from '@/lib/store/settings';
 import type { Scene, Stage } from '@/lib/types/stage';
 import type { Action } from '@/lib/types/action';
 import type { PPTElement, Slide } from '@openmaic/dsl';
@@ -298,6 +299,17 @@ function payloadFromWindowName(): CodeTrackExport | null {
   }
 }
 
+function configureCodeTrackPlaybackDefaults() {
+  const settings = useSettingsStore.getState();
+  settings.setTTSProviderConfig('browser-native-tts', { enabled: true });
+  settings.setTTSProvider('browser-native-tts');
+  settings.setTTSEnabled(true);
+  settings.setTTSMuted(false);
+  if (settings.ttsVolume < 0.2) {
+    settings.setTTSVolume(1);
+  }
+}
+
 function applyExportToStore(payload: CodeTrackExport): string {
   const stage = normalizeStage(payload);
   const scenes = Array.isArray(payload.scenes)
@@ -309,6 +321,7 @@ function applyExportToStore(payload: CodeTrackExport): string {
   }
 
   const store = useStageStore.getState();
+  configureCodeTrackPlaybackDefaults();
   store.setStage(stage);
   store.setScenes(scenes);
   store.setMode('playback');

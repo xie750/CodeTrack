@@ -4,8 +4,16 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from backend.app.core.database import SessionLocal
-from backend.app.models import LearnerKnowledgeState, LearnerProfileSnapshot, StudentClassMembership, User
+from backend.app.models import (
+    LearnerKnowledgeState,
+    LearnerProfileSnapshot,
+    PracticeProject,
+    PracticeProjectEnrollment,
+    StudentClassMembership,
+    User,
+)
 from backend.app.main import app
+from backend.app.services.practice_projects import REGISTRATION_INIT_SUMMARY
 
 
 def unique_username(prefix: str) -> str:
@@ -72,7 +80,11 @@ def test_student_registration_initializes_learning_business_flow():
 
         practice_projects = client.get("/api/v1/student/practice-projects", headers=headers)
         assert practice_projects.status_code == 200
-        assert len(practice_projects.json()["data"]["projects"]) >= 1
+        practice_data = practice_projects.json()["data"]
+        assert practice_data["projects"] == []
+        assert practice_data["recommended_project_id"] is None
+        assert practice_data["research_recommendation"] is None
+        assert practice_data["stats"]["project_count"] == 0
 
     db = SessionLocal()
     try:
@@ -181,7 +193,10 @@ def test_registered_students_do_not_share_personal_learning_records():
 
         first_projects = client.get("/api/v1/student/practice-projects", headers=first_headers)
         assert first_projects.status_code == 200
-        project_id = first_projects.json()["data"]["projects"][0]["id"]
+        assert first_projects.json()["data"]["projects"] == []
+        started = client.post("/api/v1/student/practice-projects/start-first", headers=first_headers)
+        assert started.status_code == 201
+        project_id = started.json()["data"]["detail"]["project"]["id"]
         material = client.post(
             f"/api/v1/student/practice-projects/{project_id}/materials",
             headers=first_headers,
@@ -201,11 +216,66 @@ def test_registered_students_do_not_share_personal_learning_records():
             headers=second_headers,
         )
         assert first_detail.status_code == 200
-        assert second_detail.status_code == 200
+        assert second_detail.status_code == 404
         assert first_detail.json()["data"]["materials"][0]["title"] == "甲的私有科研材料"
-        assert second_detail.json()["data"]["materials"] == []
-        assert second_detail.json()["data"]["submissions"] == []
-        assert second_detail.json()["data"]["activities"] == []
+
+
+def test_legacy_registration_practice_placeholders_are_hidden_until_started():
+    username = unique_username("legacy_scope")
+    with TestClient(app) as client:
+        registered = client.post(
+            "/api/v1/auth/register",
+            json={
+                "username": username,
+                "password": "codetrack123",
+                "display_name": "旧占位隔离",
+                "role": "STUDENT",
+            },
+        )
+        assert registered.status_code == 201
+        headers = {"Authorization": f"Bearer {registered.json()['data']['access_token']}"}
+
+        db = SessionLocal()
+        try:
+            user = db.scalar(select(User).where(User.username == username))
+            project = db.scalar(
+                select(PracticeProject)
+                .where(PracticeProject.status == "ACTIVE")
+                .order_by(PracticeProject.sort_order.asc(), PracticeProject.id.asc())
+            )
+            assert user is not None
+            assert project is not None
+            db.add(
+                PracticeProjectEnrollment(
+                    project_id=project.id,
+                    student_id=user.id,
+                    class_id="class_se_001",
+                    status="IN_PROGRESS",
+                    progress=8,
+                    completed_stage_count=0,
+                    experiment_record_count=0,
+                    submission_count=0,
+                    weekly_hours=0,
+                    last_activity_summary=REGISTRATION_INIT_SUMMARY,
+                )
+            )
+            db.commit()
+            project_id = project.id
+        finally:
+            db.close()
+
+        home = client.get("/api/v1/student/practice-projects", headers=headers)
+        assert home.status_code == 200
+        assert home.json()["data"]["projects"] == []
+
+        detail = client.get(f"/api/v1/student/practice-projects/{project_id}", headers=headers)
+        assert detail.status_code == 404
+
+        started = client.post("/api/v1/student/practice-projects/start-first", headers=headers)
+        assert started.status_code == 201
+        started_project = started.json()["data"]["detail"]["project"]
+        assert started_project["id"] == project_id
+        assert started_project["status"] == "IN_PROGRESS"
 
 
 def test_teacher_registration_returns_teacher_token_and_course_scope():

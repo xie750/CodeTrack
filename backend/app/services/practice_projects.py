@@ -4,7 +4,7 @@ from pathlib import Path
 from urllib.parse import quote_plus
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import and_, func, not_, select
 from sqlalchemy.orm import Session
 
 from backend.app.core.api_response import ApiError
@@ -54,6 +54,8 @@ MARKET_RESEARCH_WORKFLOW = [
     "检查引用覆盖、结构完整性、学术诚信和格式一致性",
     "把写作产物保存为阶段材料，再进入成果提交",
 ]
+
+REGISTRATION_INIT_SUMMARY = "注册初始化，等待科研实践行为产生记录。"
 
 RESEARCH_BRIEF_LIBRARY = {
     "sales-cleaning": {
@@ -836,6 +838,13 @@ def research_recommendation_for_project(projects: list[dict], recommended_projec
 
 
 def project_scope_query(student_id: str, class_id: str):
+    initialized_placeholder = and_(
+        func.coalesce(PracticeProjectEnrollment.last_activity_summary, "") == REGISTRATION_INIT_SUMMARY,
+        func.coalesce(PracticeProjectEnrollment.completed_stage_count, 0) == 0,
+        func.coalesce(PracticeProjectEnrollment.experiment_record_count, 0) == 0,
+        func.coalesce(PracticeProjectEnrollment.submission_count, 0) == 0,
+        func.coalesce(PracticeProjectEnrollment.weekly_hours, 0) == 0,
+    )
     return (
         select(PracticeProject, PracticeProjectEnrollment, Course)
         .join(Course, PracticeProject.course_id == Course.id)
@@ -851,12 +860,22 @@ def project_scope_query(student_id: str, class_id: str):
             & (Enrollment.user_id == student_id)
             & (Enrollment.role == "STUDENT"),
         )
-        .where(PracticeProject.status == "ACTIVE")
+        .where(
+            PracticeProject.status == "ACTIVE",
+            not_(initialized_placeholder),
+        )
         .order_by(PracticeProject.sort_order.asc(), PracticeProject.id.asc())
     )
 
 
 def starter_project_query(student_id: str):
+    initialized_placeholder = and_(
+        func.coalesce(PracticeProjectEnrollment.last_activity_summary, "") == REGISTRATION_INIT_SUMMARY,
+        func.coalesce(PracticeProjectEnrollment.completed_stage_count, 0) == 0,
+        func.coalesce(PracticeProjectEnrollment.experiment_record_count, 0) == 0,
+        func.coalesce(PracticeProjectEnrollment.submission_count, 0) == 0,
+        func.coalesce(PracticeProjectEnrollment.weekly_hours, 0) == 0,
+    )
     return (
         select(PracticeProject, Course)
         .join(Course, PracticeProject.course_id == Course.id)
@@ -869,7 +888,8 @@ def starter_project_query(student_id: str):
         .outerjoin(
             PracticeProjectEnrollment,
             (PracticeProjectEnrollment.project_id == PracticeProject.id)
-            & (PracticeProjectEnrollment.student_id == student_id),
+            & (PracticeProjectEnrollment.student_id == student_id)
+            & not_(initialized_placeholder),
         )
         .where(
             PracticeProject.status == "ACTIVE",
@@ -1069,21 +1089,40 @@ def start_first_practice_project(db: Session, student: User, class_id: str) -> d
 
     project, _ = row
     now = utc_now()
-    enrollment = PracticeProjectEnrollment(
-        project_id=project.id,
-        student_id=student.id,
-        class_id=class_id,
-        status="IN_PROGRESS",
-        progress=1,
-        completed_stage_count=0,
-        experiment_record_count=0,
-        submission_count=0,
-        weekly_hours=0,
-        last_activity_summary="开启第一个科研课题",
-        joined_at=now,
-        updated_at=now,
+    enrollment = db.scalar(
+        select(PracticeProjectEnrollment).where(
+            PracticeProjectEnrollment.project_id == project.id,
+            PracticeProjectEnrollment.student_id == student.id,
+            PracticeProjectEnrollment.last_activity_summary == REGISTRATION_INIT_SUMMARY,
+            PracticeProjectEnrollment.completed_stage_count == 0,
+            PracticeProjectEnrollment.experiment_record_count == 0,
+            PracticeProjectEnrollment.submission_count == 0,
+            PracticeProjectEnrollment.weekly_hours == 0,
+        )
     )
-    db.add(enrollment)
+    if enrollment is None:
+        enrollment = PracticeProjectEnrollment(
+            project_id=project.id,
+            student_id=student.id,
+            class_id=class_id,
+            status="IN_PROGRESS",
+            progress=1,
+            completed_stage_count=0,
+            experiment_record_count=0,
+            submission_count=0,
+            weekly_hours=0,
+            last_activity_summary="开启第一个科研课题",
+            joined_at=now,
+            updated_at=now,
+        )
+        db.add(enrollment)
+    else:
+        enrollment.class_id = class_id
+        enrollment.status = "IN_PROGRESS"
+        enrollment.progress = max(1, enrollment.progress)
+        enrollment.last_activity_summary = "开启第一个科研课题"
+        enrollment.joined_at = now
+        enrollment.updated_at = now
     activity = PracticeProjectActivity(
         id=prefixed_id("practice_activity"),
         project_id=project.id,

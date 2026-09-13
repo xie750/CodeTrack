@@ -141,7 +141,10 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
   if (isWorkspace) {
     content = (
       <>
-        <div className="student-direct-window student-workspace-direct" data-route={activeRouteGroup}>
+        <div
+          className={`student-direct-window student-workspace-direct${isClassroomWorkspace ? " student-classroom-direct" : ""}`}
+          data-route={activeRouteGroup}
+        >
           <StudentAppTopbar authUser={authUser} onLogout={onLogout} onNavigate={transitionTo} />
           <div className="workspace-route-stage" data-onboarding-id="tour-workspace-route" key={location.pathname}>
             <Routes location={location}>

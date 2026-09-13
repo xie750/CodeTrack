@@ -16,8 +16,6 @@ from backend.app.models import (
     Enrollment,
     LearnerKnowledgeState,
     LearnerProfileSnapshot,
-    PracticeProject,
-    PracticeProjectEnrollment,
     Recommendation,
     StudentDailyTask,
     StudentResourceFolder,
@@ -230,42 +228,6 @@ def _ensure_student_daily_task(db: Session, *, student_id: str) -> None:
         )
 
 
-def _ensure_practice_project_initial_state(db: Session, *, student_id: str, class_id: str) -> int:
-    projects = list(
-        db.scalars(
-            select(PracticeProject)
-            .where(PracticeProject.status == "ACTIVE")
-            .order_by(PracticeProject.sort_order.asc(), PracticeProject.id.asc())
-        ).all()
-    )
-    initialized_count = 0
-    for index, project in enumerate(projects):
-        exists = db.scalar(
-            select(PracticeProjectEnrollment).where(
-                PracticeProjectEnrollment.project_id == project.id,
-                PracticeProjectEnrollment.student_id == student_id,
-            )
-        )
-        if exists is not None:
-            continue
-        db.add(
-            PracticeProjectEnrollment(
-                project_id=project.id,
-                student_id=student_id,
-                class_id=class_id,
-                status="IN_PROGRESS" if index == 0 else "NOT_STARTED",
-                progress=8 if index == 0 else 0,
-                completed_stage_count=0,
-                experiment_record_count=0,
-                submission_count=0,
-                weekly_hours=0,
-                last_activity_summary="注册初始化，等待科研实践行为产生记录。",
-            )
-        )
-        initialized_count += 1
-    return initialized_count
-
-
 def _initialize_student_business_flow(db: Session, user: User) -> dict:
     courses = list(
         db.scalars(select(Course).where(Course.status == "ACTIVE").order_by(Course.id.asc())).all()
@@ -290,17 +252,12 @@ def _initialize_student_business_flow(db: Session, user: User) -> dict:
 
     _ensure_student_resource_folders(db, student_id=user.id)
     _ensure_student_daily_task(db, student_id=user.id)
-    practice_project_count = _ensure_practice_project_initial_state(
-        db,
-        student_id=user.id,
-        class_id=DEFAULT_PERSONAL_CLASS_ID,
-    )
     return {
         "state": "NO_CLASS",
         "class_id": None,
         "personal_class_context_id": DEFAULT_PERSONAL_CLASS_ID,
         "personal_courses": personal_courses,
-        "practice_project_count": practice_project_count,
+        "practice_project_count": 0,
     }
 
 

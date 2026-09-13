@@ -7363,7 +7363,7 @@ button.student-generated-thumb:hover {
 
 .openmaic-bridge-page {
   width: 100%;
-  min-height: calc(100vh - 74px);
+  min-height: calc(var(--app-viewport-height, 100vh) - var(--student-app-topbar-height, 0px));
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   color: #17243b;
@@ -7371,7 +7371,7 @@ button.student-generated-thumb:hover {
 }
 
 .openmaic-bridge-page.runtime-connected {
-  height: calc(100vh - 74px);
+  height: calc(var(--app-viewport-height, 100vh) - var(--student-app-topbar-height, 0px));
   overflow: hidden;
 }
 
@@ -7446,6 +7446,19 @@ button.student-generated-thumb:hover {
   background: #ffffff;
 }
 
+.student-classroom-direct .workspace-route-stage {
+  height: var(--app-viewport-height);
+  padding-top: var(--student-app-topbar-height);
+}
+
+.student-classroom-direct .openmaic-bridge-page {
+  min-height: 100%;
+}
+
+.student-classroom-direct .openmaic-bridge-page.runtime-connected {
+  height: 100%;
+}
+
 .openmaic-bridge-state {
   width: min(720px, calc(100% - 32px));
   min-height: 320px;
@@ -7502,7 +7515,11 @@ button.student-generated-thumb:hover {
 
 @media (max-width: 720px) {
   .openmaic-bridge-page.runtime-connected {
-    height: calc(100vh - 62px);
+    height: calc(var(--app-viewport-height, 100vh) - var(--student-app-topbar-height, 0px));
+  }
+
+  .student-classroom-direct .openmaic-bridge-page.runtime-connected {
+    height: 100%;
   }
 
   .openmaic-bridge-header {
