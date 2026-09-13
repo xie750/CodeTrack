@@ -62,6 +62,42 @@ type AdviceItem = {
   relatedKnowledgePoints: string[];
 };
 
+type ProfileBootstrapField = "direction" | "goal" | "habit";
+
+const profileBootstrapQuestions: Array<{
+  key: ProfileBootstrapField;
+  title: string;
+  prompt: string;
+  helper: string;
+  placeholder: string;
+  options: string[];
+}> = [
+  {
+    key: "direction",
+    title: "学习方向",
+    prompt: "你现在最想先摸清哪一类能力？",
+    helper: "可以点选，也可以直接输入 1/2/3/4。",
+    placeholder: "输入编号或补充你的方向，例如：机器学习概念",
+    options: ["Python 程序设计基础", "数据结构刷题", "机器学习核心概念", "还不确定，先做综合摸底"]
+  },
+  {
+    key: "goal",
+    title: "当前目标",
+    prompt: "这次摸底主要想帮你解决什么问题？",
+    helper: "这只影响题目侧重点，不会直接变成画像结论。",
+    placeholder: "输入编号或写一句目标，例如：准备完成课程作业",
+    options: ["找出应该从哪里开始学", "准备完成课程作业", "期末前查漏补缺", "验证最近自学效果"]
+  },
+  {
+    key: "habit",
+    title: "练习偏好",
+    prompt: "你希望这组摸底题以什么节奏进行？",
+    helper: "后续仍会用真实作答结果修正画像。",
+    placeholder: "输入编号或描述偏好，例如：解析详细一点",
+    options: ["题量短一点", "解析详细一点", "先基础后提高", "每天 20 分钟节奏"]
+  }
+];
+
 function clampScore(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
@@ -913,6 +949,8 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
     goal: "",
     habit: ""
   });
+  const [bootstrapStep, setBootstrapStep] = useState(0);
+  const [bootstrapChatInput, setBootstrapChatInput] = useState("");
   const [bootstrapLaunch, setBootstrapLaunch] = useState<{
     assignmentId: string;
     title: string;
@@ -1078,7 +1116,34 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
       ? `建议先完成「${bootstrap.title}」，约 ${bootstrap.estimated_minutes} 分钟，共 ${bootstrap.question_count} 题，覆盖 ${bootstrap.knowledge_points.slice(0, 3).join("、")}。提交后会生成低置信初始画像。`
       : "当前课程暂未配置画像摸底题，可以先进入自主学习保存一份学习产物，系统会据此逐步生成画像。";
     const openBootstrapDialog = () => {
-      if (bootstrap) setBootstrapDialogOpen(true);
+      if (!bootstrap) return;
+      const nextStep = profileBootstrapQuestions.findIndex((question) => !bootstrapDraft[question.key].trim());
+      setBootstrapStep(nextStep >= 0 ? nextStep : profileBootstrapQuestions.length - 1);
+      setBootstrapChatInput("");
+      setBootstrapDialogOpen(true);
+    };
+    const currentBootstrapQuestion = profileBootstrapQuestions[Math.min(bootstrapStep, profileBootstrapQuestions.length - 1)];
+    const answeredBootstrapCount = profileBootstrapQuestions.filter((question) => bootstrapDraft[question.key].trim()).length;
+    const bootstrapReady = answeredBootstrapCount === profileBootstrapQuestions.length;
+    const resolveBootstrapAnswer = (rawValue: string, question = currentBootstrapQuestion) => {
+      const value = rawValue.trim();
+      const optionNumber = Number(value);
+      if (Number.isInteger(optionNumber) && optionNumber >= 1 && optionNumber <= question.options.length) {
+        return question.options[optionNumber - 1];
+      }
+      return value;
+    };
+    const answerBootstrapQuestion = (rawValue: string) => {
+      const answer = resolveBootstrapAnswer(rawValue);
+      if (!answer) return;
+      setBootstrapDraft((draft) => ({ ...draft, [currentBootstrapQuestion.key]: answer }));
+      setBootstrapChatInput("");
+      setBootstrapStep((step) => Math.min(step + 1, profileBootstrapQuestions.length - 1));
+    };
+    const resetBootstrapDialog = () => {
+      setBootstrapDraft({ direction: "", goal: "", habit: "" });
+      setBootstrapStep(0);
+      setBootstrapChatInput("");
     };
     const submitBootstrapDialog = () => {
       if (!bootstrap) return;
@@ -1093,46 +1158,125 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
     };
     const bootstrapModal = bootstrapDialogOpen && bootstrap ? (
       <div className="behavior-modal-backdrop" role="presentation" onMouseDown={() => setBootstrapDialogOpen(false)}>
-        <article className="behavior-modal" role="dialog" aria-modal="true" aria-label="画像摸底前信息收集" onMouseDown={(event) => event.stopPropagation()}>
+        <article className="behavior-modal profile-bootstrap-modal" role="dialog" aria-modal="true" aria-label="画像摸底前信息收集" onMouseDown={(event) => event.stopPropagation()}>
           <div className="behavior-modal-head">
             <div>
-              <h2>先了解你的学习方向</h2>
-              <p>只问三个简短问题，用来调整摸底题侧重点；不会把这些回答直接当成画像结论。</p>
+              <h2>画像摸底助手</h2>
+              <p>先用三轮轻量对话了解你的方向，再生成一组可验证的摸底题。</p>
             </div>
             <button type="button" onClick={() => setBootstrapDialogOpen(false)} aria-label="关闭">
               <X size={18} />
             </button>
           </div>
-          <div className="goal-table">
-            <span>你更想先补哪类能力？</span>
-            <textarea
-              value={bootstrapDraft.direction}
-              onChange={(event) => setBootstrapDraft((draft) => ({ ...draft, direction: event.target.value }))}
-              placeholder="例如：Python 基础、数据结构刷题、机器学习概念、期末复习"
-              rows={3}
-              style={{ width: "100%", resize: "vertical" }}
-            />
-            <span>这次摸底想服务什么目标？</span>
-            <textarea
-              value={bootstrapDraft.goal}
-              onChange={(event) => setBootstrapDraft((draft) => ({ ...draft, goal: event.target.value }))}
-              placeholder="例如：想知道自己从哪里开始学、准备完成课程作业、查漏补缺"
-              rows={3}
-              style={{ width: "100%", resize: "vertical" }}
-            />
-            <span>你偏好的练习方式？</span>
-            <textarea
-              value={bootstrapDraft.habit}
-              onChange={(event) => setBootstrapDraft((draft) => ({ ...draft, habit: event.target.value }))}
-              placeholder="例如：题量少一点、解析详细一点、先基础后提高、每天 20 分钟"
-              rows={3}
-              style={{ width: "100%", resize: "vertical" }}
-            />
+          <div className="profile-bootstrap-progress" aria-label="画像摸底进度">
+            {profileBootstrapQuestions.map((question, index) => (
+              <button
+                type="button"
+                key={question.key}
+                className={`${bootstrapDraft[question.key].trim() ? "done" : ""} ${index === bootstrapStep ? "active" : ""}`}
+                onClick={() => {
+                  setBootstrapStep(index);
+                  setBootstrapChatInput("");
+                }}
+              >
+                <span>{index + 1}</span>
+                {question.title}
+              </button>
+            ))}
+          </div>
+          <div className="profile-bootstrap-chat" aria-live="polite">
+            <div className="profile-bootstrap-message assistant">
+              <span><Bot size={17} /></span>
+              <div>
+                <strong>我会先问 3 个问题。</strong>
+                <p>你的回答只用于调整摸底题，不会直接作为能力评价。你可以点快捷选项，也可以在输入框里填编号或自己的说法。</p>
+              </div>
+            </div>
+            {profileBootstrapQuestions.map((question, index) => {
+              const answer = bootstrapDraft[question.key].trim();
+              if (!answer) return null;
+              return (
+                <div className="profile-bootstrap-turn" key={question.key}>
+                  <div className="profile-bootstrap-message assistant compact">
+                    <span><Bot size={16} /></span>
+                    <div>
+                      <small>{question.title}</small>
+                      <p>{question.prompt}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="profile-bootstrap-message user"
+                    onClick={() => {
+                      setBootstrapStep(index);
+                      setBootstrapChatInput(answer);
+                    }}
+                    title="点击修改这条回答"
+                  >
+                    <span>{answer}</span>
+                  </button>
+                </div>
+              );
+            })}
+            {!bootstrapReady ? (
+              <div className="profile-bootstrap-current">
+                <div className="profile-bootstrap-message assistant">
+                  <span><Sparkles size={17} /></span>
+                  <div>
+                    <small>{currentBootstrapQuestion.title}</small>
+                    <strong>{currentBootstrapQuestion.prompt}</strong>
+                    <p>{currentBootstrapQuestion.helper}</p>
+                  </div>
+                </div>
+                <div className="profile-bootstrap-options" aria-label={`${currentBootstrapQuestion.title}快捷选项`}>
+                  {currentBootstrapQuestion.options.map((option, index) => (
+                    <button type="button" key={option} onClick={() => answerBootstrapQuestion(option)}>
+                      <kbd>{index + 1}</kbd>
+                      <span>{option}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="profile-bootstrap-input">
+                  <textarea
+                    value={bootstrapChatInput}
+                    onChange={(event) => setBootstrapChatInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        answerBootstrapQuestion(bootstrapChatInput);
+                      }
+                    }}
+                    placeholder={currentBootstrapQuestion.placeholder}
+                    rows={2}
+                  />
+                  <button type="button" onClick={() => answerBootstrapQuestion(bootstrapChatInput)} disabled={!bootstrapChatInput.trim()}>
+                    <ChevronRight size={18} />
+                    发送
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="profile-bootstrap-ready">
+                <div className="profile-bootstrap-message assistant">
+                  <span><ShieldCheck size={17} /></span>
+                  <div>
+                    <strong>已收集到摸底侧重点</strong>
+                    <p>下一步会根据这些回答生成题目。真正的初始画像仍以作答结果、引用证据和后续学习记录为准。</p>
+                  </div>
+                </div>
+                <div className="profile-bootstrap-summary">
+                  {profileBootstrapQuestions.map((question) => (
+                    <span key={question.key}><b>{question.title}</b>{bootstrapDraft[question.key]}</span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <div className="behavior-modal-foot">
-            <span>下一步会进入“正在构建练习题”页面，然后再开始作答。</span>
+            <span>已回答 {answeredBootstrapCount}/{profileBootstrapQuestions.length}，生成后进入摸底题作答页。</span>
+            <button type="button" onClick={resetBootstrapDialog}>重新填写</button>
             <button type="button" onClick={() => setBootstrapDialogOpen(false)}>稍后再说</button>
-            <button type="button" onClick={submitBootstrapDialog}>生成摸底题</button>
+            <button type="button" onClick={submitBootstrapDialog} disabled={!bootstrapReady}>生成摸底题</button>
           </div>
         </article>
       </div>

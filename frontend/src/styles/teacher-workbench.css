@@ -6637,17 +6637,17 @@ button.student-resource-thumb {
 .behavior-modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 120;
+  z-index: 2600;
   display: grid;
   place-items: center;
   box-sizing: border-box;
-  width: 100vw;
-  height: 100vh;
-  height: 100dvh;
+  width: var(--app-viewport-width, 100vw);
+  height: var(--app-viewport-height, 100vh);
+  min-height: var(--app-viewport-height, 100dvh);
   padding: 18px 24px;
   overflow: auto;
-  background: rgba(14, 28, 51, 0.42);
-  backdrop-filter: blur(8px);
+  background: rgba(15, 23, 42, 0.46);
+  backdrop-filter: none;
 }
 
 .behavior-modal {
@@ -6664,7 +6664,7 @@ button.student-resource-thumb {
   border: 1px solid rgba(218, 228, 243, 0.9);
   border-radius: 8px;
   background: #ffffff;
-  box-shadow: 0 30px 80px rgba(11, 27, 55, 0.28);
+  box-shadow: 0 28px 70px rgba(15, 23, 42, 0.24);
 }
 
 .behavior-modal-head {
@@ -6757,6 +6757,305 @@ button.student-resource-thumb {
   border-radius: 999px;
   background: #f4f7fb;
   overflow-wrap: anywhere;
+}
+
+.profile-bootstrap-modal {
+  width: min(760px, calc(100vw - 48px));
+  grid-template-rows: auto auto minmax(300px, auto) auto;
+  gap: 14px;
+  background: #ffffff;
+}
+
+.profile-bootstrap-modal .behavior-modal-head {
+  padding-bottom: 12px;
+  border-bottom: 1px solid #edf2f8;
+}
+
+.profile-bootstrap-modal .behavior-modal-head > button {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #dbe7f4;
+  border-radius: 8px;
+  color: #61728c;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.profile-bootstrap-modal .behavior-modal-head > button:hover {
+  color: #176cf5;
+  border-color: #bcd6ff;
+  background: #f4f8ff;
+}
+
+.profile-bootstrap-progress {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.profile-bootstrap-progress button {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid #dce7f5;
+  border-radius: 8px;
+  color: #50627b;
+  background: #f8fbff;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.profile-bootstrap-progress button span {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #6b7e97;
+  background: #edf3fa;
+  font-size: 11px;
+}
+
+.profile-bootstrap-progress button.active {
+  color: #176cf5;
+  border-color: #b9d5ff;
+  background: #eef6ff;
+}
+
+.profile-bootstrap-progress button.done {
+  color: #12816f;
+  border-color: #bce9df;
+  background: #effcf8;
+}
+
+.profile-bootstrap-progress button.done span {
+  color: #ffffff;
+  background: #16a085;
+}
+
+.profile-bootstrap-chat {
+  min-height: 320px;
+  max-height: min(56vh, 560px);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #e1eaf6;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.profile-bootstrap-message {
+  max-width: min(600px, 88%);
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 9px;
+  align-items: start;
+}
+
+.profile-bootstrap-message > span:first-child {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: #176cf5;
+  background: #eaf3ff;
+}
+
+.profile-bootstrap-message > div,
+.profile-bootstrap-message.user {
+  min-width: 0;
+  padding: 11px 13px;
+  border: 1px solid #dce8f7;
+  border-radius: 8px;
+  color: #24344e;
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(35, 78, 134, 0.04);
+}
+
+.profile-bootstrap-message.compact > div {
+  padding: 9px 11px;
+}
+
+.profile-bootstrap-message small {
+  display: block;
+  margin-bottom: 4px;
+  color: #176cf5;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.profile-bootstrap-message strong {
+  display: block;
+  color: #17243b;
+  font-size: 14px;
+  line-height: 1.45;
+  font-weight: 950;
+}
+
+.profile-bootstrap-message p {
+  margin-top: 5px;
+  color: #5d6d84;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.profile-bootstrap-turn {
+  display: contents;
+}
+
+.profile-bootstrap-message.user {
+  align-self: flex-end;
+  display: block;
+  border-color: #176cf5;
+  color: #ffffff;
+  background: #176cf5;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.profile-bootstrap-current,
+.profile-bootstrap-ready {
+  display: grid;
+  gap: 12px;
+}
+
+.profile-bootstrap-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding-left: 43px;
+}
+
+.profile-bootstrap-options button {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #d6e5f8;
+  border-radius: 8px;
+  color: #24415f;
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 850;
+  text-align: left;
+  cursor: pointer;
+}
+
+.profile-bootstrap-options button:hover {
+  border-color: #9fc4fb;
+  color: #176cf5;
+  background: #f4f8ff;
+}
+
+.profile-bootstrap-options kbd {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border: 1px solid #bdd6f8;
+  border-radius: 6px;
+  color: #176cf5;
+  background: #eef6ff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.profile-bootstrap-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 86px;
+  gap: 8px;
+  padding-left: 43px;
+}
+
+.profile-bootstrap-input textarea {
+  min-height: 48px;
+  resize: vertical;
+  padding: 11px 12px;
+  border: 1px solid #d6e4f4;
+  border-radius: 8px;
+  color: #17243b;
+  background: #ffffff;
+  outline: none;
+}
+
+.profile-bootstrap-input textarea:focus {
+  border-color: #176cf5;
+  box-shadow: 0 0 0 3px rgba(23, 108, 245, 0.12);
+}
+
+.profile-bootstrap-input button,
+.profile-bootstrap-modal .behavior-modal-foot button {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 13px;
+  border: 1px solid #d6e3f3;
+  border-radius: 8px;
+  color: #20324f;
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.profile-bootstrap-input button {
+  border-color: #176cf5;
+  color: #ffffff;
+  background: #176cf5;
+}
+
+.profile-bootstrap-input button:disabled,
+.profile-bootstrap-modal .behavior-modal-foot button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.profile-bootstrap-modal .behavior-modal-foot button:last-child {
+  border-color: #176cf5;
+  color: #ffffff;
+  background: #176cf5;
+}
+
+.profile-bootstrap-summary {
+  display: grid;
+  gap: 8px;
+  padding-left: 43px;
+}
+
+.profile-bootstrap-summary span {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #d9efe9;
+  border-radius: 8px;
+  color: #245b52;
+  background: #f4fcf9;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.profile-bootstrap-summary b {
+  flex: 0 0 auto;
+  color: #0f7d6c;
 }
 
 .record-row {
@@ -6871,6 +7170,35 @@ button.student-resource-thumb {
 
   .behavior-modal-head {
     flex-direction: column;
+  }
+
+  .profile-bootstrap-modal {
+    width: min(100%, calc(100vw - 28px));
+    grid-template-rows: auto auto minmax(260px, auto) auto;
+  }
+
+  .profile-bootstrap-progress,
+  .profile-bootstrap-options,
+  .profile-bootstrap-input {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .profile-bootstrap-options,
+  .profile-bootstrap-input,
+  .profile-bootstrap-summary {
+    padding-left: 0;
+  }
+
+  .profile-bootstrap-message {
+    max-width: 100%;
+  }
+
+  .profile-bootstrap-message.user {
+    max-width: 92%;
+  }
+
+  .profile-bootstrap-chat {
+    max-height: min(58vh, 520px);
   }
 }
 

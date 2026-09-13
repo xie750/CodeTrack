@@ -49,16 +49,24 @@ type AICompanionOpenEventDetail = {
   reset?: boolean;
 };
 
+type CompanionPlacement = "top" | "right" | "bottom" | "left" | "sheet" | "free";
+type PanelSide = Exclude<CompanionPlacement, "sheet" | "free">;
+
 type CompanionFrame = Position & {
   width: number;
   height: number;
 };
 
-const COMPANION_FRAME_STORAGE_BASE_KEY = "codetrack.aiCompanion.frame.v2";
+const COMPANION_FRAME_STORAGE_BASE_KEY = "codetrack.aiCompanion.launcherFrame.v3";
 const CHAT_SIZE_STORAGE_BASE_KEY = "codetrack.aiCompanion.chatSize.v2";
 const LAUNCHER_SIZE = { width: 88, height: 78 };
+const DEFAULT_ENTRY_SIZE = { width: 408, height: 436 };
+const MIN_ENTRY_SIZE = { width: 320, height: 380 };
 const DEFAULT_CHAT_SIZE = { width: 492, height: 720 };
 const MIN_CHAT_SIZE = { width: 420, height: 560 };
+const VIEWPORT_MARGIN = 16;
+const MOBILE_VIEWPORT_MARGIN = 12;
+const PANEL_GAP = 14;
 const TRANSITION_MS = 190;
 const CLICK_DRAG_TOLERANCE = 6;
 
@@ -108,11 +116,11 @@ function saveJson(key: string, value: unknown) {
   window.localStorage.setItem(key, JSON.stringify(value));
 }
 
-function normalizePosition(position: Position, size: { width: number; height: number }): Position {
+function normalizePosition(position: Position, size: { width: number; height: number }, margin = VIEWPORT_MARGIN): Position {
   const viewport = viewportSize();
   return {
-    x: clamp(position.x, 8, Math.max(8, viewport.width - size.width - 8)),
-    y: clamp(position.y, 8, Math.max(8, viewport.height - size.height - 8))
+    x: clamp(position.x, margin, Math.max(margin, viewport.width - size.width - margin)),
+    y: clamp(position.y, margin, Math.max(margin, viewport.height - size.height - margin))
   };
 }
 
@@ -127,32 +135,41 @@ function defaultFloatingFrame(): CompanionFrame {
 
 function normalizeFrame(frame: CompanionFrame): CompanionFrame {
   const viewport = viewportSize();
-  const width = clamp(frame.width, LAUNCHER_SIZE.width, Math.max(LAUNCHER_SIZE.width, viewport.width - 16));
-  const height = clamp(frame.height, LAUNCHER_SIZE.height, Math.max(LAUNCHER_SIZE.height, viewport.height - 16));
+  const margin = panelViewportMargin();
+  const width = clamp(frame.width, LAUNCHER_SIZE.width, Math.max(LAUNCHER_SIZE.width, viewport.width - margin * 2));
+  const height = clamp(frame.height, LAUNCHER_SIZE.height, Math.max(LAUNCHER_SIZE.height, viewport.height - margin * 2));
   return {
-    ...normalizePosition({ x: frame.x, y: frame.y }, { width, height }),
+    ...normalizePosition({ x: frame.x, y: frame.y }, { width, height }, margin),
     width,
     height
   };
 }
 
-function frameFromCenter(frame: CompanionFrame, size: { width: number; height: number }): CompanionFrame {
-  const center = {
-    x: frame.x + frame.width / 2,
-    y: frame.y + frame.height / 2
-  };
-  const position = normalizePosition(
-    {
-      x: center.x - size.width / 2,
-      y: center.y - size.height / 2
-    },
-    size
-  );
-  return { ...position, ...size };
+function normalizeLauncherFrame(frame: CompanionFrame): CompanionFrame {
+  const position = normalizePosition({ x: frame.x, y: frame.y }, LAUNCHER_SIZE);
+  return { ...position, ...LAUNCHER_SIZE };
 }
 
 function readInitialFrame() {
-  return normalizeFrame(readJson(companionFrameStorageKey(), defaultFloatingFrame()));
+  const fallback = defaultFloatingFrame();
+  const saved = readJson(companionFrameStorageKey(), fallback);
+  return normalizeLauncherFrame({ ...fallback, x: saved.x, y: saved.y });
+}
+
+function panelViewportMargin() {
+  const viewport = viewportSize();
+  return viewport.width <= 640 ? MOBILE_VIEWPORT_MARGIN : VIEWPORT_MARGIN;
+}
+
+function normalizeEntrySize(size = DEFAULT_ENTRY_SIZE) {
+  const viewport = viewportSize();
+  const margin = panelViewportMargin();
+  const minWidth = Math.min(MIN_ENTRY_SIZE.width, Math.max(LAUNCHER_SIZE.width, viewport.width - margin * 2));
+  const minHeight = Math.min(MIN_ENTRY_SIZE.height, Math.max(320, viewport.height - margin * 2));
+  return {
+    width: clamp(size.width, minWidth, Math.max(minWidth, viewport.width - margin * 2)),
+    height: clamp(size.height, minHeight, Math.max(minHeight, viewport.height - margin * 2))
+  };
 }
 
 function readInitialChatSize() {
@@ -168,19 +185,82 @@ function readInitialChatSize() {
 
 function chatMinSize() {
   const viewport = viewportSize();
+  const margin = panelViewportMargin();
   return {
-    width: Math.min(MIN_CHAT_SIZE.width, Math.max(LAUNCHER_SIZE.width, viewport.width - 16)),
-    height: Math.min(MIN_CHAT_SIZE.height, Math.max(360, viewport.height - 16))
+    width: Math.min(MIN_CHAT_SIZE.width, Math.max(LAUNCHER_SIZE.width, viewport.width - margin * 2)),
+    height: Math.min(MIN_CHAT_SIZE.height, Math.max(360, viewport.height - margin * 2))
   };
 }
 
 function normalizeChatSize(size: { width: number; height: number }) {
   const minSize = chatMinSize();
   const viewport = viewportSize();
+  const margin = panelViewportMargin();
   return {
-    width: clamp(size.width, minSize.width, Math.max(minSize.width, viewport.width - 16)),
-    height: clamp(size.height, minSize.height, Math.max(minSize.height, viewport.height - 16))
+    width: clamp(size.width, minSize.width, Math.max(minSize.width, viewport.width - margin * 2)),
+    height: clamp(size.height, minSize.height, Math.max(minSize.height, viewport.height - margin * 2))
   };
+}
+
+function positionPanel(anchor: CompanionFrame, size: { width: number; height: number }): { frame: CompanionFrame; placement: CompanionPlacement } {
+  const viewport = viewportSize();
+  const margin = panelViewportMargin();
+  const gap = PANEL_GAP;
+  const panelSize = viewport.width <= 640 ? normalizeChatSize(size) : size;
+
+  if (viewport.width <= 640) {
+    const sheetHeight = clamp(panelSize.height, 320, Math.max(320, viewport.height - margin * 2));
+    const sheetWidth = Math.max(0, viewport.width - margin * 2);
+    return {
+      frame: {
+        x: margin,
+        y: Math.max(margin, viewport.height - sheetHeight - margin),
+        width: sheetWidth,
+        height: sheetHeight
+      },
+      placement: "sheet"
+    };
+  }
+
+  const anchorCenterX = anchor.x + anchor.width / 2;
+  const anchorCenterY = anchor.y + anchor.height / 2;
+  const available = {
+    right: viewport.width - margin - (anchor.x + anchor.width + gap),
+    left: anchor.x - margin - gap,
+    bottom: viewport.height - margin - (anchor.y + anchor.height + gap),
+    top: anchor.y - margin - gap
+  };
+  const horizontalOrder: PanelSide[] = anchorCenterX > viewport.width / 2 ? ["left", "right"] : ["right", "left"];
+  const verticalOrder: PanelSide[] = anchorCenterY > viewport.height / 2 ? ["top", "bottom"] : ["bottom", "top"];
+  const ordered = [...horizontalOrder, ...verticalOrder];
+  const placement = ordered.find((side) => (
+    side === "left" || side === "right" ? available[side] >= panelSize.width : available[side] >= panelSize.height
+  )) ?? ordered.reduce((best, side) => {
+    const bestSpace = available[best];
+    const sideSpace = available[side];
+    return sideSpace > bestSpace ? side : best;
+  }, ordered[0]);
+
+  const positionForPlacement: Record<PanelSide, Position> = {
+    left: {
+      x: anchor.x - panelSize.width - gap,
+      y: anchorCenterY - panelSize.height / 2
+    },
+    right: {
+      x: anchor.x + anchor.width + gap,
+      y: anchorCenterY - panelSize.height / 2
+    },
+    top: {
+      x: anchorCenterX - panelSize.width / 2,
+      y: anchor.y - panelSize.height - gap
+    },
+    bottom: {
+      x: anchorCenterX - panelSize.width / 2,
+      y: anchor.y + anchor.height + gap
+    }
+  };
+  const position = normalizePosition(positionForPlacement[placement], panelSize);
+  return { frame: { ...position, ...panelSize }, placement };
 }
 
 function pageContextLabel(routeGroup: string) {
@@ -306,6 +386,7 @@ function CompanionModelSelect({
 export default function AICompanion({ routePath, routeGroup }: AICompanionProps) {
   const [mode, setMode] = useState<CompanionMode>("floating");
   const [frame, setFrame] = useState<CompanionFrame>(readInitialFrame);
+  const [panelPlacement, setPanelPlacement] = useState<CompanionPlacement>("left");
   const [chatSize, setChatSize] = useState(readInitialChatSize);
   const [transitioning, setTransitioning] = useState(false);
   const [input, setInput] = useState("");
@@ -316,6 +397,7 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
   const [modelOptions, setModelOptions] = useState<StudentAiModelOption[]>(fallbackStudentAiModelOptions);
   const [selectedModelKey, setSelectedModelKey] = useState(readStudentAiModelKey);
   const messageListRef = useRef<HTMLDivElement | null>(null);
+  const launcherFrameRef = useRef<CompanionFrame | null>(null);
   const draggedRef = useRef(false);
   const pointerStartRef = useRef<Position | null>(null);
   const transitionTimerRef = useRef<number | null>(null);
@@ -337,14 +419,25 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
         return nextSize;
       });
       setFrame((currentFrame) => {
-        const normalized = normalizeFrame(currentFrame);
+        if (mode !== "floating") {
+          const positionedPanel = positionPanel(
+            launcherFrameRef.current ?? normalizeLauncherFrame(currentFrame),
+            mode === "expanded" ? normalizeEntrySize() : normalizeChatSize(chatSize)
+          );
+          setPanelPlacement(positionedPanel.placement);
+          return positionedPanel.frame;
+        }
+        const normalized = normalizeLauncherFrame(currentFrame);
         if (
           normalized.x !== currentFrame.x ||
           normalized.y !== currentFrame.y ||
           normalized.width !== currentFrame.width ||
           normalized.height !== currentFrame.height
         ) {
-          saveJson(companionFrameStorageKey(), normalized);
+          if (mode === "floating") {
+            launcherFrameRef.current = normalized;
+            saveJson(companionFrameStorageKey(), normalized);
+          }
         }
         return normalized;
       });
@@ -352,7 +445,7 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
 
     window.addEventListener("resize", syncFrameToViewport);
     return () => window.removeEventListener("resize", syncFrameToViewport);
-  }, []);
+  }, [chatSize, mode]);
 
   useEffect(() => {
     let alive = true;
@@ -369,24 +462,38 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
     };
   }, []);
 
-  function persistFrame(nextFrame: CompanionFrame) {
-    const normalized = normalizeFrame(nextFrame);
+  function setCompanionFrame(nextFrame: CompanionFrame, shouldPersistLauncher = false) {
+    const normalized = shouldPersistLauncher ? normalizeLauncherFrame(nextFrame) : normalizeFrame(nextFrame);
     setFrame(normalized);
-    saveJson(companionFrameStorageKey(), normalized);
+    if (shouldPersistLauncher) {
+      launcherFrameRef.current = normalized;
+      saveJson(companionFrameStorageKey(), normalized);
+    }
   }
 
   function startMorph(nextMode: CompanionMode, size: { width: number; height: number }) {
     if (transitionTimerRef.current) window.clearTimeout(transitionTimerRef.current);
+    const launcherFrame = mode === "floating"
+      ? normalizeLauncherFrame(frame)
+      : launcherFrameRef.current ?? normalizeLauncherFrame(frame);
+    if (mode === "floating") {
+      launcherFrameRef.current = launcherFrame;
+      saveJson(companionFrameStorageKey(), launcherFrame);
+    }
+    const positionedPanel = nextMode === "floating"
+      ? { frame: launcherFrame, placement: "free" as CompanionPlacement }
+      : positionPanel(launcherFrame, size);
     setTransitioning(true);
     setMode(nextMode);
-    persistFrame(frameFromCenter(frame, size));
+    setPanelPlacement(positionedPanel.placement);
+    setCompanionFrame(positionedPanel.frame, nextMode === "floating");
     transitionTimerRef.current = window.setTimeout(() => {
       setTransitioning(false);
     }, TRANSITION_MS);
   }
 
   function openExpanded() {
-    startMorph("expanded", normalizeChatSize(chatSize));
+    startMorph("expanded", normalizeEntrySize());
   }
 
   function openChat() {
@@ -548,7 +655,13 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
   }
 
   function handleDragStop(data: DraggableData) {
-    persistFrame({ ...frame, x: data.x, y: data.y });
+    const nextFrame = { ...frame, x: data.x, y: data.y };
+    if (isFloating) {
+      setCompanionFrame(nextFrame, true);
+      return;
+    }
+    setPanelPlacement("free");
+    setCompanionFrame(nextFrame);
   }
 
   function handleResizeStop(elementRef: HTMLElement, position: Position) {
@@ -558,7 +671,8 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
     });
     setChatSize(nextSize);
     saveJson(chatSizeStorageKey(), nextSize);
-    persistFrame({ ...position, ...nextSize });
+    setPanelPlacement("free");
+    setCompanionFrame({ ...position, ...nextSize });
   }
 
   function handleLauncherPointerDown(event: PointerEvent<HTMLButtonElement>) {
@@ -588,6 +702,7 @@ export default function AICompanion({ routePath, routeGroup }: AICompanionProps)
     <aside
       className={`ai-companion ai-companion-${mode}${transitioning ? " morphing" : ""}`}
       data-route={routePath}
+      data-placement={panelPlacement}
       aria-label="CodeTrack AI 助手"
     >
       <Rnd
