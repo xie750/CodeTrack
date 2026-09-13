@@ -235,8 +235,6 @@ function normalizeScene(raw: Record<string, unknown>, index: number, stageId: st
           type: 'interactive' as const,
           html: text(content.html),
           url: text(content.url),
-          widgetType: 'simulation' as const,
-          widgetConfig: { type: 'simulation' as const },
         }
       : type === 'quiz'
         ? normalizeQuizContent(content)
