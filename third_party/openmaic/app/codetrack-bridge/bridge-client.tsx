@@ -17,7 +17,7 @@ import { useSettingsStore } from '@/lib/store/settings';
 import type { Scene, Stage } from '@/lib/types/stage';
 import type { Action } from '@/lib/types/action';
 import type { PPTElement, Slide } from '@openmaic/dsl';
-import { asRecord, isCodeTrackExport, type CodeTrackExport } from './bridge-schema';
+import { asRecord, isCodeTrackExport, nativeScenes, type CodeTrackExport } from './bridge-schema';
 
 class BridgeErrorBoundary extends Component<
   { children: ReactNode; onError: (message: string) => void },
@@ -312,9 +312,9 @@ function configureCodeTrackPlaybackDefaults() {
 
 function applyExportToStore(payload: CodeTrackExport): string {
   const stage = normalizeStage(payload);
-  const scenes = Array.isArray(payload.scenes)
+  const scenes = nativeScenes(payload) ?? (Array.isArray(payload.scenes)
     ? payload.scenes.map((scene, index) => normalizeScene(scene, index, stage.id))
-    : [];
+    : []);
 
   if (!scenes.length) {
     throw new Error('CodeTrack export has no scenes.');

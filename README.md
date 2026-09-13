@@ -41,6 +41,25 @@ third_party/openmaic
 2. CodeTrack 学生后端，端口 `8000`。
 3. CodeTrack 前端，端口 `5173`。
 
+课堂内容生成直接调用项目内 `@openmaic/generation` 的原生大纲、逐页课件和讲解动作生成器。
+首次运行或更新 OpenMAIC 后，先安装并构建其工作区依赖（Node.js 22.19+）：
+
+```bash
+cd third_party/openmaic
+pnpm install
+```
+
+在根目录 `.env` 配置 `CODETRACK_MODEL_API_KEY`、`CODETRACK_MODEL_API_BASE_URL` 和
+`CODETRACK_MODEL_NAME`。后端通过本地 Node 子进程调用生成包，密钥只经标准输入传入，
+不会发给浏览器。生成过程包含多次真实模型调用，需要等待数分钟；默认总超时为 1200 秒，
+单次模型请求超时为 180 秒，可分别用 `CODETRACK_OPENMAIC_GENERATION_TIMEOUT_SECONDS` 和
+`CODETRACK_OPENMAIC_MODEL_TIMEOUT_SECONDS` 调整。Node 不在 PATH 时设置
+`CODETRACK_OPENMAIC_NODE_COMMAND` 为其可执行文件绝对路径。
+
+生成器校验课件元素、画布边界、高亮引用、讲解长度和测验答案，失败时不再保存固定模板。
+新课堂完整保留 OpenMAIC 原生元素和动作。资源中心入口与保存流程不变。
+已有课堂属于之前保存的快照，不会自动改写；需要重新生成，才能使用新版内容链路。
+
 OpenMAIC 需要允许被 CodeTrack 前端 iframe 嵌入。确认 `third_party/openmaic/.env.local` 至少包含：
 
 ```env

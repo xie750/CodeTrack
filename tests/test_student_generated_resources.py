@@ -553,6 +553,30 @@ def test_student_ai_classroom_exports_openmaic_contract(monkeypatch):
     monkeypatch.setenv("CODETRACK_MODEL_GATEWAY_URL", "")
     get_settings.cache_clear()
 
+    native_scene = {
+        "id": "scene-native", "stageId": "stage-native", "type": "slide",
+        "title": "损失曲线", "order": 0, "createdAt": 1, "updatedAt": 1,
+        "content": {"type": "slide", "canvas": {"elements": [
+            {"id": "curve", "type": "chart", "data": {"labels": ["1", "2"], "series": ["loss"], "values": [[0.9, 0.2]]}},
+            {"id": "equation", "type": "latex", "latex": "L=(y-p)^2"},
+        ]}},
+        "actions": [
+            {"id": "focus", "type": "spotlight", "elementId": "curve"},
+            {"id": "voice", "type": "speech", "text": "训练损失下降并不能证明泛化能力提高。", "audioUrl": "/audio/test.mp3"},
+        ],
+    }
+
+    async def native_generator(payload):
+        assert payload["course"]["id"] == "course_arch_001"
+        assert "过拟合" in payload["message"]
+        return {
+            "stage": {"id": "stage-native", "name": "理解过拟合", "description": "对比训练与验证误差"},
+            "scenes": [native_scene],
+            "metadata": {"generation_pipeline": "openmaic_native", "model_content_fallback": False},
+        }
+
+    monkeypatch.setattr(student_resources, "generate_openmaic_classroom", native_generator)
+
     with TestClient(app) as client:
         generated = client.post(
             "/api/v1/student/resources/generate",
@@ -577,9 +601,32 @@ def test_student_ai_classroom_exports_openmaic_contract(monkeypatch):
         assert payload["resource"]["title"] == resource["title"]
         assert payload["stage"]["id"]
         assert payload["scenes"]
+        assert payload["scenes"] == [native_scene]
+        assert payload["metadata"]["generation_pipeline"] == "openmaic_native"
+        assert payload["metadata"]["model_content_fallback"] is False
         assert payload["learnerContext"]["student_id"] == "user_student_001"
         assert payload["metadata"]["source"] == "codetrack_resource_center"
         assert payload["metadata"]["resource_center_entry_required"] is True
+
+
+def test_ai_classroom_missing_model_does_not_save_template(monkeypatch):
+    from backend.app.models import AgentRun, StudentGeneratedResource
+
+    monkeypatch.setenv("CODETRACK_MODEL_API_KEY", "")
+    monkeypatch.setenv("CODETRACK_MODEL_NAME", "")
+    get_settings.cache_clear()
+    with TestClient(app) as client:
+        with SessionLocal() as db:
+            count = db.query(StudentGeneratedResource).count()
+        response = client.post("/api/v1/student/resources/generate", headers=STUDENT, json={
+            "course_id": "course_arch_001", "resource_type": "AI_CLASSROOM", "message": "学习神经网络",
+        })
+        assert response.status_code == 503
+        with SessionLocal() as db:
+            assert db.query(StudentGeneratedResource).count() == count
+            failed = db.query(AgentRun).filter_by(workflow_type="student_ai_classroom_generation", status="FAILED").first()
+            assert failed is not None
+            assert failed.error_code == "CLASSROOM_MODEL_NOT_CONFIGURED"
 
 
 def test_generated_practice_resource_auto_saves_and_submits_to_profile(monkeypatch):
