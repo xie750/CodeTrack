@@ -49,6 +49,7 @@ from backend.app.services.ai_tutor import (
     stream_student_ai_reply,
 )
 from backend.app.services.question_workflow import (
+    create_personalized_profile_bootstrap,
     question_workspace_payload,
     save_question_draft,
     submit_question_answers,
@@ -107,6 +108,13 @@ class QuestionAnswerPayload(BaseModel):
 
 class SaveQuestionAnswersRequest(BaseModel):
     answers: list[QuestionAnswerPayload]
+
+
+class GenerateProfileBootstrapRequest(BaseModel):
+    base_assignment_id: str = Field(min_length=1, max_length=64)
+    direction: str = Field(default="", max_length=120)
+    goal: str = Field(default="", max_length=160)
+    habit: str = Field(default="", max_length=160)
 
 
 class AiChatHistoryItem(BaseModel):
@@ -2428,6 +2436,8 @@ def list_student_tasks(
 
     data = []
     for assignment, task, teaching, course, teacher, progress in db.execute(query).all():
+        if task.id.startswith("task_profile_bootstrap_custom_") and progress is None:
+            continue
         fallback_required_count = (
             len(task.questions) if task.workspace_type == "QUESTION_SET" else len(task.test_cases)
         )
@@ -2498,6 +2508,27 @@ def get_assignment_workspace(
     require_role(user, "STUDENT")
     class_id = student_assignment_class_id(db, user, assignment_id)
     return ok(question_workspace_payload(db, assignment_id, class_id, user))
+
+
+@router.post("/profile/bootstrap-assessments", status_code=status.HTTP_201_CREATED)
+def generate_profile_bootstrap_assessment(
+    payload: GenerateProfileBootstrapRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    class_id = student_assignment_class_id(db, user, payload.base_assignment_id)
+    return ok(
+        create_personalized_profile_bootstrap(
+            db,
+            base_assignment_id=payload.base_assignment_id,
+            class_id=class_id,
+            user=user,
+            direction=payload.direction,
+            goal=payload.goal,
+            habit=payload.habit,
+        )
+    )
 
 
 @router.post("/assignments/{assignment_id}/answers")

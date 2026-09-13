@@ -1460,6 +1460,23 @@ export type SubmitQuestionResult = {
   };
 };
 
+export type GeneratedProfileBootstrapAssessment = {
+  assignment_id: string;
+  task_id: string;
+  course_id: string;
+  course_name: string;
+  class_id: string;
+  title: string;
+  description: string;
+  question_count: number;
+  knowledge_points: string[];
+  intake: {
+    direction: string;
+    goal: string;
+    habit: string;
+  };
+};
+
 export type QuestionAiFeedback = {
   status: string;
   workflow_type: string;
@@ -1843,6 +1860,12 @@ export const api = {
   getTask: (taskId: string, assignmentId?: string) => request<TaskDetail>(`/api/v1/tasks/${taskId}${assignmentId ? `?assignment_id=${encodeURIComponent(assignmentId)}` : ''}`),
   getQuestionWorkspace: (assignmentId: string) =>
     request<QuestionWorkspace>(`/api/v1/student/assignments/${assignmentId}/workspace`),
+  generateProfileBootstrapAssessment: (payload: { base_assignment_id: string; direction: string; goal: string; habit: string }) =>
+    request<GeneratedProfileBootstrapAssessment>("/api/v1/student/profile/bootstrap-assessments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }),
   getLearningContext: () => cachedGet<LearningContext>("/api/v1/student/learning-context"),
   listStudentCourseOfferings: () =>
     request<{ items: StudentCourseOffering[] }>("/api/v1/student/course-offerings"),

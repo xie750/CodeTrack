@@ -267,7 +267,8 @@ export function ExactTasksV2(props: Props) {
   }
 
   const buildTaskPayload = async () => {
-    const values = await form.validateFields()
+    await form.validateFields()
+    const values = form.getFieldsValue(true)
     const kind: TaskKind = values.task_kind || currentTaskKind
     const chapter = Array.isArray(values.chapter) ? values.chapter : [values.chapter].filter(Boolean)
     const normalizedQuestions = paperQuestions.map((question, index) => normalizeQuestionForSubmit(question, chapter, index))

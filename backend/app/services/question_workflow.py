@@ -15,6 +15,7 @@ from backend.app.models import (
     Question,
     QuestionAnswer,
     QuestionAttempt,
+    QuestionOption,
     Recommendation,
     StudentTaskProgress,
     Task,
@@ -50,6 +51,136 @@ ERROR_LABELS = {
 FILL_QUESTION_TYPES = {"FILL_BLANK", "FILL_IN_BLANK"}
 
 
+PROFILE_BOOTSTRAP_QUESTION_BANK = {
+    "PYTHON": [
+        {
+            "question_type": "SINGLE_CHOICE",
+            "stem": "你希望先从 Python 程序设计基础建立摸底。如果函数需要把计算结果交给后续代码继续使用，最合适的做法是什么？",
+            "analysis": "画像建档选择了 Python 方向，因此先验证函数返回值这一类基础概念。return 会把结果交给调用方，print 只负责输出展示。",
+            "knowledge_points": ["Python 函数", "返回值"],
+            "difficulty": "BASIC",
+            "score": 10,
+            "error_type": "PYTHON_RETURN_PRINT_CONFUSION",
+            "options": [("A", "使用 print 输出即可", False), ("B", "使用 return 返回结果", True), ("C", "只写注释说明结果", False), ("D", "把结果写在函数名里", False)],
+        },
+        {
+            "question_type": "SINGLE_CHOICE",
+            "stem": "你提到希望找出学习起点。遍历列表 nums 时，如果既要元素下标又要元素值，哪种写法更适合作为起点掌握？",
+            "analysis": "enumerate(nums) 能同时拿到下标和值，是 Python 列表遍历的高频基础能力。",
+            "knowledge_points": ["列表遍历", "下标和值"],
+            "difficulty": "BASIC",
+            "score": 10,
+            "error_type": "PYTHON_INDEX_VALUE_CONFUSION",
+            "options": [("A", "for i, value in enumerate(nums)", True), ("B", "for value in range(nums)", False), ("C", "for nums in value", False), ("D", "while enumerate", False)],
+        },
+        {
+            "question_type": "TRUE_FALSE",
+            "stem": "做两数之和这类题时，可以用字典记录已经访问过的元素及下标，从而减少重复查找。",
+            "analysis": "字典查找可以把补数定位从重复遍历优化为快速查询，是两数之和的关键思路。",
+            "knowledge_points": ["字典查找", "两数之和"],
+            "difficulty": "MEDIUM",
+            "score": 10,
+            "error_type": "PYTHON_REUSE_GUARD_MISSING",
+            "options": [("A", "正确", True), ("B", "错误", False)],
+        },
+        {
+            "question_type": "MULTIPLE_CHOICE",
+            "stem": "如果你想准备课程作业，写 Python 循环处理列表前，哪些习惯更能减少基础错误？",
+            "analysis": "课程作业更看重可运行和边界稳定。先确认输入类型、遍历目标和返回值，能减少常见低级错误。",
+            "knowledge_points": ["Python 基础调试", "列表遍历"],
+            "difficulty": "MEDIUM",
+            "score": 15,
+            "error_type": "PYTHON_INDEX_VALUE_CONFUSION",
+            "options": [("A", "确认遍历的是列表本身还是下标范围", True), ("B", "函数需要结果时明确 return", True), ("C", "把 print 当作所有函数结果", False), ("D", "完全不处理空列表场景", False)],
+        },
+    ],
+    "DATA_STRUCTURE": [
+        {
+            "question_type": "SINGLE_CHOICE",
+            "stem": "你选择了数据结构刷题方向。删除单链表头节点时，函数最应该返回什么？",
+            "analysis": "删除头节点后，链表新的起点是原 head->next，因此函数应返回新的 head。",
+            "knowledge_points": ["链表边界处理", "头节点删除"],
+            "difficulty": "BASIC",
+            "score": 10,
+            "error_type": "HEAD_NODE_RETURN_MISSING",
+            "options": [("A", "原 head", False), ("B", "原 head->next", True), ("C", "尾节点", False), ("D", "nullptr", False)],
+        },
+        {
+            "question_type": "SINGLE_CHOICE",
+            "stem": "如果本次摸底要帮你找到刷题起点，栈和队列最核心的访问差异是什么？",
+            "analysis": "栈是后进先出，队列是先进先出，这是判断结构适用场景的基础。",
+            "knowledge_points": ["栈与队列", "LIFO/FIFO"],
+            "difficulty": "BASIC",
+            "score": 10,
+            "error_type": "STACK_QUEUE_RULE_CONFUSION",
+            "options": [("A", "栈先进先出，队列后进先出", False), ("B", "栈后进先出，队列先进先出", True), ("C", "二者都只能随机访问", False), ("D", "二者都按数值大小访问", False)],
+        },
+        {
+            "question_type": "MULTIPLE_CHOICE",
+            "stem": "你希望题量短一点，所以这题合并检查递归出口。递归遍历二叉树时，哪些情况通常应作为出口或保护条件？",
+            "analysis": "空节点和不存在的左右子节点都需要出口保护，否则会继续访问不存在的节点。",
+            "knowledge_points": ["二叉树递归出口", "边界保护"],
+            "difficulty": "MEDIUM",
+            "score": 15,
+            "error_type": "RECURSION_BASE_CASE_MISSING",
+            "options": [("A", "当前节点为空", True), ("B", "递归到不存在的左右子节点", True), ("C", "节点值等于 0 就必须停止", False), ("D", "只要树高度超过 1 就停止", False)],
+        },
+        {
+            "question_type": "TRUE_FALSE",
+            "stem": "准备课程作业时，链表删除操作只要普通位置能通过，就可以不单独考虑空链表和头节点。",
+            "analysis": "这是常见边界错误。空链表、头节点、尾节点都应单独保护或验证。",
+            "knowledge_points": ["链表边界处理", "边界保护"],
+            "difficulty": "MEDIUM",
+            "score": 10,
+            "error_type": "BOUNDARY_CASE_MISSING",
+            "options": [("A", "正确", False), ("B", "错误", True)],
+        },
+    ],
+    "MACHINE_LEARNING": [
+        {
+            "question_type": "SINGLE_CHOICE",
+            "stem": "你选择了机器学习核心概念。验证集最主要的作用是什么？",
+            "analysis": "验证集用于调参和模型选择，测试集应保留到最终评估阶段使用。",
+            "knowledge_points": ["数据集划分", "验证集"],
+            "difficulty": "BASIC",
+            "score": 10,
+            "error_type": "TRAIN_VALID_TEST_CONFUSION",
+            "options": [("A", "训练模型参数", False), ("B", "辅助调参与模型选择", True), ("C", "替代所有测试数据", False), ("D", "保存模型文件", False)],
+        },
+        {
+            "question_type": "SINGLE_CHOICE",
+            "stem": "如果模型训练集表现很好、验证集表现明显变差，最可能是什么问题？",
+            "analysis": "训练集好但验证集差通常说明模型过度拟合训练数据，泛化能力不足。",
+            "knowledge_points": ["过拟合与正则化", "泛化能力"],
+            "difficulty": "BASIC",
+            "score": 10,
+            "error_type": "OVERFITTING_SYMPTOM_CONFUSION",
+            "options": [("A", "过拟合", True), ("B", "欠拟合且完全不能学习", False), ("C", "数据已经完美", False), ("D", "不需要验证集", False)],
+        },
+        {
+            "question_type": "MULTIPLE_CHOICE",
+            "stem": "为了验证最近自学效果，评估分类模型时，哪些指标或观察能帮助判断模型效果？",
+            "analysis": "准确率、混淆矩阵和不同类别错误分布都能提供评估依据；只看训练耗时不能说明分类质量。",
+            "knowledge_points": ["模型评估", "分类指标"],
+            "difficulty": "MEDIUM",
+            "score": 15,
+            "error_type": "MODEL_METRIC_CONFUSION",
+            "options": [("A", "验证集准确率", True), ("B", "混淆矩阵", True), ("C", "只看训练耗时", False), ("D", "不同类别上的错误分布", True)],
+        },
+        {
+            "question_type": "TRUE_FALSE",
+            "stem": "期末查漏补缺时，只要训练集准确率很高，就可以直接判断模型已经学得很好。",
+            "analysis": "训练集高分不代表泛化稳定，还需要看验证集或测试集表现。",
+            "knowledge_points": ["过拟合与正则化", "模型评估"],
+            "difficulty": "MEDIUM",
+            "score": 10,
+            "error_type": "OVERFITTING_SYMPTOM_CONFUSION",
+            "options": [("A", "正确", False), ("B", "错误", True)],
+        },
+    ],
+}
+
+
 def loads_json(value: str, fallback):
     try:
         parsed = json.loads(value)
@@ -62,7 +193,210 @@ def new_id(prefix: str) -> str:
     return f"{prefix}_{uuid4().hex[:12]}"
 
 
-def load_assignment_for_student(db: Session, assignment_id: str, class_id: str) -> tuple[TaskAssignment, Task, TeachingAssignment, Course]:
+def _profile_bootstrap_focus(direction: str) -> str:
+    normalized = direction.lower()
+    if "python" in normalized or "程序" in direction:
+        return "PYTHON"
+    if "机器学习" in direction or "模型" in direction or "ml" in normalized:
+        return "MACHINE_LEARNING"
+    if "综合" in direction or "不确定" in direction:
+        return "MIXED"
+    return "DATA_STRUCTURE"
+
+
+def _rotate(items: list[dict], seed_text: str) -> list[dict]:
+    if not items:
+        return []
+    offset = sum(ord(char) for char in seed_text) % len(items)
+    return [items[(offset + index) % len(items)] for index in range(len(items))]
+
+
+def _profile_bootstrap_question_specs(direction: str, goal: str, habit: str, nonce: str) -> list[dict]:
+    focus = _profile_bootstrap_focus(direction)
+    seed_text = f"{direction}|{goal}|{habit}|{nonce}"
+    if focus == "MIXED":
+        specs = [
+            _rotate(PROFILE_BOOTSTRAP_QUESTION_BANK["PYTHON"], seed_text)[0],
+            _rotate(PROFILE_BOOTSTRAP_QUESTION_BANK["DATA_STRUCTURE"], seed_text)[0],
+            _rotate(PROFILE_BOOTSTRAP_QUESTION_BANK["MACHINE_LEARNING"], seed_text)[0],
+        ]
+    else:
+        specs = _rotate(PROFILE_BOOTSTRAP_QUESTION_BANK[focus], seed_text)[:3]
+
+    if "解析" in habit and specs:
+        specs = [dict(spec) for spec in specs]
+        specs[0]["analysis"] = f"{specs[0]['analysis']} 本题会在提交后展示解析，用来帮助你确认当前画像证据的来源。"
+    if "期末" in goal and len(specs) >= 3:
+        specs = [dict(spec) for spec in specs]
+        specs[-1]["difficulty"] = "MEDIUM"
+        specs[-1]["stem"] = f"期末查漏补缺场景：{specs[-1]['stem']}"
+    if "课程作业" in goal and len(specs) >= 2:
+        specs = [dict(spec) for spec in specs]
+        specs[1]["stem"] = f"课程作业准备场景：{specs[1]['stem']}"
+    return specs
+
+
+def create_personalized_profile_bootstrap(
+    db: Session,
+    *,
+    base_assignment_id: str,
+    class_id: str,
+    user: User,
+    direction: str,
+    goal: str,
+    habit: str,
+) -> dict:
+    base_assignment, base_task, teaching, course = load_assignment_for_student(db, base_assignment_id, class_id)
+    if base_assignment.assignment_mode != "PROFILE_BOOTSTRAP":
+        raise ApiError(400, "NOT_PROFILE_BOOTSTRAP", "当前任务不是画像摸底任务")
+    if base_task.workspace_type != "QUESTION_SET":
+        raise ApiError(400, "NOT_QUESTION_WORKSPACE", "当前画像摸底不是题目任务")
+
+    now = utc_now()
+    suffix = uuid4().hex[:12]
+    task_id = f"task_profile_bootstrap_custom_{suffix}"
+    assignment_id = f"assign_profile_bootstrap_custom_{suffix}"
+    direction_text = direction.strip() or "综合摸底"
+    goal_text = goal.strip() or "建立初始画像"
+    habit_text = habit.strip() or "短题量、即时反馈"
+    specs = _profile_bootstrap_question_specs(direction_text, goal_text, habit_text, suffix)
+    knowledge_points = sorted(
+        {
+            point
+            for spec in specs
+            for point in spec.get("knowledge_points", [])
+            if point
+        }
+    )
+
+    task = Task(
+        id=task_id,
+        course_id=course.id,
+        title=f"{course.name}个性化画像摸底",
+        description=(
+            "基于建档对话实时生成："
+            f"方向「{direction_text}」，目标「{goal_text}」，偏好「{habit_text}」。"
+            "本次题目只用于形成低置信初始画像。"
+        ),
+        workspace_type="QUESTION_SET",
+        language=base_task.language,
+        interface_spec=base_task.interface_spec,
+        learning_objectives=json.dumps(
+            [
+                f"围绕{direction_text}生成可验证摸底题",
+                f"服务目标：{goal_text}",
+                f"作答节奏：{habit_text}",
+            ],
+            ensure_ascii=False,
+        ),
+        hint_forbidden_fragments=base_task.hint_forbidden_fragments,
+        capability_ids=base_task.capability_ids,
+        status="PUBLISHED",
+    )
+    db.add(task)
+    assignment = TaskAssignment(
+        id=assignment_id,
+        task_id=task.id,
+        teaching_assignment_id=teaching.id,
+        published_by=base_assignment.published_by,
+        publish_status="PUBLISHED",
+        assignment_mode="PROFILE_BOOTSTRAP",
+        allow_hint_level_3=base_assignment.allow_hint_level_3,
+        published_at=now,
+        start_at=now,
+        deadline=base_assignment.deadline,
+    )
+    db.add(assignment)
+
+    for question_index, spec in enumerate(specs, start=1):
+        question_id = f"q_profile_bootstrap_{suffix}_{question_index}"
+        question = Question(
+            id=question_id,
+            task_id=task.id,
+            question_type=spec["question_type"],
+            stem=spec["stem"],
+            analysis=spec["analysis"],
+            knowledge_points=json.dumps(spec.get("knowledge_points", []), ensure_ascii=False),
+            difficulty=spec.get("difficulty", "BASIC"),
+            score=spec.get("score", 10),
+            error_type=spec.get("error_type"),
+            sort_order=question_index,
+        )
+        db.add(question)
+        for option_index, (label, content, is_correct) in enumerate(spec.get("options", []), start=1):
+            db.add(
+                QuestionOption(
+                    id=f"{question_id}_{label.lower()}",
+                    question_id=question.id,
+                    label=label,
+                    content=content,
+                    is_correct=bool(is_correct),
+                    sort_order=option_index,
+                )
+            )
+
+    db.add(
+        StudentTaskProgress(
+            assignment_id=assignment.id,
+            student_id=user.id,
+            status="NOT_STARTED",
+            passed_count=0,
+            total_required_count=len(specs),
+            updated_at=now,
+        )
+    )
+    db.flush()
+    db.add(
+        LearnerEvent(
+            id=new_id("levent"),
+            student_id=user.id,
+            course_id=course.id,
+            class_id=class_id,
+            teaching_assignment_id=teaching.id,
+            assignment_id=assignment.id,
+            task_id=task.id,
+            event_type="PROFILE_BOOTSTRAP_GENERATED",
+            knowledge_points=json.dumps(knowledge_points, ensure_ascii=False),
+            payload=json.dumps(
+                {
+                    "direction": direction_text,
+                    "goal": goal_text,
+                    "habit": habit_text,
+                    "base_assignment_id": base_assignment.id,
+                    "question_count": len(specs),
+                    "generation_mode": "rule_personalized",
+                },
+                ensure_ascii=False,
+            ),
+            created_at=now,
+        )
+    )
+    db.commit()
+    return {
+        "assignment_id": assignment.id,
+        "task_id": task.id,
+        "course_id": course.id,
+        "course_name": course.name,
+        "class_id": teaching.class_id,
+        "title": task.title,
+        "description": task.description,
+        "question_count": len(specs),
+        "knowledge_points": knowledge_points,
+        "intake": {
+            "direction": direction_text,
+            "goal": goal_text,
+            "habit": habit_text,
+        },
+    }
+
+
+def load_assignment_for_student(
+    db: Session,
+    assignment_id: str,
+    class_id: str,
+    *,
+    student_id: str | None = None,
+) -> tuple[TaskAssignment, Task, TeachingAssignment, Course]:
     row = db.execute(
         select(TaskAssignment, Task, TeachingAssignment, Course)
         .join(Task, TaskAssignment.task_id == Task.id)
@@ -77,6 +411,16 @@ def load_assignment_for_student(db: Session, assignment_id: str, class_id: str) 
     ).one_or_none()
     if row is None:
         raise ApiError(404, "ASSIGNMENT_NOT_FOUND", "任务不存在或当前学生无权限")
+    assignment, task, _, _ = row
+    if task.id.startswith("task_profile_bootstrap_custom_") and student_id:
+        progress = db.scalar(
+            select(StudentTaskProgress).where(
+                StudentTaskProgress.assignment_id == assignment.id,
+                StudentTaskProgress.student_id == student_id,
+            )
+        )
+        if progress is None:
+            raise ApiError(404, "ASSIGNMENT_NOT_FOUND", "任务不存在或当前学生无权限")
     return row
 
 
@@ -162,7 +506,7 @@ def question_workspace_payload(
     class_id: str,
     user: User,
 ) -> dict:
-    assignment, task, teaching, course = load_assignment_for_student(db, assignment_id, class_id)
+    assignment, task, teaching, course = load_assignment_for_student(db, assignment_id, class_id, student_id=user.id)
     if task.workspace_type != "QUESTION_SET":
         raise ApiError(400, "NOT_QUESTION_WORKSPACE", "当前任务不是题目作答任务")
     questions = db.scalars(
@@ -237,7 +581,7 @@ def question_workspace_payload(
 
 
 def save_question_draft(db: Session, assignment_id: str, class_id: str, user: User, answers: list[dict]) -> dict:
-    assignment, task, _, _ = load_assignment_for_student(db, assignment_id, class_id)
+    assignment, task, _, _ = load_assignment_for_student(db, assignment_id, class_id, student_id=user.id)
     if task.workspace_type != "QUESTION_SET":
         raise ApiError(400, "NOT_QUESTION_WORKSPACE", "当前任务不是题目作答任务")
     assert_assignment_started(assignment)
@@ -684,7 +1028,7 @@ def update_learner_profile(
 
 
 def submit_question_answers(db: Session, assignment_id: str, class_id: str, user: User, answers: list[dict]) -> dict:
-    assignment, task, teaching, _ = load_assignment_for_student(db, assignment_id, class_id)
+    assignment, task, teaching, _ = load_assignment_for_student(db, assignment_id, class_id, student_id=user.id)
     if task.workspace_type != "QUESTION_SET":
         raise ApiError(400, "NOT_QUESTION_WORKSPACE", "当前任务不是题目作答任务")
     assert_assignment_started(assignment)

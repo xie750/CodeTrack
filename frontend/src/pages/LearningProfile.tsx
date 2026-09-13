@@ -29,6 +29,7 @@ import {
   X,
 } from "lucide-react";
 import { api, LearningContext, StudentAiChatResponse, StudentProfile } from "../api";
+import profileLoadingBot from "../assets/self-study/profile-loading-bot.png";
 import heroArt from "../assets/ui-home/hero-art.png";
 import { StudentState, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
 import { scopedStorageKey } from "../scopedStorage";
@@ -951,8 +952,9 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
   });
   const [bootstrapStep, setBootstrapStep] = useState(0);
   const [bootstrapChatInput, setBootstrapChatInput] = useState("");
+  const [bootstrapGenerateError, setBootstrapGenerateError] = useState<string | null>(null);
   const [bootstrapLaunch, setBootstrapLaunch] = useState<{
-    assignmentId: string;
+    assignmentId: string | null;
     title: string;
     direction: string;
     goal: string;
@@ -1026,7 +1028,7 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
   }, [aiAdviceLoading, initialCourseId, selectedCourseId]);
 
   useEffect(() => {
-    if (!bootstrapLaunch) return undefined;
+    if (!bootstrapLaunch?.assignmentId) return undefined;
     const timer = window.setTimeout(() => {
       navigate(`/question-workspace/${bootstrapLaunch.assignmentId}`, {
         state: {
@@ -1037,7 +1039,7 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
           }
         }
       });
-    }, 1800);
+    }, 2800);
     return () => window.clearTimeout(timer);
   }, [bootstrapLaunch, navigate]);
 
@@ -1083,31 +1085,41 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
   }
 
   if (bootstrapLaunch) {
-    return (
-      <div className="profile-page">
-        <section className="profile-hero profile-loading-hero">
-          <div>
-            <h1>正在构建练习题...</h1>
-            <p>系统正在根据你的方向、目标和学习习惯组织画像摸底题，完成后会进入作答页。</p>
+    const launchScreen = (
+      <div className="profile-bootstrap-launch" role="status" aria-live="polite" aria-label="正在生成画像摸底题">
+        <div className="profile-launch-sphere sphere-top" aria-hidden="true" />
+        <div className="profile-launch-sphere sphere-bottom" aria-hidden="true" />
+        <main className="profile-bootstrap-launch-stage">
+          <div className="profile-launch-visual" aria-hidden="true">
+            <span className="profile-launch-glow" />
+            <span className="profile-launch-orbit orbit-one" />
+            <span className="profile-launch-orbit orbit-two" />
+            <span className="profile-launch-particle particle-one" />
+            <span className="profile-launch-particle particle-two" />
+            <span className="profile-launch-particle particle-three" />
+            <img className="profile-launch-bot-image" src={profileLoadingBot} alt="" />
           </div>
-          <img src={heroArt} alt="学生使用电脑学习" />
-        </section>
-        <section className="profile-card profile-pad">
-          <div className="profile-section-head">
-            <div>
-              <h2>{bootstrapLaunch.title}</h2>
-              <p>这一步只生成低置信初始画像，后续仍需要课程任务和自主学习记录继续验证。</p>
-            </div>
-            <span>AI 生成中</span>
+
+          <div className="profile-launch-copy">
+            <h1>AI 正在生成画像评测题</h1>
+            <p>我们正在分析你的建档回答，智能匹配并准备个性化的画像评测题...</p>
           </div>
-          <div className="goal-table">
-            <span>学习方向</span><strong>{bootstrapLaunch.direction || "暂未填写，按基础诊断处理"}</strong>
-            <span>当前目标</span><strong>{bootstrapLaunch.goal || "先建立初始画像"}</strong>
-            <span>学习习惯</span><strong>{bootstrapLaunch.habit || "题量短、反馈清晰、可继续调整"}</strong>
+
+          <div className="profile-launch-progress" aria-hidden="true">
+            <span />
           </div>
-        </section>
+
+          <div className="profile-launch-status" aria-hidden="true">
+            <span>解析回答</span>
+            <i />
+            <span>匹配知识点</span>
+            <i />
+            <span>准备作答页</span>
+          </div>
+        </main>
       </div>
     );
+    return typeof document !== "undefined" ? createPortal(launchScreen, document.body) : launchScreen;
   }
 
   if (profile.profile_status === "EMPTY") {
@@ -1120,6 +1132,7 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
       const nextStep = profileBootstrapQuestions.findIndex((question) => !bootstrapDraft[question.key].trim());
       setBootstrapStep(nextStep >= 0 ? nextStep : profileBootstrapQuestions.length - 1);
       setBootstrapChatInput("");
+      setBootstrapGenerateError(null);
       setBootstrapDialogOpen(true);
     };
     const currentBootstrapQuestion = profileBootstrapQuestions[Math.min(bootstrapStep, profileBootstrapQuestions.length - 1)];
@@ -1145,16 +1158,41 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
       setBootstrapStep(0);
       setBootstrapChatInput("");
     };
-    const submitBootstrapDialog = () => {
+    const submitBootstrapDialog = async () => {
       if (!bootstrap) return;
+      const direction = bootstrapDraft.direction.trim();
+      const goal = bootstrapDraft.goal.trim();
+      const habit = bootstrapDraft.habit.trim();
       setBootstrapDialogOpen(false);
+      setBootstrapGenerateError(null);
       setBootstrapLaunch({
-        assignmentId: bootstrap.assignment_id,
+        assignmentId: null,
         title: bootstrap.title,
-        direction: bootstrapDraft.direction.trim(),
-        goal: bootstrapDraft.goal.trim(),
-        habit: bootstrapDraft.habit.trim()
+        direction,
+        goal,
+        habit
       });
+      setError(null);
+      setErrorDetail(null);
+      try {
+        const generated = await api.generateProfileBootstrapAssessment({
+          base_assignment_id: bootstrap.assignment_id,
+          direction,
+          goal,
+          habit
+        });
+        setBootstrapLaunch({
+          assignmentId: generated.assignment_id,
+          title: generated.title,
+          direction: generated.intake.direction,
+          goal: generated.intake.goal,
+          habit: generated.intake.habit
+        });
+      } catch (err) {
+        setBootstrapLaunch(null);
+        setBootstrapGenerateError(studentErrorMessage(err, "画像摸底题生成失败，请稍后重试。"));
+        setBootstrapDialogOpen(true);
+      }
     };
     const bootstrapModal = bootstrapDialogOpen && bootstrap ? (
       <div className="behavior-modal-backdrop" role="presentation" onMouseDown={() => setBootstrapDialogOpen(false)}>
@@ -1274,6 +1312,7 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
           </div>
           <div className="behavior-modal-foot">
             <span>已回答 {answeredBootstrapCount}/{profileBootstrapQuestions.length}，生成后进入摸底题作答页。</span>
+            {bootstrapGenerateError ? <em className="profile-bootstrap-error">{bootstrapGenerateError}</em> : null}
             <button type="button" onClick={resetBootstrapDialog}>重新填写</button>
             <button type="button" onClick={() => setBootstrapDialogOpen(false)}>稍后再说</button>
             <button type="button" onClick={submitBootstrapDialog} disabled={!bootstrapReady}>生成摸底题</button>

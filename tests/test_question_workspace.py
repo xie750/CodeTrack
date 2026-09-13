@@ -2,10 +2,11 @@ from datetime import timedelta
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from backend.app.core.database import SessionLocal
 from backend.app.main import app
-from backend.app.models import TaskAssignment
+from backend.app.models import Question, TaskAssignment
 from backend.app.models.entities import utc_now
 
 
@@ -218,3 +219,89 @@ def test_registered_student_builds_initial_profile_from_bootstrap_assessment():
             "栈与队列",
             "二叉树递归出口",
         }
+
+
+def test_profile_bootstrap_generation_uses_dialog_intake_and_updates_profile():
+    username = f"bootstrap_gen_{uuid4().hex[:8]}"
+    with TestClient(app) as c:
+        registered = c.post(
+            "/api/v1/auth/register",
+            json={
+                "username": username,
+                "password": "codetrack123",
+                "display_name": "动态摸底学生",
+                "role": "STUDENT",
+            },
+        )
+        assert registered.status_code == 201, registered.text
+        headers = {"Authorization": f"Bearer {registered.json()['data']['access_token']}"}
+
+        python_generated = c.post(
+            "/api/v1/student/profile/bootstrap-assessments",
+            headers=headers,
+            json={
+                "base_assignment_id": "assign_bootstrap_ds_profile_001",
+                "direction": "Python 程序设计基础",
+                "goal": "找出应该从哪里开始学",
+                "habit": "题量短一点",
+            },
+        )
+        assert python_generated.status_code == 201, python_generated.text
+        python_data = python_generated.json()["data"]
+        assert python_data["assignment_id"] != "assign_bootstrap_ds_profile_001"
+        assert python_data["intake"]["direction"] == "Python 程序设计基础"
+
+        ml_generated = c.post(
+            "/api/v1/student/profile/bootstrap-assessments",
+            headers=headers,
+            json={
+                "base_assignment_id": "assign_bootstrap_ds_profile_001",
+                "direction": "机器学习核心概念",
+                "goal": "验证最近自学效果",
+                "habit": "解析详细一点",
+            },
+        )
+        assert ml_generated.status_code == 201, ml_generated.text
+        ml_data = ml_generated.json()["data"]
+        assert ml_data["assignment_id"] != python_data["assignment_id"]
+        assert set(python_data["knowledge_points"]) != set(ml_data["knowledge_points"])
+
+        workspace = c.get(f"/api/v1/student/assignments/{python_data['assignment_id']}/workspace", headers=headers)
+        assert workspace.status_code == 200, workspace.text
+        workspace_data = workspace.json()["data"]
+        assert workspace_data["assignment"]["assignment_mode"] == "PROFILE_BOOTSTRAP"
+        assert "Python 程序设计基础" in workspace_data["task"]["description"]
+        assert any("Python" in question["stem"] or "列表" in question["stem"] for question in workspace_data["questions"])
+        assert all("链表" not in question["stem"] for question in workspace_data["questions"])
+
+        db = SessionLocal()
+        try:
+            questions = list(
+                db.scalars(
+                    select(Question)
+                    .where(Question.task_id == python_data["task_id"])
+                    .order_by(Question.sort_order.asc())
+                ).all()
+            )
+            answer_payload = [
+                {
+                    "question_id": question.id,
+                    "selected_option_ids": [option.id for option in question.options if option.is_correct],
+                }
+                for question in questions
+            ]
+        finally:
+            db.close()
+
+        submitted = c.post(
+            f"/api/v1/student/assignments/{python_data['assignment_id']}/submit-answers",
+            headers=headers,
+            json={"answers": answer_payload},
+        )
+        assert submitted.status_code == 201, submitted.text
+        assert submitted.json()["data"]["profile_signal"]["profile_status"] == "INITIAL"
+
+        profile = c.get("/api/v1/student/profile", params={"course_id": "course_ds_001"}, headers=headers)
+        assert profile.status_code == 200
+        points = {item["knowledge_point"] for item in profile.json()["data"]["knowledge_states"]}
+        assert any("Python" in point for point in points)

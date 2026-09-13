@@ -268,7 +268,26 @@ function normalizeTaskQuestions(rawQuestions: any, taskType: string, chapter: st
   })
 }
 
+function textValue(value: unknown) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function taskTitleFromPayload(body: any) {
+  return (
+    textValue(body?.title)
+    || textValue(body?.name)
+    || textValue(body?.task_name)
+    || textValue(body?.taskName)
+    || textValue(body?.assignment_name)
+    || textValue(body?.assignmentName)
+  )
+}
+
 function createUnifiedTaskPayload(body: any) {
+  const title = taskTitleFromPayload(body)
+  if (!title) {
+    throw new ApiError('请输入任务标题', 400)
+  }
   const taskType = body.task_kind === 'question_set' ? 'quiz' : body.type || 'programming'
   const isCoding = taskType === 'programming' || taskType === 'project'
   const chapter = Array.isArray(body.chapter_label) ? body.chapter_label : [body.chapter_label || '链表']
@@ -284,7 +303,7 @@ function createUnifiedTaskPayload(body: any) {
   }
   return {
     course_id: unifiedCourseId(body.course_id),
-    title: body.title || '未命名任务',
+    title,
     description: body.description || '请完成本次课程任务。',
     workspace_type: isCoding ? 'CODING' : 'QUESTION_SET',
     language: 'CPP',
@@ -307,9 +326,10 @@ function createUnifiedTaskPayload(body: any) {
 
 function unifiedCreatedTaskToLegacy(data: any, body: any): ApiTask {
   const learningObjectives = Array.isArray(body.chapter_label) ? body.chapter_label : [body.chapter_label || '链表']
+  const title = textValue(data.title) || taskTitleFromPayload(body)
   return unifiedTaskToLegacy({
     task_id: data.task_id,
-    title: data.title || body.title,
+    title,
     description: body.description || '',
     workspace_type: data.workspace_type || (body.type === 'programming' ? 'CODING' : 'QUESTION_SET'),
     raw_status: data.status || 'OPEN',
