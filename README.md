@@ -27,6 +27,78 @@ AI/RAG 集成通过模型网关适配器进行。当配置了 `CODETRACK_MODEL_G
 
 ## 启动
 
+### AI 讲解课堂集成启动
+
+AI 讲解课堂现在使用项目内的 OpenMAIC 运行时，源码位于：
+
+```text
+third_party/openmaic
+```
+
+本地联调需要同时启动三个服务：
+
+1. OpenMAIC 课堂运行时，端口 `3100`。
+2. CodeTrack 学生后端，端口 `8000`。
+3. CodeTrack 前端，端口 `5173`。
+
+OpenMAIC 需要允许被 CodeTrack 前端 iframe 嵌入。确认 `third_party/openmaic/.env.local` 至少包含：
+
+```env
+ALLOWED_FRAME_ANCESTORS=http://127.0.0.1:5173 http://localhost:5173
+```
+
+CodeTrack 前端需要知道 OpenMAIC bridge 地址。确认 `frontend/.env.local` 至少包含：
+
+```env
+VITE_OPENMAIC_RUNTIME_URL=http://127.0.0.1:3100/codetrack-bridge
+```
+
+**终端 1：启动 OpenMAIC**
+
+```bash
+cd D:\shy\CodeTrack\third_party\openmaic
+pnpm exec next dev -p 3100
+```
+
+**终端 2：启动 CodeTrack 后端**
+
+```bash
+cd D:\shy\CodeTrack
+python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+```
+
+**终端 3：启动 CodeTrack 前端**
+
+```bash
+cd D:\shy\CodeTrack\frontend
+npm run dev -- --host 127.0.0.1 --port 5173
+```
+
+启动后访问：
+
+```text
+http://127.0.0.1:5173/
+```
+
+AI 课堂测试资源示例：
+
+```text
+http://127.0.0.1:5173/self-study/library/classroom/res_4d0ff718e6c9
+```
+
+如果页面中间显示“拒绝访问”图标，通常不是服务没部署，而是浏览器阻止了跨端口 iframe：
+
+- CodeTrack 前端是 `http://127.0.0.1:5173`。
+- OpenMAIC 运行时是 `http://127.0.0.1:3100`。
+- 浏览器会把不同端口视为不同源。
+- OpenMAIC 默认响应头包含 `X-Frame-Options: SAMEORIGIN` 和 `Content-Security-Policy: frame-ancestors 'self'`，会禁止被 `5173` 页面嵌入。
+
+处理方式：
+
+1. 设置 `third_party/openmaic/.env.local` 中的 `ALLOWED_FRAME_ANCESTORS`。
+2. 重启 OpenMAIC 服务。
+3. 刷新 CodeTrack AI 课堂页面。
+
 **后端**（一个终端）：
 
 ```bash

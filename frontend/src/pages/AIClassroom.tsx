@@ -27,6 +27,15 @@ function postClassroomToRuntime(target: HTMLIFrameElement | null, payload: OpenM
   );
 }
 
+function classroomBridgeEnvelope(payload: OpenMaicClassroomExport | null) {
+  if (!payload) return "";
+  return JSON.stringify({
+    type: "codetrack:openmaic-classroom",
+    version: 1,
+    payload
+  });
+}
+
 export default function AIClassroom() {
   const navigate = useNavigate();
   const { resourceId } = useParams();
@@ -37,6 +46,7 @@ export default function AIClassroom() {
   const [error, setError] = useState<string | null>(null);
 
   const runtimeUrl = useMemo(() => resourceId ? buildRuntimeUrl(resourceId) : "", [resourceId]);
+  const runtimeEnvelope = useMemo(() => classroomBridgeEnvelope(classroomExport), [classroomExport]);
 
   useEffect(() => {
     let alive = true;
@@ -78,10 +88,20 @@ export default function AIClassroom() {
 
   useEffect(() => {
     if (!classroomExport) return undefined;
+    const onRuntimeReady = (event: MessageEvent) => {
+      if (event.data?.type === "codetrack:openmaic-ready") {
+        postClassroomToRuntime(iframeRef.current, classroomExport);
+      }
+    };
+    window.addEventListener("message", onRuntimeReady);
+    postClassroomToRuntime(iframeRef.current, classroomExport);
     const timer = window.setInterval(() => {
       postClassroomToRuntime(iframeRef.current, classroomExport);
     }, 1400);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.removeEventListener("message", onRuntimeReady);
+      window.clearInterval(timer);
+    };
   }, [classroomExport]);
 
   function handleIframeLoad() {
@@ -168,6 +188,7 @@ export default function AIClassroom() {
         className="openmaic-bridge-frame"
         title={resource.title}
         src={runtimeUrl}
+        name={runtimeEnvelope}
         allow="fullscreen; clipboard-read; clipboard-write; microphone; autoplay"
         onLoad={handleIframeLoad}
       />

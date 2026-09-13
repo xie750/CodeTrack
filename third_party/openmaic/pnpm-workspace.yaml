@@ -1,0 +1,18 @@
+packages:
+  - "packages/*"
+  - "packages/@openmaic/*"
+  - "!packages/docs" # standalone docs sub-app: own lockfile, build, deploy
+allowBuilds:
+  '@alicloud/openapi-core': true
+  '@biomejs/biome': true
+  '@google/genai': true
+  '@scarf/scarf': true
+  canvas: true
+  core-js: true
+  es5-ext: true
+  esbuild: true
+  msw: true
+  onnxruntime-node: true
+  protobufjs: true
+  sharp: true
+  unrs-resolver: true

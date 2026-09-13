@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import {
   AlertCircle,
   ArrowLeft,
@@ -236,6 +237,14 @@ function splitOptionLabels(value: string) {
 }
 
 export default function QuestionWorkspace({ assignmentId, focusQuestionId, onBack }: PageProps) {
+  const location = useLocation();
+  const profileBootstrapIntake = (location.state as {
+    profileBootstrapIntake?: {
+      direction?: string;
+      goal?: string;
+      habit?: string;
+    };
+  } | null)?.profileBootstrapIntake;
   const [workspace, setWorkspace] = useState<QuestionWorkspaceData | null>(null);
   const [result, setResult] = useState<SubmitQuestionResult | null>(null);
   const [answers, setAnswers] = useState<AnswerMap>({});
@@ -321,6 +330,7 @@ export default function QuestionWorkspace({ assignmentId, focusQuestionId, onBac
   const favoriteCount = questions.filter((question) => favoriteIds.has(favoriteRecordId("QUESTION", assignmentId, question.question_id))).length;
   const scheduleInfo = getScheduleInfo(workspace?.assignment.start_at);
   const assignmentOpen = scheduleInfo.isOpen;
+  const isProfileBootstrap = workspace?.assignment.assignment_mode === "PROFILE_BOOTSTRAP";
 
   useEffect(() => {
     if (!workspace || submitted) return;
@@ -775,7 +785,7 @@ export default function QuestionWorkspace({ assignmentId, focusQuestionId, onBac
               <button className="program-back" type="button" onClick={onBack}><ArrowLeft size={16} /> 返回班级任务</button>
               <div className="question-title-line">
                 <h1>{workspace.task.title}</h1>
-                <span>{workspace.assignment.assignment_mode === "EXAM" ? "考核任务" : "练习任务"} · {statusText(workspace.progress.status, workspace.assignment.start_at)}</span>
+                <span>{isProfileBootstrap ? "画像摸底" : workspace.assignment.assignment_mode === "EXAM" ? "考核任务" : "练习任务"} · {statusText(workspace.progress.status, workspace.assignment.start_at)}</span>
               </div>
               <p>{workspace.task.course_name} · 发布老师：{workspace.task.teacher_name} · 开始：{formatStudentDateTime(workspace.assignment.start_at, "未设置")} · 截止：{formatStudentDateTime(workspace.assignment.deadline, "未设置")}</p>
             </div>
@@ -806,6 +816,21 @@ export default function QuestionWorkspace({ assignmentId, focusQuestionId, onBac
                   <p>{assignmentOpen ? "请按题目要求完成选择或填空。答案会自动保留在当前页面，交卷前可继续修改。" : `本任务将于 ${scheduleInfo.absoluteLabel} 开放，开始前可查看题目安排，暂不能保存草稿或交卷。`}</p>
                 </div>
               </section>
+
+              {isProfileBootstrap ? (
+                <section className="question-notice">
+                  <Bot size={17} />
+                  <div>
+                    <strong>画像摸底说明</strong>
+                    <p>
+                      本次题目只用于生成低置信初始画像，不会单凭几道题给你定型。
+                      {profileBootstrapIntake?.direction ? ` 方向：${profileBootstrapIntake.direction}` : ""}
+                      {profileBootstrapIntake?.goal ? ` 目标：${profileBootstrapIntake.goal}` : ""}
+                      {profileBootstrapIntake?.habit ? ` 偏好：${profileBootstrapIntake.habit}` : ""}
+                    </p>
+                  </div>
+                </section>
+              ) : null}
 
               <div className="question-list">
                 {questions.map((question, index) => {

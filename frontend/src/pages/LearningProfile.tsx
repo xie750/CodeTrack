@@ -15,6 +15,7 @@ import {
   Goal,
   GraduationCap,
   HardDrive,
+  Info as InfoIcon,
   Layers3,
   ListChecks,
   Medal,
@@ -906,6 +907,19 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
   const [aiAdvice, setAiAdvice] = useState<StudentAiChatResponse | null>(null);
   const [aiAdviceLoading, setAiAdviceLoading] = useState(false);
   const [aiAdviceError, setAiAdviceError] = useState<string | null>(null);
+  const [bootstrapDialogOpen, setBootstrapDialogOpen] = useState(false);
+  const [bootstrapDraft, setBootstrapDraft] = useState({
+    direction: "",
+    goal: "",
+    habit: ""
+  });
+  const [bootstrapLaunch, setBootstrapLaunch] = useState<{
+    assignmentId: string;
+    title: string;
+    direction: string;
+    goal: string;
+    habit: string;
+  } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -973,6 +987,22 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
     return () => window.clearInterval(timer);
   }, [aiAdviceLoading, initialCourseId, selectedCourseId]);
 
+  useEffect(() => {
+    if (!bootstrapLaunch) return undefined;
+    const timer = window.setTimeout(() => {
+      navigate(`/question-workspace/${bootstrapLaunch.assignmentId}`, {
+        state: {
+          profileBootstrapIntake: {
+            direction: bootstrapLaunch.direction,
+            goal: bootstrapLaunch.goal,
+            habit: bootstrapLaunch.habit
+          }
+        }
+      });
+    }, 1800);
+    return () => window.clearTimeout(timer);
+  }, [bootstrapLaunch, navigate]);
+
   const currentCourse = useMemo(
     () => context?.courses.find((course) => course.course_id === selectedCourseId),
     [context, selectedCourseId]
@@ -1014,30 +1044,202 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
     );
   }
 
+  if (bootstrapLaunch) {
+    return (
+      <div className="profile-page">
+        <section className="profile-hero profile-loading-hero">
+          <div>
+            <h1>正在构建练习题...</h1>
+            <p>系统正在根据你的方向、目标和学习习惯组织画像摸底题，完成后会进入作答页。</p>
+          </div>
+          <img src={heroArt} alt="学生使用电脑学习" />
+        </section>
+        <section className="profile-card profile-pad">
+          <div className="profile-section-head">
+            <div>
+              <h2>{bootstrapLaunch.title}</h2>
+              <p>这一步只生成低置信初始画像，后续仍需要课程任务和自主学习记录继续验证。</p>
+            </div>
+            <span>AI 生成中</span>
+          </div>
+          <div className="goal-table">
+            <span>学习方向</span><strong>{bootstrapLaunch.direction || "暂未填写，按基础诊断处理"}</strong>
+            <span>当前目标</span><strong>{bootstrapLaunch.goal || "先建立初始画像"}</strong>
+            <span>学习习惯</span><strong>{bootstrapLaunch.habit || "题量短、反馈清晰、可继续调整"}</strong>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
   if (profile.profile_status === "EMPTY") {
     const bootstrap = profile.bootstrap_assessment;
     const bootstrapDescription = bootstrap
       ? `建议先完成「${bootstrap.title}」，约 ${bootstrap.estimated_minutes} 分钟，共 ${bootstrap.question_count} 题，覆盖 ${bootstrap.knowledge_points.slice(0, 3).join("、")}。提交后会生成低置信初始画像。`
       : "当前课程暂未配置画像摸底题，可以先进入自主学习保存一份学习产物，系统会据此逐步生成画像。";
+    const openBootstrapDialog = () => {
+      if (bootstrap) setBootstrapDialogOpen(true);
+    };
+    const submitBootstrapDialog = () => {
+      if (!bootstrap) return;
+      setBootstrapDialogOpen(false);
+      setBootstrapLaunch({
+        assignmentId: bootstrap.assignment_id,
+        title: bootstrap.title,
+        direction: bootstrapDraft.direction.trim(),
+        goal: bootstrapDraft.goal.trim(),
+        habit: bootstrapDraft.habit.trim()
+      });
+    };
+    const bootstrapModal = bootstrapDialogOpen && bootstrap ? (
+      <div className="behavior-modal-backdrop" role="presentation" onMouseDown={() => setBootstrapDialogOpen(false)}>
+        <article className="behavior-modal" role="dialog" aria-modal="true" aria-label="画像摸底前信息收集" onMouseDown={(event) => event.stopPropagation()}>
+          <div className="behavior-modal-head">
+            <div>
+              <h2>先了解你的学习方向</h2>
+              <p>只问三个简短问题，用来调整摸底题侧重点；不会把这些回答直接当成画像结论。</p>
+            </div>
+            <button type="button" onClick={() => setBootstrapDialogOpen(false)} aria-label="关闭">
+              <X size={18} />
+            </button>
+          </div>
+          <div className="goal-table">
+            <span>你更想先补哪类能力？</span>
+            <textarea
+              value={bootstrapDraft.direction}
+              onChange={(event) => setBootstrapDraft((draft) => ({ ...draft, direction: event.target.value }))}
+              placeholder="例如：Python 基础、数据结构刷题、机器学习概念、期末复习"
+              rows={3}
+              style={{ width: "100%", resize: "vertical" }}
+            />
+            <span>这次摸底想服务什么目标？</span>
+            <textarea
+              value={bootstrapDraft.goal}
+              onChange={(event) => setBootstrapDraft((draft) => ({ ...draft, goal: event.target.value }))}
+              placeholder="例如：想知道自己从哪里开始学、准备完成课程作业、查漏补缺"
+              rows={3}
+              style={{ width: "100%", resize: "vertical" }}
+            />
+            <span>你偏好的练习方式？</span>
+            <textarea
+              value={bootstrapDraft.habit}
+              onChange={(event) => setBootstrapDraft((draft) => ({ ...draft, habit: event.target.value }))}
+              placeholder="例如：题量少一点、解析详细一点、先基础后提高、每天 20 分钟"
+              rows={3}
+              style={{ width: "100%", resize: "vertical" }}
+            />
+          </div>
+          <div className="behavior-modal-foot">
+            <span>下一步会进入“正在构建练习题”页面，然后再开始作答。</span>
+            <button type="button" onClick={() => setBootstrapDialogOpen(false)}>稍后再说</button>
+            <button type="button" onClick={submitBootstrapDialog}>生成摸底题</button>
+          </div>
+        </article>
+      </div>
+    ) : null;
     return (
       <div className="profile-page">
-        <StudentState
-          kind="empty"
-          title="学习画像尚未构建"
-          description="当前账号还没有真实学习证据，系统不会用默认分数冒充画像。"
-          detail={`${profile.profile_evidence_note ?? ""} ${bootstrapDescription}`.trim()}
-          actions={[
-            ...(bootstrap
-              ? [{
-                  label: bootstrap.action_label || "开始画像摸底",
-                  variant: "primary" as const,
-                  onClick: () => navigate(`/question-workspace/${bootstrap.assignment_id}`),
-                }]
-              : []),
-            { label: "先去自主学习", onClick: () => navigate("/self-study") },
-          ]}
-          className="profile-card profile-pad"
-        />
+        <section className="profile-hero course-profile-hero global-profile-hero">
+          <div>
+            <h1>{context.student.name}的个人学习画像</h1>
+            <p>当前还没有真实学习证据，系统不会用默认分数冒充画像。先完成一次简短摸底，生成低置信初始画像。</p>
+          </div>
+          <img src={heroArt} alt="学生使用电脑学习" />
+        </section>
+
+        <section className="global-profile-metrics" data-onboarding-id="tour-profile-overview">
+          <article className="profile-card">
+            <span><ChartNoAxesColumnIncreasing size={18} /></span>
+            <small>整体画像分</small>
+            <strong>暂无</strong>
+          </article>
+          <article className="profile-card">
+            <span><GraduationCap size={18} /></span>
+            <small>课程能力</small>
+            <strong>暂无课程信息</strong>
+          </article>
+          <article className="profile-card">
+            <span><Sparkles size={18} /></span>
+            <small>自主学习</small>
+            <strong>待采集</strong>
+          </article>
+          <article className="profile-card">
+            <span><RefreshCw size={18} /></span>
+            <small>学习行为</small>
+            <strong>待观察</strong>
+          </article>
+        </section>
+
+        <section className="profile-top-grid global-profile-top">
+          <article className="profile-card profile-pad">
+            <h2>画像初始状态</h2>
+            <div className="goal-table">
+              <span>班级信息</span><strong>{context.student.has_class ? context.student.class_name : "暂无班级信息"}</strong>
+              <span>课程证据</span><strong>暂无课程任务证据</strong>
+              <span>画像证据</span><strong>尚未产生真实学习记录</strong>
+              <span>下一步</span><strong>{bootstrap ? bootstrap.title : "先完成自主学习记录"}</strong>
+            </div>
+          </article>
+          <article className="profile-card profile-pad">
+            <div className="profile-section-head">
+              <div>
+                <h2>画像摸底入口</h2>
+                <p>{bootstrapDescription}</p>
+              </div>
+              <span>{profile.profile_confidence || "NONE"}</span>
+            </div>
+            <div className="ai-advice-actions">
+              {bootstrap ? <button type="button" onClick={openBootstrapDialog}>{bootstrap.action_label || "开始画像摸底"}</button> : null}
+              <button type="button" onClick={() => navigate("/self-study")}>先去自主学习</button>
+            </div>
+          </article>
+        </section>
+
+        <section className="profile-card profile-pad course-dimension-section">
+          <div className="profile-section-head">
+            <div>
+              <h2>个人画像三类维度</h2>
+              <p>模块已准备好，但还没有足够证据计算分数。</p>
+            </div>
+          </div>
+          <div className="global-dimension-groups">
+            {[
+              { group: "课程能力", items: ["暂无课程信息", "暂无课程任务证据"] },
+              { group: "自主学习", items: ["待采集学习方向", "待记录学习产物"] },
+              { group: "学习行为", items: ["待观察学习习惯", "待形成练习记录"] },
+            ].map((group) => (
+              <article className="global-dimension-group" key={group.group}>
+                <h3>{group.group}</h3>
+                <div className="course-dimension-grid compact">
+                  {group.items.map((item) => (
+                    <article className="course-dimension-card" key={item}>
+                      <span className="blue"><InfoIcon /></span>
+                      <div>
+                        <strong>{item}</strong>
+                        <p>完成画像摸底和后续学习后自动更新。</p>
+                      </div>
+                      <em>--</em>
+                    </article>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="profile-card profile-pad knowledge-section">
+          <div className="profile-section-head">
+            <div>
+              <h2>知识点与练习建议</h2>
+              <p>暂无从课程或班级搬入的知识证据；摸底题会先根据你的交互回答生成第一批可验证练习。</p>
+            </div>
+          </div>
+          <div className="empty-list">
+            <strong>暂无练习画像</strong>
+            <p>{profile.profile_evidence_note} 当前不会展示薄弱点、课程能力或错因判断。</p>
+          </div>
+        </section>
+        {bootstrapModal}
       </div>
     );
   }
@@ -1045,8 +1247,9 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
   const activeProfile = profile;
   const activeContext = context;
   const isCourseLocked = Boolean(initialCourseId);
+  const isInitialProfile = activeProfile.profile_status === "INITIAL";
   const overview = activeProfile.overview;
-  const dimensions = isCourseLocked ? courseDimensionProfile(activeProfile) : buildGlobalProfileDimensions(activeProfile);
+  const dimensions = isInitialProfile ? [] : isCourseLocked ? courseDimensionProfile(activeProfile) : buildGlobalProfileDimensions(activeProfile);
   const polygonPoints = radarPoints(dimensions).map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
   const knowledgeCards = activeProfile.knowledge_states.map((item, index) => ({
     icon: knowledgeIcons[index % knowledgeIcons.length],
@@ -1081,6 +1284,147 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
       time: formatTime(overview.updated_at)
     }));
   const progress = overview.overall_progress;
+
+  if (isInitialProfile) {
+    const hasClass = activeContext.student.has_class !== false && Boolean(activeContext.student.class_id);
+    const initialKnowledgeStates = activeProfile.knowledge_states.filter((item) => item.evidence_count > 0);
+    const initialGroups = [
+      { group: "课程能力", items: ["暂无课程信息", "暂无课程任务证据"] },
+      { group: "自主学习", items: ["已完成画像摸底", "待记录学习产物"] },
+      { group: "学习行为", items: ["待观察学习习惯", "待形成练习记录"] },
+    ];
+
+    return (
+      <div className="profile-page global-profile-page">
+        <section className="profile-hero course-profile-hero global-profile-hero">
+          <div>
+            <h1>{activeContext.student.name}的个人学习画像</h1>
+            <p>画像已完成初构建，但当前只代表摸底题形成的低置信线索；没有课程、班级或真实任务证据的模块会继续保持暂无状态。</p>
+          </div>
+          <img src={heroArt} alt="学生使用电脑学习" />
+        </section>
+
+        <section className="global-profile-metrics" data-onboarding-id="tour-profile-overview">
+          <article className="profile-card">
+            <span><ChartNoAxesColumnIncreasing size={18} /></span>
+            <small>整体画像分</small>
+            <strong>待验证</strong>
+          </article>
+          <article className="profile-card">
+            <span><GraduationCap size={18} /></span>
+            <small>课程能力</small>
+            <strong>暂无课程信息</strong>
+          </article>
+          <article className="profile-card">
+            <span><Sparkles size={18} /></span>
+            <small>自主学习</small>
+            <strong>初始线索</strong>
+          </article>
+          <article className="profile-card">
+            <span><RefreshCw size={18} /></span>
+            <small>学习行为</small>
+            <strong>待观察</strong>
+          </article>
+        </section>
+
+        <section className="profile-top-grid global-profile-top">
+          <article className="profile-card profile-pad">
+            <h2>画像初构建状态</h2>
+            <div className="goal-table">
+              <span>学生</span><strong>{activeContext.student.name}</strong>
+              <span>班级信息</span><strong>{hasClass ? activeContext.student.class_name : "暂无班级信息"}</strong>
+              <span>课程证据</span><strong>暂无课程任务证据</strong>
+              <span>画像置信度</span><strong>{activeProfile.profile_confidence || "LOW"}，需要后续学习记录验证</strong>
+              <span>画像证据</span><strong>{activeProfile.profile_evidence_note || "来自画像摸底题，不直接等同于课程能力结论"}</strong>
+            </div>
+            <div className="profile-course-scope global">
+              <span><InfoIcon size={15} /> 当前为低置信初始画像</span>
+              <p>摸底题只用于确定后续练习方向；课程能力、课程知识搬入、错因判断仍要等课程任务或真实学习行为产生后再更新。</p>
+            </div>
+          </article>
+
+          <article className="profile-card profile-pad">
+            <div className="profile-section-head">
+              <div>
+                <h2>下一步验证</h2>
+                <p>系统不会把几道题直接判定为完整画像。你可以继续自学，或加入班级课程后用任务记录验证这些初始线索。</p>
+              </div>
+              <span>待积累证据</span>
+            </div>
+            <div className="ai-advice-actions">
+              <button type="button" onClick={() => navigate("/self-study")}>去自主学习</button>
+              <button type="button" onClick={() => navigate("/")}>返回学习首页</button>
+            </div>
+          </article>
+        </section>
+
+        <section className="profile-card profile-pad course-dimension-section">
+          <div className="profile-section-head">
+            <div>
+              <h2>个人画像三类维度</h2>
+              <p>模块保留，但没有证据的维度不展示分数。</p>
+            </div>
+            <span>初始状态</span>
+          </div>
+          <div className="global-dimension-groups">
+            {initialGroups.map((group) => (
+              <article className="global-dimension-group" key={group.group}>
+                <h3>{group.group}</h3>
+                <div className="course-dimension-grid compact">
+                  {group.items.map((item) => (
+                    <article className="course-dimension-card" key={item}>
+                      <span className={group.group === "课程能力" ? "blue" : group.group === "自主学习" ? "orange" : "green"}>
+                        <InfoIcon size={18} />
+                      </span>
+                      <div>
+                        <strong>{item}</strong>
+                        <p>{group.group === "课程能力" ? "未加入课程或未产生课程任务记录前不计算。" : "需要后续学习记录继续验证。"}</p>
+                      </div>
+                      <em>--</em>
+                    </article>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="profile-card profile-pad knowledge-section">
+          <div className="profile-section-head">
+            <div>
+              <h2>画像摸底形成的初始知识线索</h2>
+              <p>这里不是从课程搬入的知识画像，也不展示确定性掌握分；后续会被课程任务和自主学习记录校准。</p>
+            </div>
+            <span>低置信</span>
+          </div>
+          <div className="knowledge-grid">
+            {initialKnowledgeStates.length ? initialKnowledgeStates.map((item, index) => (
+              <article className="knowledge-card" key={`${item.knowledge_point}-${index}`}>
+                <div className="knowledge-top">
+                  <span className={knowledgeColors[index % knowledgeColors.length]}>{knowledgeIcons[index % knowledgeIcons.length]}</span>
+                  {item.knowledge_point}
+                </div>
+                <strong>待验证 <em>低置信</em></strong>
+                <div className="empty-panel compact">{item.last_evidence || "来自画像摸底题，暂不作为课程能力结论。"}</div>
+              </article>
+            )) : <div className="empty-panel wide">暂无可展示的初始知识线索。</div>}
+          </div>
+        </section>
+
+        <section className="profile-mid-grid global-advice-grid">
+          <article className="profile-card profile-pad">
+            <div className="profile-section-head"><h2>整体薄弱信号</h2><span>待验证</span></div>
+            <div className="empty-panel">暂无可判定的薄弱项。需要课程任务、自主学习产物或更多练习记录后再生成。</div>
+          </article>
+
+          <article className="profile-card profile-pad">
+            <div className="profile-section-head"><h2>近期学习记录</h2><span>初始状态</span></div>
+            <div className="empty-panel">暂无真实学习行为记录。完成自学、保存资料或提交任务后会在这里沉淀。</div>
+          </article>
+        </section>
+      </div>
+    );
+  }
 
   function openSelfStudyForPoint(knowledgePoint?: string) {
     navigate("/self-study", {
