@@ -226,11 +226,18 @@ export default function StudentResourceCenter() {
   useEffect(() => {
     const focusedResourceId = new URLSearchParams(location.search).get("resource");
     if (!focusedResourceId) return;
-    if (generatedResources.some((item) => item.id === focusedResourceId && item.resource_type === "AI_CLASSROOM")) {
+    const focusedResource = generatedResources.find((item) => item.id === focusedResourceId);
+    if (!focusedResource) return;
+    if (focusedResource.resource_type === "AI_CLASSROOM") {
       setActiveFolder("AI讲解课堂");
       setCurrentPage(1);
       setActionNotice("已定位到刚保存的 AI讲解课堂资源。");
+      return;
     }
+    setActiveFolder(generatedToResource(focusedResource).folder);
+    setCurrentPage(1);
+    setPreviewResource(focusedResource);
+    setActionNotice("已打开刚保存的 AI 生成资源。");
   }, [generatedResources, location.search]);
 
   useEffect(() => {

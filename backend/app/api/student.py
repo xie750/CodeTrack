@@ -1,6 +1,7 @@
 import json
 from datetime import date, datetime, timezone
 from typing import Any
+from urllib.parse import quote_plus
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile, status
@@ -215,6 +216,123 @@ class StudentDailyTaskUpdateRequest(BaseModel):
 
 class JoinCourseOfferingRequest(BaseModel):
     teaching_assignment_id: str = Field(min_length=1, max_length=64)
+
+
+def _default_self_study_topic(course_name: str) -> str:
+    if "机器学习" in course_name:
+        return "过拟合与正则化"
+    if "Python" in course_name:
+        return "Python 列表与字典查找"
+    return "链表"
+
+
+def _daily_recommendation_topic(profile: dict, course: Course) -> tuple[str, str]:
+    weak_state = next(
+        (
+            item
+            for item in profile.get("knowledge_states", [])
+            if isinstance(item, dict) and str(item.get("state", "")).upper() in {"WEAK", "NEEDS_REVIEW", "AT_RISK"}
+        ),
+        None,
+    )
+    if not weak_state:
+        weak_state = next(
+            (
+                item
+                for item in profile.get("knowledge_states", [])
+                if isinstance(item, dict) and str(item.get("knowledge_point", "")).strip()
+            ),
+            None,
+        )
+    if weak_state:
+        topic = str(weak_state.get("knowledge_point", "")).strip()
+        reason = str(weak_state.get("last_evidence", "")).strip()
+        if topic:
+            return topic, reason or f"{topic} 是当前画像中优先复盘的知识点。"
+
+    recommendation = next(
+        (
+            item
+            for item in profile.get("recommendations", [])
+            if isinstance(item, dict) and item.get("related_knowledge_points")
+        ),
+        None,
+    )
+    if recommendation:
+        points = recommendation.get("related_knowledge_points") or []
+        topic = str(points[0]).strip() if isinstance(points, list) and points else ""
+        reason = str(recommendation.get("reason", "")).strip()
+        if topic:
+            return topic, reason or f"系统推荐先围绕 {topic} 做一次自主学习。"
+
+    topic = _default_self_study_topic(course.name if course else "")
+    overview = profile.get("overview", {}) if isinstance(profile.get("overview"), dict) else {}
+    reason = str(overview.get("recommendation", "")).strip()
+    return topic, reason or f"当前课程适合先从 {topic} 建立自主学习起点。"
+
+
+def _self_study_external_resources(topic: str) -> list[dict[str, str]]:
+    query = quote_plus(f"{topic} 数据结构 讲解")
+    lower_topic = topic.lower()
+    if "python" in lower_topic:
+        query = quote_plus(f"{topic} Python 教程")
+        practice_title = "Python 官方教程：数据结构"
+        practice_url = "https://docs.python.org/zh-cn/3/tutorial/datastructures.html"
+        practice_desc = "对照官方文档复盘列表、字典与常见操作"
+        article_url = "https://www.runoob.com/python3/python3-tutorial.html"
+        article_desc = "中文教程快速回看 Python 基础语法与示例"
+    elif "机器学习" in topic or "过拟合" in topic or "模型" in topic:
+        query = quote_plus(f"{topic} 机器学习 讲解")
+        practice_title = "scikit-learn 文档：模型评估与选择"
+        practice_url = "https://scikit-learn.org/stable/model_selection.html"
+        practice_desc = "用官方文档理解训练、验证与模型选择流程"
+        article_url = "https://developers.google.com/machine-learning/crash-course/overfitting/overfitting"
+        article_desc = "通过机器学习速成课程复盘过拟合现象"
+    elif "栈" in topic or "队列" in topic:
+        practice_title = "LeetCode 练习：20. Valid Parentheses"
+        practice_url = "https://leetcode.cn/problems/valid-parentheses/"
+        practice_desc = "用括号匹配巩固栈的后进先出操作"
+        article_url = "https://www.runoob.com/?s=%E6%A0%88+%E9%98%9F%E5%88%97"
+        article_desc = "检索栈、队列与循环队列的图文资料"
+    elif "二叉树" in topic or "树" in topic:
+        practice_title = "LeetCode 练习：144. Binary Tree Preorder Traversal"
+        practice_url = "https://leetcode.cn/problems/binary-tree-preorder-traversal/"
+        practice_desc = "用前序遍历巩固递归出口与访问顺序"
+        article_url = "https://www.runoob.com/?s=%E4%BA%8C%E5%8F%89%E6%A0%91"
+        article_desc = "检索二叉树概念、遍历和代码示例"
+    else:
+        practice_title = "LeetCode 练习：206. Reverse Linked List"
+        practice_url = "https://leetcode.cn/problems/reverse-linked-list/"
+        practice_desc = "经典反转链表题，巩固指针操作"
+        article_url = "https://www.runoob.com/data-structures/data-structures-linked-list.html"
+        article_desc = "图文总结常见链表操作与注意事项"
+
+    return [
+        {
+            "id": "bilibili-search",
+            "title": f"B站课程：{topic} 基础与专题练习",
+            "type": "B站",
+            "description": "打开站内检索，选择适合自己的系统讲解视频",
+            "url": f"https://search.bilibili.com/all?keyword={query}",
+            "tone": "red",
+        },
+        {
+            "id": "practice-source",
+            "title": practice_title,
+            "type": "练习",
+            "description": practice_desc,
+            "url": practice_url,
+            "tone": "amber",
+        },
+        {
+            "id": "article-source",
+            "title": f"教程 / 博客文章：{topic} 操作总结",
+            "type": "教程",
+            "description": article_desc,
+            "url": article_url,
+            "tone": "green",
+        },
+    ]
 
 
 def today_date_key() -> str:
@@ -1227,6 +1345,67 @@ def reply_student_intervention(
     db.merge(response)
     db.commit()
     return ok({"event_id": event.id, "responded": True, "content": payload.content.strip()})
+
+
+@router.get("/self-study/daily-recommendation")
+def self_study_daily_recommendation(
+    course_id: str | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_role(user, "STUDENT")
+    class_id, course, administrative_class = resolve_student_learning_context(db, user, course_id)
+    profile = serialize_learner_profile(
+        db,
+        student_id=user.id,
+        course_id=course.id,
+        class_id=class_id,
+    )
+    if profile is None:
+        profile = initial_learner_profile_payload(
+            db,
+            user=user,
+            class_id=class_id if administrative_class is not None else None,
+            course_id=course.id,
+        )
+    topic, reason = _daily_recommendation_topic(profile, course)
+    return ok(
+        {
+            "task_date": today_date_key(),
+            "course_id": course.id,
+            "course_name": course.name,
+            "topic": topic,
+            "topic_badge": "薄弱知识点" if profile.get("knowledge_states") else "推荐起点",
+            "reason": reason,
+            "external_resources": _self_study_external_resources(topic),
+            "recommended_actions": [
+                {
+                    "id": "open-library",
+                    "label": "查看资源",
+                    "action": "OPEN_LIBRARY",
+                    "resource_type": None,
+                },
+                {
+                    "id": "generate-practice",
+                    "label": "生成练习",
+                    "action": "GENERATE_RESOURCE",
+                    "resource_type": "PRACTICE_SET",
+                },
+                {
+                    "id": "generate-explanation",
+                    "label": "生成讲解",
+                    "action": "GENERATE_RESOURCE",
+                    "resource_type": "DOCUMENT",
+                },
+                {
+                    "id": "generate-classroom",
+                    "label": "AI讲解课堂",
+                    "action": "GENERATE_RESOURCE",
+                    "resource_type": "AI_CLASSROOM",
+                },
+            ],
+        }
+    )
 
 
 @router.get("/daily-tasks")

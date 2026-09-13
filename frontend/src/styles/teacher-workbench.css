@@ -6760,15 +6760,28 @@ button.student-resource-thumb {
 }
 
 .profile-bootstrap-modal {
-  width: min(760px, calc(100vw - 48px));
-  grid-template-rows: auto auto minmax(300px, auto) auto;
-  gap: 14px;
+  width: min(820px, calc(100vw - 48px));
+  grid-template-rows: auto auto minmax(360px, auto) auto;
+  gap: 16px;
+  padding: 20px;
   background: #ffffff;
 }
 
 .profile-bootstrap-modal .behavior-modal-head {
-  padding-bottom: 12px;
+  padding-bottom: 14px;
   border-bottom: 1px solid #edf2f8;
+}
+
+.profile-bootstrap-modal .behavior-modal-head h2 {
+  font-size: 22px;
+  line-height: 1.25;
+}
+
+.profile-bootstrap-modal .behavior-modal-head p {
+  max-width: 560px;
+  margin-top: 8px;
+  color: #657187;
+  line-height: 1.62;
 }
 
 .profile-bootstrap-modal .behavior-modal-head > button {
@@ -6803,13 +6816,14 @@ button.student-resource-thumb {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  border: 1px solid #dce7f5;
+  border: 1px solid #dce6f3;
   border-radius: 8px;
   color: #50627b;
-  background: #f8fbff;
+  background: #ffffff;
   font-size: 12px;
   font-weight: 900;
   cursor: pointer;
+  transition: border-color 160ms var(--motion-soft), background 160ms var(--motion-soft), color 160ms var(--motion-soft);
 }
 
 .profile-bootstrap-progress button span {
@@ -6825,8 +6839,8 @@ button.student-resource-thumb {
 
 .profile-bootstrap-progress button.active {
   color: #176cf5;
-  border-color: #b9d5ff;
-  background: #eef6ff;
+  border-color: #9fc4ff;
+  background: #f4f8ff;
 }
 
 .profile-bootstrap-progress button.done {
@@ -6841,16 +6855,17 @@ button.student-resource-thumb {
 }
 
 .profile-bootstrap-chat {
-  min-height: 320px;
-  max-height: min(56vh, 560px);
+  min-height: 360px;
+  max-height: min(58vh, 590px);
   overflow: auto;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid #e1eaf6;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid #dce6f3;
   border-radius: 8px;
-  background: #f8fbff;
+  background: #f7f9fc;
+  scrollbar-gutter: stable;
 }
 
 .profile-bootstrap-message {
@@ -6861,7 +6876,7 @@ button.student-resource-thumb {
   align-items: start;
 }
 
-.profile-bootstrap-message > span:first-child {
+.profile-bootstrap-message.assistant > span:first-child {
   width: 32px;
   height: 32px;
   display: grid;
@@ -6871,19 +6886,19 @@ button.student-resource-thumb {
   background: #eaf3ff;
 }
 
-.profile-bootstrap-message > div,
-.profile-bootstrap-message.user {
+.profile-bootstrap-message.assistant > div {
   min-width: 0;
-  padding: 11px 13px;
+  padding: 12px 14px;
   border: 1px solid #dce8f7;
   border-radius: 8px;
   color: #24344e;
   background: #ffffff;
-  box-shadow: 0 4px 12px rgba(35, 78, 134, 0.04);
+  box-shadow: 0 4px 14px rgba(35, 78, 134, 0.045);
 }
 
 .profile-bootstrap-message.compact > div {
   padding: 9px 11px;
+  background: rgba(255, 255, 255, 0.82);
 }
 
 .profile-bootstrap-message small {
@@ -6910,25 +6925,49 @@ button.student-resource-thumb {
 }
 
 .profile-bootstrap-turn {
-  display: contents;
+  display: grid;
+  gap: 8px;
 }
 
 .profile-bootstrap-message.user {
+  max-width: min(430px, 78%);
   align-self: flex-end;
-  display: block;
-  border-color: #176cf5;
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 0;
+  min-height: 38px;
+  padding: 10px 14px;
+  border: 1px solid #176cf5;
+  border-radius: 8px;
   color: #ffffff;
   background: #176cf5;
   text-align: left;
   font-size: 13px;
+  line-height: 1.55;
   font-weight: 850;
   cursor: pointer;
+  box-shadow: 0 8px 18px rgba(23, 108, 245, 0.18);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.profile-bootstrap-message.user:hover {
+  border-color: #0f5bd7;
+  background: #0f5bd7;
+}
+
+.profile-bootstrap-message.user span {
+  display: block;
+  min-width: 0;
 }
 
 .profile-bootstrap-current,
 .profile-bootstrap-ready {
   display: grid;
   gap: 12px;
+  padding-top: 4px;
 }
 
 .profile-bootstrap-options {
@@ -6939,11 +6978,11 @@ button.student-resource-thumb {
 }
 
 .profile-bootstrap-options button {
-  min-height: 40px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 9px 11px;
   border: 1px solid #d6e5f8;
   border-radius: 8px;
   color: #24415f;
@@ -6952,12 +6991,14 @@ button.student-resource-thumb {
   font-weight: 850;
   text-align: left;
   cursor: pointer;
+  transition: border-color 160ms var(--motion-soft), background 160ms var(--motion-soft), color 160ms var(--motion-soft), box-shadow 160ms var(--motion-soft);
 }
 
 .profile-bootstrap-options button:hover {
   border-color: #9fc4fb;
   color: #176cf5;
   background: #f4f8ff;
+  box-shadow: 0 6px 14px rgba(23, 108, 245, 0.08);
 }
 
 .profile-bootstrap-options kbd {
@@ -6977,13 +7018,14 @@ button.student-resource-thumb {
 
 .profile-bootstrap-input {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 86px;
+  grid-template-columns: minmax(0, 1fr) 88px;
   gap: 8px;
   padding-left: 43px;
 }
 
 .profile-bootstrap-input textarea {
-  min-height: 48px;
+  min-height: 50px;
+  max-height: 110px;
   resize: vertical;
   padding: 11px 12px;
   border: 1px solid #d6e4f4;
@@ -6991,6 +7033,7 @@ button.student-resource-thumb {
   color: #17243b;
   background: #ffffff;
   outline: none;
+  line-height: 1.55;
 }
 
 .profile-bootstrap-input textarea:focus {

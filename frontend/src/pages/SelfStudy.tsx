@@ -22,7 +22,16 @@ import {
   Trash2,
   TrendingUp
 } from "lucide-react";
-import { api, apiCache, StudentDailyTask, StudentDailyTaskCenter, StudentProfile } from "../api";
+import {
+  api,
+  apiCache,
+  type GeneratedResourceType,
+  type SelfStudyDailyRecommendation,
+  type SelfStudyExternalResource,
+  type StudentDailyTask,
+  type StudentDailyTaskCenter,
+  type StudentProfile
+} from "../api";
 import { StudentInlineNotice, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
 import selfStudyHeroArt from "../assets/self-study/self-study-ai-hero-wide.jpg";
 
@@ -59,26 +68,29 @@ const loopSteps = [
   }
 ];
 
-const resourceCards = [
+const fallbackResourceCards: SelfStudyExternalResource[] = [
   {
+    id: "fallback-bilibili",
     title: "B站课程：链表基础与专题练习",
     type: "B站",
-    desc: "系统讲解链表基本概念与操作",
-    icon: <FileText size={20} />,
+    description: "系统讲解链表基本概念与操作",
+    url: "https://search.bilibili.com/all?keyword=%E9%93%BE%E8%A1%A8%20%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%20%E8%AE%B2%E8%A7%A3",
     tone: "red"
   },
   {
+    id: "fallback-leetcode",
     title: "LeetCode 练习：206. Reverse Linked List",
     type: "LeetCode",
-    desc: "经典反转链表题，巩固指针操作",
-    icon: <ClipboardList size={20} />,
+    description: "经典反转链表题，巩固指针操作",
+    url: "https://leetcode.cn/problems/reverse-linked-list/",
     tone: "amber"
   },
   {
+    id: "fallback-runoob",
     title: "菜鸟教程 / 博客文章：链表操作总结",
     type: "博客",
-    desc: "图文总结常见链表操作与注意事项",
-    icon: <BookOpen size={20} />,
+    description: "图文总结常见链表操作与注意事项",
+    url: "https://www.runoob.com/data-structures/data-structures-linked-list.html",
     tone: "green"
   }
 ];
@@ -95,16 +107,33 @@ function localTodayKey() {
   return `${year}-${month}-${day}`;
 }
 
+function externalResourceIcon(type: string) {
+  if (type.includes("LeetCode") || type.includes("练习")) return <ClipboardList size={20} />;
+  if (type.includes("教程") || type.includes("博客") || type.includes("文档")) return <BookOpen size={20} />;
+  return <FileText size={20} />;
+}
+
+function resourceTypeLabel(type: GeneratedResourceType) {
+  if (type === "PRACTICE_SET") return "练习题";
+  if (type === "AI_CLASSROOM") return "AI讲解课堂";
+  if (type === "DOCUMENT") return "讲解文档";
+  return "学习资源";
+}
+
 export default function SelfStudy() {
   const navigate = useNavigate();
   const todayKey = localTodayKey();
   const [profile, setProfile] = useState<StudentProfile | null>(null);
+  const [selectedCourseId, setSelectedCourseId] = useState<string | undefined>(undefined);
+  const [dailyRecommendation, setDailyRecommendation] = useState<SelfStudyDailyRecommendation | null>(null);
   const [dailyTasks, setDailyTasks] = useState<StudentDailyTaskCenter | null>(() => apiCache.peekStudentDailyTasks(todayKey));
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
   const [profileDetail, setProfileDetail] = useState<string | null>(null);
   const [dailyTaskError, setDailyTaskError] = useState<string | null>(null);
   const [dailyTaskBusyId, setDailyTaskBusyId] = useState<string | null>(null);
   const [dailyTaskCreating, setDailyTaskCreating] = useState(false);
+  const [resourceActionBusy, setResourceActionBusy] = useState<GeneratedResourceType | null>(null);
+  const [resourceActionError, setResourceActionError] = useState<string | null>(null);
   const [newDailyTaskTitle, setNewDailyTaskTitle] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -116,19 +145,23 @@ export default function SelfStudy() {
     api.getLearningContext()
       .then((context) => {
         const courseId = context.courses[0]?.course_id;
+        if (alive) setSelectedCourseId(courseId);
         return Promise.all([
           api.getStudentProfile(courseId),
-          api.listStudentDailyTasks(todayKey)
+          api.listStudentDailyTasks(todayKey),
+          api.getSelfStudyDailyRecommendation(courseId).catch(() => null)
         ]);
       })
-      .then(([profileData, dailyTaskData]) => {
+      .then(([profileData, dailyTaskData, recommendationData]) => {
         if (!alive) return;
         if (profileData) setProfile(profileData);
         setDailyTasks(dailyTaskData);
+        setDailyRecommendation(recommendationData);
       })
       .catch((err) => {
         if (!alive) return;
         setProfile(null);
+        setDailyRecommendation(null);
         setProfileMessage(studentErrorMessage(err, "学习画像暂未同步，当前使用默认自学建议。"));
         setProfileDetail(studentErrorDetail(err));
         setDailyTaskError(studentErrorMessage(err, "今日任务暂未同步。"));
@@ -143,11 +176,14 @@ export default function SelfStudy() {
   const dailyTaskItems = dailyTasks?.items ?? [];
   const dailyCompleted = dailyTasks?.summary.completed ?? dailyTaskItems.filter((task) => task.completed).length;
   const dailyTotal = dailyTasks?.summary.total ?? dailyTaskItems.length;
-  const adviceTopic = weakPoint?.knowledge_point ?? "自主学习起点";
+  const adviceTopic = dailyRecommendation?.topic ?? weakPoint?.knowledge_point ?? "自主学习起点";
+  const adviceTopicBadge = dailyRecommendation?.topic_badge ?? "薄弱知识点";
+  const resourceCards = dailyRecommendation?.external_resources?.length ? dailyRecommendation.external_resources : fallbackResourceCards;
   const adviceReason = useMemo(() => {
+    if (dailyRecommendation?.reason) return dailyRecommendation.reason;
     if (weakPoint?.last_evidence) return weakPoint.last_evidence;
     return profile?.overview.recommendation ?? "当前账号还没有足够学习证据，建议先生成一份学习资料、创建自学图谱节点或完成一次科研实践记录。";
-  }, [profile, weakPoint]);
+  }, [dailyRecommendation, profile, weakPoint]);
 
   function updateDailyState(items: StudentDailyTask[], taskDate = todayKey) {
     const completed = items.filter((item) => item.completed).length;
@@ -203,6 +239,39 @@ export default function SelfStudy() {
       setDailyTaskError(studentErrorMessage(err, "今日任务删除失败，请稍后重试。"));
     } finally {
       setDailyTaskBusyId(null);
+    }
+  }
+
+  async function generateAdviceResource(resourceType: GeneratedResourceType) {
+    if (resourceActionBusy) return;
+    setResourceActionBusy(resourceType);
+    setResourceActionError(null);
+    const label = resourceTypeLabel(resourceType);
+    const message =
+      resourceType === "PRACTICE_SET"
+        ? `围绕${adviceTopic}生成 5 道自主学习练习题，覆盖概念理解、代码阅读和易错点辨析。`
+        : resourceType === "AI_CLASSROOM"
+          ? `围绕${adviceTopic}生成一节可进入 OpenMAIC 的 AI讲解课堂，结合我的学习画像和下一步建议：${adviceReason}`
+          : `围绕${adviceTopic}生成一份自主学习讲解文档，包含概念解释、例题拆解、常见误区和下一步练习建议。`;
+    try {
+      const result = await api.generateResource(resourceType, message, selectedCourseId);
+      let resource = result.resource;
+      if (!resource.saved_to_resource_center) {
+        resource = await api.saveGeneratedResource(resource.id);
+      }
+      if (resource.resource_type === "PRACTICE_SET") {
+        navigate(`/self-study/library/practice/${encodeURIComponent(resource.id)}`);
+        return;
+      }
+      if (resource.resource_type === "AI_CLASSROOM") {
+        navigate(`/self-study/library/classroom/${encodeURIComponent(resource.id)}`);
+        return;
+      }
+      navigate(`/self-study/library?resource=${encodeURIComponent(resource.id)}`);
+    } catch (err) {
+      setResourceActionError(studentErrorMessage(err, `${label}生成失败，请稍后重试。`));
+    } finally {
+      setResourceActionBusy(null);
     }
   }
 
@@ -274,7 +343,7 @@ export default function SelfStudy() {
               <div>
                 <small>今日推荐主题</small>
                 <strong>{adviceTopic}</strong>
-                <em>薄弱知识点</em>
+                <em>{adviceTopicBadge}</em>
                 <p>{adviceReason}</p>
               </div>
             </article>
@@ -283,14 +352,14 @@ export default function SelfStudy() {
               <strong>推荐外部资源</strong>
               <div>
                 {resourceCards.map((card) => (
-                  <article className={`study-resource-card ${card.tone}`} key={card.title}>
-                    <span>{card.icon}</span>
+                  <a className={`study-resource-card ${card.tone}`} key={card.id || card.title} href={card.url} target="_blank" rel="noreferrer" title={`打开 ${card.title}`}>
+                    <span>{externalResourceIcon(card.type)}</span>
                     <div>
                       <b>{card.title}</b>
                       <small>{card.type}</small>
-                      <p>{card.desc}</p>
+                      <p>{card.description}</p>
                     </div>
-                  </article>
+                  </a>
                 ))}
               </div>
             </div>
@@ -300,19 +369,20 @@ export default function SelfStudy() {
                 <BookOpen size={17} />
                 查看资源
               </button>
-              <button type="button" onClick={() => navigate("/self-study/knowledge-map")}>
-                <Target size={17} />
+              <button type="button" disabled={Boolean(resourceActionBusy)} onClick={() => void generateAdviceResource("PRACTICE_SET")}>
+                {resourceActionBusy === "PRACTICE_SET" ? <Loader2 size={17} className="study-spin-icon" /> : <Target size={17} />}
                 生成练习
               </button>
-              <button type="button" onClick={() => navigate("/self-study/ai")}>
-                <Sparkles size={17} />
+              <button type="button" disabled={Boolean(resourceActionBusy)} onClick={() => void generateAdviceResource("DOCUMENT")}>
+                {resourceActionBusy === "DOCUMENT" ? <Loader2 size={17} className="study-spin-icon" /> : <Sparkles size={17} />}
                 生成讲解
               </button>
-              <button type="button" onClick={() => navigate("/self-study/classroom")}>
-                <MonitorPlay size={17} />
+              <button type="button" disabled={Boolean(resourceActionBusy)} onClick={() => void generateAdviceResource("AI_CLASSROOM")}>
+                {resourceActionBusy === "AI_CLASSROOM" ? <Loader2 size={17} className="study-spin-icon" /> : <MonitorPlay size={17} />}
                 AI讲解课堂
               </button>
             </footer>
+            {resourceActionError ? <p className="study-task-error">{resourceActionError}</p> : null}
           </section>
         </main>
 

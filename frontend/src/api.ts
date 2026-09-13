@@ -415,6 +415,31 @@ export type StudentProfile = {
   }>;
 };
 
+export type SelfStudyExternalResource = {
+  id: string;
+  title: string;
+  type: string;
+  description: string;
+  url: string;
+  tone: "red" | "amber" | "green" | string;
+};
+
+export type SelfStudyDailyRecommendation = {
+  task_date: string;
+  course_id: string;
+  course_name: string;
+  topic: string;
+  topic_badge: string;
+  reason: string;
+  external_resources: SelfStudyExternalResource[];
+  recommended_actions: Array<{
+    id: string;
+    label: string;
+    action: "OPEN_LIBRARY" | "GENERATE_RESOURCE" | string;
+    resource_type: GeneratedResourceType | string | null;
+  }>;
+};
+
 export type StudentKnowledgeGraphNode = {
   id: string;
   label: string;
@@ -1858,6 +1883,12 @@ export const api = {
     });
     clearApiCache((url) => url.startsWith("/api/v1/student/daily-tasks"));
     return result;
+  },
+  getSelfStudyDailyRecommendation: (courseId?: string) => {
+    const params = new URLSearchParams();
+    if (courseId) params.set("course_id", courseId);
+    const suffix = params.toString() ? `?${params.toString()}` : "";
+    return cachedGet<SelfStudyDailyRecommendation>(`/api/v1/student/self-study/daily-recommendation${suffix}`, 5_000);
   },
   getStudentProfile: (courseId?: string) =>
     cachedGet<StudentProfile>(studentProfileUrl(courseId)),
