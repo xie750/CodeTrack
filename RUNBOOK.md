@@ -315,6 +315,48 @@ python -m alembic -c teacher_backend\alembic.ini upgrade head
 
 必须先完成 `dist/` 构建，再启动 FastAPI。后端仅在进程启动时检测并挂载 `dist/`。
 
+Windows 全项目部署应使用 `deploy/windows/start-codetrack-full.ps1`，不要只启动教师端。它会同时启动：教师端 `8001`、学生/AI 后端 `8002`，以及对外网关 `8000`。
+
+先在本地构建并生成发布包：
+
+```powershell
+npm --prefix frontend run build
+powershell -NoProfile -ExecutionPolicy Bypass -File .\deploy\windows\build-codetrack-release.ps1 -ProjectRoot (Get-Location).Path
+```
+
+将生成的 `var\deploy\codetrack-release-*.zip` 上传到服务器 `C:\CodeTrack`。服务器保留原有 `.env`、数据库和 `teacher_backend\uploads\` 后，解压发布包并启动：
+
+```powershell
+cd C:\CodeTrack
+Expand-Archive .\codetrack-release-*.zip -DestinationPath . -Force
+powershell -NoProfile -ExecutionPolicy Bypass -File .\deploy\windows\install-codetrack-full.ps1 -ProjectRoot C:\CodeTrack -PublicPort 8000
+```
+
+公网只需要开放 TCP `8000`。`8001` 和 `8002` 仅绑定本机地址，不需要开放到公网。
+
+如果依赖已经安装过，只更新代码而不重复安装依赖，可加 `-SkipDependencies`。如果服务器权限不足以修改 Windows 防火墙，可加 `-SkipFirewall`，但仍需在阿里云安全组和 Windows 防火墙中放行 TCP `8000`。
+
+### 10.3.1 AI 讲解课堂运行依赖
+
+AI 讲解课堂不是独立公网服务。学生/AI 后端在收到生成请求时，会由同一个 `8002` 进程调用 `third_party/openmaic/scripts/codetrack-generate.mjs`；服务器只需要准备 Node.js 22.19+ 和 pnpm，不需要额外开放端口。
+
+完整安装脚本会自动执行过滤安装。如果服务器尚未安装 pnpm，先执行：
+
+```powershell
+node --version
+npm install --global pnpm@10.28.0
+```
+
+然后重新运行：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\deploy\windows\install-codetrack-full.ps1 -ProjectRoot C:\CodeTrack
+```
+
+课堂生成使用服务器 `.env` 中的通用模型配置 `CODETRACK_MODEL_API_KEY`、`CODETRACK_MODEL_API_BASE_URL` 和 `CODETRACK_MODEL_NAME`。微调模型配置不会自动替代课堂生成模型，两者按项目配置分别使用。
+
+# 单端教师演示备用启动方式（完整公网部署不要使用）
+
 ```powershell
 python -m uvicorn teacher_backend.app.main:app --host 0.0.0.0 --port 8000
 ```

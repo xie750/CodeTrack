@@ -121,6 +121,21 @@ async def proxy_ready(request: Request):
     return await _proxy(request, "ready")
 
 
+@app.api_route("/docs", methods=["GET", "HEAD"])
+async def proxy_docs(request: Request):
+    return await _proxy(request, "docs")
+
+
+@app.api_route("/redoc", methods=["GET", "HEAD"])
+async def proxy_redoc(request: Request):
+    return await _proxy(request, "redoc")
+
+
+@app.api_route("/openapi.json", methods=["GET", "HEAD"])
+async def proxy_openapi(request: Request):
+    return await _proxy(request, "openapi.json")
+
+
 if FRONTEND_DIST.exists():
     app.mount("/", SPAStaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")
 else:

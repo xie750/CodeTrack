@@ -197,16 +197,6 @@ def reset_initial_demo_accounts(db: Session) -> None:
         )
         db.query(Submission).filter(Submission.id.in_(initial_submission_ids)).delete(synchronize_session=False)
 
-    initial_run_ids = [
-        row[0]
-        for row in db.query(AgentRun.id)
-        .filter(AgentRun.student_id == INITIAL_STUDENT_ID)
-        .all()
-    ]
-    if initial_run_ids:
-        db.query(AgentStep).filter(AgentStep.run_id.in_(initial_run_ids)).delete(synchronize_session=False)
-        db.query(AgentRun).filter(AgentRun.id.in_(initial_run_ids)).delete(synchronize_session=False)
-
     initial_session_ids = [
         row[0]
         for row in db.query(AiTutorSession.id)
@@ -323,6 +313,26 @@ def reset_initial_demo_accounts(db: Session) -> None:
     db.query(AuditLog).filter(AuditLog.user_id.in_([INITIAL_STUDENT_ID, INITIAL_TEACHER_ID])).delete(
         synchronize_session=False
     )
+
+    # Delete agent runs after every nullable/child reference has been removed.
+    # SQLite enforces these foreign keys during the startup seed refresh.
+    initial_run_ids = [
+        row[0]
+        for row in db.query(AgentRun.id)
+        .filter(AgentRun.student_id == INITIAL_STUDENT_ID)
+        .all()
+    ]
+    if initial_run_ids:
+        db.query(AgentStep).filter(AgentStep.run_id.in_(initial_run_ids)).delete(synchronize_session=False)
+        db.query(AiTutorMessage).filter(AiTutorMessage.run_id.in_(initial_run_ids)).update(
+            {"run_id": None},
+            synchronize_session=False,
+        )
+        db.query(StudentGeneratedResource).filter(StudentGeneratedResource.run_id.in_(initial_run_ids)).update(
+            {"run_id": None},
+            synchronize_session=False,
+        )
+        db.query(AgentRun).filter(AgentRun.id.in_(initial_run_ids)).delete(synchronize_session=False)
 
 
 def upsert(db: Session, model, key: str, values: dict) -> None:

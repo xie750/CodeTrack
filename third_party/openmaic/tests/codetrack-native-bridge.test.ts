@@ -8,11 +8,11 @@ describe('CodeTrack native classroom export', () => {
       { id: 'outline', type: 'slide', title: 'Loss', description: 'Compare errors', keyPoints: [], order: 1 },
       { elements: [
         { id: 'formula', type: 'latex', left: 30, top: 30, width: 300, height: 80, rotate: 0, latex: 'L=(y-p)^2', path: 'M0 0', viewBox: [300, 80], color: '#333333', strokeWidth: 1 },
-        { id: 'line', type: 'line', left: 40, top: 200, width: 200, height: 0, rotate: 0, start: [0, 0], end: [200, 0], style: 'solid', color: '#333333', points: ['', 'arrow'], lineWidth: 2 },
+        { id: 'line', type: 'line', left: 40, top: 200, width: 2, start: [0, 0], end: [200, 0], style: 'solid', color: '#333333', points: ['', 'arrow'] },
       ] },
       [
         { id: 'focus', type: 'spotlight', elementId: 'formula' },
-        { id: 'speech', type: 'speech', text: '解释平方损失', audioUrl: '/speech.wav' },
+        { id: 'speech', type: 'speech', text: '解释平方损失', audioId: 'speech-asset' },
         { id: 'board', type: 'wb_draw_latex', latex: 'p-y', x: 20, y: 50 },
       ], 'stage',
     );

@@ -47,13 +47,20 @@ Start-CodeTrackService -Name "codetrack-teacher-api" -Module "teacher_backend.ap
 Start-CodeTrackService -Name "codetrack-unified-api" -Module "backend.app.main:app" -HostValue "127.0.0.1" -Port $UnifiedPort
 Start-CodeTrackService -Name "codetrack-gateway" -Module "deploy.windows.codetrack_gateway:app" -HostValue "0.0.0.0" -Port $PublicPort
 
-Start-Sleep -Seconds 5
-
-Write-Host "Checking public gateway..."
-try {
-    Invoke-RestMethod "http://127.0.0.1:$PublicPort/api/v1/health" | ConvertTo-Json -Compress
-    Write-Host "CodeTrack full deployment is reachable at http://<server-public-ip>:$PublicPort/"
-} catch {
-    Write-Warning "Gateway health check failed. Check logs in $LogDir."
-    throw
-}
+$Deadline = (Get-Date).AddSeconds(60)
+do {
+    Start-Sleep -Seconds 2
+    try {
+        $TeacherHealth = Invoke-RestMethod "http://127.0.0.1:$TeacherPort/api/v1/health" -TimeoutSec 5
+        $UnifiedHealth = Invoke-RestMethod "http://127.0.0.1:$UnifiedPort/api/v1/health" -TimeoutSec 5
+        $GatewayHealth = Invoke-RestMethod "http://127.0.0.1:$PublicPort/api/v1/health" -TimeoutSec 5
+        Write-Host ("Teacher: {0}; Unified: {1}; Gateway: {2}" -f $TeacherHealth.status, $UnifiedHealth.status, $GatewayHealth.status)
+        Write-Host "CodeTrack full deployment is reachable at http://<server-public-ip>:$PublicPort/"
+        return
+    } catch {
+        if ((Get-Date) -ge $Deadline) {
+            Write-Warning "One or more services failed health checks. Check logs in $LogDir."
+            throw
+        }
+    }
+} while ($true)
