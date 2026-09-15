@@ -1,0 +1,443 @@
+/* Teacher-only presentation; the shell reuses the student window styles. */
+.teacher-ui {
+  --teacher-topbar-height: var(--student-app-topbar-height);
+  --teacher-bg: #f4f7fb;
+  --teacher-border: #dce6f4;
+  --teacher-text: #18243a;
+  --teacher-heading: #142036;
+  --teacher-muted: #60708b;
+  --teacher-shadow: 0 16px 36px rgba(34, 57, 94, .065);
+  --teacher-shadow-hover: 0 22px 42px rgba(34, 57, 94, .095);
+}
+
+.teacher-ui .teacher-topbar-actions {
+  margin-left: auto;
+}
+
+.teacher-ui .teacher-topbar-actions > .ant-tag {
+  margin: 0;
+  color: #127b69;
+  border-color: #bce9df;
+  background: #eafaf3;
+  font-size: 12px;
+}
+
+.teacher-ui .teacher-topbar-actions .ant-btn {
+  width: 36px;
+  height: 36px;
+}
+
+.teacher-ui .exact-topbar-context {
+  flex: 1;
+  max-width: 610px;
+  margin-left: 16px;
+}
+
+.teacher-ui .exact-topbar-context label {
+  height: 36px;
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.teacher-ui .exact-topbar-context label:first-child { flex: 1.4; }
+.teacher-ui .exact-topbar-context label:last-child { flex: 1; }
+
+.teacher-ui .teacher-window-nav .exact-nav-item {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 9px;
+  gap: 10px;
+  color: #4f5f76;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.teacher-ui .teacher-window-nav .exact-nav-item:is(:hover, .active) {
+  color: #176cf5;
+  background: #eef6ff;
+}
+
+.teacher-ui .teacher-window-nav .exact-nav-item svg { flex: 0 0 auto; }
+.teacher-ui .teacher-window-nav .exact-nav-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.teacher-ui .student-window-title > .teacher-soft-icon {
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
+  color: #176cf5;
+  background: #edf4ff;
+}
+
+.teacher-ui .teacher-work-window > .exact-main {
+  min-height: 0;
+  margin: 0;
+  padding: var(--student-window-gutter);
+  color: var(--teacher-text);
+}
+
+.teacher-ui .teacher-work-window > .view-ai-assistant { padding: 0; }
+.teacher-ui .view-ai-assistant > .teacher-ai-workspace-page { height: 100%; padding: 0; }
+
+.teacher-ui .exact-main > :is(.exact-page, .exact-course-page) {
+  width: min(100%, var(--app-page-content-max));
+  max-width: var(--app-page-content-max);
+  margin: 0 auto;
+  padding: 0 0 24px;
+  background: transparent;
+}
+
+.teacher-ui .course-breadcrumb {
+  min-height: 22px;
+  margin: 0 0 12px;
+  color: #657187;
+  font-size: 12px;
+}
+
+.teacher-ui .course-breadcrumb button { font-size: 12px; }
+
+.teacher-ui :is(.exact-page-title, .class-v2-heading, .task-v2-heading, .material-v2-heading) {
+  min-height: 86px;
+  height: auto;
+  padding: 12px 0 18px;
+  margin-bottom: 16px;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.teacher-ui :is(.exact-page-title, .class-v2-heading, .task-v2-heading, .material-v2-heading) h2 {
+  color: #142036;
+  font-size: 26px;
+  line-height: 1.3;
+}
+
+.teacher-ui :is(.exact-dashboard-hero, .class-v2-heading img, .material-v2-heading img) {
+  display: none;
+}
+
+.teacher-ui .view-workspace .workspace-heading {
+  min-height: 142px;
+  padding: 22px 28px;
+  margin-bottom: 16px;
+  border: 1px solid #dce6f4;
+  border-radius: 8px;
+  background: linear-gradient(110deg, #fff, #edf5ff);
+  box-shadow: 0 18px 44px rgba(36, 61, 105, .08);
+}
+
+.teacher-ui .view-workspace .workspace-title-line {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.teacher-ui .view-workspace .workspace-title-line h2 {
+  max-width: none;
+  color: #142036;
+  font-size: 26px;
+  line-height: 1.3;
+}
+
+.teacher-ui .workspace-course-meta { margin-top: 12px; }
+.teacher-ui .workspace-course-meta > span { font-size: 13px; }
+
+.teacher-ui :is(.exact-metric-row, .workspace-metrics, .analytics-metrics) {
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.teacher-ui :is(.exact-metric-row, .workspace-metrics) > button {
+  position: relative;
+  min-width: 0;
+  min-height: 118px;
+  padding: 18px 16px;
+  grid-template-columns: 46px minmax(0, 1fr);
+  column-gap: 12px;
+  color: var(--teacher-text);
+}
+
+.teacher-ui .exact-metric-row > button > svg { position: absolute; top: 14px; right: 12px; }
+
+.teacher-ui :is(.exact-metric-row, .workspace-metrics) > button > span {
+  width: 46px;
+  height: 46px;
+  color: #1677ff !important;
+  background: #eaf2ff !important;
+  border-radius: 8px;
+}
+
+.teacher-ui :is(.exact-metric-row, .workspace-metrics) > button:nth-child(2n) > span {
+  color: #18a957 !important;
+  background: #e9f9f1 !important;
+}
+
+.teacher-ui :is(.exact-metric-row, .workspace-metrics) > button:nth-child(3n) > span {
+  color: #7c4dff !important;
+  background: #f1edff !important;
+}
+
+.teacher-ui :is(.exact-metric-row, .workspace-metrics) > button:nth-child(4n) > span {
+  color: #fa7a0a !important;
+  background: #fff2e3 !important;
+}
+
+.teacher-ui :is(.exact-metric-row, .workspace-metrics) small {
+  color: #5f6f89;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.teacher-ui :is(.exact-metric-row, .workspace-metrics) strong {
+  margin: 4px 0;
+  color: #142036;
+  font-size: 28px;
+  line-height: 1.15;
+  font-weight: 950;
+}
+
+.teacher-ui :is(.exact-metric-row, .workspace-metrics) em {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #60708b;
+}
+
+.teacher-ui .view-workspace .workspace-board {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.teacher-ui .view-workspace .workspace-board > .workspace-panel {
+  grid-column: span 4;
+  min-height: 260px;
+  height: auto;
+  padding: 18px 20px;
+  border-radius: 8px;
+}
+
+.teacher-ui .workspace-recent-tasks { order: -2; }
+.teacher-ui .workspace-announcements { order: -1; }
+
+.teacher-ui :is(.exact-block-title, .workspace-panel .exact-block-title) {
+  min-height: 32px;
+  margin-bottom: 14px;
+  gap: 10px;
+}
+
+.teacher-ui :is(.exact-block-title > strong, .workspace-panel .exact-block-title > strong) {
+  font-size: 16px;
+  line-height: 1.4;
+  color: #142036;
+}
+
+.teacher-ui :is(.exact-block-title .ant-btn, .workspace-panel-more) {
+  min-height: 32px;
+  font-size: 13px !important;
+}
+
+.teacher-ui :is(.workspace-task, .workspace-announcements .workspace-list-row, .workspace-class) {
+  min-height: 68px;
+  padding-block: 12px;
+  gap: 10px;
+}
+
+.teacher-ui :is(.workspace-task, .workspace-list-row, .workspace-class, .exact-todo) strong {
+  color: #253653;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.teacher-ui :is(.workspace-task, .workspace-list-row, .workspace-class, .exact-todo) small,
+.teacher-ui :is(.workspace-list-row time, .workspace-class b, .material-legend, .material-legend b, .material-legend small) {
+  color: #657187;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.teacher-ui .workspace-task .task-square {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: 8px;
+}
+
+.teacher-ui .workspace-ai > div:not(.exact-block-title) {
+  min-height: 48px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.teacher-ui .workspace-ai > div strong { font-size: 13px; }
+.teacher-ui .workspace-ai .ant-typography-secondary { font-size: 12px; }
+.teacher-ui .workspace-ai .exact-block-title { flex-wrap: wrap; }
+.teacher-ui .workspace-quick { gap: 12px; }
+.teacher-ui .workspace-quick button { font-size: 13px; }
+.teacher-ui .workspace-material-summary { flex: 1; gap: 16px; }
+
+.teacher-ui .exact-dashboard-primary > .exact-block:has(.exact-dashboard-courses) {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.teacher-ui .view-dashboard .exact-dashboard-side {
+  position: static;
+  height: auto;
+  min-height: 0;
+  grid-template-rows: auto auto;
+  align-content: start;
+}
+
+.teacher-ui .exact-dashboard-courses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.teacher-ui .dashboard-course-heading > strong { font-size: 15px; line-height: 1.5; }
+.teacher-ui :is(.exact-course-art img, .exact-course-grid .course-art img) { filter: none; object-fit: contain; }
+.teacher-ui .exact-dashboard-side .exact-block { padding: 18px 20px; }
+.teacher-ui :is(.exact-todo, .exact-ai-actions) { padding-block: 12px; }
+.teacher-ui .exact-todo button { font-size: 12px; }
+.teacher-ui .exact-ai-insight p { font-size: 14px; line-height: 1.8; }
+.teacher-ui .exact-ai-actions strong { font-size: 13px; }
+
+.teacher-ui .task-v2-layout { min-height: 0; background: transparent; gap: 16px; }
+.teacher-ui .task-v2-layout > main { padding: 0; background: transparent; }
+.teacher-ui .task-v2-page.panel-open .task-v2-layout { grid-template-columns: minmax(0, 1fr) 380px; }
+.teacher-ui .task-v2-filter { padding: 16px; gap: 12px; }
+.teacher-ui .task-v2-list { gap: 14px; }
+.teacher-ui .task-v2-list > article { padding: 20px; border-radius: 8px; }
+.teacher-ui .task-v2-main h4 { margin-block: 10px 8px !important; font-size: 16px; }
+.teacher-ui .task-v2-meta-top { flex-wrap: wrap; gap: 6px; }
+.teacher-ui .task-v2-meta-top :is(small, b) { font-size: 12px; color: #657187; }
+.teacher-ui .task-v2-data { flex-wrap: wrap; row-gap: 12px; }
+.teacher-ui .task-v2-data > span { min-width: 100px; }
+.teacher-ui .task-v2-data :is(small, b) { font-size: 12px; line-height: 1.6; }
+.teacher-ui .task-v2-panel { padding: 20px; }
+
+.teacher-ui :is(.class-v2-filter, .material-v2-filter, .material-v2-actions) { padding: 16px; gap: 12px; }
+.teacher-ui :is(.class-v2-name h4, .file-name strong, .material-v2-section-title strong) { font-size: 15px; }
+.teacher-ui :is(.class-v2-stats small, .class-v2-stats strong, .file-name small, .upload-time small, .material-v2-head, .parse-state) { font-size: 12px; }
+.teacher-ui .material-v2-layout { grid-template-columns: 190px minmax(0, 1fr) 290px; }
+.teacher-ui .material-v2-folders > button { font-size: 13px; }
+.teacher-ui .material-v2-table > .material-v2-filter { border: 0; border-bottom: 1px solid #e5ebf3; border-radius: 0; box-shadow: none; }
+.teacher-ui .material-v2-rows { padding: 0 6px; }
+.teacher-ui .material-v2-rows > [role="button"] { min-height: 72px; margin: 0; border: 0; border-bottom: 1px solid #e5ebf3; border-radius: 0; }
+.teacher-ui .material-v2-preview { padding: 16px; }
+.teacher-ui .material-slide { background: #f3f8ff; border-color: #dce6f4; border-radius: 8px; }
+.teacher-ui .material-slide i { display: none; }
+.teacher-ui .preview-file-type { border-radius: 6px; color: #176cf5; background: #eaf2ff; font-size: 12px; }
+.teacher-ui .quote-preview p { color: #52627a; background: #f8fbff; border-color: #dce6f4; font-size: 13px; line-height: 1.8; }
+.teacher-ui :is(.trusted-source > span, .material-v2-detail > span, .material-v2-ai small) { color: #60708b; font-size: 12px; }
+.teacher-ui .material-v2-ai { background: #f0f7ff; border-color: #dce6f4; }
+.teacher-ui .material-v2-ai > span { color: #176cf5; background: #e1edff; }
+
+.teacher-ui .course-content-heading h2 { font-size: 26px; color: #142036; }
+.teacher-ui :is(.chapter-catalog-head strong, .chapter-catalog-title strong) { font-size: 16px; }
+.teacher-ui :is(.chapter-catalog-title em, .chapter-catalog-meta small, .course-content-overview small) { font-size: 12px; color: #60708b; }
+.teacher-ui .analytics-charts section > strong,
+.teacher-ui .knowledge-analysis > strong { font-size: 16px; }
+.teacher-ui .knowledge-analysis > div { font-size: 13px; margin-block: 18px; }
+.teacher-ui .analytics-metrics strong { font-size: 28px; }
+.teacher-ui .analytics-metrics em { color: #60708b; }
+
+.teacher-ui .ant-btn { font-size: 13px; }
+.teacher-ui .ant-btn:not(.ant-btn-sm):not(.ant-btn-icon-only) { min-height: 38px; }
+.teacher-ui .ant-btn-primary:not(:disabled) {
+  background: linear-gradient(180deg, #2d8bff, #1267f8) !important;
+  box-shadow: 0 10px 22px rgba(23, 108, 245, .18);
+}
+.teacher-ui .ant-tag { font-size: 12px; line-height: 20px; }
+.teacher-ui :is(.ant-input, .ant-select, .ant-form-item-label > label, .ant-table) { font-size: 14px; }
+.teacher-ui .ant-table-thead > tr > th { background: #f7faff; color: #60708b; }
+.teacher-ui .ant-table-tbody > tr > td { padding-block: 16px; }
+.teacher-ui button:focus-visible { outline: 2px solid #91baff; outline-offset: 2px; }
+
+@media (min-width: 901px) {
+  .teacher-ui .sidebar-collapsed .teacher-window-nav .exact-nav-item {
+    min-height: 42px;
+    justify-content: center;
+    padding-inline: 0;
+  }
+  .teacher-ui .sidebar-collapsed .teacher-window-nav .exact-nav-item span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .teacher-ui .sidebar-collapsed .teacher-window-nav .exact-nav-item.active { box-shadow: inset 0 -3px 0 #176cf5; }
+}
+
+@media (max-width: 1280px) {
+  .teacher-ui .teacher-topbar-actions > .ant-tag { display: none; }
+  .teacher-ui :is(.workspace-metrics, .exact-metric-row) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .teacher-ui .exact-metric-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .teacher-ui .view-workspace .workspace-board > .workspace-panel { grid-column: span 6; }
+  .teacher-ui .material-v2-layout { grid-template-columns: 170px minmax(0, 1fr); }
+  .teacher-ui .material-v2-layout > :last-child { grid-column: 1 / -1; }
+  .teacher-ui .task-v2-page.panel-open .task-v2-layout { grid-template-columns: minmax(0, 1fr); }
+  .teacher-ui .task-v2-filter { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 900px) {
+  .teacher-ui .teacher-work-window { padding: 0 16px 40px; }
+  .teacher-ui .teacher-work-window > .exact-main { padding: 0; overflow: visible; }
+  .teacher-ui .view-ai-assistant > .teacher-ai-workspace-page { height: calc(var(--app-viewport-height) - 58px); }
+  .teacher-ui .student-window-sidebar { width: calc(100% + 32px); }
+  .teacher-ui .teacher-window-nav { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .teacher-ui .exact-topbar-context { display: none; }
+  .teacher-ui .exact-dashboard-grid { grid-template-columns: minmax(0, 1fr); }
+  .teacher-ui .view-dashboard .exact-dashboard-side { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 600px) {
+  .teacher-ui .student-app-topbar { gap: 6px; padding-inline: 12px; }
+  .teacher-ui .teacher-topbar-actions { gap: 4px; }
+  .teacher-ui .teacher-window-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .teacher-ui .view-workspace .workspace-heading { padding: 20px; flex-wrap: wrap; gap: 16px; }
+  .teacher-ui .view-workspace .workspace-title-line h2 { font-size: 22px; }
+  .teacher-ui .view-workspace .workspace-heading > .ant-btn { margin-left: 0; }
+  .teacher-ui :is(.workspace-metrics, .exact-metric-row) { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .teacher-ui :is(.workspace-metrics, .exact-metric-row) > button { grid-template-columns: 32px minmax(0, 1fr); padding: 12px; gap: 8px; }
+  .teacher-ui :is(.workspace-metrics, .exact-metric-row) > button > span { width: 32px; height: 32px; }
+  .teacher-ui :is(.workspace-metrics, .exact-metric-row) strong { font-size: 24px; }
+  .teacher-ui .view-workspace .workspace-board > .workspace-panel { grid-column: 1 / -1; }
+  .teacher-ui :is(.exact-dashboard-courses, .view-dashboard .exact-dashboard-side, .material-v2-layout) { grid-template-columns: minmax(0, 1fr); }
+  .teacher-ui .task-v2-filter { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .teacher-ui .task-v2-list > article { grid-template-columns: 36px minmax(0, 1fr); padding: 14px; gap: 10px; }
+  .teacher-ui .task-v2-icon { width: 36px; height: 36px; }
+  .teacher-ui .task-v2-tabs { flex-wrap: wrap; gap: 10px; }
+  .teacher-ui .task-v2-tabs .ant-tabs { width: 100%; flex: auto; }
+  .teacher-ui .task-v2-main > .ant-space { flex-wrap: wrap; gap: 8px !important; }
+  .teacher-ui .task-v2-data { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .teacher-ui .task-v2-data > span { min-width: 0; }
+  .teacher-ui .task-v2-data b { overflow-wrap: anywhere; }
+  .teacher-ui .task-v2-pagination { flex-wrap: wrap; gap: 12px; }
+  .teacher-ui .material-v2-filter { flex-wrap: wrap; }
+  .teacher-ui .material-v2-filter .ant-tabs { width: 100%; flex: auto; }
+  .teacher-ui .material-v2-filter .ant-input-affix-wrapper { width: 100%; }
+  .teacher-ui .material-v2-head { display: none; }
+  .teacher-ui .material-v2-rows { min-width: 0; }
+  .teacher-ui .material-v2-rows > [role="button"] { grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 14px; }
+  .teacher-ui .material-v2-rows > [role="button"] > :first-child { grid-column: 1 / -1; }
+  .teacher-ui .material-v2-ai { grid-template-columns: 40px minmax(0, 1fr); }
+  .teacher-ui .material-v2-ai > .ant-btn { grid-column: 1 / -1; }
+  .teacher-ui .analytics-toolbar { flex-wrap: wrap; gap: 12px; }
+  .teacher-ui .analytics-toolbar > .ant-select { width: 100%; }
+  .teacher-ui .analytics-toolbar .ant-segmented { max-width: 100%; }
+  .teacher-ui .analytics-toolbar .ant-segmented-item-label { padding-inline: 8px; }
+  .teacher-ui .knowledge-analysis > div { grid-template-columns: 76px minmax(0, 1fr) auto; gap: 8px; }
+  .teacher-ui .knowledge-analysis > div > .ant-tag { grid-column: 1 / -1; justify-self: end; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .teacher-ui *, .teacher-ui *::before, .teacher-ui *::after { transition: none !important; animation: none !important; }
+}

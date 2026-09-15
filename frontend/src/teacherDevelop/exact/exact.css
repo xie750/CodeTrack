@@ -1,12 +1,12 @@
 :root {
-  color: #19221b;
-  background: #f7f9f6;
+  color: #17243b;
+  background: #f7f9fc;
   font-family: var(--font-sans);
   font-synthesis: none;
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 320px; background: #f7f9f6; color: #19221b; }
+body { margin: 0; min-width: 320px; background: #f7f9fc; color: #17243b; }
 button, input, textarea { font: inherit; }
 button { cursor: pointer; }
 .ant-btn { box-shadow: none; }
@@ -4708,26 +4708,28 @@ button { cursor: pointer; }
 /* Teacher SaaS alignment: match the student workbench visual system without touching the entry portal. */
 .exact-shell {
   --exact-sidebar-width: 212px;
-  --teacher-topbar-height: 58px;
-  --teacher-bg: #f4f7fb;
+  --teacher-topbar-height: 62px;
+  --teacher-bg: #f7f9fc;
   --teacher-surface: #ffffff;
   --teacher-surface-soft: #f8fbff;
-  --teacher-border: #e4ebf3;
-  --teacher-border-strong: #d7e2ef;
-  --teacher-text: #172033;
-  --teacher-heading: #111a30;
+  --teacher-border: #dbe6f4;
+  --teacher-border-strong: #cddbeb;
+  --teacher-text: #17243b;
+  --teacher-heading: #14233d;
   --teacher-muted: #657187;
   --teacher-muted-2: #7d8ca2;
   --teacher-primary: #176cf5;
   --teacher-primary-hover: #0f5fdc;
   --teacher-primary-soft: #eef6ff;
-  --teacher-accent: #1fb6a6;
-  --teacher-accent-soft: #ecfbf8;
+  --teacher-accent: #16b6a0;
+  --teacher-accent-soft: #eafafb;
   --teacher-success: #16a34a;
+  --teacher-success-soft: #eafaf3;
+  --teacher-success-border: #bce9df;
   --teacher-warning: #d97706;
   --teacher-danger: #be123c;
-  --teacher-shadow: 0 18px 40px rgba(30, 44, 66, .045);
-  --teacher-shadow-hover: 0 18px 42px rgba(30, 44, 66, .095);
+  --teacher-shadow: 0 12px 28px rgba(27, 63, 116, .055);
+  --teacher-shadow-hover: 0 16px 36px rgba(27, 63, 116, .095);
   min-height: 100vh;
   overflow-x: hidden;
   background: var(--teacher-bg);
@@ -4745,10 +4747,10 @@ button { cursor: pointer; }
 
 .exact-topbar {
   height: var(--teacher-topbar-height);
-  padding: 0 18px;
+  padding: 0 18px 0 16px;
   border-bottom: 1px solid var(--teacher-border);
   background: rgba(255, 255, 255, .94);
-  box-shadow: 0 8px 22px rgba(30, 44, 66, .055);
+  box-shadow: 0 8px 22px rgba(27, 63, 116, .045);
   backdrop-filter: blur(14px);
 }
 
@@ -4808,7 +4810,71 @@ button { cursor: pointer; }
 }
 
 .exact-context {
+  margin-left: auto;
   gap: 10px;
+}
+
+.exact-topbar-context {
+  min-width: 0;
+  max-width: min(680px, calc(100vw - 620px));
+  margin-left: 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.exact-topbar-context label {
+  min-width: 0;
+  height: 42px;
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 1px solid #dce7f5;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 8px 18px rgba(27, 63, 116, .04);
+}
+
+.exact-topbar-context label:first-child {
+  width: min(360px, 32vw);
+}
+
+.exact-topbar-context label:last-child {
+  width: min(250px, 22vw);
+}
+
+.exact-topbar-context label > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #657187;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.exact-topbar-context label > span svg {
+  color: var(--teacher-primary);
+}
+
+.exact-topbar-context .ant-select {
+  min-width: 0;
+}
+
+.exact-topbar-context .ant-select-selector {
+  height: 32px !important;
+  padding-inline: 8px !important;
+  border-color: transparent !important;
+  background: #f8fbff !important;
+}
+
+.exact-topbar-context .ant-select-selection-item,
+.exact-topbar-context .ant-select-selection-placeholder {
+  color: var(--teacher-heading);
+  font-size: 13px;
+  font-weight: 900;
 }
 
 .exact-context .ant-tag {
@@ -4937,10 +5003,10 @@ button { cursor: pointer; }
 .exact-sidebar {
   top: var(--teacher-topbar-height);
   width: var(--exact-sidebar-width);
-  padding: 14px 10px 64px;
+  padding: 16px 10px 64px;
   border-right: 1px solid var(--teacher-border);
   background: rgba(255, 255, 255, .94);
-  box-shadow: 8px 0 22px rgba(30, 44, 66, .035);
+  box-shadow: 8px 0 22px rgba(27, 63, 116, .035);
 }
 
 .exact-sidebar nav {
@@ -5031,10 +5097,10 @@ button { cursor: pointer; }
 
 .exact-page,
 .exact-course-page {
-  width: min(100%, 1480px);
-  max-width: 1480px;
+  width: min(100%, var(--app-page-content-max, 1480px));
+  max-width: var(--app-page-content-max, 1480px);
   margin: 0 auto;
-  padding: 18px 22px 30px;
+  padding: 20px 22px 30px;
 }
 
 .exact-main.view-ai-assistant .teacher-ai-workspace-page {
@@ -5875,6 +5941,29 @@ button { cursor: pointer; }
 }
 
 @media (max-width: 1180px) {
+  .exact-topbar-context {
+    max-width: min(520px, calc(100vw - 430px));
+  }
+
+  .exact-topbar-context label {
+    grid-template-columns: 1fr;
+    gap: 0;
+    height: 46px;
+    padding: 4px 8px 5px;
+  }
+
+  .exact-topbar-context label > span {
+    font-size: 11px;
+  }
+
+  .exact-topbar-context label:first-child {
+    width: min(300px, 30vw);
+  }
+
+  .exact-topbar-context label:last-child {
+    width: min(210px, 22vw);
+  }
+
   .exact-dashboard-grid,
   .view-dashboard .exact-dashboard-grid,
   .view-courses .exact-courses-layout,
@@ -5903,6 +5992,10 @@ button { cursor: pointer; }
 }
 
 @media (max-width: 900px) {
+  .exact-topbar-context {
+    display: none;
+  }
+
   .exact-page-title,
   .workspace-heading,
   .class-v2-heading,
@@ -6016,11 +6109,11 @@ button { cursor: pointer; }
   --teacher-primary: #1677ff;
   --teacher-primary-hover: #0f63d9;
   --teacher-primary-soft: #eef6ff;
-  --teacher-accent: #06b6d4;
-  --teacher-accent-soft: #ecfeff;
-  --teacher-success: #1677ff;
-  --teacher-success-soft: #eef6ff;
-  --teacher-success-border: #bcd7ff;
+  --teacher-accent: #16b6a0;
+  --teacher-accent-soft: #eafafb;
+  --teacher-success: #16a34a;
+  --teacher-success-soft: #eafaf3;
+  --teacher-success-border: #bce9df;
 }
 
 .exact-shell .exact-logo > span {
@@ -6054,18 +6147,21 @@ button { cursor: pointer; }
 
 .exact-shell .ant-tag-green,
 .exact-shell .ant-tag-success {
-  color: #0f63d9 !important;
+  color: #127b69 !important;
   border-color: var(--teacher-success-border) !important;
   background: var(--teacher-success-soft) !important;
 }
 
 .exact-shell .ant-alert-success {
-  border-color: #bcd7ff !important;
-  background: #f4f8ff !important;
+  border-color: var(--teacher-success-border) !important;
+  background: #effcf8 !important;
 }
 
 .exact-shell .ant-alert-success .ant-alert-icon,
-.exact-shell .ant-badge-status-success,
+.exact-shell .ant-badge-status-success {
+  color: var(--teacher-success) !important;
+}
+
 .exact-shell .ant-radio-wrapper-checked .ant-radio-inner,
 .exact-shell .ant-checkbox-checked .ant-checkbox-inner {
   color: var(--teacher-primary) !important;

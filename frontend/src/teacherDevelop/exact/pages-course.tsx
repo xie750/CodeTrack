@@ -254,9 +254,9 @@ export function ExactWorkspace(props: CommonProps) {
     : -1
 
   return <div className="exact-course-page exact-workspace">
+    <CourseBreadcrumb current="课程首页" onNavigate={props.onNavigate} />
     <div className="workspace-heading">
       <div className="workspace-course-title">
-        <img src="/ui-assets/workspace-course-icon.png" alt="" />
         <div>
           <div className="workspace-title-line"><Title level={2}>{course?.name || '未命名课程'}</Title><Tag color="green">{course?.term || '当前学期'}</Tag></div>
           <div className="workspace-course-meta"><Text type="secondary">课程代码：{course?.code}</Text><Text type="secondary">授课教师：{props.teacher.name}</Text><Text type="secondary">开课院系：{props.teacher.department}</Text></div>

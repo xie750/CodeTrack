@@ -21,6 +21,7 @@ import type { AuthUser } from '../../authSession'
 import AccountMenu from '../../components/AccountMenu'
 import brandLogo from '../../assets/ui-home/logo-img.png'
 import './exact.css'
+import './teacher-ui.css'
 
 const { Text } = Typography
 
