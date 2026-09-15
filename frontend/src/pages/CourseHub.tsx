@@ -58,9 +58,6 @@ function coursePath(courseId: string, path = "") {
   return path ? `${base}/${path}` : base;
 }
 
-function progressOf(task: StudentTaskCard) {
-  return Math.round((task.passed_count / Math.max(task.total_required_count, 1)) * 100);
-}
 
 function statusLabel(task: StudentTaskCard) {
   return visibleTaskStatusLabel(resolveVisibleTaskStatus(task.status, task.start_at));

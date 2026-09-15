@@ -336,49 +336,6 @@ const researchBriefs: Record<string, ResearchBrief> = {
 
 const fallbackBrief = researchBriefs["sales-cleaning"];
 
-function fallbackDetail(project: PracticeProjectSummary): PracticeProjectDetail {
-  const brief = researchBriefFor(project);
-  return {
-    project,
-    metrics: {
-      completed_stage_count: project.id === "sales-cleaning" ? 3 : project.id === "retention-dashboard" ? 5 : 0,
-      total_stage_count: 6,
-      experiment_record_count: project.id === "sales-cleaning" ? 8 : project.id === "retention-dashboard" ? 11 : 0,
-      submission_count: project.id === "sales-cleaning" ? 2 : project.id === "retention-dashboard" ? 4 : 0
-    },
-    task_sections: [
-      { title: "画像推理结论", description: brief.profileFit, icon: "target" },
-      { title: "当前科研任务", description: project.long_description, icon: "bot" },
-      {
-        title: "研究对象 / 数据来源",
-        description: project.id === "sales-cleaning" ? "CIFAR-10 图像分类公开数据集，结合课程知识库中的实验指南和模型评估规范。" : "使用项目内置的脱敏数据样例，保证演示链路稳定可复查。",
-        action: "查看前沿追踪",
-        icon: "database"
-      },
-      { title: "成果要求", description: "完成前沿归纳、文献综述框架、实验或调查数据分析、可视化图表、阶段研究结论和下一步计划。", icon: "file-check" }
-    ],
-    submission_requirements: ["文献综述 / 论文框架", "实验数据分析报告", "趋势图谱或指标图表", "阶段研究结论"],
-    acceptance_criteria: ["前沿追踪有来源", "论文框架结构完整", "数据分析图表可解释", "结论不脱离实验或资料证据"],
-    mentor_tips: brief.dataInsights,
-    resources: brief.citations,
-    materials: [],
-    submissions: [
-      {
-        id: "fallback-submit-1",
-        project_id: project.id,
-        title: "v1.2 实验分析记录",
-        description: "提交内容：模型对比表、学习曲线、结论草稿；评审意见：建议补充前沿综述引用和消融实验说明。",
-        status: "APPROVED",
-        status_label: "已通过",
-        review_comment: "指标达标，建议补充前沿综述引用和消融实验说明。",
-        content: {},
-        submitted_at: "2026-05-17T14:32:00Z",
-        created_at: null
-      }
-    ],
-    activities: fallbackActivities.filter((activity) => activity.project_id === project.id)
-  };
-}
 
 function projectIcon(project: PracticeProjectSummary, index = 0) {
   if (project.id.includes("log")) return <Search size={24} />;

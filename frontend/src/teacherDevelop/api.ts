@@ -11,9 +11,6 @@ export function setCurrentUser(userId: string, name: string) {
   _currentUserName = name
 }
 
-export function getCurrentUserId() {
-  return _currentUserId
-}
 
 export function getCurrentUserName() {
   return _currentUserName

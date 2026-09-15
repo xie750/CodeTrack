@@ -307,15 +307,3 @@ export const seedLogs: OperationLog[] = [
   { id: 'L8', operator: '超级管理员', actionType: '编辑', resourceType: '基础参数', resourceId: 'upload', desc: '调整单文件上传上限', before: '200 MB', after: '500 MB', ip: '10.20.1.8', ua: 'Chrome/126 Windows', time: '2026-06-15 10:00:00', sensitive: true },
 ]
 
-// 平台运营指标（按时间范围）—— 用函数生成避免数据过于静态
-// 核心指标：用户总量 / AI 调用总量 / 班级课程关系 / 学习资料生成量
-export function genOpsMetrics(range: '本月' | '本学期' | '本年度' | '全部') {
-  const factor: Record<string, { users: number; ai: number; projects: number; research: number }> = {
-    本月: { users: 268, ai: 18240, projects: 12, research: 38 },
-    本学期: { users: 3240, ai: 234500, projects: 86, research: 426 },
-    本年度: { users: 4560, ai: 890200, projects: 210, research: 1192 },
-    全部: { users: 7820, ai: 1520000, projects: 356, research: 2140 },
-  }
-  const f = factor[range]
-  return { ...f }
-}

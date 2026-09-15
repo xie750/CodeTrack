@@ -96,9 +96,6 @@ export function readStudentFavorites() {
   }
 }
 
-export function isStudentFavorite(id: string) {
-  return readStudentFavorites().some((item) => item.id === id);
-}
 
 export function upsertStudentFavorite(record: StudentFavoriteRecord) {
   const current = readStudentFavorites();

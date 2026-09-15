@@ -8,6 +8,7 @@
     "dev:frontend": "node ../scripts/dev.mjs --frontend-only",
     "dev:backend": "node ../scripts/dev.mjs --backend-only",
     "build": "tsc -b && vite build",
+    "audit:unused": "node scripts/audit-unused.mjs",
     "preview": "vite preview --host 0.0.0.0",
     "evidence:screenshots": "node scripts/capture-evidence.mjs"
   },

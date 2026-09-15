@@ -59,13 +59,3 @@ export const navModules: NavModule[] = [
   },
 ]
 
-// 由当前路径解析出所属模块与二级页面（面包屑 / 菜单高亮共用）
-export function resolveNav(pathname: string): { module?: NavModule; entry?: NavEntry } {
-  for (const m of navModules) {
-    if (pathname === m.key || pathname.startsWith(m.key + '/')) {
-      const entry = m.entries.find((e) => pathname === e.key || pathname.startsWith(e.key + '/'))
-      return { module: m, entry }
-    }
-  }
-  return {}
-}

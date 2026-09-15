@@ -4,7 +4,6 @@ import { ConfigProvider } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import StudentEntryPortal from "./pages/StudentEntryPortal";
 import CourseHub from "./pages/CourseHub";
-import CourseTasks from "./pages/CourseTasks";
 import TaskWorkspace from "./pages/TaskWorkspace";
 import QuestionWorkspace from "./pages/QuestionWorkspace";
 import SelfStudyHub from "./pages/SelfStudyHub";
@@ -195,9 +194,7 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
             <Route path="/courses" element={<Navigate to="/" replace />} />
             <Route path="/courses/:courseId/*" element={<CourseHub onOpenWorkspace={openTask} />} />
             <Route path="/tasks" element={<Navigate to="/courses" replace />} />
-            <Route path="/tasks-legacy" element={<CourseTasks onOpenWorkspace={openTask} />} />
-            <Route path="/workspace/:taskId" element={<TaskWorkspaceWrapper onBack={() => transitionTo(workspaceBackPath)} />} />
-            <Route path="/question-workspace/:assignmentId" element={<QuestionWorkspaceWrapper onBack={() => transitionTo(workspaceBackPath)} />} />
+            <Route path="/tasks-legacy" element={<Navigate to="/courses" replace />} />
             <Route path="/self-study/*" element={<SelfStudyHub />} />
             <Route path="/project-practice" element={<ProjectPractice />} />
             <Route path="/project-practice/projects/:projectId" element={<ProjectPractice />} />

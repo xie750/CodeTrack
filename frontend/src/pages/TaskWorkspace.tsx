@@ -314,14 +314,6 @@ function agentStatusLabel(status: string) {
   return labels[status] ?? status;
 }
 
-function agentStatusClass(status: string) {
-  if (status === "SUCCEEDED") return "done";
-  if (status === "RUNNING") return "running";
-  if (status === "WARNING") return "warn";
-  if (status === "SKIPPED") return "skip";
-  if (status === "FAILED") return "fail";
-  return "idle";
-}
 
 function summarizeAgentValue(value: unknown): string {
   if (value === null || value === undefined) return "暂无摘要";
