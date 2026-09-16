@@ -72,7 +72,7 @@ def run_execution_background(execution_id: str, timeout_seconds: int) -> None:
 
 
 def _student_assignment(
-    db: Session, assignment_id: str, task_id: str, student_id: str
+    db: Session, assignment_id: str | None, task_id: str, student_id: str
 ) -> TaskAssignment:
     assignment = db.scalar(
         select(TaskAssignment)
@@ -90,7 +90,7 @@ def _student_assignment(
             & (Enrollment.role == "STUDENT"),
         )
         .where(
-            TaskAssignment.id == assignment_id,
+            TaskAssignment.id == assignment_id if assignment_id else True,
             TaskAssignment.task_id == task_id,
             TaskAssignment.publish_status == "PUBLISHED",
             TeachingAssignment.status == "ACTIVE",
@@ -197,12 +197,9 @@ def list_tasks(
     user: User = Depends(current_user),
 ):
     require_role(user, "STUDENT")
-    tasks = db.scalars(
-        select(Task)
-        .join(Enrollment, Enrollment.course_id == Task.course_id)
-        .where(Task.status == "OPEN", Enrollment.user_id == user.id)
-        .order_by(Task.id.asc())
-    ).all()
+    from backend.app.api.student import list_student_tasks
+    visible_ids = {item["task_id"] for item in list_student_tasks(db=db, user=user)["data"]}
+    tasks = db.scalars(select(Task).where(Task.status == "OPEN", Task.id.in_(visible_ids)).order_by(Task.id.asc())).all()
     data = []
     for task in tasks:
         course = db.get(Course, task.course_id)
@@ -239,11 +236,8 @@ def get_task(
         raise ApiError(404, "TASK_NOT_FOUND", "任务不存在")
     if task.workspace_type != "CODING":
         raise ApiError(400, "NOT_CODING_TASK", "当前任务不是编程任务，请使用题目作答工作台")
-    assignment = None
-    if assignment_id:
-        assignment = _student_assignment(db, assignment_id, task_id, user.id)
-    else:
-        ensure_course_member(db, task.course_id, user.id)
+    assignment = _student_assignment(db, assignment_id, task_id, user.id)
+    assignment_id = assignment.id
     test_cases = (
         db.query(TestCase)
         .filter(TestCase.task_id == task.id)
@@ -302,12 +296,8 @@ def submit_code(
         raise ApiError(404, "TASK_NOT_FOUND", "任务不存在")
     if task.workspace_type != "CODING":
         raise ApiError(400, "NOT_CODING_TASK", "当前任务不是编程任务，不能提交代码")
-    assignment = None
-    if assignment_id:
-        assignment = _student_assignment(db, assignment_id, task_id, user.id)
-        assert_assignment_started(assignment)
-    else:
-        ensure_course_member(db, task.course_id, user.id, role="STUDENT")
+    assignment = _student_assignment(db, assignment_id, task_id, user.id)
+    assert_assignment_started(assignment)
     submission, version, execution, created = create_submission_version(
         db=db,
         task_id=task_id,

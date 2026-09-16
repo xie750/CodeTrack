@@ -972,7 +972,7 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
       setContext(data);
       const preferredCourse = initialCourseId && data.courses.some((course) => course.course_id === initialCourseId)
         ? initialCourseId
-        : data.courses[0]?.course_id ?? "";
+        : data.courses[0]?.course_id ?? (initialCourseId ? "" : "course_ds_001");
       setSelectedCourseId(preferredCourse);
     }).catch((err) => {
       if (!alive) return;

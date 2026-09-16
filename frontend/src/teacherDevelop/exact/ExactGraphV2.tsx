@@ -1,3 +1,4 @@
+import { AuthenticatedFileLink } from '../../components/AuthenticatedFile'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as echarts from 'echarts'
 import type { EChartsOption } from 'echarts'
@@ -646,7 +647,7 @@ export function ExactGraphV2(props: Props) {
                         <div>
                           <strong>{attachment.title}</strong>
                           {attachment.resource_type === 'file' && attachment.file_url ? (
-                            <a href={attachment.file_url} target="_blank" rel="noreferrer" title={attachmentSummary(attachment)}>{attachmentSummary(attachment)}</a>
+                            <AuthenticatedFileLink href={attachment.file_url} title={attachmentSummary(attachment)}>{attachmentSummary(attachment)}</AuthenticatedFileLink>
                           ) : attachment.resource_type === 'link' ? (
                             <a href={attachment.link_url} target="_blank" rel="noreferrer" title={attachment.link_url}>{attachmentSummary(attachment)}</a>
                           ) : (

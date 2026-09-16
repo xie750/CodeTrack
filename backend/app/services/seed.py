@@ -368,6 +368,8 @@ def ensure_enrollment_columns(db: Session) -> None:
     columns = {column["name"] for column in inspect(db.bind).get_columns("enrollments")}
     if "teaching_assignment_id" not in columns:
         db.execute(text("ALTER TABLE enrollments ADD COLUMN teaching_assignment_id VARCHAR(64)"))
+    if "origin" not in columns:
+        db.execute(text("ALTER TABLE enrollments ADD COLUMN origin VARCHAR(20) NOT NULL DEFAULT 'LEGACY'"))
     db.commit()
 
 

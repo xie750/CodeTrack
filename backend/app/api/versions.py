@@ -112,7 +112,8 @@ def ensure_submission_access(db: Session, submission: Submission, user: User) ->
         ensure_course_member(db, submission.task.course_id, user.id, role="STUDENT")
         return
     if user.role == "TEACHER":
-        ensure_course_member(db, submission.task.course_id, user.id, role="TEACHER")
+        from backend.app.api.teacher_submissions import _authorized_submission
+        _authorized_submission(db, user, submission.id)
         return
     raise ApiError(403, "AUTH_FORBIDDEN", "当前角色无权访问该资源")
 

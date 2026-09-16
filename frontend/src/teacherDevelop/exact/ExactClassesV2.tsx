@@ -1,3 +1,4 @@
+import { scopedStorageKey } from '../../scopedStorage'
 import { useEffect, useMemo, useState } from 'react'
 import {
   Avatar, Button, Drawer, Form, Input, Modal, Select, Space, Spin, Tag, Typography,
@@ -148,9 +149,9 @@ export function ExactClassesV2(props: Props) {
 
   useEffect(() => {
     if (!groups.length) return
-    const stored = sessionStorage.getItem('codetrack-class-panel')
+    const stored = sessionStorage.getItem(scopedStorageKey('codetrack-class-panel'))
     if (!stored) return
-    sessionStorage.removeItem('codetrack-class-panel')
+    sessionStorage.removeItem(scopedStorageKey('codetrack-class-panel'))
     try {
       const target = JSON.parse(stored)
       const group = groups.find((item) => item.id === target.classId)
@@ -228,7 +229,7 @@ export function ExactClassesV2(props: Props) {
             </div>
             <div className="class-v2-actions">
               <Button size="small" onClick={(event) => { event.stopPropagation(); openDetail(group) }}>查看详情</Button>
-              <Button size="small" type="primary" ghost icon={<UserPlus size={14} />} onClick={(event) => { event.stopPropagation(); setSelectedId(group.id); sessionStorage.setItem('codetrack-selected-class-id', group.id); props.onNavigate('invite') }}>邀请学生</Button>
+              <Button size="small" type="primary" ghost icon={<UserPlus size={14} />} onClick={(event) => { event.stopPropagation(); setSelectedId(group.id); sessionStorage.setItem(scopedStorageKey('codetrack-selected-class-id'), group.id); props.onNavigate('invite') }}>邀请学生</Button>
               <Button size="small" icon={<Settings size={14} />} onClick={(event) => { event.stopPropagation(); props.notify('班级设置已加载') }}>管理班级</Button>
             </div>
           </article>
@@ -261,7 +262,7 @@ export function ExactClassesV2(props: Props) {
     <Drawer rootClassName="class-join-status-drawer" open={joinOpen} onClose={() => setJoinOpen(false)} placement="right" width={820} closeIcon={<X size={18} />} title={<div className="class-join-drawer-title"><span><UserCheck size={20} /></span><div><Title level={3}>学生加入状态</Title><Text type="secondary">{joinStatus?.class_name || selected?.name}</Text></div></div>}>
       <div className="class-join-status-page">
         <div className="class-join-summary"><article><span className="joined"><CheckCircle2 /></span><div><small>已加入</small><strong>{joinStatus?.summary.joined || 0}</strong></div></article><article><span className="pending"><Clock3 /></span><div><small>待审核</small><strong>{joinStatus?.summary.pending || 0}</strong></div></article><article><span className="invited"><Mail /></span><div><small>已邀请</small><strong>{joinStatus?.summary.invited || 0}</strong></div></article><article><span className="available"><Users /></span><div><small>剩余名额</small><strong>{joinStatus?.summary.available_slots || 0}</strong></div></article></div>
-        <div className="class-join-toolbar"><Input allowClear prefix={<Search size={15} />} placeholder="搜索学生姓名或学号" value={joinSearch} onChange={(event) => setJoinSearch(event.target.value)} /><Select value={joinFilter} onChange={setJoinFilter} options={[{ value: 'all', label: '全部状态' }, { value: 'joined', label: '已加入' }, { value: 'pending', label: '待审核' }, { value: 'invited', label: '已邀请' }]} /><Button type="primary" icon={<UserPlus size={15} />} onClick={() => { if (!selected) return; sessionStorage.setItem('codetrack-selected-class-id', selected.id); props.onNavigate('invite') }}>继续邀请</Button></div>
+        <div className="class-join-toolbar"><Input allowClear prefix={<Search size={15} />} placeholder="搜索学生姓名或学号" value={joinSearch} onChange={(event) => setJoinSearch(event.target.value)} /><Select value={joinFilter} onChange={setJoinFilter} options={[{ value: 'all', label: '全部状态' }, { value: 'joined', label: '已加入' }, { value: 'pending', label: '待审核' }, { value: 'invited', label: '已邀请' }]} /><Button type="primary" icon={<UserPlus size={15} />} onClick={() => { if (!selected) return; sessionStorage.setItem(scopedStorageKey('codetrack-selected-class-id'), selected.id); props.onNavigate('invite') }}>继续邀请</Button></div>
         <div className="class-join-list"><div className="class-join-list-head"><span>学生</span><span>加入状态</span><span>加入方式</span><span>加入时间</span><span>最近活跃</span><span>操作</span></div>{joinLoading && <div className="class-join-loading"><Spin /><span>正在加载加入记录</span></div>}{!joinLoading && !visibleJoinRows.length && <EmptyPanel text="当前筛选条件下没有学生加入记录" />}{!joinLoading && visibleJoinRows.map((student) => { const state = joinStatusView(student.join_status); return <div className="class-join-list-row" key={student.id}><span className="class-join-student"><Avatar size={34} className="exact-avatar">{student.name.slice(-1)}</Avatar><span><strong>{student.name}</strong><small>{student.number}</small></span></span><Tag color={state.color}>{state.text}</Tag><span>{student.join_method}</span><span>{formatJoinTime(student.joined_at)}</span><span>{student.last_active}</span><Button type="link" onClick={() => props.notify(`正在查看 ${student.name} 的学生信息`)}>查看</Button></div> })}</div>
         <div className="class-join-footer"><span>共 {visibleJoinRows.length} 条记录</span><span>数据与当前班级加入记录实时同步</span></div>
       </div>

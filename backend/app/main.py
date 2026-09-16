@@ -37,6 +37,8 @@ async def lifespan(app: FastAPI):
     db = SessionLocal()
     try:
         seed_demo_data(db)
+        from backend.app.services.account_scope import repair_registration_scope
+        repair_registration_scope(db)
     finally:
         db.close()
     yield

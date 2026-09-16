@@ -30,7 +30,7 @@ def ensure_student_enrolled(user_id: str, display_name: str) -> None:
             .one_or_none()
             is None
         ):
-            db.add(Enrollment(course_id="course_ds_001", user_id=user_id, role="STUDENT"))
+            db.add(Enrollment(course_id="course_ds_001", user_id=user_id, role="STUDENT", teaching_assignment_id="ta_se1_ds_001", origin="JOINED"))
         db.commit()
     finally:
         db.close()
@@ -822,16 +822,16 @@ def test_student_without_course_membership_is_forbidden():
             "/api/v1/tasks/task_linked_list_delete_001",
             headers={"X-Demo-User-Id": "user_student_outside"},
         )
-        assert task_detail.status_code == 403
-        assert task_detail.json()["error"]["code"] == "AUTH_FORBIDDEN"
+        assert task_detail.status_code == 404
+        assert task_detail.json()["error"]["code"] == "ASSIGNMENT_NOT_FOUND"
 
         submit = c.post(
             "/api/v1/tasks/task_linked_list_delete_001/submissions",
             headers={"Idempotency-Key": "outside-submit-001", "X-Demo-User-Id": "user_student_outside"},
             json={"language": "CPP", "source_code": STANDARD_WRONG_CODE},
         )
-        assert submit.status_code == 403
-        assert submit.json()["error"]["code"] == "AUTH_FORBIDDEN"
+        assert submit.status_code == 404
+        assert submit.json()["error"]["code"] == "ASSIGNMENT_NOT_FOUND"
 
 
 def test_task_list_filters_out_courses_without_membership():

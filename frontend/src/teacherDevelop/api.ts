@@ -3,8 +3,8 @@ import { authHeaders } from '../authSession'
 export const TEACHER_API_BASE = import.meta.env.VITE_TEACHER_API_BASE || '/api/v1'
 const UNIFIED_TASK_API_BASE = '/api/unified'
 
-let _currentUserId = 'teacher-01'
-let _currentUserName = '王老师'
+let _currentUserId = ''
+let _currentUserName = ''
 
 export function setCurrentUser(userId: string, name: string) {
   _currentUserId = userId
@@ -52,6 +52,7 @@ async function request<T>(
       'X-User-Id': userId ?? _currentUserId,
       'X-User-Name': encodeURIComponent(_currentUserName),
       ...options.headers,
+      ...authHeaders(),
     },
   })
   const payload = await response.json().catch(() => ({}))
@@ -73,21 +74,6 @@ const legacyClassIds: Record<string, string> = Object.fromEntries(
   Object.entries(unifiedClassIds).map(([legacyId, unifiedId]) => [unifiedId, legacyId]),
 )
 
-const unifiedStudentIds: Record<string, string> = {
-  'student-01': 'user_student_001',
-  'student-02': 'user_student_001',
-  'student-03': 'user_student_001',
-  'student-04': 'user_student_001',
-  'student-05': 'user_student_001',
-  'student-06': 'user_student_001',
-}
-
-function unifiedUserId(userId: string) {
-  if (userId === 'teacher-01') return 'user_teacher_001'
-  if (userId === 'teacher-02') return 'user_teacher_002'
-  return userId
-}
-
 function unifiedCourseId(courseId: string) {
   return unifiedCourseIds[courseId] || courseId
 }
@@ -98,7 +84,7 @@ function unifiedClassId(classId: string) {
 
 function unifiedStudentId(studentId?: string | null) {
   if (!studentId) return studentId
-  return unifiedStudentIds[studentId] || studentId
+  return studentId
 }
 
 function legacyTaskStatus(contentStatus: string, rawStatus: string) {
@@ -353,8 +339,9 @@ async function unifiedTaskRequest<T>(path: string, options: RequestInit = {}) {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      ...(Object.keys(tokenHeaders).length ? tokenHeaders : { 'X-Demo-User-Id': unifiedUserId(_currentUserId) }),
+      ...tokenHeaders,
       ...options.headers,
+      ...authHeaders(),
     },
   })
   const payload = await response.json().catch(() => ({}))
@@ -986,6 +973,7 @@ async function streamTeacherAiChat(
     headers: {
       'Content-Type': 'application/json',
       'X-User-Id': _currentUserId,
+      ...authHeaders(),
     },
     body: JSON.stringify(body),
   })
@@ -1028,7 +1016,7 @@ async function uploadMaterial(courseId: string, file: File, chapterLabel = '未�
   body.append('file', file)
   const response = await fetch(TEACHER_API_BASE + '/teacher/materials/upload', {
     method: 'POST',
-    headers: { 'X-User-Id': _currentUserId },
+    headers: { ...authHeaders() },
     body,
   })
   const payload = await response.json().catch(() => ({}))
@@ -1052,7 +1040,7 @@ async function uploadTeacherResearchMaterial(
     {
       method: 'POST',
       headers: {
-        ...(Object.keys(tokenHeaders).length ? tokenHeaders : { 'X-Demo-User-Id': unifiedUserId(_currentUserId) }),
+        ...tokenHeaders,
       },
       body,
     },
@@ -1070,7 +1058,7 @@ async function createTeacherGraphFromFiles(files: File[], fields: { title: strin
   body.append('target_classes', fields.target_classes)
   const response = await fetch(TEACHER_API_BASE + '/teacher/knowledge-graphs/from-files', {
     method: 'POST',
-    headers: { 'X-User-Id': _currentUserId },
+    headers: { ...authHeaders() },
     body,
   })
   const payload = await response.json().catch(() => ({}))
@@ -1102,7 +1090,7 @@ async function uploadTeacherGraphNodeAttachmentFile(
   body.append('visible', String(fields.visible ?? true))
   const response = await fetch(
     TEACHER_API_BASE + '/teacher/knowledge-graphs/' + graphId + '/attachments/file',
-    { method: 'POST', headers: { 'X-User-Id': _currentUserId }, body },
+    { method: 'POST', headers: { ...authHeaders() }, body },
   )
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) throw new ApiError(payload.detail || '文件挂载失败', response.status)

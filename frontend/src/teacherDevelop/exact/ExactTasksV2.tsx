@@ -1,3 +1,4 @@
+import { scopedStorageKey } from '../../scopedStorage'
 import { useEffect, useMemo, useState } from 'react'
 import {
   Alert, Button, Checkbox, Col, Dropdown, Form, Input, InputNumber, Modal, Radio, Row,
@@ -213,10 +214,10 @@ export function ExactTasksV2(props: Props) {
   }, [props.courseId])
 
   useEffect(() => {
-    const taskId = sessionStorage.getItem('codetrack:focus-task') || ''
+    const taskId = sessionStorage.getItem(scopedStorageKey('codetrack:focus-task')) || ''
     if (!taskId || !tasks.some((item) => item.id === taskId)) return
     setFocusedTaskId(taskId)
-    sessionStorage.removeItem('codetrack:focus-task')
+    sessionStorage.removeItem(scopedStorageKey('codetrack:focus-task'))
     window.setTimeout(() => document.getElementById(`task-${taskId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 120)
     window.setTimeout(() => setFocusedTaskId(''), 3200)
   }, [tasks])
@@ -425,7 +426,7 @@ export function ExactTasksV2(props: Props) {
   }
 
   const openTaskView = (view: 'monitor' | 'grading', taskId: string) => {
-    sessionStorage.setItem(`codetrack:${view}-task-id`, taskId)
+    sessionStorage.setItem(scopedStorageKey(`codetrack:${view}-task-id`), taskId)
     props.onNavigate(view)
   }
 

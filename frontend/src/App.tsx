@@ -257,6 +257,13 @@ function QuestionWorkspaceWrapper({ onBack }: { onBack: () => void }) {
 export default function App() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === 'codetrack.accessToken' || event.key === null) window.location.reload();
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -304,18 +311,18 @@ export default function App() {
         <div className="auth-loading">正在恢复登录状态...</div>
       ) : (
         <Routes>
-          <Route path="admin/*" element={<AdminApp />} />
+          <Route path="admin/*" element={authUser?.role === "ADMIN" ? <AdminApp key={authUser.id} /> : <Navigate to={authUser ? homePathForRole(authUser.role) : "/login"} replace />} />
           <Route
             path="/login"
             element={authUser ? <Navigate to={homePathForRole(authUser.role)} replace /> : <LoginPage onLogin={(user) => setAuthUser(user)} />}
           />
           <Route
             path="/teacher/*"
-            element={authUser?.role === "TEACHER" ? <TeacherDevelopRoute authUser={authUser} onLogout={handleLogout} /> : <Navigate to={authUser ? homePathForRole(authUser.role) : "/login"} replace />}
+            element={authUser?.role === "TEACHER" ? <TeacherDevelopRoute key={authUser.id} authUser={authUser} onLogout={handleLogout} /> : <Navigate to={authUser ? homePathForRole(authUser.role) : "/login"} replace />}
           />
           <Route
             path="/*"
-            element={authUser?.role === "STUDENT" ? <StudentAppContent authUser={authUser} onLogout={handleLogout} /> : <Navigate to={authUser ? homePathForRole(authUser.role) : "/login"} replace />}
+            element={authUser?.role === "STUDENT" ? <StudentAppContent key={authUser.id} authUser={authUser} onLogout={handleLogout} /> : <Navigate to={authUser ? homePathForRole(authUser.role) : "/login"} replace />}
           />
         </Routes>
       )}

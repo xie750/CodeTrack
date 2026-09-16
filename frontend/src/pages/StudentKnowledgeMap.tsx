@@ -1,3 +1,4 @@
+import { AuthenticatedFileLink } from '../components/AuthenticatedFile'
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import * as echarts from "echarts";
@@ -1675,7 +1676,7 @@ export default function StudentKnowledgeMap({ scope = "course", courseName }: Kn
                                     <div>
                                       <strong>{attachment.title}</strong>
                                       {attachment.resource_type === "file" && attachment.file_url ? (
-                                        <a href={attachment.file_url} target="_blank" rel="noreferrer" title={`${attachment.file_name || "文件资料"} · ${fileSize(attachment.file_size_bytes || 0)}`}>{attachment.file_name || "文件资料"} · {fileSize(attachment.file_size_bytes || 0)}</a>
+                                        <AuthenticatedFileLink href={attachment.file_url} title={`${attachment.file_name || "文件资料"} · ${fileSize(attachment.file_size_bytes || 0)}`}>{attachment.file_name || "文件资料"} · {fileSize(attachment.file_size_bytes || 0)}</AuthenticatedFileLink>
                                       ) : attachment.resource_type === "link" && attachment.link_url ? (
                                         <a href={attachment.link_url} target="_blank" rel="noreferrer" title={attachment.link_url}>{attachment.link_url}</a>
                                       ) : (

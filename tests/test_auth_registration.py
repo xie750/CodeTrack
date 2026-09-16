@@ -51,24 +51,19 @@ def test_student_registration_initializes_learning_business_flow():
         assert context_data["student"]["class_id"] is None
         assert context_data["student"]["class_name"] == "未加入班级"
         assert context_data["student"]["state"] == "NO_CLASS"
-        course_names = {course["course_name"] for course in context_data["courses"]}
-        assert course_names >= {"机器学习", "Python 程序设计", "数据结构"}
-        assert all(course["teaching_assignment_id"] for course in context_data["courses"])
+        assert context_data["courses"] == []
+        assert all(course["teaching_assignment_id"] is None for course in data["business_context"]["personal_courses"])
 
         tasks = client.get("/api/v1/student/tasks", headers=headers)
         assert tasks.status_code == 200
-        assert tasks.json()["data"]
-        bootstrap_tasks = [
-            item for item in tasks.json()["data"] if item["assignment_mode"] == "PROFILE_BOOTSTRAP"
-        ]
-        assert {item["course_name"] for item in bootstrap_tasks} >= {"机器学习", "Python 程序设计", "数据结构"}
+        assert tasks.json()["data"] == []
 
         profile = client.get("/api/v1/student/profile", params={"course_id": "course_ds_001"}, headers=headers)
         assert profile.status_code == 200
         profile_data = profile.json()["data"]
         assert profile_data["profile_status"] == "EMPTY"
         assert profile_data["knowledge_states"] == []
-        assert profile_data["bootstrap_assessment"]["assignment_id"] == "assign_bootstrap_ds_profile_001"
+        assert profile_data["bootstrap_assessment"] is None
 
         daily_tasks = client.get("/api/v1/student/daily-tasks", headers=headers)
         assert daily_tasks.status_code == 200
@@ -300,8 +295,4 @@ def test_teacher_registration_returns_teacher_token_and_course_scope():
             headers={"Authorization": f"Bearer {data['access_token']}"},
         )
         assert courses.status_code == 200
-        assert {course["title"] for course in courses.json()["data"]} >= {
-            "机器学习",
-            "Python 程序设计",
-            "数据结构",
-        }
+        assert courses.json()["data"] == []

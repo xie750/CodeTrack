@@ -6,6 +6,7 @@ from backend.app.core.database import get_db
 from backend.app.core.security import current_user, ensure_course_member
 from backend.app.models import ExecutionRun, Submission, SubmissionVersion, User
 from backend.app.services.submissions import iso
+from backend.app.api.versions import ensure_submission_access
 
 router = APIRouter(prefix="/api/v1/executions", tags=["executions"])
 
@@ -23,14 +24,7 @@ def get_execution(
     submission = db.get(Submission, version.submission_id) if version else None
     if submission is None:
         raise ApiError(404, "SUBMISSION_NOT_FOUND", "提交不存在")
-    if user.role == "STUDENT" and submission.student_id != user.id:
-        raise ApiError(403, "AUTH_FORBIDDEN", "无权访问其他学生的执行结果")
-    ensure_course_member(
-        db,
-        submission.task.course_id,
-        user.id,
-        role="TEACHER" if user.role == "TEACHER" else "STUDENT",
-    )
+    ensure_submission_access(db, submission, user)
 
     total = len(execution.test_results)
     passed = len([result for result in execution.test_results if result.status == "PASSED"])

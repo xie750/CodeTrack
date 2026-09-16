@@ -67,10 +67,7 @@ def teacher_courses(
     require_role(user, "TEACHER")
     enrolled_course_ids = set(
         db.scalars(
-            select(Enrollment.course_id).where(
-                Enrollment.user_id == user.id,
-                Enrollment.role == "TEACHER",
-            )
+            select(Course.id).where(Course.owner_teacher_id == user.id)
         ).all()
     )
     grouped = _group_by_course(teacher_assignments(db, user.id))
@@ -151,6 +148,13 @@ def teacher_submissions(
     )
     data = []
     for submission in submissions:
+        from backend.app.api.teacher_submissions import _authorized_submission
+        try:
+            _authorized_submission(db, user, submission.id)
+        except ApiError as exc:
+            if exc.status_code in {403, 404}:
+                continue
+            raise
         latest = submission.versions[-1] if submission.versions else None
         failed_tags = []
         if latest and latest.execution:
@@ -188,7 +192,8 @@ def teacher_timeline(
     submission = db.get(Submission, submission_id)
     if submission is None:
         raise ApiError(404, "SUBMISSION_NOT_FOUND", "提交不存在")
-    ensure_course_member(db, submission.task.course_id, user.id, role="TEACHER")
+    from backend.app.api.teacher_submissions import _authorized_submission
+    _authorized_submission(db, user, submission.id)
 
     events = []
     for version in submission.versions:

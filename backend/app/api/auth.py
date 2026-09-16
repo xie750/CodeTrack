@@ -1,4 +1,3 @@
-import json
 import re
 from datetime import date, datetime, timezone
 from uuid import uuid4
@@ -14,18 +13,16 @@ from backend.app.core.security import create_access_token, current_user, hash_pa
 from backend.app.models import (
     Course,
     Enrollment,
-    LearnerKnowledgeState,
-    LearnerProfileSnapshot,
-    Recommendation,
     StudentDailyTask,
     StudentResourceFolder,
-    TeachingAssignment,
     User,
 )
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
-DEFAULT_PERSONAL_CLASS_ID = "class_se_001"
+from backend.app.services.account_scope import PERSONAL_LEARNING_CLASS_ID, PERSONAL_COURSE_IDS
+
+DEFAULT_PERSONAL_CLASS_ID = PERSONAL_LEARNING_CLASS_ID
 DEFAULT_REGISTER_TERM = "2026-demo"
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{3,32}$")
 SUPPORTED_REGISTER_ROLES = {"STUDENT", "TEACHER"}
@@ -87,19 +84,6 @@ def _validate_register_password(password: str, username: str) -> str:
     return password
 
 
-def _default_teaching_assignment_id(db: Session, *, course_id: str) -> str | None:
-    teaching = db.scalar(
-        select(TeachingAssignment)
-        .where(
-            TeachingAssignment.course_id == course_id,
-            TeachingAssignment.class_id == DEFAULT_PERSONAL_CLASS_ID,
-            TeachingAssignment.status == "ACTIVE",
-        )
-        .order_by(TeachingAssignment.id.asc())
-    )
-    return teaching.id if teaching else None
-
-
 def _ensure_enrollment(
     db: Session,
     *,
@@ -121,76 +105,13 @@ def _ensure_enrollment(
                 user_id=user_id,
                 role=role,
                 teaching_assignment_id=teaching_assignment_id,
+                origin="PERSONAL" if role == "STUDENT" else "ASSIGNED",
             )
         )
         return
     enrollment.role = role
     if teaching_assignment_id:
         enrollment.teaching_assignment_id = teaching_assignment_id
-
-
-def _ensure_student_profile(db: Session, *, student_id: str, class_id: str, course: Course, first_task_id: str | None) -> None:
-    profile_id = f"profile_{student_id}_{course.id}"
-    profile = db.get(LearnerProfileSnapshot, profile_id)
-    if profile is None:
-        db.add(
-            LearnerProfileSnapshot(
-                id=profile_id,
-                student_id=student_id,
-                course_id=course.id,
-                class_id=class_id,
-                summary_text="已完成账号注册，当前为未加入班级的个人学习初始状态；画像将从自主学习、AI 助学和后续课程任务中逐步形成。",
-                overall_progress=0,
-                hint_dependency_level="LOW",
-                compile_error_rate=0,
-                logic_error_rate=0,
-                recent_task_completion=0,
-                recommendation_text="建议先进入自主学习或科研实践完成一次学习产物沉淀；加入班级后会同步出现班级课程任务。",
-            )
-        )
-    profile_points = {
-        "course_ds_001": ["链表", "栈与队列", "二叉树"],
-        "course_network_001": ["Python 函数", "列表与字典", "数据处理"],
-        "course_arch_001": ["监督学习", "模型评估", "过拟合与正则化"],
-    }.get(course.id, [course.name])
-    for point in profile_points:
-        exists = db.scalar(
-            select(LearnerKnowledgeState).where(
-                LearnerKnowledgeState.student_id == student_id,
-                LearnerKnowledgeState.course_id == course.id,
-                LearnerKnowledgeState.knowledge_point == point,
-            )
-        )
-        if exists is None:
-            db.add(
-                LearnerKnowledgeState(
-                    student_id=student_id,
-                    course_id=course.id,
-                    knowledge_point=point,
-                    mastery_score=0,
-                    state="READY",
-                    evidence_count=0,
-                    last_evidence="注册初始化，等待自主学习、科研实践或课程任务产生可验证证据。",
-                )
-            )
-
-    rec_id = f"rec_{student_id}_{course.id}_start"
-    if db.get(Recommendation, rec_id) is None:
-        db.add(
-            Recommendation(
-                id=rec_id,
-                student_id=student_id,
-                course_id=course.id,
-                recommendation_type="TASK",
-                title=f"开始学习{course.name}",
-                reason="新账号已接入人工智能专业助学闭环，尚未绑定行政班时可先从自主学习或科研实践建立画像证据。",
-                priority=6,
-                related_task_id=first_task_id,
-                related_knowledge_points=json.dumps(profile_points[:2], ensure_ascii=False),
-                suggested_action="OPEN_SELF_STUDY",
-                status="ACTIVE",
-            )
-        )
 
 
 def _ensure_student_resource_folders(db: Session, *, student_id: str) -> None:
@@ -230,11 +151,11 @@ def _ensure_student_daily_task(db: Session, *, student_id: str) -> None:
 
 def _initialize_student_business_flow(db: Session, user: User) -> dict:
     courses = list(
-        db.scalars(select(Course).where(Course.status == "ACTIVE").order_by(Course.id.asc())).all()
+        db.scalars(select(Course).where(Course.status == "ACTIVE", Course.id.in_(PERSONAL_COURSE_IDS)).order_by(Course.id.asc())).all()
     )
     personal_courses: list[dict] = []
     for course in courses:
-        teaching_assignment_id = _default_teaching_assignment_id(db, course_id=course.id)
+        teaching_assignment_id = None
         _ensure_enrollment(
             db,
             course_id=course.id,
@@ -262,18 +183,9 @@ def _initialize_student_business_flow(db: Session, user: User) -> dict:
 
 
 def _initialize_teacher_business_flow(db: Session, user: User) -> dict:
-    courses = list(
-        db.scalars(
-            select(Course)
-            .where(Course.status == "ACTIVE")
-            .order_by(Course.id.asc())
-        ).all()
-    )
-    for course in courses:
-        _ensure_enrollment(db, course_id=course.id, user_id=user.id, role="TEACHER")
     return {
         "term": DEFAULT_REGISTER_TERM,
-        "courses": [{"course_id": course.id, "course_name": course.name} for course in courses],
+        "courses": [],
     }
 
 

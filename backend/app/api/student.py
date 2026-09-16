@@ -89,7 +89,7 @@ from backend.app.services.student_resources import (
 router = APIRouter(prefix="/api/v1/student", tags=["student"])
 
 STUDENT_RESOURCE_CACHE_TTL_SECONDS = 30
-PERSONAL_LEARNING_CLASS_ID = "class_se_001"
+from backend.app.services.account_scope import PERSONAL_LEARNING_CLASS_ID, PERSONAL_COURSE_IDS
 PERSONAL_LEARNING_COURSE_ID = "course_ds_001"
 
 
@@ -447,14 +447,13 @@ def student_business_class_id(db: Session, user: User) -> str:
 
 
 def student_class_teaching_assignments(db: Session, user: User) -> list[TeachingAssignment]:
-    administrative_class, _ = active_class_or_none(db, user)
-    if administrative_class is None:
-        return []
     return list(
         db.scalars(
             select(TeachingAssignment)
+            .join(StudentClassMembership, StudentClassMembership.class_id == TeachingAssignment.class_id)
             .where(
-                TeachingAssignment.class_id == administrative_class.id,
+                StudentClassMembership.student_id == user.id,
+                StudentClassMembership.status == "ACTIVE",
                 TeachingAssignment.status == "ACTIVE",
             )
             .order_by(TeachingAssignment.course_id.asc())
@@ -570,6 +569,10 @@ def resolve_student_learning_context(
                 if course is None:
                     raise ApiError(404, "COURSE_NOT_FOUND", "课程不存在")
                 return teaching.class_id, course, administrative_class
+        if course_id in PERSONAL_COURSE_IDS:
+            course = db.get(Course, course_id)
+            if course is not None and course.status == "ACTIVE":
+                return PERSONAL_LEARNING_CLASS_ID, course, None
         raise ApiError(404, "COURSE_NOT_IN_STUDENT_CLASS", "当前学生未加入这门课程")
 
     if administrative_class is not None:
@@ -583,7 +586,7 @@ def resolve_student_learning_context(
             raise ApiError(404, "COURSE_NOT_FOUND", "课程不存在")
         return joined[0].class_id, course, None
 
-    query = select(Course).where(Course.status == "ACTIVE")
+    query = select(Course).where(Course.status == "ACTIVE", Course.id.in_(PERSONAL_COURSE_IDS))
     preferred = db.get(Course, PERSONAL_LEARNING_COURSE_ID)
     if preferred is not None and preferred.status == "ACTIVE":
         return PERSONAL_LEARNING_CLASS_ID, preferred, None
@@ -1156,11 +1159,13 @@ def join_course_offering(
                 user_id=user.id,
                 role="STUDENT",
                 teaching_assignment_id=teaching.id,
+                origin="JOINED",
             )
         )
     else:
         enrollment.role = "STUDENT"
         enrollment.teaching_assignment_id = teaching.id
+        enrollment.origin = "JOINED"
     db.commit()
     return ok(
         {

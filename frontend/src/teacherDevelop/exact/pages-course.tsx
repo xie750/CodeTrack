@@ -1,3 +1,4 @@
+import { scopedStorageKey } from '../../scopedStorage'
 import { useEffect, useState } from 'react'
 import {
   Avatar, Button, Drawer, Form, Input,
@@ -193,7 +194,7 @@ export function ExactWorkspace(props: CommonProps) {
   }
 
   const openRecentTask = (taskId: string) => {
-    sessionStorage.setItem('codetrack:focus-task', taskId)
+    sessionStorage.setItem(scopedStorageKey('codetrack:focus-task'), taskId)
     props.onNavigate('tasks')
   }
 
@@ -476,7 +477,7 @@ export function ExactCourseSettings(props: CommonProps) {
 
 export function ExactInvite(props: CommonProps) {
   const courseClasses = props.classes.filter((item) => item.course_id === props.courseId)
-  const [selectedClassId, setSelectedClassId] = useState(() => sessionStorage.getItem('codetrack-selected-class-id') || props.classId)
+  const [selectedClassId, setSelectedClassId] = useState(() => sessionStorage.getItem(scopedStorageKey('codetrack-selected-class-id')) || props.classId)
   const selected = courseClasses.find((item) => item.id === selectedClassId) || courseClasses[0]
   const [students, setStudents] = useState<ApiStudent[]>([])
   const [joinStatus, setJoinStatus] = useState<ApiClassJoinStatus | null>(null)
@@ -491,7 +492,7 @@ export function ExactInvite(props: CommonProps) {
   useEffect(() => {
     setJoinCode(selected?.join_code || '')
     if (selected) {
-      sessionStorage.setItem('codetrack-selected-class-id', selected.id)
+      sessionStorage.setItem(scopedStorageKey('codetrack-selected-class-id'), selected.id)
       Promise.all([api.students(selected.id), api.classJoinStatus(selected.id)]).then(([studentRows, status]) => {
         setStudents(studentRows)
         setJoinStatus(status)
@@ -501,7 +502,7 @@ export function ExactInvite(props: CommonProps) {
 
   const showAllJoinStatus = () => {
     if (!selected) return
-    sessionStorage.setItem('codetrack-class-panel', JSON.stringify({
+    sessionStorage.setItem(scopedStorageKey('codetrack-class-panel'), JSON.stringify({
       courseId: props.courseId,
       classId: selected.id,
       panel: 'join-status',

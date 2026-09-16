@@ -17,6 +17,7 @@ from backend.app.core.database import get_db
 from backend.app.core.security import current_user, require_role
 from backend.app.models import (
     DiagnosisReview,
+    Enrollment,
     Grade,
     Submission,
     SubmissionVersion,
@@ -83,7 +84,12 @@ def _authorized_submission(
             )
         ).all()
     }
-    if submission.student_id not in class_student_ids(db, sorted(assignment_class_ids)):
+    joined = db.scalar(select(Enrollment.id).where(
+        Enrollment.user_id == submission.student_id,
+        Enrollment.role == "STUDENT",
+        Enrollment.teaching_assignment_id.in_([item.teaching_assignment_id for item in assignments]),
+    ))
+    if joined is None and submission.student_id not in class_student_ids(db, sorted(assignment_class_ids)):
         raise ApiError(404, "SUBMISSION_NOT_FOUND", "提交不存在或不在当前教师的教学范围内")
     return submission
 

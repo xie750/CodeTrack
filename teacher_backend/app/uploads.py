@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from .database import get_db
-from .models import AuditLog, Course, Material, User
+from .models import AuditLog, ClassGroup, Course, Enrollment, Material, User
 
 
 router = APIRouter(prefix="/api/v1")
@@ -104,6 +104,17 @@ def download_material(
         raise HTTPException(status_code=404, detail="Material not found")
     if user.role == "student" and material.visibility != "students":
         raise HTTPException(status_code=403, detail="Material is not visible to students")
+    course = db.get(Course, material.course_id)
+    if user.role == "teacher":
+        allowed = course and course.teacher_id == user.id
+    elif user.role == "student":
+        allowed = db.query(Enrollment).join(ClassGroup).filter(
+            Enrollment.student_id == user.id, ClassGroup.course_id == material.course_id,
+        ).first() is not None
+    else:
+        allowed = False
+    if not allowed:
+        raise HTTPException(status_code=404, detail="Material not found")
     return FileResponse(target, filename=material.title)
 
 

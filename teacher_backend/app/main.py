@@ -181,6 +181,8 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+from .authentication import VerifiedIdentityMiddleware
+app.add_middleware(VerifiedIdentityMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],

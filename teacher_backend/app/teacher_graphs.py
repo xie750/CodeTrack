@@ -17,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from .database import get_db
-from .models import ClassGroup, TeacherGraphNodeAttachment, TeacherGraphPublication, TeacherKnowledgeGraph, User
+from .models import ClassGroup, Enrollment, TeacherGraphNodeAttachment, TeacherGraphPublication, TeacherKnowledgeGraph, User
 from backend.app.core.database import build_engine
 from backend.app.models import (
     AdministrativeClass as UnifiedClass,
@@ -232,9 +232,7 @@ def graph_for_viewer(db: Session, user: User | None, graph_id: int) -> TeacherKn
     if not item:
         raise HTTPException(status_code=404, detail="图谱不存在")
     if user is None:
-        if item.status != "published":
-            raise HTTPException(status_code=404, detail="图谱不存在")
-        return item
+        raise HTTPException(status_code=401, detail="请先登录")
     if user.role == "teacher":
         if item.user_id != user.id:
             raise HTTPException(status_code=404, detail="图谱不存在")
@@ -242,7 +240,25 @@ def graph_for_viewer(db: Session, user: User | None, graph_id: int) -> TeacherKn
     if user.role == "student":
         if item.status != "published":
             raise HTTPException(status_code=404, detail="图谱不存在")
-        return item
+        enrolled = db.scalar(select(Enrollment.id).join(
+            TeacherGraphPublication, TeacherGraphPublication.class_id == Enrollment.class_id,
+        ).where(Enrollment.student_id == user.id, TeacherGraphPublication.graph_id == graph_id,
+                TeacherGraphPublication.status == "published"))
+        if enrolled is not None:
+            return item
+        from backend.app.core.database import SessionLocal as AuthSession
+        from backend.app.api.student import student_accessible_teaching_assignment_ids
+        with AuthSession() as unified_db:
+            student = unified_db.get(UnifiedUser, user.id)
+            if student is not None:
+                accessible = student_accessible_teaching_assignment_ids(unified_db, student)
+                visible = unified_db.scalar(select(UnifiedStudentKnowledgeGraph.id).where(
+                    UnifiedStudentKnowledgeGraph.id.in_([f"kg_tg_{graph_id}_{teaching_id}"[:64] for teaching_id in accessible]),
+                    UnifiedStudentKnowledgeGraph.status == "published",
+                ))
+                if visible is not None:
+                    return item
+        raise HTTPException(status_code=404, detail="图谱不存在")
     raise HTTPException(status_code=403, detail="无权访问图谱")
 
 

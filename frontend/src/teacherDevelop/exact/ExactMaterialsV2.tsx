@@ -1,3 +1,4 @@
+import { useAuthenticatedFileUrl } from '../../components/AuthenticatedFile'
 import { useEffect, useMemo, useState } from 'react'
 import {
   Alert, Button, Checkbox, Dropdown, Form, Input, Modal, Select, Space,
@@ -78,6 +79,7 @@ export function ExactMaterialsV2(props: Props) {
   const [loading, setLoading] = useState(true)
   const [selectedFolder, setSelectedFolder] = useState('all')
   const [selected, setSelected] = useState<ApiMaterial | null>(null)
+  const selectedFile = useAuthenticatedFileUrl(selected?.content_url)
   const [activeType, setActiveType] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [uploading, setUploading] = useState(false)
@@ -333,7 +335,7 @@ export function ExactMaterialsV2(props: Props) {
 
   const isTrash = selectedFolder === 'trash'
   const selectedDate = formatDate(selected?.updated_at)
-  const canInlinePreview = selected?.type === 'pdf' && selected.content_url
+  const canInlinePreview = selected?.type === 'pdf' && selectedFile.url
 
   return <div className="exact-course-page material-v2-page">
     <div className="material-v2-heading">
@@ -527,17 +529,17 @@ export function ExactMaterialsV2(props: Props) {
       <aside className="material-v2-preview">
         <div className="material-v2-section-title">
           <strong>资料预览</strong>
-          {selected?.content_url && <Button type="text" href={selected.content_url} target="_blank" aria-label="在新窗口打开" icon={<ExternalLink size={15} />} />}
+          {selected?.content_url && <Button type="text" href={selectedFile.url} target="_blank" aria-label="在新窗口打开" icon={<ExternalLink size={15} />} />}
         </div>
         {!selected ? <div className="material-preview-empty"><FileText size={30} /><span>选择一份资料查看内容</span></div> : <>
-          {canInlinePreview ? <iframe className="material-document-frame" title={selected.title} src={selected.content_url || undefined} /> : <div className={'material-slide material-slide-' + materialKind(selected)}>
+          {canInlinePreview ? <iframe className="material-document-frame" title={selected.title} src={selectedFile.url} /> : <div className={'material-slide material-slide-' + materialKind(selected)}>
             <small>{selected.chapter || '教学资料'}</small>
             <Title level={3}>{selected.title}</Title>
             <span className="preview-file-type">{typeLabels[selected.type] || selected.type.toUpperCase()}</span>
             <i />
           </div>}
           <div className="quote-preview">
-            <div><strong>资料内容摘要</strong>{selected.content_url && <Button type="link" href={selected.content_url} target="_blank">查看原文件</Button>}</div>
+            <div><strong>资料内容摘要</strong>{selected.content_url && <Button type="link" href={selectedFile.url} target="_blank">查看原文件</Button>}</div>
             <p>{selected.type === 'link' ? '该资料为课程外部参考链接，可在新窗口打开并作为课堂讲解与自主学习的延伸材料。' : `《${selected.title}》已关联到“${selected.chapter || '未分类'}”，可用于备课、课堂讲解和 AI 知识库引用。`}</p>
           </div>
           <div className="trusted-source"><strong>可信来源</strong><span><CheckCircle2 size={16} />教学资料库（本课程）<Tag color="green">可信</Tag></span></div>
@@ -549,7 +551,7 @@ export function ExactMaterialsV2(props: Props) {
             <span>文件大小 <b>{selected.size || '-'}</b></span>
             <span>格式 <b>{selected.type.toUpperCase()}</b></span>
             <span>资料状态 <b>{isTrash ? '回收站（可恢复）' : selected.status === 'ready' ? '解析完成（100%）' : '解析中（72%）'}</b></span>
-            {selected.content_url && <Button block href={selected.content_url} target="_blank" icon={<Download size={15} />}>打开资料</Button>}
+            {selected.content_url && <Button block href={selectedFile.url} target="_blank" icon={<Download size={15} />}>打开资料</Button>}
           </div>
         </>}
       </aside>

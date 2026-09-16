@@ -83,6 +83,7 @@ class Enrollment(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     teaching_assignment_id: Mapped[str | None] = mapped_column(ForeignKey("teaching_assignments.id"))
+    origin: Mapped[str] = mapped_column(String(20), nullable=False, default="LEGACY", server_default="LEGACY")
 
 
 class AdministrativeClass(Base):

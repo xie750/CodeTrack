@@ -1,3 +1,4 @@
+import { scopedStorageKey } from '../../scopedStorage'
 import { useEffect, useMemo, useState } from 'react'
 import {
   Alert, Avatar, Button, Col, Divider, Form, Input, InputNumber, Progress, Row,
@@ -85,7 +86,7 @@ export function ExactMonitor({ courseId, onNavigate, notify }: FlowProps) {
     setLoading(true)
     api.tasks(courseId).then((items) => {
       setTasks(items)
-      const requested = sessionStorage.getItem('codetrack:monitor-task-id') || ''
+      const requested = sessionStorage.getItem(scopedStorageKey('codetrack:monitor-task-id')) || ''
       const first = items.find((item) => item.id === requested)?.id
         || items.find((item) => item.status === 'published')?.id
         || items[0]?.id || ''
@@ -134,7 +135,7 @@ export function ExactGrading({ courseId, onNavigate, notify }: FlowProps) {
     setLoading(true)
     api.tasks(courseId).then((items) => {
       setTasks(items)
-      const requested = sessionStorage.getItem('codetrack:grading-task-id') || ''
+      const requested = sessionStorage.getItem(scopedStorageKey('codetrack:grading-task-id')) || ''
       setTaskId(items.find((item) => item.id === requested)?.id
         || items.find((item) => item.status === 'published')?.id
         || items[0]?.id || '')

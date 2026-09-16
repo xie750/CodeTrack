@@ -268,8 +268,8 @@ def serialize_learner_profile(
         "student": {
             "id": student_id,
             "name": student.display_name if student else "",
-            "class_id": profile.class_id,
-            "class_name": administrative_class.name if administrative_class else "",
+            "class_id": None if administrative_class and administrative_class.status == "SYSTEM" else profile.class_id,
+            "class_name": administrative_class.name if administrative_class and administrative_class.status != "SYSTEM" else "未加入班级",
         },
         "course": {
             "id": course.id if course else profile.course_id,

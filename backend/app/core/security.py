@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from backend.app.core.api_response import ApiError
 from backend.app.core.config import get_settings
 from backend.app.core.database import get_db
-from backend.app.models import Enrollment, User
+from backend.app.models import Course, Enrollment, TeachingAssignment, User
 
 
 PASSWORD_ALGORITHM = "pbkdf2_sha256"
@@ -131,6 +131,16 @@ def require_role(user: User, role: str) -> None:
 
 
 def ensure_course_member(db: Session, course_id: str, user_id: str, role: str | None = None) -> None:
+    if role == "TEACHER":
+        course = db.get(Course, course_id)
+        teaching = db.scalar(select(TeachingAssignment.id).where(
+            TeachingAssignment.course_id == course_id,
+            TeachingAssignment.teacher_id == user_id,
+            TeachingAssignment.status == "ACTIVE",
+        ))
+        if not course or (course.owner_teacher_id != user_id and teaching is None):
+            raise ApiError(403, "AUTH_FORBIDDEN", "无权访问该课程资源")
+        return
     query = select(Enrollment).where(
         Enrollment.course_id == course_id,
         Enrollment.user_id == user_id,

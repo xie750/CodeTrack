@@ -3,6 +3,7 @@ import { Badge, Avatar, Dropdown, Popover, Button, Divider, Modal } from 'antd'
 import { Bell, LogOut, ChevronDown, User, BookOpen, DatabaseZap, ShieldCheck, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '@admin/stores/useAppStore'
+import { clearAccessToken } from '../../authSession'
 import PersonalCenter from '@admin/components/PersonalCenter'
 
 const todoMeta = [
@@ -45,7 +46,8 @@ export default function Topbar() {
     onClick: ({ key }: { key: string }) => {
       if (key === 'logout') {
         logout()
-        navigate('/admin/login')
+        clearAccessToken()
+        window.location.assign('/login')
       } else if (key === 'profile') {
         setProfileOpen(true)
       }

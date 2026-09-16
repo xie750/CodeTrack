@@ -4,7 +4,6 @@ import { Spin } from 'antd'
 import MainLayout from '@admin/layouts/MainLayout'
 import '@admin/theme/global.css'
 
-const Login = lazy(() => import('@admin/pages/login'))
 const Dashboard = lazy(() => import('@admin/pages/dashboard'))
 const Teachers = lazy(() => import('@admin/pages/users/Teachers'))
 const Students = lazy(() => import('@admin/pages/users/Students'))
@@ -29,7 +28,7 @@ export default function App() {
   return (
     <Suspense fallback={<PageLoader />}>
       <Routes>
-        <Route path="login" element={<Login />} />
+        <Route path="login" element={<Navigate to="/admin/dashboard" replace />} />
         <Route element={<MainLayout />}>
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
