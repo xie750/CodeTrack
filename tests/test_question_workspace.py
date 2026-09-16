@@ -16,6 +16,15 @@ def client() -> TestClient:
     return test_client
 
 
+def join_data_structures_offering(c: TestClient, headers: dict[str, str]) -> None:
+    joined = c.post(
+        "/api/v1/student/course-offerings/join",
+        headers=headers,
+        json={"teaching_assignment_id": "ta_se1_ds_001"},
+    )
+    assert joined.status_code == 201, joined.text
+
+
 def test_question_workspace_submit_updates_task_progress_and_profile():
     with client() as c:
         tasks = c.get("/api/v1/student/tasks")
@@ -145,6 +154,11 @@ def test_registered_student_without_class_can_use_joined_question_workspace():
         assert context.status_code == 200
         assert context.json()["data"]["student"]["state"] == "NO_CLASS"
 
+        before_join = c.get("/api/v1/student/tasks", headers=headers)
+        assert before_join.status_code == 200
+        assert before_join.json()["data"] == []
+
+        join_data_structures_offering(c, headers)
         tasks = c.get("/api/v1/student/tasks", headers=headers)
         assert tasks.status_code == 200
         quiz = next(item for item in tasks.json()["data"] if item["assignment_id"] == "assign_se1_ds_stage_quiz_001")
@@ -189,6 +203,7 @@ def test_registered_student_builds_initial_profile_from_bootstrap_assessment():
         )
         assert registered.status_code == 201, registered.text
         headers = {"Authorization": f"Bearer {registered.json()['data']['access_token']}"}
+        join_data_structures_offering(c, headers)
 
         empty_profile = c.get("/api/v1/student/profile", params={"course_id": "course_ds_001"}, headers=headers)
         assert empty_profile.status_code == 200
@@ -235,6 +250,7 @@ def test_profile_bootstrap_generation_uses_dialog_intake_and_updates_profile():
         )
         assert registered.status_code == 201, registered.text
         headers = {"Authorization": f"Bearer {registered.json()['data']['access_token']}"}
+        join_data_structures_offering(c, headers)
 
         python_generated = c.post(
             "/api/v1/student/profile/bootstrap-assessments",

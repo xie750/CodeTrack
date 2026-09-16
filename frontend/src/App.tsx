@@ -9,6 +9,7 @@ import { StudentState } from "./components/StudentState";
 import TaskWorkspace from "./pages/TaskWorkspace";
 import QuestionWorkspace from "./pages/QuestionWorkspace";
 import SelfStudyHub from "./pages/SelfStudyHub";
+import GeneratedPracticeWorkspace from "./pages/GeneratedPracticeWorkspace";
 import ProjectPractice from "./pages/ProjectPractice";
 import LoginPage from "./pages/LoginPage";
 import AIClassroom from "./pages/AIClassroom";
@@ -94,7 +95,8 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
   const navigate = useNavigate();
   const location = useLocation();
   const isClassroomWorkspace = location.pathname.startsWith("/self-study/library/classroom") || location.pathname.startsWith("/self-study/classroom");
-  const isWorkspace = location.pathname.startsWith("/workspace") || location.pathname.startsWith("/question-workspace") || isClassroomWorkspace;
+  const isGeneratedPracticeWorkspace = location.pathname.startsWith("/self-study/library/practice");
+  const isWorkspace = location.pathname.startsWith("/workspace") || location.pathname.startsWith("/question-workspace") || isClassroomWorkspace || isGeneratedPracticeWorkspace;
   const activeRouteGroup = routeGroup(location.pathname);
   const isEntryRoute = location.pathname === "/" || location.pathname === "";
 
@@ -142,6 +144,7 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
             <Routes location={location}>
               <Route path="/workspace/:taskId" element={<TaskWorkspaceWrapper onBack={() => transitionTo(workspaceBackPath)} />} />
               <Route path="/question-workspace/:assignmentId" element={<QuestionWorkspaceWrapper onBack={() => transitionTo(workspaceBackPath)} />} />
+              <Route path="/self-study/library/practice/:resourceId" element={<GeneratedPracticeWrapper onBack={() => transitionTo(workspaceState?.fromPath ?? "/self-study/library")} />} />
               <Route path="/self-study/library/classroom/:resourceId" element={<AIClassroom />} />
               <Route path="/self-study/classroom" element={<AIClassroom />} />
               <Route path="*" element={<StudentState title="未找到该工作区" description="链接可能不完整，请重新选择任务。" actions={[{ label: "查看课程任务", onClick: () => transitionTo("/tasks") }]} />} />
@@ -252,6 +255,14 @@ function QuestionWorkspaceWrapper({ onBack }: { onBack: () => void }) {
     return <Navigate to="/tasks" replace />;
   }
   return <QuestionWorkspace assignmentId={assignmentId} focusQuestionId={searchParams.get("question_id") ?? undefined} onBack={onBack} />;
+}
+
+function GeneratedPracticeWrapper({ onBack }: { onBack: () => void }) {
+  const { resourceId } = useParams<{ resourceId: string }>();
+  if (!resourceId) {
+    return <Navigate to="/self-study/library" replace />;
+  }
+  return <GeneratedPracticeWorkspace resourceId={resourceId} onBack={onBack} />;
 }
 
 export default function App() {

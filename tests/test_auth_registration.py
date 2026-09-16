@@ -63,7 +63,8 @@ def test_student_registration_initializes_learning_business_flow():
         profile_data = profile.json()["data"]
         assert profile_data["profile_status"] == "EMPTY"
         assert profile_data["knowledge_states"] == []
-        assert profile_data["bootstrap_assessment"] is None
+        assert profile_data["bootstrap_assessment"]["assignment_id"] == "assign_bootstrap_ds_profile_001"
+        assert profile_data["bootstrap_assessment"]["action_label"] == "开始画像摸底"
 
         daily_tasks = client.get("/api/v1/student/daily-tasks", headers=headers)
         assert daily_tasks.status_code == 200

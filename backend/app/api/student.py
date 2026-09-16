@@ -88,6 +88,12 @@ from backend.app.services.student_resources import (
 
 router = APIRouter(prefix="/api/v1/student", tags=["student"])
 
+PROFILE_BOOTSTRAP_ASSIGNMENT_BY_COURSE = {
+    "course_ds_001": "assign_bootstrap_ds_profile_001",
+    "course_network_001": "assign_bootstrap_python_profile_001",
+    "course_arch_001": "assign_bootstrap_ml_profile_001",
+}
+
 STUDENT_RESOURCE_CACHE_TTL_SECONDS = 30
 from backend.app.services.account_scope import PERSONAL_LEARNING_CLASS_ID, PERSONAL_COURSE_IDS
 PERSONAL_LEARNING_COURSE_ID = "course_ds_001"
@@ -503,6 +509,20 @@ def student_assignment_class_id(db: Session, user: User, assignment_id: str) -> 
         raise ApiError(404, "ASSIGNMENT_NOT_FOUND", "任务不存在或当前学生无权限")
     accessible_ids = set(student_accessible_teaching_assignment_ids(db, user))
     if teaching.id not in accessible_ids:
+        if assignment.assignment_mode == "PROFILE_BOOTSTRAP":
+            progress = db.scalar(
+                select(StudentTaskProgress).where(
+                    StudentTaskProgress.assignment_id == assignment.id,
+                    StudentTaskProgress.student_id == user.id,
+                )
+            )
+            if progress is not None:
+                return teaching.class_id
+            if (
+                assignment.id in PROFILE_BOOTSTRAP_ASSIGNMENT_BY_COURSE.values()
+                and teaching.course_id in PERSONAL_COURSE_IDS
+            ):
+                return teaching.class_id
         raise ApiError(404, "ASSIGNMENT_NOT_FOUND", "任务不存在或当前学生无权限")
     return teaching.class_id
 
@@ -940,27 +960,49 @@ def bootstrap_assessment_payload(db: Session, *, user: User, course_id: str | No
     if not course_id:
         return None
     teaching_ids = student_accessible_teaching_assignment_ids(db, user)
-    if not teaching_ids:
-        return None
-    row = db.execute(
-        select(TaskAssignment, Task, TeachingAssignment, Course, StudentTaskProgress)
-        .join(Task, TaskAssignment.task_id == Task.id)
-        .join(TeachingAssignment, TaskAssignment.teaching_assignment_id == TeachingAssignment.id)
-        .join(Course, TeachingAssignment.course_id == Course.id)
-        .outerjoin(
-            StudentTaskProgress,
-            (StudentTaskProgress.assignment_id == TaskAssignment.id)
-            & (StudentTaskProgress.student_id == user.id),
-        )
-        .where(
-            TeachingAssignment.id.in_(teaching_ids),
-            TeachingAssignment.course_id == course_id,
-            TeachingAssignment.status == "ACTIVE",
-            TaskAssignment.publish_status == "PUBLISHED",
-            TaskAssignment.assignment_mode == "PROFILE_BOOTSTRAP",
-        )
-        .order_by(TaskAssignment.published_at.asc(), TaskAssignment.id.asc())
-    ).first()
+    row = None
+    if teaching_ids:
+        row = db.execute(
+            select(TaskAssignment, Task, TeachingAssignment, Course, StudentTaskProgress)
+            .join(Task, TaskAssignment.task_id == Task.id)
+            .join(TeachingAssignment, TaskAssignment.teaching_assignment_id == TeachingAssignment.id)
+            .join(Course, TeachingAssignment.course_id == Course.id)
+            .outerjoin(
+                StudentTaskProgress,
+                (StudentTaskProgress.assignment_id == TaskAssignment.id)
+                & (StudentTaskProgress.student_id == user.id),
+            )
+            .where(
+                TeachingAssignment.id.in_(teaching_ids),
+                TeachingAssignment.course_id == course_id,
+                TeachingAssignment.status == "ACTIVE",
+                TaskAssignment.publish_status == "PUBLISHED",
+                TaskAssignment.assignment_mode == "PROFILE_BOOTSTRAP",
+            )
+            .order_by(TaskAssignment.published_at.asc(), TaskAssignment.id.asc())
+        ).first()
+    if row is None and course_id in PERSONAL_COURSE_IDS:
+        bootstrap_assignment_id = PROFILE_BOOTSTRAP_ASSIGNMENT_BY_COURSE.get(course_id)
+        if not bootstrap_assignment_id:
+            return None
+        row = db.execute(
+            select(TaskAssignment, Task, TeachingAssignment, Course, StudentTaskProgress)
+            .join(Task, TaskAssignment.task_id == Task.id)
+            .join(TeachingAssignment, TaskAssignment.teaching_assignment_id == TeachingAssignment.id)
+            .join(Course, TeachingAssignment.course_id == Course.id)
+            .outerjoin(
+                StudentTaskProgress,
+                (StudentTaskProgress.assignment_id == TaskAssignment.id)
+                & (StudentTaskProgress.student_id == user.id),
+            )
+            .where(
+                TaskAssignment.id == bootstrap_assignment_id,
+                TeachingAssignment.course_id == course_id,
+                TeachingAssignment.status == "ACTIVE",
+                TaskAssignment.publish_status == "PUBLISHED",
+                TaskAssignment.assignment_mode == "PROFILE_BOOTSTRAP",
+            )
+        ).first()
     if row is None:
         return None
     assignment, task, teaching, course, progress = row

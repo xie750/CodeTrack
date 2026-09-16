@@ -1125,9 +1125,8 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
     const bootstrap = profile.bootstrap_assessment;
     const bootstrapDescription = bootstrap
       ? `建议先完成「${bootstrap.title}」，约 ${bootstrap.estimated_minutes} 分钟，共 ${bootstrap.question_count} 题，覆盖 ${bootstrap.knowledge_points.slice(0, 3).join("、")}。提交后会生成低置信初始画像。`
-      : "当前课程暂未配置画像摸底题，可以先进入自主学习保存一份学习产物，系统会据此逐步生成画像。";
+      : "当前课程暂未加载到画像摸底基准任务，请刷新后重试。";
     const openBootstrapDialog = () => {
-      if (!bootstrap) return;
       const nextStep = profileBootstrapQuestions.findIndex((question) => !bootstrapDraft[question.key].trim());
       setBootstrapStep(nextStep >= 0 ? nextStep : profileBootstrapQuestions.length - 1);
       setBootstrapChatInput("");
@@ -1158,7 +1157,6 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
       setBootstrapChatInput("");
     };
     const submitBootstrapDialog = async () => {
-      if (!bootstrap) return;
       const direction = bootstrapDraft.direction.trim();
       const goal = bootstrapDraft.goal.trim();
       const habit = bootstrapDraft.habit.trim();
@@ -1166,7 +1164,7 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
       setBootstrapGenerateError(null);
       setBootstrapLaunch({
         assignmentId: null,
-        title: bootstrap.title,
+        title: bootstrap?.title ?? "个性化画像摸底",
         direction,
         goal,
         habit
@@ -1174,6 +1172,9 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
       setError(null);
       setErrorDetail(null);
       try {
+        if (!bootstrap) {
+          throw new Error("当前课程暂未加载到画像摸底基准任务，请刷新后重试。");
+        }
         const generated = await api.generateProfileBootstrapAssessment({
           base_assignment_id: bootstrap.assignment_id,
           direction,
@@ -1193,7 +1194,7 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
         setBootstrapDialogOpen(true);
       }
     };
-    const bootstrapModal = bootstrapDialogOpen && bootstrap ? (
+    const bootstrapModal = bootstrapDialogOpen ? (
       <div className="behavior-modal-backdrop" role="presentation" onMouseDown={() => setBootstrapDialogOpen(false)}>
         <article className="behavior-modal profile-bootstrap-modal" role="dialog" aria-modal="true" aria-label="画像摸底前信息收集" onMouseDown={(event) => event.stopPropagation()}>
           <div className="behavior-modal-head">
@@ -1371,7 +1372,7 @@ export default function LearningProfile({ initialCourseId }: LearningProfileProp
               <span>{profile.profile_confidence || "NONE"}</span>
             </div>
             <div className="ai-advice-actions">
-              {bootstrap ? <button type="button" onClick={openBootstrapDialog}>{bootstrap.action_label || "开始画像摸底"}</button> : null}
+              <button type="button" onClick={openBootstrapDialog}>{bootstrap?.action_label || "开始画像摸底"}</button>
               <button type="button" onClick={() => navigate("/self-study")}>先去自主学习</button>
             </div>
           </article>

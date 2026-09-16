@@ -309,20 +309,7 @@ def test_correct_code_passes_and_creates_capability_evidence():
 
 def test_independent_first_pass_creates_strong_capability_evidence():
     with client() as c:
-        db = SessionLocal()
-        try:
-            db.merge(User(id="user_student_independent", display_name="独立通过学生", role="STUDENT", status="ACTIVE"))
-            db.flush()
-            if (
-                db.query(Enrollment)
-                .filter(Enrollment.course_id == "course_ds_001", Enrollment.user_id == "user_student_independent")
-                .one_or_none()
-                is None
-            ):
-                db.add(Enrollment(course_id="course_ds_001", user_id="user_student_independent", role="STUDENT"))
-            db.commit()
-        finally:
-            db.close()
+        ensure_student_enrolled("user_student_independent", "独立通过学生")
 
         response = c.post(
             "/api/v1/tasks/task_linked_list_delete_001/submissions",
@@ -360,20 +347,7 @@ def test_independent_first_pass_creates_strong_capability_evidence():
 
 def test_level_one_hint_then_pass_creates_moderate_capability_evidence():
     with client() as c:
-        db = SessionLocal()
-        try:
-            db.merge(User(id="user_student_level1", display_name="一级提示学生", role="STUDENT", status="ACTIVE"))
-            db.flush()
-            if (
-                db.query(Enrollment)
-                .filter(Enrollment.course_id == "course_ds_001", Enrollment.user_id == "user_student_level1")
-                .one_or_none()
-                is None
-            ):
-                db.add(Enrollment(course_id="course_ds_001", user_id="user_student_level1", role="STUDENT"))
-            db.commit()
-        finally:
-            db.close()
+        ensure_student_enrolled("user_student_level1", "一级提示学生")
 
         first = c.post(
             "/api/v1/tasks/task_linked_list_delete_001/submissions",
@@ -497,20 +471,7 @@ def test_repeated_boundary_failure_creates_negative_capability_evidence():
 
 def test_version_history_keeps_source_code_and_hash_immutable():
     with client() as c:
-        db = SessionLocal()
-        try:
-            db.merge(User(id="user_student_history", display_name="版本历史学生", role="STUDENT", status="ACTIVE"))
-            db.flush()
-            if (
-                db.query(Enrollment)
-                .filter(Enrollment.course_id == "course_ds_001", Enrollment.user_id == "user_student_history")
-                .one_or_none()
-                is None
-            ):
-                db.add(Enrollment(course_id="course_ds_001", user_id="user_student_history", role="STUDENT"))
-            db.commit()
-        finally:
-            db.close()
+        ensure_student_enrolled("user_student_history", "版本历史学生")
 
         first = c.post(
             "/api/v1/tasks/task_linked_list_delete_001/submissions",
