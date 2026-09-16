@@ -35,6 +35,8 @@
 | `16_algorithm_application_design.md` | 算法应用的内部落点、推荐逻辑和验收口径 |
 | `17_voice_control_feature_design.md` | 语音控制功能调研、竞品参考和轻量落地方案 |
 | `18_teacher_ai_grading_design.md` | 助教场景下作业、试题和主观题的 AI 智能批改设计 |
+| `19_interaction_audit_2026-09-16.md` | 交互断点、静态数据修复、验证结果与原型边界 |
+| `20_rag_quality_optimization_2026-09-16.md` | RAG 切分、向量、混合检索优化、模型启用与可复现评测 |
 | `12_hifi_prototype_page_framework.md` | 高保真原型的三端页面框架、控件和功能清单 |
 | `../../AGENTS.md` | 项目级 agent harness 入口 |
 

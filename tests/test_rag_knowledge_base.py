@@ -322,3 +322,67 @@ def test_same_markdown_has_stable_chunks_across_knowledge_bases():
             for item in second_chunks.json()["data"]["items"]
         ]
         assert first_signature == second_signature
+
+
+def test_reindex_preserves_old_versions_and_pins_actual_embedding_model():
+    from backend.app.models import RagKnowledgeBase, RagDocumentVersion
+    from scripts.reindex_rag import rebuild_knowledge_base
+
+    with client() as c:
+        kb_id, document_id = create_ready_kb_with_document(c)
+    with SessionLocal() as db:
+        kb = db.get(RagKnowledgeBase, kb_id)
+        assert kb.embedding_model == "codetrack-hash-embedding-v2"
+        old_id = db.get(RagDocument, document_id).active_version_id
+        report = rebuild_knowledge_base(db, kb, provider="hash", model="ignored", dim=1024)
+        new_id = db.get(RagDocument, document_id).active_version_id
+        assert old_id != new_id
+        assert db.get(RagDocumentVersion, old_id).status == "READY"
+        assert db.get(RagDocumentVersion, old_id).superseded_at
+        assert db.get(RagDocumentVersion, new_id).embedding_model == "codetrack-hash-embedding-v2"
+        assert report["documents_rebuilt"] == 1
+        from backend.app.services.rag.retrieval import retrieve_chunks
+        rows = retrieve_chunks(db, kb_id, "核心概念")
+        assert rows
+        assert all(db.get(RagChunk, row.child_chunk_id).document_version_id == new_id for row in rows)
+
+
+def test_failed_batch_reindex_never_partially_activates(monkeypatch):
+    from backend.app.models import RagKnowledgeBase
+    import scripts.reindex_rag as reindex
+    import pytest
+
+    with client() as c:
+        kb_id, first_id = create_ready_kb_with_document(c)
+        response = c.post(f"/api/v1/knowledge-bases/{kb_id}/documents/from-text?auto_process=true",
+                          json={"title": "second", "content": "# 第二份\n\n梯度下降沿损失函数梯度的反方向更新。"})
+        assert response.status_code == 202
+        second_id = response.json()["data"]["document_id"]
+    with SessionLocal() as db:
+        kb = db.get(RagKnowledgeBase, kb_id)
+        old_ids = {id: db.get(RagDocument, id).active_version_id for id in (first_id, second_id)}
+        original = reindex.ingest_document_version
+        calls = []
+
+        def fail_second(*args, **kwargs):
+            calls.append(True)
+            if len(calls) == 2:
+                raise RuntimeError("simulated embedding failure")
+            return original(*args, **kwargs)
+
+        monkeypatch.setattr(reindex, "ingest_document_version", fail_second)
+        with pytest.raises(RuntimeError, match="simulated"):
+            reindex.rebuild_knowledge_base(db, kb, provider="hash", model="ignored", dim=1024)
+        assert {id: db.get(RagDocument, id).active_version_id for id in old_ids} == old_ids
+        assert kb.embedding_provider == "hash"
+
+
+def test_unknown_query_returns_no_evidence_in_hash_mode():
+    with client() as c:
+        kb_id, _ = create_ready_kb_with_document(c)
+        response = c.post(f"/api/v1/knowledge-bases/{kb_id}/retrieve", json={"query": "quasar_xyz_987"})
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["results"] == []
+        assert "HASH_EMBEDDING_NOT_SEMANTIC" in data["retrieval"]["warnings"]
+        assert data["retrieval"]["candidate_count"] == 0

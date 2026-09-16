@@ -90,18 +90,23 @@ class Settings(BaseSettings):
     embedding_model: str = Field(default="BAAI/bge-m3")
     embedding_dim: int = Field(default=1024)
     embedding_batch_size: int = Field(default=16)
+    rag_model_threads: int = Field(default=4, ge=1)
+    rag_model_local_files_only: bool = Field(default=False)
 
     rerank_provider: str = Field(default="bge")
     rerank_model: str = Field(default="BAAI/bge-reranker-v2-m3")
 
     parent_target_chars: int = Field(default=1800)
     parent_max_chars: int = Field(default=2600)
+    parent_max_tokens: int = Field(default=2048, ge=128)
     child_target_chars: int = Field(default=450)
     child_max_chars: int = Field(default=650)
+    child_max_tokens: int = Field(default=512, ge=64)
     child_overlap_chars: int = Field(default=50)
 
     dense_top_k: int = Field(default=20)
     lexical_top_k: int = Field(default=20)
+    lexical_candidates: int = Field(default=500, ge=20)
     rerank_candidates: int = Field(default=30)
     rerank_top_n: int = Field(default=6)
     min_rerank_score: float | None = Field(default=0.15)

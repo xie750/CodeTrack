@@ -3851,7 +3851,8 @@
 .favorite-card {
   position: relative;
   min-width: 0;
-  height: 304px;
+  min-height: 304px;
+  height: auto;
   padding: 15px 16px 13px;
   display: flex;
   flex-direction: column;

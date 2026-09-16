@@ -131,6 +131,8 @@ try {
   await page.goto(`${baseURL}/courses/course-a/favorites`)
   await page.getByRole('heading', { name: '已完成收藏任务', exact: true }).waitFor()
   assert.match(await page.locator('.favorite-card').first().innerText(), /100%/)
+  assert.match(await page.locator('.library-donut').evaluate((element) => getComputedStyle(element).backgroundImage), /rgb\(25, 185, 120\) 100%/)
+  assert.equal(await page.locator('.library-donut').getAttribute('aria-label'), '收藏分布：编程题 2 道，练习题 0 道，考核题 0 道')
   await page.getByLabel('收藏排序').selectOption('published')
   assert.match(await page.locator('.favorite-card').first().innerText(), /待完成收藏任务/)
   await page.getByRole('button', { name: '最近收藏', exact: true }).click()

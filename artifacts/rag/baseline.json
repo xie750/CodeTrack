@@ -1,0 +1,330 @@
+{
+  "mode": "baseline",
+  "baseline_ref": "7b2106154a0a1640c049b821d044b2a3750bda06",
+  "fixture": "tests\\fixtures\\rag_eval.json",
+  "query_count": 20,
+  "metrics": {
+    "hit_at_1": 0.9444444444444444,
+    "hit_at_3": 1.0,
+    "mrr_at_6": 0.9722222222222222,
+    "no_answer_accuracy": 0.0
+  },
+  "results": [
+    {
+      "query": "训练数据预测很准，换一批没见过的数据就很差，应该怎么办？",
+      "relevant": [
+        "overfit"
+      ],
+      "returned": [
+        "leakage",
+        "overfit",
+        "gradient",
+        "mutable",
+        "generator",
+        "binary"
+      ],
+      "rank": 2,
+      "seconds": 0.024
+    },
+    {
+      "query": "梯度下降的学习率过大会发生什么？",
+      "relevant": [
+        "gradient"
+      ],
+      "returned": [
+        "gradient",
+        "precision",
+        "generator",
+        "overfit",
+        "queue",
+        "copy"
+      ],
+      "rank": 1,
+      "seconds": 0.01
+    },
+    {
+      "query": "模型更新参数的时候步子迈得太大，一直来回震荡",
+      "relevant": [
+        "gradient"
+      ],
+      "returned": [
+        "gradient",
+        "overfit",
+        "mutable",
+        "binary",
+        "tree",
+        "generator"
+      ],
+      "rank": 1,
+      "seconds": 0.01
+    },
+    {
+      "query": "Precision 的分母为什么是 TP + FP？",
+      "relevant": [
+        "precision"
+      ],
+      "returned": [
+        "precision",
+        "gradient",
+        "binary",
+        "tree",
+        "mutable",
+        "stack"
+      ],
+      "rank": 1,
+      "seconds": 0.012
+    },
+    {
+      "query": "真正的阳性样本中找出了多少，用哪个指标衡量？",
+      "relevant": [
+        "precision"
+      ],
+      "returned": [
+        "precision",
+        "overfit",
+        "queue",
+        "binary",
+        "mutable",
+        "head"
+      ],
+      "rank": 1,
+      "seconds": 0.009
+    },
+    {
+      "query": "标准化器应该在划分数据之前拟合吗？",
+      "relevant": [
+        "leakage"
+      ],
+      "returned": [
+        "leakage",
+        "overfit",
+        "generator",
+        "mutable",
+        "binary",
+        "gradient"
+      ],
+      "rank": 1,
+      "seconds": 0.014
+    },
+    {
+      "query": "测试集的信息提前进入了预处理，分数偏高怎么办？",
+      "relevant": [
+        "leakage"
+      ],
+      "returned": [
+        "leakage",
+        "overfit",
+        "gradient",
+        "generator",
+        "precision",
+        "mutable"
+      ],
+      "rank": 1,
+      "seconds": 0.011
+    },
+    {
+      "query": "Python 函数的列表默认参数为什么会保留上一次调用的数据？",
+      "relevant": [
+        "mutable"
+      ],
+      "returned": [
+        "mutable",
+        "gradient",
+        "generator",
+        "leakage",
+        "overfit",
+        "precision"
+      ],
+      "rank": 1,
+      "seconds": 0.009
+    },
+    {
+      "query": "append_item 的 items=None 有什么作用？",
+      "relevant": [
+        "mutable"
+      ],
+      "returned": [
+        "mutable",
+        "precision",
+        "queue",
+        "gradient",
+        "binary",
+        "overfit"
+      ],
+      "rank": 1,
+      "seconds": 0.009
+    },
+    {
+      "query": "copy.deepcopy 和浅拷贝的区别",
+      "relevant": [
+        "copy"
+      ],
+      "returned": [
+        "copy",
+        "precision",
+        "gradient",
+        "head",
+        "queue",
+        "binary"
+      ],
+      "rank": 1,
+      "seconds": 0.01
+    },
+    {
+      "query": "复制了一个嵌套列表，修改其中的子列表，原来的也变了",
+      "relevant": [
+        "copy"
+      ],
+      "returned": [
+        "copy",
+        "mutable",
+        "queue",
+        "tree",
+        "head",
+        "precision"
+      ],
+      "rank": 1,
+      "seconds": 0.013
+    },
+    {
+      "query": "yield 暂停后怎么继续执行？",
+      "relevant": [
+        "generator"
+      ],
+      "returned": [
+        "generator",
+        "overfit",
+        "stack",
+        "tree",
+        "precision",
+        "gradient"
+      ],
+      "rank": 1,
+      "seconds": 0.012
+    },
+    {
+      "query": "读取很大的文件时，怎样一条一条产生结果而不是全部放进内存？",
+      "relevant": [
+        "generator"
+      ],
+      "returned": [
+        "generator",
+        "binary",
+        "stack",
+        "mutable",
+        "copy",
+        "tree"
+      ],
+      "rank": 1,
+      "seconds": 0.015
+    },
+    {
+      "query": "remove_head 空链表如何避免访问空指针？",
+      "relevant": [
+        "head"
+      ],
+      "returned": [
+        "head",
+        "queue",
+        "stack",
+        "mutable",
+        "generator",
+        "binary"
+      ],
+      "rank": 1,
+      "seconds": 0.01
+    },
+    {
+      "query": "括号匹配遇到右括号而栈已经空了怎么办？",
+      "relevant": [
+        "stack"
+      ],
+      "returned": [
+        "stack",
+        "tree",
+        "overfit",
+        "head",
+        "binary",
+        "copy"
+      ],
+      "rank": 1,
+      "seconds": 0.009
+    },
+    {
+      "query": "无权图逐层遍历找最短路径，应该用什么结构？",
+      "relevant": [
+        "queue"
+      ],
+      "returned": [
+        "queue",
+        "tree",
+        "mutable",
+        "binary",
+        "precision",
+        "overfit"
+      ],
+      "rank": 1,
+      "seconds": 0.011
+    },
+    {
+      "query": "二分查找闭区间 left <= right 怎么防止死循环？",
+      "relevant": [
+        "binary"
+      ],
+      "returned": [
+        "binary",
+        "stack",
+        "tree",
+        "precision",
+        "leakage",
+        "queue"
+      ],
+      "rank": 1,
+      "seconds": 0.016
+    },
+    {
+      "query": "二叉搜索树哪一种遍历能得到从小到大的结果？",
+      "relevant": [
+        "tree"
+      ],
+      "returned": [
+        "tree",
+        "binary",
+        "queue",
+        "gradient",
+        "stack",
+        "copy"
+      ],
+      "rank": 1,
+      "seconds": 0.011
+    },
+    {
+      "query": "火星基地的建设预算是多少？",
+      "relevant": [],
+      "returned": [
+        "precision",
+        "gradient",
+        "tree",
+        "leakage",
+        "mutable",
+        "copy"
+      ],
+      "rank": null,
+      "seconds": 0.01
+    },
+    {
+      "query": "quasar_xyz_987",
+      "relevant": [],
+      "returned": [
+        "overfit",
+        "gradient",
+        "precision",
+        "leakage",
+        "mutable",
+        "copy"
+      ],
+      "rank": null,
+      "seconds": 0.012
+    }
+  ]
+}

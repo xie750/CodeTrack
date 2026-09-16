@@ -238,6 +238,11 @@ export default function LearningLibrary({ initialCourseId = "", scope = "global"
       { 编程题: 0, 练习题: 0, 考核题: 0 } as Record<FavoriteType, number>
     );
   }, [favoriteItems]);
+  const codingShare = favoriteItems.length ? typeCounts.编程题 / favoriteItems.length * 100 : 0;
+  const practiceShare = favoriteItems.length ? typeCounts.练习题 / favoriteItems.length * 100 : 0;
+  const favoriteDistribution = favoriteItems.length
+    ? `conic-gradient(#19b978 0% ${codingShare}%, #8153f6 ${codingShare}% ${codingShare + practiceShare}%, #ff9418 ${codingShare + practiceShare}% 100%)`
+    : "#e5eaf2";
 
   const weakPoint = profile?.knowledge_states.find((item) => item.state === "WEAK")?.knowledge_point ?? null;
 
@@ -307,7 +312,7 @@ export default function LearningLibrary({ initialCourseId = "", scope = "global"
 
         <section className="library-stats" aria-label="收藏统计">
           <StatCard title="收藏题目总数" value={String(favoriteItems.length)} unit="道" detail="来自教师下发任务" tone="blue" icon={<Bookmark size={24} fill="currentColor" />} />
-          <StatCard title="本次更新" value={String(recentlyChangedIds.size)} unit="次" detail="收藏状态变化" tone="orange" icon={<PlusCircle size={25} fill="currentColor" />} />
+          <StatCard title="本次调整" value={String(recentlyChangedIds.size)} unit="道" detail="调整过收藏状态的题目" tone="orange" icon={<PlusCircle size={25} fill="currentColor" />} />
           <StatCard title="编程题" value={String(typeCounts.编程题)} unit="道" detail="关联沙箱任务" tone="green" icon={<Code2 size={25} />} />
           <StatCard title="练习题" value={String(typeCounts.练习题)} unit="道" detail="关联阶段练习" tone="purple" icon={<Pencil size={25} fill="currentColor" />} />
         </section>
@@ -404,7 +409,7 @@ export default function LearningLibrary({ initialCourseId = "", scope = "global"
             </a>
           </header>
           <div className="library-overview-body">
-            <div className="library-donut">
+            <div className="library-donut" style={{ background: favoriteDistribution }} aria-label={`收藏分布：编程题 ${typeCounts.编程题} 道，练习题 ${typeCounts.练习题} 道，考核题 ${typeCounts.考核题} 道`}>
               <div>
                 <strong>{favoriteItems.length}</strong>
                 <span>总收藏</span>

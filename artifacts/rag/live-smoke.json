@@ -1,0 +1,107 @@
+[
+  {
+    "query": "SFT与RAG分别承担什么作用？",
+    "status": 200,
+    "seconds": 53.1,
+    "retrieval": {
+      "candidate_count": 25,
+      "reranked_count": 25,
+      "warnings": [],
+      "mode": "hybrid_rrf+neural_rerank",
+      "embedding_provider": "bge_m3",
+      "embedding_model": "BAAI/bge-m3",
+      "dense_count": 20,
+      "lexical_count": 20,
+      "returned_count": 4
+    },
+    "results": [
+      {
+        "heading_path": [
+          "10. 核心原则"
+        ],
+        "score": 0.9774417877197266
+      },
+      {
+        "heading_path": [
+          "CodeTrack 人工智能学科垂直大模型微调数据集构建说明",
+          "2.2 RAG知识库数据"
+        ],
+        "score": 0.535992443561554
+      },
+      {
+        "heading_path": [
+          "8. 推荐规模"
+        ],
+        "score": 0.3244737684726715
+      },
+      {
+        "heading_path": [
+          "CodeTrack 人工智能学科垂直大模型微调数据集构建说明",
+          "2.1 SFT微调数据"
+        ],
+        "score": 0.29773908853530884
+      }
+    ]
+  },
+  {
+    "query": "火星基地建设需要多少预算？",
+    "status": 200,
+    "seconds": 22.3,
+    "retrieval": {
+      "candidate_count": 36,
+      "reranked_count": 30,
+      "warnings": [],
+      "mode": "hybrid_rrf+neural_rerank",
+      "embedding_provider": "bge_m3",
+      "embedding_model": "BAAI/bge-m3",
+      "dense_count": 20,
+      "lexical_count": 17,
+      "returned_count": 0
+    },
+    "results": []
+  },
+  {
+    "query": "SFT与RAG分别承担什么作用？",
+    "status": 200,
+    "seconds": 22.97,
+    "retrieval": {
+      "candidate_count": 25,
+      "reranked_count": 25,
+      "warnings": [],
+      "mode": "hybrid_rrf+neural_rerank",
+      "embedding_provider": "bge_m3",
+      "embedding_model": "BAAI/bge-m3",
+      "dense_count": 20,
+      "lexical_count": 20,
+      "returned_count": 4
+    },
+    "results": [
+      {
+        "heading_path": [
+          "10. 核心原则"
+        ],
+        "score": 0.9774417877197266
+      },
+      {
+        "heading_path": [
+          "CodeTrack 人工智能学科垂直大模型微调数据集构建说明",
+          "2.2 RAG知识库数据"
+        ],
+        "score": 0.535992443561554
+      },
+      {
+        "heading_path": [
+          "8. 推荐规模"
+        ],
+        "score": 0.3244737684726715
+      },
+      {
+        "heading_path": [
+          "CodeTrack 人工智能学科垂直大模型微调数据集构建说明",
+          "2.1 SFT微调数据"
+        ],
+        "score": 0.29773908853530884
+      }
+    ]
+  }
+]

@@ -1,0 +1,21 @@
+{
+  "status": 200,
+  "seconds": 48.15,
+  "data": {
+    "answer": "当前知识库资料不足以支持该结论。",
+    "citations": [],
+    "retrieval": {
+      "candidate_count": 36,
+      "reranked_count": 30,
+      "warnings": [],
+      "mode": "hybrid_rrf+neural_rerank",
+      "embedding_provider": "bge_m3",
+      "embedding_model": "BAAI/bge-m3",
+      "dense_count": 20,
+      "lexical_count": 17,
+      "returned_count": 0,
+      "context_parent_count": 0
+    },
+    "answer_mode": "insufficient_evidence"
+  }
+}

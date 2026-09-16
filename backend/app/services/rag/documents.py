@@ -22,13 +22,13 @@ from backend.app.models import (
     RagKnowledgeBase,
     User,
 )
-from backend.app.services.rag.chunking import build_parent_child_chunks
+from backend.app.services.rag.chunking import CHUNKER_VERSION, build_parent_child_chunks
 from backend.app.services.rag.cleaning import clean_elements
-from backend.app.services.rag.embeddings import get_embedding_provider
+from backend.app.services.rag.embeddings import configured_model, get_embedding_provider, validate_embeddings
 from backend.app.services.rag.parsers import SUPPORTED_EXTENSIONS, parse_document
 from backend.app.services.rag.profiles import ContentProfile, detect_content_profile, detect_file_profile
 from backend.app.services.rag.storage import get_object_storage
-from backend.app.services.rag.utils import estimate_tokens, json_dumps, json_loads, new_id, sha256_bytes, sha256_text, vector_to_db
+from backend.app.services.rag.utils import estimate_tokens, json_dumps, json_loads, new_id, sha256_bytes, sha256_text, vector_to_db, retrieval_text, tokenize_query
 
 
 INGEST_PROGRESS = {
@@ -66,7 +66,7 @@ def create_knowledge_base(db: Session, user: User, name: str, description: str |
         name=name.strip(),
         description=description,
         embedding_provider=settings.embedding_provider,
-        embedding_model=settings.embedding_model,
+        embedding_model=configured_model(settings.embedding_provider, settings.embedding_model),
         embedding_dim=settings.embedding_dim,
         chunk_mode="parent_child",
         retrieval_config=json_dumps(
@@ -354,6 +354,9 @@ def enqueue_ingest_job(db: Session, job: RagIngestJob) -> None:
 def _chunk_config(profile: ContentProfile | None = None) -> dict[str, Any]:
     settings = get_settings()
     config = {
+        "chunker_version": CHUNKER_VERSION,
+        "parent_max_tokens": settings.parent_max_tokens,
+        "child_max_tokens": settings.child_max_tokens,
         "parent_target_chars": settings.parent_target_chars,
         "parent_max_chars": settings.parent_max_chars,
         "child_target_chars": settings.child_target_chars,
@@ -433,7 +436,10 @@ def _chunk_quality_report(
     risk_flags: list[str] = []
 
     empty_children = [child for child in children if not child.content.strip()]
-    oversized_children = [child for child in children if len(child.content) > settings.child_max_chars]
+    oversized_children = [child for child in children if len(child.content) > settings.child_max_chars
+                          or child.token_count > settings.child_max_tokens]
+    oversized_parents = [parent for parent in parents if len(parent.content) > settings.parent_max_chars
+                         or parent.token_count > settings.parent_max_tokens]
     tiny_children = [child for child in children if len(child.content.strip()) < 80]
     missing_heading_children = [
         child
@@ -450,6 +456,8 @@ def _chunk_quality_report(
         risk_flags.append("EMPTY_CHILD_CHUNK")
     if oversized_children:
         risk_flags.append("CHILD_CHUNK_TOO_LARGE")
+    if oversized_parents:
+        risk_flags.append("PARENT_CHUNK_TOO_LARGE")
     if len(tiny_children) > max(2, len(children) // 3):
         risk_flags.append("TOO_MANY_TINY_CHUNKS")
     if missing_heading_children:
@@ -466,6 +474,8 @@ def _chunk_quality_report(
         "child_count": len(children),
         "empty_child_count": len(empty_children),
         "oversized_child_count": len(oversized_children),
+        "oversized_parent_count": len(oversized_parents),
+        "chunker_version": CHUNKER_VERSION,
         "tiny_child_count": len(tiny_children),
         "missing_heading_child_count": len(missing_heading_children),
         "code_block_split_risk_count": len(code_block_split_risks),
@@ -473,7 +483,9 @@ def _chunk_quality_report(
     }
 
 
-def ingest_document_version(db: Session, document_id: str, version_id: str) -> None:
+def ingest_document_version(db: Session, document_id: str, version_id: str, *,
+                            embedding_config: tuple[str, str, int] | None = None,
+                            activate: bool = True) -> None:
     document = db.get(RagDocument, document_id)
     version = db.get(RagDocumentVersion, version_id)
     job = db.scalar(
@@ -601,15 +613,22 @@ def ingest_document_version(db: Session, document_id: str, version_id: str) -> N
         )
 
         _set_stage(db, document, version, job, "EMBEDDING")
-        provider = get_embedding_provider()
+        kb = db.get(RagKnowledgeBase, document.knowledge_base_id)
+        if kb is None:
+            raise ApiError(404, "KB_NOT_FOUND", "知识库不存在")
+        embedding_config = embedding_config or (kb.embedding_provider, kb.embedding_model, kb.embedding_dim)
+        provider = get_embedding_provider(*embedding_config)
+        version.embedding_model = provider.model_name
+        version.embedding_dim = provider.dim
         parent_records: list[tuple[str, Any, list[Any]]] = []
-        child_texts = [child.content for _, children in chunk_groups for child in children]
+        child_texts = [retrieval_text(document.name, child.heading_path, child.content)
+                       for _, children in chunk_groups for child in children]
         embeddings: list[list[float]] = []
         batch_size = max(1, get_settings().embedding_batch_size)
         for offset in range(0, len(child_texts), batch_size):
-            embeddings.extend(provider.embed(child_texts[offset : offset + batch_size]))
-        if any(len(vector) != version.embedding_dim for vector in embeddings):
-            raise ApiError(500, "EMBEDDING_DIM_MISMATCH", "Embedding 维度与知识库配置不一致")
+            batch = child_texts[offset : offset + batch_size]
+            encode = getattr(provider, "embed_documents", provider.embed)
+            embeddings.extend(validate_embeddings(encode(batch), len(batch), version.embedding_dim))
         record_step(
             db,
             run,
@@ -619,6 +638,9 @@ def ingest_document_version(db: Session, document_id: str, version_id: str) -> N
                 "child_count": len(child_texts),
                 "embedding_count": len(embeddings),
                 "embedding_dim": version.embedding_dim,
+                "embedding_provider": embedding_config[0],
+                "embedding_model": provider.model_name,
+                "semantic": embedding_config[0] not in {"hash", "local_hash"},
             },
         )
 
@@ -650,13 +672,14 @@ def ingest_document_version(db: Session, document_id: str, version_id: str) -> N
             },
         )
 
-        old_active = document.active_version_id
-        if old_active and old_active != version.id:
-            old_version = db.get(RagDocumentVersion, old_active)
-            if old_version:
-                old_version.superseded_at = utc_now()
-        version.activated_at = utc_now()
-        document.active_version_id = version.id
+        if activate:
+            old_active = document.active_version_id
+            if old_active and old_active != version.id:
+                old_version = db.get(RagDocumentVersion, old_active)
+                if old_version:
+                    old_version.superseded_at = utc_now()
+            version.activated_at = utc_now()
+            document.active_version_id = version.id
         _set_stage(db, document, version, job, "READY")
         job.finished_at = utc_now()
         finish_run(
@@ -727,7 +750,7 @@ def _chunk_record(
         char_count=len(chunk.content),
         token_count=chunk.token_count or estimate_tokens(chunk.content),
         embedding=vector_to_db(embedding) if embedding is not None else None,
-        search_vector=chunk.content,
+        search_vector=None,
         enabled=True,
         metadata_json=json_dumps(
             {
@@ -740,6 +763,10 @@ def _chunk_record(
                 "content_profile": json_loads(version.content_profile, {}),
                 "cleaning_strategy": version.cleaning_strategy,
                 "chunking_strategy": version.chunking_strategy,
+                "chunker_version": CHUNKER_VERSION,
+                "embedding_model": version.embedding_model,
+                "embedding_dim": version.embedding_dim,
+                "lexical_analyzer": "cjk_ngram_v2",
                 "split_reason": getattr(chunk, "split_reason", None),
                 "source_element_start": getattr(chunk, "source_element_start", None),
                 "source_element_end": getattr(chunk, "source_element_end", None),
@@ -751,15 +778,21 @@ def _chunk_record(
 
 def _refresh_search_vectors(db: Session, version_id: str) -> None:
     if db.bind and db.bind.dialect.name == "postgresql":
+        rows = db.execute(select(RagChunk, RagDocument).join(RagDocument, RagDocument.id == RagChunk.document_id)
+                          .where(RagChunk.document_version_id == version_id, RagChunk.chunk_type == "child")).all()
+        values = [{"chunk_id": chunk.id, "tokens": " ".join(tokenize_query(
+            retrieval_text(document.name, json_loads(chunk.heading_path, []), chunk.content)))} for chunk, document in rows]
+        if not values:
+            return
         db.execute(
             text(
                 """
                 UPDATE chunks
-                SET search_vector = to_tsvector('simple', coalesce(content, ''))
-                WHERE document_version_id = :version_id AND chunk_type = 'child'
+                SET search_vector = to_tsvector('simple', :tokens)
+                WHERE id = :chunk_id
                 """
             ),
-            {"version_id": version_id},
+            values,
         )
     db.commit()
 
@@ -829,7 +862,7 @@ def reprocess_document(db: Session, user: User, document_id: str) -> tuple[RagDo
     document = db.get(RagDocument, document_id)
     if document is None or document.deleted_at is not None:
         raise ApiError(404, "DOCUMENT_NOT_FOUND", "文档不存在")
-    ensure_kb_owner(db, document.knowledge_base_id, user)
+    kb = ensure_kb_owner(db, document.knowledge_base_id, user)
     version = RagDocumentVersion(
         id=new_id("ver"),
         document_id=document.id,
@@ -840,8 +873,8 @@ def reprocess_document(db: Session, user: User, document_id: str) -> tuple[RagDo
         content_profile=json_dumps({}),
         cleaning_strategy="generic_clean",
         chunking_strategy="section_recursive",
-        embedding_model=get_settings().embedding_model,
-        embedding_dim=get_settings().embedding_dim,
+        embedding_model=kb.embedding_model,
+        embedding_dim=kb.embedding_dim,
         status="QUEUED",
     )
     job = RagIngestJob(

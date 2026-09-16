@@ -50,6 +50,7 @@ def parse_text_document(filename: str, content: bytes) -> ParseResult:
     extension = Path(filename).suffix.lower()
     is_markdown = extension in {".md", ".markdown"}
     heading_path: list[str] = []
+    heading_stack: list[tuple[int, str]] = []
     elements: list[ParsedElement] = []
     paragraph_blocks: list[str] = []
     list_blocks: list[str] = []
@@ -97,7 +98,12 @@ def parse_text_document(filename: str, content: bytes) -> ParseResult:
 
     for line in text.splitlines():
         stripped = line.strip()
-        if is_markdown and stripped.startswith("```"):
+        fence_match = re.match(r"^(`{3,}|~{3,})(.*)$", stripped) if is_markdown else None
+        if fence_match and (not in_code_block or (
+            fence_match.group(1)[0] == code_fence[0]
+            and len(fence_match.group(1)) >= len(re.match(r"[`~]+", code_fence).group())
+            and not fence_match.group(2).strip()
+        )):
             if in_code_block:
                 code_blocks.append(line)
                 flush_code()
@@ -120,7 +126,8 @@ def parse_text_document(filename: str, content: bytes) -> ParseResult:
                 if _looks_like_attribute_heading(title):
                     paragraph_blocks.append(title)
                     continue
-                heading_path = heading_path[: level - 1] + [title]
+                heading_stack = [(depth, name) for depth, name in heading_stack if depth < level] + [(level, title)]
+                heading_path = [name for _, name in heading_stack]
                 elements.append(
                     ParsedElement(
                         "heading",
@@ -137,7 +144,8 @@ def parse_text_document(filename: str, content: bytes) -> ParseResult:
             if _looks_like_attribute_heading(title):
                 paragraph_blocks.append(title)
                 continue
-            heading_path = heading_path[: level - 1] + [title]
+            heading_stack = [(depth, name) for depth, name in heading_stack if depth < level] + [(level, title)]
+            heading_path = [name for _, name in heading_stack]
             elements.append(
                 ParsedElement(
                     "heading",
@@ -171,7 +179,7 @@ def parse_text_document(filename: str, content: bytes) -> ParseResult:
     flush_flow()
     return ParseResult(
         parser_name="markdown" if is_markdown else "plain_text",
-        parser_version="1",
+        parser_version="2",
         elements=elements,
     )
 
@@ -283,13 +291,32 @@ def _parse_pdf_document_with_pypdf(content: bytes, import_error: ImportError) ->
 def parse_docx_document(content: bytes) -> ParseResult:
     try:
         from docx import Document
+        from docx.table import Table
+        from docx.text.paragraph import Paragraph
     except ImportError as exc:
         raise RuntimeError("python-docx is required for DOCX parsing") from exc
 
     elements: list[ParsedElement] = []
     heading_path: list[str] = []
+    heading_stack: list[tuple[int, str]] = []
     doc = Document(io.BytesIO(content))
-    for paragraph in doc.paragraphs:
+    # Preserve document order: collecting all tables after all paragraphs assigned
+    # every table to the final chapter and destroyed its surrounding context.
+    for node in doc.element.body.iterchildren():
+        if node.tag.endswith("}tbl"):
+            table = Table(node, doc)
+            rows = [[normalize_text(cell.text).replace("\n", " ").replace("|", "\\|")
+                     for cell in row.cells] for row in table.rows]
+            rows = [row for row in rows if any(row)]
+            if rows:
+                rendered = ["| " + " | ".join(row) + " |" for row in rows]
+                rendered.insert(1, "| " + " | ".join("---" for _ in rows[0]) + " |")
+                elements.append(ParsedElement("table", "\n".join(rendered), heading_path=list(heading_path),
+                                              metadata={"format": "docx_table"}))
+            continue
+        if not node.tag.endswith("}p"):
+            continue
+        paragraph = Paragraph(node, doc)
         text = normalize_text(paragraph.text)
         if not text:
             continue
@@ -297,20 +324,12 @@ def parse_docx_document(content: bytes) -> ParseResult:
         if style_name.startswith("heading"):
             match = re.search(r"(\d+)", style_name)
             level = int(match.group(1)) if match else 1
-            heading_path = heading_path[: level - 1] + [text]
+            heading_stack = [(depth, name) for depth, name in heading_stack if depth < level] + [(level, text)]
+            heading_path = [name for _, name in heading_stack]
             elements.append(ParsedElement("heading", text, heading_level=level, heading_path=list(heading_path)))
         else:
             elements.append(ParsedElement("paragraph", text, heading_path=list(heading_path)))
-    for table in doc.tables:
-        rows = []
-        for row in table.rows:
-            cells = [normalize_text(cell.text) for cell in row.cells]
-            if any(cells):
-                rows.append(" | ".join(cells))
-        table_text = normalize_text("\n".join(rows))
-        if table_text:
-            elements.append(ParsedElement("table", table_text, heading_path=list(heading_path), metadata={"format": "docx_table"}))
-    return ParseResult("python-docx", "1", elements)
+    return ParseResult("python-docx", "2", elements)
 
 
 def parse_pptx_document(content: bytes) -> ParseResult:

@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import math
+import unicodedata
 from typing import Any
 from uuid import uuid4
 
@@ -40,9 +42,9 @@ def normalize_text(text: str) -> str:
 
 
 def estimate_tokens(text: str) -> int:
-    ascii_words = re.findall(r"[A-Za-z0-9_]+", text)
-    non_ascii = re.findall(r"[\u4e00-\u9fff]", text)
-    return max(1, len(ascii_words) + len(non_ascii))
+    # Conservative budget estimate, not a replacement for a model's tokenizer.
+    parts = re.findall(r"[A-Za-z0-9_]+|[^\s]", text)
+    return sum(max(1, math.ceil(len(part) / 4)) for part in parts)
 
 
 def vector_to_db(values: list[float]) -> str:
@@ -72,6 +74,29 @@ def cosine_similarity(left: list[float], right: list[float]) -> float:
 
 
 def tokenize_query(text: str) -> list[str]:
-    terms = re.findall(r"[A-Za-z0-9_]+|[\u4e00-\u9fff]{2,}", text.lower())
-    single_cjk = re.findall(r"[\u4e00-\u9fff]", text)
-    return terms + single_cjk
+    """Shared index/query analyzer: Chinese n-grams and exact code identifiers.
+
+    No dictionary/model download; n-grams cover unseen subject terminology and
+    avoid the old single-character matches dominating Chinese retrieval.
+    """
+    text = unicodedata.normalize("NFKC", text).lower()
+    stopwords = {"the", "a", "an", "is", "are", "of", "to", "and", "what", "how",
+                 "什么", "怎么", "如何", "为什么", "是否", "一个", "哪些", "可以", "中的"}
+    terms: list[str] = []
+    for part in re.findall(r"[a-z0-9_]+|[\u3400-\u9fff]+", text):
+        if re.match(r"[a-z0-9_]", part):
+            terms.append(part)
+            if "_" in part:
+                terms.extend(piece for piece in part.split("_") if piece)
+        elif len(part) == 1:
+            if part not in "的了是在与和及吗呢有为对中":
+                terms.append(part)
+        else:
+            terms.extend(part[i:i + n] for n in (2, 3) for i in range(len(part) - n + 1))
+    return [term for term in terms if term not in stopwords]
+
+
+def retrieval_text(file_name: str, heading_path: list[str], content: str) -> str:
+    """Deterministic source context for both dense and lexical indexes."""
+    context = [file_name[:160], " > ".join(heading_path)[-240:]]
+    return "\n".join(part for part in [*context, content] if part)

@@ -1,0 +1,39 @@
+{
+  "description": "人工智能专业三门课程的小型人工编写回归集；非真实用户标注集，不代表生产准确率。",
+  "documents": [
+    {"id": "overfit", "name": "模型泛化.md", "content": "# 过拟合\n\n过拟合指模型记住了训练样本中的噪声，训练集误差很低而验证集误差较高。可使用正则化、早停、增加数据以及降低模型复杂度改善泛化。验证集不能参与模型参数训练。"},
+    {"id": "gradient", "name": "模型优化.md", "content": "# 梯度下降与学习率\n\n梯度下降沿损失函数梯度的反方向更新参数。学习率控制每次更新的步长，过大会震荡或发散，过小则收敛缓慢。梯度是损失对参数的偏导数。"},
+    {"id": "precision", "name": "分类评估.md", "content": "# 精确率与召回率\n\n精确率 Precision = TP / (TP + FP)，用于衡量预测为正例的样本中有多少是真的。召回率 Recall = TP / (TP + FN)，衡量真实正例中有多少被找出。F1 是精确率与召回率的调和平均。"},
+    {"id": "leakage", "name": "数据划分.md", "content": "# 数据泄漏\n\n先划分训练集与测试集，再仅在训练集上拟合标准化器。若在全部数据上计算均值和方差，测试集信息进入预处理参数，造成评估结果偏乐观。交叉验证时各折需要独立拟合预处理步骤。"},
+    {"id": "mutable", "name": "Python函数.md", "content": "# 可变默认参数\n\nPython 函数的默认参数在定义时只求值一次。使用列表作为默认值会导致多次调用共享同一列表。应使用 None 作为默认值，在函数体内创建新列表。\n\n```python\ndef append_item(item, items=None):\n    if items is None:\n        items = []\n    items.append(item)\n    return items\n```"},
+    {"id": "copy", "name": "Python对象.md", "content": "# 浅拷贝与深拷贝\n\n浅拷贝只创建外层容器，内部嵌套对象仍由两个容器共享。修改嵌套列表时，另一个容器也会受到影响。copy.deepcopy 会递归复制嵌套对象，适合需要完全隔离可变对象的场景。"},
+    {"id": "generator", "name": "Python迭代.md", "content": "# 生成器\n\nyield 让函数返回生成器，暂停执行并保存局部状态。下次调用 next 时从暂停位置继续。生成器按需产生数据，避免一次把所有数据存入内存，适合处理大型文件。"},
+    {"id": "head", "name": "链表边界.md", "content": "# 删除头节点\n\n删除单链表头节点需要让 head 指向原头节点的 next，并返回新的头指针。空链表应直接返回空指针，不能先访问 head->next。\n\n```cpp\nNode* remove_head(Node* head) {\n    if (!head) return nullptr;\n    Node* next = head->next;\n    delete head;\n    return next;\n}\n```"},
+    {"id": "stack", "name": "栈.md", "content": "# 栈与括号匹配\n\n栈遵循后进先出 LIFO。遇到左括号入栈，遇到右括号时检查栈顶是否配对，再出栈。右括号出现时栈为空或扫描结束栈不为空都表示不匹配。时间复杂度 O(n)。"},
+    {"id": "queue", "name": "队列.md", "content": "# 队列与广度优先搜索\n\n队列遵循先进先出 FIFO。广度优先搜索 BFS 使用队列逐层访问图中的顶点。无权图中可以用 BFS 求最短路径，访问过的顶点需要标记，避免重复入队。"},
+    {"id": "binary", "name": "二分查找.md", "content": "# 二分查找\n\n二分查找要求数组有序，每一步比较目标与中间元素并缩小一半搜索范围，时间复杂度 O(log n)。采用闭区间时循环条件为 left <= right，更新时应排除已经检查的 mid，避免死循环。"},
+    {"id": "tree", "name": "二叉树.md", "content": "# 二叉树遍历\n\n前序遍历顺序是根、左子树、右子树。中序遍历顺序是左子树、根、右子树。后序遍历顺序是左子树、右子树、根。递归遇到空节点时返回。二叉搜索树的中序遍历产生有序序列。"}
+  ],
+  "queries": [
+    {"query": "训练数据预测很准，换一批没见过的数据就很差，应该怎么办？", "relevant": ["overfit"]},
+    {"query": "梯度下降的学习率过大会发生什么？", "relevant": ["gradient"]},
+    {"query": "模型更新参数的时候步子迈得太大，一直来回震荡", "relevant": ["gradient"]},
+    {"query": "Precision 的分母为什么是 TP + FP？", "relevant": ["precision"]},
+    {"query": "真正的阳性样本中找出了多少，用哪个指标衡量？", "relevant": ["precision"]},
+    {"query": "标准化器应该在划分数据之前拟合吗？", "relevant": ["leakage"]},
+    {"query": "测试集的信息提前进入了预处理，分数偏高怎么办？", "relevant": ["leakage"]},
+    {"query": "Python 函数的列表默认参数为什么会保留上一次调用的数据？", "relevant": ["mutable"]},
+    {"query": "append_item 的 items=None 有什么作用？", "relevant": ["mutable"]},
+    {"query": "copy.deepcopy 和浅拷贝的区别", "relevant": ["copy"]},
+    {"query": "复制了一个嵌套列表，修改其中的子列表，原来的也变了", "relevant": ["copy"]},
+    {"query": "yield 暂停后怎么继续执行？", "relevant": ["generator"]},
+    {"query": "读取很大的文件时，怎样一条一条产生结果而不是全部放进内存？", "relevant": ["generator"]},
+    {"query": "remove_head 空链表如何避免访问空指针？", "relevant": ["head"]},
+    {"query": "括号匹配遇到右括号而栈已经空了怎么办？", "relevant": ["stack"]},
+    {"query": "无权图逐层遍历找最短路径，应该用什么结构？", "relevant": ["queue"]},
+    {"query": "二分查找闭区间 left <= right 怎么防止死循环？", "relevant": ["binary"]},
+    {"query": "二叉搜索树哪一种遍历能得到从小到大的结果？", "relevant": ["tree"]},
+    {"query": "火星基地的建设预算是多少？", "relevant": []},
+    {"query": "quasar_xyz_987", "relevant": []}
+  ]
+}

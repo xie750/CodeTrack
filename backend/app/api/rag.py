@@ -349,6 +349,7 @@ def document_knowledge_graph_import_plan(
 @router.post("/knowledge-bases/{kb_id}/retrieve")
 def retrieve(kb_id: str, payload: RetrieveRequest, db: Session = Depends(get_db), user: User = Depends(current_user)):
     ensure_kb_owner(db, kb_id, user)
+    diagnostics = {}
     results = retrieve_chunks(
         db,
         kb_id,
@@ -356,10 +357,12 @@ def retrieve(kb_id: str, payload: RetrieveRequest, db: Session = Depends(get_db)
         dense_top_k=payload.dense_top_k,
         lexical_top_k=payload.lexical_top_k,
         rerank_top_n=payload.rerank_top_n,
+        diagnostics=diagnostics,
     )
     return ok(
         {
             "query": payload.query,
+            "retrieval": diagnostics,
             "results": [
                 {
                     "child_chunk_id": item.child_chunk_id,
@@ -376,6 +379,8 @@ def retrieve(kb_id: str, payload: RetrieveRequest, db: Session = Depends(get_db)
                     "lexical_rank": item.lexical_rank,
                     "fusion_score": item.fusion_score,
                     "rerank_score": item.rerank_score,
+                    "dense_score": item.dense_score,
+                    "lexical_score": item.lexical_score,
                 }
                 for item in results
             ],

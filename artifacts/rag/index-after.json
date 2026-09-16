@@ -1,0 +1,18 @@
+[
+  {
+    "chunk_type": "child",
+    "count": 161,
+    "min_chars": 14,
+    "max_chars": 646,
+    "avg_chars": 220.0,
+    "tiny_count": 13
+  },
+  {
+    "chunk_type": "parent",
+    "count": 148,
+    "min_chars": 28,
+    "max_chars": 2073,
+    "avg_chars": 206.29054054054055,
+    "tiny_count": 47
+  }
+]
