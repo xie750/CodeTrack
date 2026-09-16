@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarDays,
   CheckCircle2,
-  ChevronDown,
   ChevronRight,
   ClipboardList,
   FileText,
@@ -241,7 +240,6 @@ export default function CourseTasks({ onOpenWorkspace, courseId, embedded = fals
 
   const loading = loadingContext || loadingTasks;
   const courseTabs = useMemo(() => ["全部课程", ...(context?.courses.map((course) => course.course_name) ?? [])], [context]);
-  const currentCourse = selectedTab === "全部课程" ? null : context?.courses.find((course) => course.course_name === selectedTab);
   const allCount = tasks.length;
   const readyToStart = tasks.filter((task) => resolveVisibleTaskStatus(task.status, task.start_at) === "READY_TO_START").length;
   const submitted = tasks.filter((task) => task.status === "SUBMITTED").length;

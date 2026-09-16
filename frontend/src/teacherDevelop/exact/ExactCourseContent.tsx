@@ -4,9 +4,9 @@ import {
   Switch, Tag, Typography, Upload,
 } from 'antd'
 import {
-  BookOpen, CheckCircle2, ChevronRight, ClipboardCheck, Clock3, Edit3, Eye,
+  BookOpen, CheckCircle2, ChevronRight, ClipboardCheck, Clock3, Eye,
   FileQuestion, FileText, GraduationCap, ListTree, MonitorPlay, Plus, Presentation,
-  Send, Sparkles, UploadCloud, Users,
+  Send, Sparkles, UploadCloud,
 } from 'lucide-react'
 
 import {

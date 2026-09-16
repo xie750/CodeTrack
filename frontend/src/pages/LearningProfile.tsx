@@ -535,7 +535,6 @@ function summarizeBucket(title: string, events: BehaviorTrendEvent[], weakPoint:
 }
 
 function bucketEvents(
-  events: BehaviorTrendEvent[],
   mode: BehaviorTrendMode,
   anchorDate: Date,
   now = new Date()
@@ -598,7 +597,7 @@ function buildBehaviorTrend(profile: StudentProfile, mode: BehaviorTrendMode, an
   const logicBase = profilePercent(profile.overview.logic_error_rate);
   const fallbackSummary = profile.overview.summary || profile.overview.recommendation;
 
-  return bucketEvents(events, mode, anchorDate, now).map((bucket, index) => {
+  return bucketEvents(mode, anchorDate, now).map((bucket, index) => {
     const matchedEvents = events.filter((event) => eventInRange(event, bucket.start, bucket.end, now));
     const noise = (hashText(`${profile.student.id}-${profile.course.id}-${bucket.key}`) % 21) - 10;
     const scale = mode === "year" ? 0.32 : 1.45;

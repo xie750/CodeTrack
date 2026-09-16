@@ -188,11 +188,11 @@ export default function Students() {
         />
         <div style={{ padding: '0 20px 16px' }}>
           <Space wrap className="filter-bar">
-            <Input.Search placeholder="学号/姓名" allowClear style={{ width: 220 }} onChange={(e) => setKeyword(e.target.value)} />
-            <Select placeholder="年级" allowClear style={{ width: 110 }} options={grades.map((g) => ({ label: g, value: g }))} onChange={setGrade} />
-            <Select placeholder="专业" allowClear style={{ width: 190 }} options={majors.map((m) => ({ label: m, value: m }))} onChange={setMajor} />
-            <Select placeholder="行政班" allowClear style={{ width: 140 }} options={classNames.map((c) => ({ label: c, value: c }))} onChange={setClassName} />
-            <Select placeholder="课程" allowClear style={{ width: 150 }} options={courseNames.map((c) => ({ label: c, value: c }))} onChange={setCourseName} />
+            <Input.Search placeholder="学号/姓名" value={keyword} allowClear style={{ width: 220 }} onChange={(e) => setKeyword(e.target.value)} />
+            <Select placeholder="年级" value={grade} allowClear style={{ width: 110 }} options={Array.from(new Set([...grades, ...students.map((student) => student.grade)])).map((g) => ({ label: g, value: g }))} onChange={setGrade} />
+            <Select placeholder="专业" value={major} allowClear style={{ width: 190 }} options={Array.from(new Set([...majors, ...students.map((student) => student.dept)])).map((m) => ({ label: m, value: m }))} onChange={setMajor} />
+            <Select placeholder="行政班" value={className} allowClear style={{ width: 140 }} options={Array.from(new Set([...classNames, ...students.map((student) => student.className).filter((name): name is string => Boolean(name))])).map((c) => ({ label: c, value: c }))} onChange={setClassName} />
+            <Select placeholder="课程" value={courseName} allowClear style={{ width: 150 }} options={Array.from(new Set([...courseNames, ...students.map((student) => student.courseName)])).map((c) => ({ label: c, value: c }))} onChange={setCourseName} />
           </Space>
           <Table rowKey="id" size="middle" columns={columns} dataSource={filtered} scroll={{ x: 'max-content', y: 420 }} pagination={{ pageSize: 8, showTotal: (t) => `共 ${t} 条` }} />
         </div>
@@ -295,6 +295,7 @@ export default function Students() {
 
               <div style={{ fontSize: 14, fontWeight: 600, color: '#111827', marginBottom: 12 }}>课程表</div>
               <div style={{ overflowX: 'auto', marginBottom: 8 }}>
+                <p style={{ color: colors.textMuted }}>示例课表：尚未接入该学生的实际排课数据。</p>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr>
@@ -366,7 +367,10 @@ export default function Students() {
         <p style={{ color: colors.warning, fontSize: 12 }}>管理员后台不展示明文密码，您无法获取该密码，请告知用户查看站内消息。</p>
       </Modal>
 
-      <ImportModal open={importOpen} onCancel={() => setImportOpen(false)} kind="学生" onSuccess={() => {}} />
+      <ImportModal open={importOpen} onCancel={() => setImportOpen(false)} kind="学生" existingIds={students.map((student) => student.id)} onSuccess={(rows) => {
+        rows.forEach((row) => addStudent({ id: row.学号, name: row.姓名, gender: row.性别 as '男' | '女', grade: row.年级, dept: row.院系, className: row.班级 || '', courseName: row.课程, enrolledCourses: [row.课程], status: '待激活', loginStatus: '离线', lastActiveAt: '—', createdAt: new Date().toLocaleDateString('sv-SE') }))
+        setKeyword(''); setGrade(undefined); setMajor(undefined); setClassName(undefined); setCourseName(undefined); setTab('all')
+      }} />
     </div>
   )
 }

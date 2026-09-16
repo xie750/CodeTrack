@@ -30,7 +30,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   ApiRequestError,
   api,
-  type PracticeProjectActivity,
   type PracticeProjectAutoAnalysis,
   type PracticeProjectDetail,
   type PracticeExternalSource,
@@ -63,69 +62,6 @@ type ResearchBrief = {
   nextActions?: string[];
 };
 
-const fallbackProjects: PracticeProjectSummary[] = [
-  {
-    id: "sales-cleaning",
-    course_id: "course_arch_001",
-    course_name: "机器学习",
-    title: "基于公开数据集的图像分类对比研究",
-    status: "IN_PROGRESS",
-    status_label: "最适合",
-    description: "系统根据机器学习画像自动匹配的科研课题，覆盖前沿追踪、实验对比、图表分析和论文框架。",
-    long_description: "围绕 CIFAR-10 图像分类任务，自动聚合近期轻量模型研究动态，完成 ResNet-18 与 EfficientNet-B0 的实验对比、指标可视化、结论提炼和论文框架沉淀。",
-    progress: 62,
-    accent: "blue",
-    tags: ["画像匹配", "前沿追踪", "数据分析"],
-    members: ["AI", "王"],
-    period: "2 周",
-    stage: "P3 实验分析",
-    direction: "计算机视觉 + 画像自动推荐",
-    capability_points: ["论文阅读", "模型评估", "实验记录", "可视化表达", "论文写作"],
-    last_activity_summary: "AI 已生成实验对比图与论文框架建议",
-    weekly_hours: 6.2
-  },
-  {
-    id: "log-topk",
-    course_id: "course_ds_001",
-    course_name: "数据结构",
-    title: "面向日志异常检测的 Top-K 方法研究",
-    status: "NOT_STARTED",
-    status_label: "备选课题",
-    description: "面向数据结构薄弱点推荐的轻量研究课题，训练算法分析、文本资料处理和结果解释能力。",
-    long_description: "基于脱敏服务日志，比较哈希表、堆结构与排序策略在 Top-K 异常定位中的效果，形成方法对比、实验图表和研究报告。",
-    progress: 12,
-    accent: "cyan",
-    tags: ["文本资料", "Top-K", "方法对比"],
-    members: ["AI", "陈"],
-    period: "1 周",
-    stage: "P1 资料归纳",
-    direction: "数据结构 + 科研入门",
-    capability_points: ["文献归纳", "复杂度分析", "文本处理", "图表解释"],
-    last_activity_summary: "系统判断可作为第二推荐课题",
-    weekly_hours: 1.1
-  },
-  {
-    id: "retention-dashboard",
-    course_id: "course_network_001",
-    course_name: "Python 程序设计",
-    title: "学习行为数据留存与影响因素分析",
-    status: "IN_PROGRESS",
-    status_label: "拓展课题",
-    description: "面向 Python 数据处理能力推荐的科研数据分析课题，输出调查数据分析和可视化结论。",
-    long_description: "围绕学习行为数据构建留存指标，完成趋势分析、影响因素解释和可视化表达，沉淀可复查的数据分析报告。",
-    progress: 86,
-    accent: "violet",
-    tags: ["调查数据", "可视化", "结论洞察"],
-    members: ["AI", "周"],
-    period: "3 周",
-    stage: "P4 结论提炼",
-    direction: "教育数据分析 + 画像推荐",
-    capability_points: ["指标口径", "Python 分析", "趋势图表", "研究结论"],
-    last_activity_summary: "AI 已完成关键波动解释草稿",
-    weekly_hours: 7.3
-  }
-];
-
 const fallbackPathSteps = [
   { title: "画像推理", description: "读取课程表现、错因、资料保存和学习兴趣，自动判断科研入口方向" },
   { title: "课题推荐", description: "系统生成最适合课题和备选课题，学生无需手动选择研究方向" },
@@ -135,54 +71,12 @@ const fallbackPathSteps = [
   { title: "成果沉淀", description: "提交论文框架、分析报告、图表和过程记录，更新科研画像" }
 ];
 
-const fallbackActivities: PracticeProjectActivity[] = [
-  { id: "fallback-1", project_id: "sales-cleaning", type: "success", text: "AI 助研生成了模型对比图与结论草稿", time: "今天 15:30", created_at: null },
-  { id: "fallback-2", project_id: "sales-cleaning", type: "submit", text: "提交了阶段成果「v1.2 实验分析记录」", time: "今天 10:24", created_at: null },
-  { id: "fallback-3", project_id: "retention-dashboard", type: "comment", text: "系统更新了留存分析的关键波动解释", time: "昨天 18:37", created_at: null },
-  { id: "fallback-4", project_id: "log-topk", type: "join", text: "AI 将 Top-K 日志研究列为备选课题", time: "05-16 15:42", created_at: null }
-];
-
 const fallbackProofItems: PracticeProjectProofItem[] = [
   { title: "画像驱动推荐", description: "不让学生先选方向，平台基于画像自动匹配课题。", icon: "target" },
   { title: "前沿追踪", description: "归纳论文、研究动态、热点主题和趋势判断。", icon: "search" },
   { title: "写作辅助", description: "支持综述生成、论文框架、润色和格式规范检查。", icon: "file-check" },
   { title: "数据分析", description: "处理实验、调查和文本资料，输出图表与研究洞察。", icon: "database" }
 ];
-
-const fallbackHome: PracticeProjectHome = {
-  projects: fallbackProjects,
-  recommended_project_id: "sales-cleaning",
-  research_recommendation: {
-    project_id: "sales-cleaning",
-    profile_fit: "画像显示你在机器学习模型评估、实验记录和图表解释上已有连续证据，适合进入计算机视觉方向科研训练。",
-    recommendation_reason: "优先推荐该课题，是因为它同时覆盖赛题要求的前沿追踪、学术写作辅助和科研数据分析三个关键环节。",
-    confidence: 0.86,
-    signals: [
-      { label: "研究方向", value: "机器学习 / 计算机视觉", note: "由课程表现和资料保存记录推断" },
-      { label: "能力短板", value: "文献综述、图表解释", note: "来自 AI 问答与实验记录质量" },
-      { label: "推荐策略", value: "先做小课题，再沉淀论文框架", note: "匹配赛题助研关键环节" }
-    ]
-  },
-  stats: {
-    project_count: 3,
-    in_progress_count: 2,
-    completed_count: 1,
-    weekly_hours: 14.6,
-    project_delta: 1,
-    completed_delta: 1,
-    weekly_hours_delta: 2.3
-  },
-  activities: fallbackActivities,
-  path_steps: fallbackPathSteps,
-  readiness: {
-    status: "ACTIVE",
-    title: "AI 已为你生成科研项目推荐",
-    description: "平台已根据学习画像、课程表现和能力短板完成底层推理，自动给出最适合的科研训练课题。",
-    primary_action_label: "进入最适合课题",
-    secondary_action_label: "查看推理路径"
-  },
-  proof_items: fallbackProofItems
-};
 
 const emptyPracticeHome: PracticeProjectHome = {
   projects: [],

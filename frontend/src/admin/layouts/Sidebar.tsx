@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Menu, Tooltip, message } from 'antd'
+import { Menu, Tooltip } from 'antd'
 import { SunMoon, LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { navModules } from './nav'
@@ -113,8 +113,8 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
 
       <div className="sider-footer">
         <div className="sider-actions">
-          <Tooltip title="主题切换（原型演示）" placement="top">
-            <button className="sider-action-btn" onClick={() => message.info('主题切换（原型演示）')}>
+          <Tooltip title="当前使用浅色主题，更多主题尚未开放" placement="top">
+            <button className="sider-action-btn" disabled aria-label="主题切换尚未开放">
               <SunMoon size={16} />
             </button>
           </Tooltip>

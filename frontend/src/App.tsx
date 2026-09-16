@@ -4,6 +4,8 @@ import { ConfigProvider } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import StudentEntryPortal from "./pages/StudentEntryPortal";
 import CourseHub from "./pages/CourseHub";
+import CourseTasks from "./pages/CourseTasks";
+import { StudentState } from "./components/StudentState";
 import TaskWorkspace from "./pages/TaskWorkspace";
 import QuestionWorkspace from "./pages/QuestionWorkspace";
 import SelfStudyHub from "./pages/SelfStudyHub";
@@ -54,6 +56,7 @@ function routeMotion(from: string, to: string) {
 }
 
 function homePathForRole(role: string) {
+  if (role === "ADMIN") return "/admin";
   if (role === "TEACHER") return "/teacher";
   if (role === "STUDENT") return "/";
   return "/unauthorized";
@@ -96,7 +99,7 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
   const isEntryRoute = location.pathname === "/" || location.pathname === "";
 
   function transitionTo(to: string, state?: unknown) {
-    if (to === location.pathname) return;
+    if (to === `${location.pathname}${location.search}` && state === undefined) return;
 
     const motion = routeMotion(location.pathname, to);
     document.documentElement.dataset.routeMotion = motion;
@@ -105,31 +108,21 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
 
   function openTask(target: TaskOpenTarget | string | undefined) {
     if (typeof target === "string" || !target) {
-      transitionTo(`/workspace/${target ?? "task_linked_list_delete_001"}`);
+      transitionTo(target ? `/workspace/${encodeURIComponent(target)}` : "/tasks");
       return;
     }
     if (target.workspaceType === "QUESTION_SET" || target.taskType === "QUIZ" || target.taskType === "EXAM") {
+      if (!target.assignmentId) { transitionTo("/tasks"); return; }
       transitionTo(`/question-workspace/${target.assignmentId}`, target.courseId ? { fromCourseId: target.courseId } : undefined);
       return;
     }
     const query = target.assignmentId ? `?assignment_id=${encodeURIComponent(target.assignmentId)}` : "";
-    transitionTo(`/workspace/${target.taskId ?? "task_linked_list_delete_001"}${query}`, target.courseId ? { fromCourseId: target.courseId } : undefined);
+    if (!target.taskId) { transitionTo("/tasks"); return; }
+    transitionTo(`/workspace/${encodeURIComponent(target.taskId)}${query}`, target.courseId ? { fromCourseId: target.courseId } : undefined);
   }
 
   const workspaceState = location.state as { fromCourseId?: string; fromPath?: string } | null;
   const workspaceBackPath = workspaceState?.fromPath ?? (workspaceState?.fromCourseId ? `/courses/${workspaceState.fromCourseId}/tasks` : "/");
-
-  function handleNavigate(page: string) {
-    const aliases: Record<string, string> = {
-      selfStudy: "/self-study",
-      aiTutor: "/self-study/ai",
-      library: "/self-study/library",
-      tasks: "/courses",
-      profile: "/self-study/profile",
-      projectPractice: "/project-practice"
-    };
-    transitionTo(aliases[page] ?? page);
-  }
 
   function openOnboardingGuide() {
     window.dispatchEvent(new Event("codetrack:student-onboarding-replay"));
@@ -151,6 +144,7 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
               <Route path="/question-workspace/:assignmentId" element={<QuestionWorkspaceWrapper onBack={() => transitionTo(workspaceBackPath)} />} />
               <Route path="/self-study/library/classroom/:resourceId" element={<AIClassroom />} />
               <Route path="/self-study/classroom" element={<AIClassroom />} />
+              <Route path="*" element={<StudentState title="未找到该工作区" description="链接可能不完整，请重新选择任务。" actions={[{ label: "查看课程任务", onClick: () => transitionTo("/tasks") }]} />} />
             </Routes>
           </div>
         </div>
@@ -191,16 +185,17 @@ function StudentAppContent({ authUser, onLogout }: { authUser: AuthUser; onLogou
         <div className="route-stage" data-onboarding-id={activeRouteGroup === "/self-study" ? "tour-self-study-route" : undefined} key={activeRouteGroup}>
           <Routes location={location}>
             <Route path="/learning-home" element={<Navigate to="/" replace />} />
-            <Route path="/courses" element={<Navigate to="/" replace />} />
+            <Route path="/courses" element={<Navigate to="/?courses=open" replace />} />
             <Route path="/courses/:courseId/*" element={<CourseHub onOpenWorkspace={openTask} />} />
-            <Route path="/tasks" element={<Navigate to="/courses" replace />} />
-            <Route path="/tasks-legacy" element={<Navigate to="/courses" replace />} />
+            <Route path="/tasks" element={<CourseTasks onOpenWorkspace={openTask} />} />
+            <Route path="/tasks-legacy" element={<Navigate to="/tasks" replace />} />
             <Route path="/self-study/*" element={<SelfStudyHub />} />
             <Route path="/project-practice" element={<ProjectPractice />} />
             <Route path="/project-practice/projects/:projectId" element={<ProjectPractice />} />
             <Route path="/ai-tutor" element={<Navigate to="/self-study/ai" replace />} />
             <Route path="/library" element={<Navigate to="/self-study/library" replace />} />
             <Route path="/profile" element={<Navigate to="/self-study/profile" replace />} />
+            <Route path="*" element={<StudentState title="未找到该页面" description="链接可能已失效，可以返回学习入口或查看课程任务。" actions={[{ label: "返回学习入口", onClick: () => transitionTo("/") }, { label: "查看课程任务", onClick: () => transitionTo("/tasks") }]} />} />
           </Routes>
         </div>
       </div>

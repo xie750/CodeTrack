@@ -73,10 +73,6 @@ export default function AiMonitor() {
   const trendModelOptions = useMemo(() => {
     return courseModels.map((m) => ({ label: m.nickname || m.modelName, value: m.modelName }))
   }, [courseModels])
-  const trendModelLabel = useMemo(() => {
-    const m = courseModels.find((c) => c.modelName === trendModel)
-    return m?.nickname || trendModel
-  }, [courseModels, trendModel])
   useEffect(() => {
     if (!trendModel && trendModelOptions.length > 0) {
       setTrendModel(trendModelOptions[0].value)
@@ -488,8 +484,8 @@ export default function AiMonitor() {
               <Tooltip title="开始处理" mouseEnterDelay={0.5}>
                 <Button type="text" size="small" icon={<Play size={15} />} onClick={() => { handleAlert(r.id, '处理中'); message.success('已开始处理') }} style={{ color: colors.primary }} />
               </Tooltip>
-              <Tooltip title="转派" mouseEnterDelay={0.5}>
-                <Button type="text" size="small" icon={<Share2 size={14} />} onClick={() => message.info('转派功能开发中')} style={{ color: '#6B7280' }} />
+              <Tooltip title="转派尚未接入，可先认领并填写处置记录" mouseEnterDelay={0.5}>
+                <Button type="text" size="small" disabled aria-label="转派尚未接入" icon={<Share2 size={14} />} style={{ color: '#6B7280' }} />
               </Tooltip>
             </>
           )}

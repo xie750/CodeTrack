@@ -119,21 +119,6 @@ export default function Dashboard() {
     return ((successCount / callLogs.length) * 100).toFixed(1)
   }, [callLogs])
 
-  // 今日活跃
-  const today = new Date().toISOString().slice(0, 10) // 2026-08-10
-  const activeStudentsToday = useMemo(
-    () => students.filter((s) => s.lastActiveAt.startsWith(today)).length,
-    [students, today],
-  )
-  const activeTeachersToday = useMemo(
-    () => teachers.filter((t) => t.lastActiveAt.startsWith(today)).length,
-    [teachers, today],
-  )
-  // 今日日志数
-  const todayLogCount = useMemo(
-    () => logs.filter((l) => l.time.startsWith(today)).length,
-    [logs, today],
-  )
   const publishedNotices = useMemo(() => notices.filter((n) => n.status === '已发布'), [notices])
   const draftNotices = useMemo(() => notices.filter((n) => n.status === '草稿'), [notices])
   const recentLogs = useMemo(() => logs.slice(0, 6), [logs])

@@ -226,6 +226,7 @@ export default function Teachers() {
           }
           return (
             <div style={{ overflowX: 'auto' }}>
+              <p style={{ color: colors.textMuted }}>示例课表：尚未接入该教师的实际排课数据。</p>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead>
                   <tr>
@@ -349,9 +350,9 @@ export default function Teachers() {
         />
         <div style={{ padding: '0 20px 16px' }}>
           <Space wrap className="filter-bar">
-            <Input.Search placeholder="工号/姓名（空格多关键字）" allowClear style={{ width: 240 }} onChange={(e) => setKeyword(e.target.value)} />
-            <Select placeholder="职称" allowClear style={{ width: 120 }} options={titles.map((t) => ({ label: t, value: t }))} onChange={setTitle} />
-            <Select placeholder="账号状态" allowClear style={{ width: 120 }} options={['已启用', '待激活', '已停用'].map((s) => ({ label: s, value: s }))} onChange={setStatus} />
+            <Input.Search placeholder="工号/姓名（空格多关键字）" value={keyword} allowClear style={{ width: 240 }} onChange={(e) => setKeyword(e.target.value)} />
+            <Select placeholder="职称" value={title} allowClear style={{ width: 120 }} options={titles.map((t) => ({ label: t, value: t }))} onChange={setTitle} />
+            <Select placeholder="账号状态" value={status} allowClear style={{ width: 120 }} options={['已启用', '待激活', '已停用'].map((s) => ({ label: s, value: s }))} onChange={setStatus} />
           </Space>
           <Table rowKey="id" size="middle" columns={columns} dataSource={filtered} scroll={{ x: 'max-content', y: 420 }} pagination={{ pageSize: 8, showTotal: (t) => `共 ${t} 条` }} />
         </div>
@@ -440,7 +441,10 @@ export default function Teachers() {
 
       <VerifyModal open={verify.open} actionLabel={verify.action} onCancel={() => setVerify({ open: false, action: '', onOk: () => {} })} onConfirm={verify.onOk} />
 
-      <ImportModal open={importOpen} onCancel={() => setImportOpen(false)} kind="教师" onSuccess={() => {}} />
+      <ImportModal open={importOpen} onCancel={() => setImportOpen(false)} kind="教师" existingIds={teachers.map((teacher) => teacher.id)} onSuccess={(rows) => {
+        rows.forEach((row) => addTeacher({ id: row.工号, name: row.姓名, dept: row.院系 || '', title: row.职称 || '', email: row.邮箱 || '', phone: row.手机 || '', status: '待激活', loginStatus: '离线', lastActiveAt: '—', createdAt: new Date().toLocaleDateString('sv-SE'), assetCount: 0 }))
+        setKeyword(''); setTitle(undefined); setStatus(undefined); setActiveTab('all')
+      }} />
     </div>
   )
 }

@@ -7,16 +7,13 @@ import {
   BookOpen,
   CalendarDays,
   ChartNoAxesColumnIncreasing,
-  CheckCircle2,
   ChevronsLeft,
   ChevronsRight,
   ClipboardList,
-  Clock3,
   Code2,
   FileQuestion,
   FileText,
   GraduationCap,
-  MapPin,
   Megaphone,
   MessageSquareText,
   Network,
@@ -29,7 +26,7 @@ import {
 import { api, apiCache, LearningContext, StudentInterventionCenter, StudentProfile, StudentTaskCard } from "../api";
 import type { TaskOpenTarget } from "../App";
 import StudentRouteBreadcrumb from "../components/StudentRouteBreadcrumb";
-import { StudentInlineNotice, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
+import { StudentInlineNotice, StudentState, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
 import {
   formatStudentDateTime,
   getScheduleInfo,
@@ -256,11 +253,9 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
   const knowledgePoints = Array.from(new Set(tasks.flatMap((task) => task.knowledge_points)));
   const learnedPoints = profile?.knowledge_states.filter((item) => item.state === "MASTERED").length ?? 0;
   const assignmentCount = tasks.filter((task) => task.workspace_type === "PROGRAMMING" || task.task_type === "QUIZ" || task.task_type === "EXAM").length;
-  const score = profile
-    ? clampPercent((profile.overview.overall_progress + profile.overview.recent_task_completion + (100 - profile.overview.compile_error_rate) + (100 - profile.overview.logic_error_rate)) / 4)
-    : progress;
+  const score = progress;
   const resourceProgress = profile ? profile.overview.overall_progress : 0;
-  const practiceScore = profile ? clampPercent(100 - profile.overview.logic_error_rate) : 0;
+  const masteredProgress = profile?.knowledge_states.length ? clampPercent(learnedPoints / profile.knowledge_states.length * 100) : 0;
   const activityScore = clampPercent((completed + inProgress) / Math.max(tasks.length, 1) * 100);
   const visibleTasks = tasks.slice(0, 5);
   const visibleInterventions = interventions?.items.slice(0, 4) ?? [];
@@ -268,16 +263,15 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
 
   const stats = [
     { label: "课程任务", value: loading ? "..." : String(tasks.length), sub: `待完成 ${pending} 项`, icon: <ClipboardList size={28} />, tone: "blue" },
-    { label: "学习资源", value: String(knowledgePoints.length), sub: `已学习 ${learnedPoints} 个`, icon: <BookMarked size={28} />, tone: "green" },
-    { label: "测验/作业", value: String(assignmentCount), sub: `待完成 ${pending} 项`, icon: <PencilLine size={28} />, tone: "purple" },
-    { label: "课堂活动", value: String(completed + inProgress), sub: `参与 ${completed} 次`, icon: <UsersRound size={28} />, tone: "orange" }
+    { label: "任务知识点", value: String(knowledgePoints.length), sub: `画像已掌握 ${learnedPoints} 个`, icon: <BookMarked size={28} />, tone: "green" },
+    { label: "测验/作业", value: String(assignmentCount), sub: "已下发的编程作业与测验", icon: <PencilLine size={28} />, tone: "purple" },
+    { label: "已开始任务", value: String(completed + inProgress), sub: `已完成 ${completed} 项`, icon: <UsersRound size={28} />, tone: "orange" }
   ];
 
   const announcements = [
     activeTask ? { title: `${activeTask.title} 开始信息`, date: getScheduleInfo(activeTask.start_at).isOpen ? `已开放：${startTimeLabel(activeTask.start_at)}` : `将开放：${startTimeLabel(activeTask.start_at)}` } : null,
     activeTask?.deadline ? { title: `${taskTypeLabel(activeTask)} 截止提醒`, date: deadlineLabel(activeTask.deadline) } : null,
-    knowledgePoints[0] ? { title: `${knowledgePoints[0]} 知识点已更新`, date: "最近" } : null,
-    profile ? { title: "学习画像已生成", date: "持续更新" } : null
+    profile ? { title: "本课程学习画像已同步", date: "学习画像" } : null
   ].filter((item): item is { title: string; date: string } => Boolean(item));
 
   function openActiveTask() {
@@ -289,6 +283,10 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
       workspaceType: activeTask.workspace_type,
       taskType: activeTask.task_type
     });
+  }
+
+  if (!loading && context && !course) {
+    return <StudentState title="未找到该课程" description="课程可能已移除，或尚未加入当前账号。" actions={[{ label: "选择我的课程", onClick: () => navigate("/courses") }]} />;
   }
 
   return (
@@ -366,16 +364,16 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
             <h2>课程信息</h2>
             <dl>
               <div><dt><UserRound size={16} /> 授课教师</dt><dd>{course?.teacher_name ?? "待同步"}</dd></div>
-              <div><dt><CalendarDays size={16} /> 学期</dt><dd>2024-2025 春季学期</dd></div>
-              <div><dt><Clock3 size={16} /> 上课时间</dt><dd>周二 10:00 - 11:40</dd></div>
-              <div><dt><MapPin size={16} /> 上课地点</dt><dd>教学楼 A305</dd></div>
+              <div><dt><CalendarDays size={16} /> 学期</dt><dd title={course?.term}>{course?.term || "未设置"}</dd></div>
+              <div><dt><UsersRound size={16} /> 班级</dt><dd>{course?.class_name || context?.student.class_name || "未设置"}</dd></div>
+              <div><dt><ClipboardList size={16} /> 待完成任务</dt><dd>{pending} 项</dd></div>
             </dl>
             <span aria-hidden="true"><Code2 size={34} /></span>
           </article>
 
           <article className="course-dashboard-card course-dashboard-notices">
             <header>
-              <h2>课程公告</h2>
+              <h2>学习提醒</h2>
             </header>
             <ul>
               {announcements.length ? announcements.map((item) => (
@@ -384,31 +382,31 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
                   <span>{item.title}</span>
                   <time>{item.date}</time>
                 </li>
-              )) : <li className="course-dashboard-notice-empty">暂无课程公告</li>}
+              )) : <li className="course-dashboard-notice-empty">暂无学习提醒</li>}
             </ul>
           </article>
         </div>
 
         <article className="course-dashboard-card course-dashboard-data">
           <h2>学习数据概览</h2>
-          <div className="course-dashboard-score" aria-label={`综合得分 ${score} 分`}>
+          <div className="course-dashboard-score" aria-label={`任务完成率 ${score}%`}>
             <span style={{ "--score": `${score}%` } as CSSProperties}>
               <strong>{score}</strong>
-              <small>分</small>
+              <small>%</small>
             </span>
-            <em>{score >= 80 ? "良好" : score >= 60 ? "稳定提升" : "需要跟进"}</em>
+            <em>{tasks.length ? "任务完成率" : "暂无任务记录"}</em>
           </div>
           <div className="course-dashboard-bars">
             {[
               { label: "任务完成度", value: progress, tone: "blue" },
-              { label: "资源学习进度", value: resourceProgress, tone: "green" },
-              { label: "测验/作业平均分", value: practiceScore, tone: "purple" },
-              { label: "课堂活动参与度", value: activityScore, tone: "orange" }
+              { label: "画像学习进度", value: profile ? resourceProgress : null, tone: "green" },
+              { label: "知识点掌握率", value: profile ? masteredProgress : null, tone: "purple" },
+              { label: "任务开始率", value: activityScore, tone: "orange" }
             ].map((item) => (
               <div className={`course-dashboard-bar ${item.tone}`} key={item.label}>
                 <span>{item.label}</span>
-                <i><b style={{ width: `${Math.max(6, item.value)}%` }} /></i>
-                <strong>{item.value}%</strong>
+                <i><b style={{ width: `${item.value ?? 0}%` }} /></i>
+                <strong>{item.value === null ? "待同步" : `${item.value}%`}</strong>
               </div>
             ))}
             <button className="course-dashboard-all" type="button" onClick={() => navigate(coursePath(courseId, "profile"))}>查看学情分析 <ArrowRight size={14} /></button>
@@ -453,6 +451,7 @@ function CourseWorkbench({ courseId, onOpenWorkspace }: { courseId: string; onOp
 
         <article className="course-dashboard-card course-dashboard-knowledge">
           <h2>知识图谱入口</h2>
+          <button className="course-dashboard-all" type="button" onClick={() => navigate(coursePath(courseId, "knowledge-map"))}>打开课程知识图谱 <ArrowRight size={14} /></button>
           <div className="course-map-preview">
             {visibleKnowledgePoints.length ? visibleKnowledgePoints.map((point, index, items) => (
               <span key={point}>

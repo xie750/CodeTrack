@@ -22,7 +22,6 @@ import {
   HelpCircle,
   Camera,
   Check,
-  Send,
   ChevronDown,
   ChevronRight,
   ArrowLeft,
@@ -995,17 +994,6 @@ export default function PersonalCenter({
       message.success('头像已更新')
     }
     reader.readAsDataURL(file)
-  }
-
-  const titleMap: Record<View, string> = {
-    main: '个人中心',
-    account: '账号与安全',
-    devices: '登录设备管理',
-    feedback: '帮助与反馈',
-    changePhone: '更换手机号',
-    changeQQ: '更换QQ',
-    changeEmail: '更换邮箱',
-    changePassword: '修改密码',
   }
 
   const isSubView = view !== 'main'

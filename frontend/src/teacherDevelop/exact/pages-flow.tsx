@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   Alert, Avatar, Button, Col, Divider, Form, Input, InputNumber, Progress, Row,
-  Segmented, Select, Slider, Space, Statistic, Switch, Table, Tabs, Tag, Timeline,
+  Segmented, Select, Slider, Space, Statistic, Switch, Table, Tag, Timeline,
   Typography,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'

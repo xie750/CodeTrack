@@ -1,22 +1,21 @@
-import { useEffect, useMemo, useState, type PointerEvent } from 'react'
+import { useEffect, useState, type PointerEvent } from 'react'
 import {
-  Alert, Button, Checkbox, Col, DatePicker, Dropdown, Form, Input, InputNumber, message, Modal, Pagination, Progress,
-  Row, Segmented, Select, Space, Steps, Switch, Tag, Typography, Upload,
+  Alert, Button, DatePicker, Dropdown, Form, Input, InputNumber, message, Modal, Pagination, Progress,
+  Segmented, Select, Space, Steps, Switch, Tag, Typography, Upload,
 } from 'antd'
 import {
-  Archive, ArrowRight, Bell, BookOpen, Bot, Edit3, Eye, Check, CheckCircle2, ChevronLeft, ChevronRight,
+  Archive, ArrowRight, Bell, BookOpen, Edit3, Eye, Check, CheckCircle2, ChevronLeft, ChevronRight,
   CalendarDays, CircleHelp, ClipboardCheck, Clock3, Code2, EyeOff, FileText, FlaskConical, GraduationCap, ImageUp, Info, KeyRound, Lightbulb,
-  ListChecks, Lock, LogIn, MessageSquareText, Microscope, MoreVertical, Plus, RefreshCw, Search, Settings2, Sparkles, Trash2, User, Users,
+  ListChecks, Lock, LogIn, Microscope, MoreVertical, Plus, RefreshCw, Search, Settings2, Sparkles, Trash2, User, Users,
 } from 'lucide-react'
 
-import { api, type ApiClass, type ApiCourse, type ApiTeacher, getCurrentUserName } from '../api'
+import { api, type ApiCourse, type ApiTeacher, getCurrentUserName } from '../api'
 import type { ExactView } from './components'
-import { PageLoader } from './components'
 import { StudentEntryMotionBackdrop, type StudentEntryTheme } from '../../pages/StudentEntryPortal'
 import AccountMenu from '../../components/AccountMenu'
 import type { AuthUser } from '../../authSession'
 
-const { Text, Title, Paragraph } = Typography
+const { Text, Title } = Typography
 const TEACHER_ENTRY_THEME_KEY = 'codetrack.teacher.entry.theme'
 
 function readStoredTeacherEntryTheme(): StudentEntryTheme {
@@ -706,7 +705,6 @@ export function ExactCreateCourse({ onDone, onCancel, teacher }: CreateCoursePro
   const watchedCode = Form.useWatch('code', form) || ''
   const watchedTerm = Form.useWatch('term', form) || ''
   const watchedDescription = Form.useWatch('description', form) || ''
-  const watchedGoals = Form.useWatch('goals', form) || ''
   const watchedMajor = Form.useWatch('major', form) || ''
   const watchedDirections = Form.useWatch('directions', form) || []
   const watchedWeeks = Form.useWatch('weeks', form) || defaults.weeks

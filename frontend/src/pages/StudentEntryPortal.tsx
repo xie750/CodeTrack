@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { ArrowRight, BookOpenCheck, BriefcaseBusiness, CalendarClock, CheckCircle2, Code2, Compass, FlaskConical, Loader2, LockKeyhole, Microscope, PlusCircle, Sparkles, Target, X } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, apiCache, type LearningContext, type StudentCourseOffering, type StudentTaskCard } from "../api";
 import type { AuthUser } from "../authSession";
 import { StudentInlineNotice, studentErrorDetail, studentErrorMessage } from "../components/StudentState";
@@ -328,15 +328,21 @@ function CourseDrawer({ open, onClose }: { open: boolean; onClose: () => void })
       setMessage(null);
       setMessageDetail(null);
       try {
-        const [data, taskData, offeringData] = await Promise.all([
+        const [contextResult, taskResult, offeringResult] = await Promise.allSettled([
           api.getLearningContext(),
           api.listStudentTasks(),
-          api.listStudentCourseOfferings().catch(() => ({ items: [] }))
+          api.listStudentCourseOfferings()
         ]);
         if (!alive) return;
-        setContext(data);
-        setTasks(taskData);
-        setOfferings(offeringData.items);
+        if (contextResult.status === "fulfilled") setContext(contextResult.value);
+        if (taskResult.status === "fulfilled") setTasks(taskResult.value);
+        if (offeringResult.status === "fulfilled") setOfferings(offeringResult.value.items);
+        const failed = [
+          contextResult.status === "rejected" ? "已加入课程" : "",
+          taskResult.status === "rejected" ? "任务进度" : "",
+          offeringResult.status === "rejected" ? "可加入课程" : ""
+        ].filter(Boolean);
+        if (failed.length) setMessage(`${failed.join("、")}暂时未同步，请重试。已加载的课程仍可进入。`);
       } catch (err) {
         if (!alive) return;
         setMessage(studentErrorMessage(err, "课程数据加载失败，请稍后重试。"));
@@ -377,11 +383,14 @@ function CourseDrawer({ open, onClose }: { open: boolean; onClose: () => void })
     setJoinMessage(null);
     try {
       const result = await api.joinStudentCourseOffering(offering.teaching_assignment_id);
-      const taskData = await api.listStudentTasks();
       setContext(result.learning_context);
-      setTasks(taskData);
       setOfferings((current) => current.filter((item) => item.teaching_assignment_id !== offering.teaching_assignment_id));
       setJoinMessage(`已加入 ${offering.course_name}`);
+      try {
+        setTasks(await api.listStudentTasks());
+      } catch {
+        setJoinMessage(`已加入 ${offering.course_name}，任务进度暂未同步，可进入课程后重试。`);
+      }
     } catch (err) {
       setJoinMessage(studentErrorMessage(err, "加入课程失败，请稍后重试。"));
     } finally {
@@ -487,8 +496,17 @@ function CourseDrawer({ open, onClose }: { open: boolean; onClose: () => void })
 
 export default function StudentEntryPortal({ authUser, accountSlot, onOpenGuide }: StudentEntryPortalProps) {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [courseDrawerOpen, setCourseDrawerOpen] = useState(false);
   const [entryTheme, setEntryTheme] = useState<StudentEntryTheme>(readStoredEntryTheme);
+
+  useEffect(() => {
+    if (searchParams.get("courses") !== "open") return;
+    setCourseDrawerOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete("courses");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   function changeEntryTheme(nextTheme: StudentEntryTheme) {
     setEntryTheme(nextTheme);

@@ -10,8 +10,6 @@ import {
   Brain,
   Check,
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
   Circle,
   Clock3,
   Code2,

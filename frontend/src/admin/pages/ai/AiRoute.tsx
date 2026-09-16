@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Button, Tag, Modal, Form, Input, message, Row, Col, Tooltip, Drawer, Select } from 'antd'
-import { Settings, Server, Plus, ArrowLeft, X, Edit3, Copy, Activity, Trash2, Cpu, Hash } from 'lucide-react'
+import { Server, Plus, ArrowLeft, X, Edit3, Copy, Activity, Trash2, Cpu, Hash } from 'lucide-react'
 import PageHeader from '@admin/components/PageHeader'
 import { useAppStore } from '@admin/stores/useAppStore'
 import { colors } from '@admin/theme/themeConfig'
@@ -29,7 +29,6 @@ export default function AiRoute() {
 
   // 接入模型弹窗状态
   const [connectOpen, setConnectOpen] = useState(false)
-  const [connectView, setConnectView] = useState<'add' | 'edit'>('add')
   const [editingModel, setEditingModel] = useState<ConnectedModel | null>(null)
   const [addForm] = Form.useForm()
 
@@ -120,7 +119,6 @@ export default function AiRoute() {
   const openAddModal = () => {
     addForm.resetFields()
     setEditingModel(null)
-    setConnectView('add')
     setConnectOpen(true)
   }
 
@@ -136,7 +134,6 @@ export default function AiRoute() {
       url: model.url,
       apiKey: model.apiKey,
     })
-    setConnectView('edit')
     setConnectOpen(true)
   }
 

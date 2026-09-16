@@ -1,28 +1,27 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
-  Alert, Avatar, Button, Checkbox, Col, Drawer, Form, Input, InputNumber, Modal,
-  Progress, QRCode, Radio, Row, Segmented, Select, Space, Steps, Switch, Table, Tabs, Tag,
+  Avatar, Button, Drawer, Form, Input,
+  QRCode, Segmented, Select, Switch, Tabs, Tag,
   Typography, Upload,
 } from 'antd'
-import type { ColumnsType } from 'antd/es/table'
 import {
-  ArrowLeft, BarChart3, Bell, BookOpen, BrainCircuit, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck,
-  Clock3, Code2, Copy, Database, Download, Edit3, Eye, FileCode2, FileText,
-  Folder, GitBranch, Globe2, Link2, ListChecks, Megaphone, MessageSquareText, Network, Pin, Plus,
-  QrCode, RefreshCw, Save, Search, Send, Settings, SlidersHorizontal, Sparkles, UploadCloud, UserPlus,
-  Users, WandSparkles,
+  ArrowLeft, BarChart3, Bell, BookOpen, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck,
+  Code2, Copy, Download, Eye, FileCode2, FileText,
+  Globe2, Link2, Megaphone, MessageSquareText, Pin, Plus,
+  QrCode, RefreshCw, Save, Send, Settings, SlidersHorizontal, Sparkles, UploadCloud, UserPlus,
+  Users,
 } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 import {
-  api, defaultTaskStartAt,
+  api,
   type ApiAnnouncement, type ApiClass, type ApiClassJoinStatus, type ApiCourse, type ApiDiscussion, type ApiMaterial,
   type ApiStudent, type ApiTask, type ApiTeacher,
 } from '../api'
 import type { ExactView } from './components'
 import { CourseBreadcrumb, EmptyPanel, PageLoader } from './components'
 
-const { Text, Title, Paragraph } = Typography
+const { Text, Title } = Typography
 
 function parseStudentCsv(text: string) {
   const rows = text.replace(/^\uFEFF/, '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
